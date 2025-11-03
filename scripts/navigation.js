@@ -1,32 +1,28 @@
-// navigation.js — Handles switching between main sections
+// scripts/navigation.js
 document.addEventListener("DOMContentLoaded", () => {
   const navButtons = document.querySelectorAll(".nav-button");
   const views = document.querySelectorAll(".view-section");
 
-  navButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      // Deactivate all buttons and sections
-      navButtons.forEach((b) => b.classList.remove("nav-button-active"));
-      views.forEach((v) => v.classList.remove("active"));
+  function activate(targetId) {
+    navButtons.forEach(b => b.classList.remove("nav-button-active"));
+    views.forEach(v => v.classList.remove("active"));
+    const btn = Array.from(navButtons).find(b => b.dataset.target === targetId);
+    if (btn) btn.classList.add("nav-button-active");
+    const view = document.getElementById(targetId);
+    if (view) view.classList.add("active");
 
-      // Activate target view
-      btn.classList.add("nav-button-active");
-      const targetId = btn.dataset.target;
-      const targetView = document.getElementById(targetId);
-      if (targetView) targetView.classList.add("active");
+    try { localStorage.setItem("uocExam_activeTab", targetId); } catch (e) { console.warn(e); }
+  }
 
-      // Save current tab in localStorage for persistence
-      localStorage.setItem("uocExam_activeTab", targetId);
-    });
+  navButtons.forEach(btn => {
+    btn.addEventListener("click", () => activate(btn.dataset.target));
   });
 
-  // Restore last opened tab
-  const lastTab = localStorage.getItem("uocExam_activeTab");
-  if (lastTab) {
-    document.querySelectorAll(".nav-button").forEach((b) => {
-      if (b.dataset.target === lastTab) b.click();
-    });
+  const last = localStorage.getItem("uocExam_activeTab");
+  if (last && document.getElementById(last)) {
+    activate(last);
   } else {
-    document.querySelector(".nav-button").click(); // default to first tab
+    const first = navButtons[0];
+    if (first) activate(first.dataset.target);
   }
 });
