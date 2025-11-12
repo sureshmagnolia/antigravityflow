@@ -1,5 +1,4 @@
-Here is the complete, updated app.js file.
-This code includes all the new features for managing and allotting students who require scribe assistance, as well as the logic for the new Scribe Assistance Report.
+
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
