@@ -568,7 +568,7 @@ generateReportButton.addEventListener('click', async () => {
                     ${locationHtml} </div>
             `;
             
-            // *** FIX: Added Remarks Column Header ***
+            // *** FIX: Added Remarks Column Header, Swapped Remarks/Signature ***
             const tableHeaderHtml = `
                 <table class="print-table">
                     <thead>
@@ -577,8 +577,8 @@ generateReportButton.addEventListener('click', async () => {
                             <th class="course-col">Course (QP Code)</th>
                             <th class="reg-col">Register Number</th>
                             <th class="name-col">Name</th>
-                            <th class="signature-col">Signature</th>
                             <th class="remarks-col">Remarks</th>
+                            <th class="signature-col">Signature</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -617,21 +617,25 @@ generateReportButton.addEventListener('click', async () => {
                     const sessionQPCodes = qpCodeMap[sessionKey] || {};
                     const courseKey = cleanCourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
-                    const qpCodeDisplay = qpCode ? ` (${qpCode})` : "";
-                    const tableCourseName = student.Course + qpCodeDisplay; // Course + QP Code
+                    
+                    // *** FIX: QP Code first, then course name ***
+                    const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; // e.g., "(QP123) "
+                    
+                    // Truncate the course name (student.Course)
+                    const courseWords = student.Course.split(/\s+/);
+                    const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
+                    
+                    // Combine them
+                    const tableCourseName = qpCodePrefix + truncatedCourse;
                     // ************************
                     
-                    // V97 FIX: Truncate Course Name (now with QP code)
-                    const words = tableCourseName.split(/\s+/);
-                    const truncatedCourseName = words.slice(0, 4).join(' ') + (words.length > 4 ? '...' : '');
-                    
-                    let displayCourseName = (truncatedCourseName === previousCourseName) ? '"' : truncatedCourseName;
-                    if (truncatedCourseName !== previousCourseName) previousCourseName = truncatedCourseName;
+                    let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
+                    if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
 
                     // *** FIX: Use class for highlighting ***
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     
-                    // *** FIX: Added Remarks Column Data ***
+                    // *** FIX: Added Remarks Column Data, Swapped Remarks/Signature ***
                     const remarkText = student.remark || ''; // Get remark or empty string
                     rowsHtml += `
                         <tr ${rowClass}>
@@ -639,8 +643,8 @@ generateReportButton.addEventListener('click', async () => {
                             <td class="course-col">${displayCourseName}</td>
                             <td class="reg-col">${student['Register Number']}</td>
                             <td class="name-col">${student.Name}</td>
-                            <td class="signature-col"></td>
                             <td class="remarks-col">${remarkText}</td>
+                            <td class="signature-col"></td>
                         </tr>
                     `;
                 });
@@ -1538,6 +1542,7 @@ saveRoomConfigButton.addEventListener('click', () => {
         console.error("Error saving room config:", e);
     }
 });
+
 // --- (V79) Load data into dynamic form (in Settings) ---
 function loadRoomConfig() {
     // V48: Load College Name
