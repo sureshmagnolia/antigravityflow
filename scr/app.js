@@ -1,4 +1,3 @@
-
 // --- Global localStorage Key ---
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
@@ -1588,9 +1587,7 @@ loadCsvButton.addEventListener('click', () => {
         return;
     }
     
-    // V67: Disable PDF input while CSV is being processed/loaded
-    document.getElementById('pdf-file').disabled = true;
-    document.getElementById('run-button').disabled = true;
+    // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -1599,8 +1596,7 @@ loadCsvButton.addEventListener('click', () => {
     };
     reader.onerror = () => {
         csvLoadStatus.textContent = "Error reading file.";
-        document.getElementById('pdf-file').disabled = true;
-        document.getElementById('run-button').disabled = true;
+        // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
     };
     reader.readAsText(file);
 });
@@ -1623,9 +1619,7 @@ function parseCsvAndLoadData(csvText) {
             csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
             csvLoadStatus.classList.add('text-red-600');
             csvLoadStatus.classList.remove('text-green-600');
-            // V67: Re-enable PDF inputs
-            document.getElementById('pdf-file').disabled = false;
-            document.getElementById('run-button').disabled = false;
+            // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
             return;
         }
 
@@ -1705,9 +1699,7 @@ function parseCsvAndLoadData(csvText) {
         loadGlobalScribeList();
         // *****************************
         
-        // V67: Disable CSV input while PDF input is enabled (since CSV is the new source)
-        document.getElementById('pdf-file').disabled = false;
-        document.getElementById('run-button').disabled = false;
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
 
 
     } catch (e) {
@@ -1715,9 +1707,7 @@ function parseCsvAndLoadData(csvText) {
         csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
         csvLoadStatus.classList.add('text-red-600');
         csvLoadStatus.classList.remove('text-green-600');
-        // V67: Re-enable PDF inputs
-        document.getElementById('pdf-file').disabled = false;
-        document.getElementById('run-button').disabled = false;
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
     }
 }
 
@@ -2232,41 +2222,9 @@ function loadInitialData() {
     }
 }
 
-// V67: Disable CSV input on load if data is loaded, and enable PDF button
-if (jsonDataStore.innerHTML && JSON.parse(jsonDataStore.innerHTML).length > 0) {
-    correctedCsvUpload.disabled = false;
-    loadCsvButton.disabled = false;
-    document.getElementById('pdf-file').disabled = false;
-    document.getElementById('run-button').disabled = false;
-} else {
-     // If no data is loaded, keep reports disabled, but enable PDF/CSV inputs
-    document.getElementById('pdf-file').disabled = false;
-    document.getElementById('run-button').disabled = false;
-    correctedCsvUpload.disabled = false;
-    loadCsvButton.disabled = false;
-}
+// *** WORKFLOW FIX: Removed the event listeners that disabled/enabled buttons ***
+// The 'change' listeners for 'pdf-file' and 'corrected-csv-upload' are gone.
 
-// V67: Prevent user from trying to run extraction if CSV load is active
-document.getElementById('pdf-file').addEventListener('change', () => {
-    if (document.getElementById('pdf-file').files.length > 0) {
-        correctedCsvUpload.disabled = true;
-        loadCsvButton.disabled = true;
-    } else {
-        correctedCsvUpload.disabled = false;
-        loadCsvButton.disabled = false;
-    }
-});
-
-// V67: Prevent user from trying to load CSV if PDF is selected
-correctedCsvUpload.addEventListener('change', () => {
-    if (correctedCsvUpload.files.length > 0) {
-        document.getElementById('pdf-file').disabled = true;
-        document.getElementById('run-button').disabled = true;
-    } else {
-        document.getElementById('pdf-file').disabled = false;
-        document.getElementById('run-button').disabled = false;
-    }
-});
 
 // --- ROOM ALLOTMENT FUNCTIONALITY ---
 
@@ -2913,4 +2871,3 @@ scribeCloseRoomModal.addEventListener('click', () => {
 
 // --- Run on initial page load ---
 loadInitialData();
-
