@@ -2599,10 +2599,12 @@ window.disable_scribe_tabs = function(disabled) {
         scribeAllotmentContentWrapper.classList.add('hidden');
         [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.add('opacity-50', 'cursor-not-allowed'));
     } else {
+        // *** FIX: This logic was inverted, causing the "loader" bug ***
         scribeLoader.classList.add('hidden');
         scribeContentWrapper.classList.remove('hidden');
         scribeAllotmentLoader.classList.add('hidden');
         scribeAllotmentContentWrapper.classList.remove('hidden');
+        // ***************************************************************
         [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.remove('opacity-50', 'cursor-not-allowed'));
     }
 }
