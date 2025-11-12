@@ -500,7 +500,7 @@ generateReportButton.addEventListener('click', async () => {
                 final_student_list_for_report.push({ 
                     ...student, 
                     Name: student.Name, // Keep original name
-                    remark: `Scribe, Moved to ${scribeRoom}`, // Add new remark
+                    remark: `${scribeRoom}*`, // *** Add remark (Room + Asterisk) ***
                     isPlaceholder: true // Keep this for styling
                 });
             } else {
@@ -583,6 +583,11 @@ generateReportButton.addEventListener('click', async () => {
                     </thead>
                     <tbody>
             `; 
+            
+            // *** NEW: Check for scribes on this page to add footnote ***
+            const hasScribe = session.students.some(s => s.isPlaceholder);
+            const scribeFootnote = hasScribe ? '<div class="scribe-footnote">* = Scribe Assistance</div>' : '';
+
             const invigilatorFooterHtml = `
                 <div class="invigilator-footer">
                     <div class="course-summary-footer">
@@ -595,6 +600,7 @@ generateReportButton.addEventListener('click', async () => {
                     <div class="signature">
                         Chief Superintendent
                     </div>
+                    ${scribeFootnote}
                 </div>
             `;
 
@@ -602,7 +608,8 @@ generateReportButton.addEventListener('click', async () => {
             function generateTableRows(studentList) {
                 let rowsHtml = '';
                 studentList.forEach((student) => { 
-                    const studentNumber = student.isPlaceholder ? '*' : student.originalIndex + 1;
+                    // *** FIX: Add asterisk to Sl. No. ***
+                    const studentNumber = student.isPlaceholder ? `${student.originalIndex + 1}*` : student.originalIndex + 1;
                     
                     // *** NEW: Get QP Code ***
                     const sessionKey = `${student.Date} | ${student.Time}`;
@@ -620,13 +627,13 @@ generateReportButton.addEventListener('click', async () => {
                     let displayCourseName = (truncatedCourseName === previousCourseName) ? '"' : truncatedCourseName;
                     if (truncatedCourseName !== previousCourseName) previousCourseName = truncatedCourseName;
 
-                    // *** NEW: Style for placeholder ***
-                    const rowStyle = student.isPlaceholder ? 'font-style: italic; color: #555;' : '';
+                    // *** FIX: Use class for highlighting ***
+                    const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     
                     // *** FIX: Added Remarks Column Data ***
                     const remarkText = student.remark || ''; // Get remark or empty string
                     rowsHtml += `
-                        <tr style="${rowStyle}">
+                        <tr ${rowClass}>
                             <td class="sl-col">${studentNumber}</td>
                             <td class="course-col">${displayCourseName}</td>
                             <td class="reg-col">${student['Register Number']}</td>
@@ -824,7 +831,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 `;
             });
 
-            // (V3Oc) Updated table header to remove Course
+            // (V30) Updated table header to remove Course
             // (V32) Updated widths
             return `
                 <table class="daywise-report-table">
@@ -1016,6 +1023,48 @@ generateQPaperReportButton.addEventListener('click', async () => {
         generateQPaperReportButton.textContent = "Generate Question Paper Report";
     }
 });
+
+// *** NEW: Helper for Absentee Report ***
+function formatRegNoList(regNos) {
+    if (!regNos || regNos.length === 0) return '<em>None</em>';
+    
+    let lastPrefix = "";
+    const outputHtml = [];
+    // Regex to split letters from numbers (e.g., "VPAYSBO" and "007")
+    const regEx = /^([A-Z]+)(\d+)$/; 
+
+    regNos.sort(); 
+    
+    regNos.forEach(regNo => {
+        const match = regNo.match(regEx);
+        if (match) {
+            const prefix = match[1];
+            const number = match[2];
+            
+            if (prefix === lastPrefix) {
+                // Same prefix, only show number with a comma
+                outputHtml.push(`<span>, ${number}</span>`);
+            } else {
+                // New prefix, show full register number
+                lastPrefix = prefix;
+                // Add a line break if this isn't the very first item
+                if(outputHtml.length > 0) {
+                     outputHtml.push('<br>');
+                }
+                outputHtml.push(`<span>${regNo}</span>`);
+            }
+        } else {
+            // Fallback for non-matching register numbers (e.g., old numbers)
+            if(outputHtml.length > 0) {
+                 outputHtml.push('<br>');
+            }
+            outputHtml.push(`<span>${regNo}</span>`);
+            lastPrefix = ""; // Reset prefix
+        }
+    });
+    
+    return outputHtml.join('');
+}
         
 // --- (V56) Event listener for "Generate Absentee Statement" ---
 generateAbsenteeReportButton.addEventListener('click', async () => {
@@ -1078,6 +1127,10 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
             const sessionCodes = qpCodeMap[sessionKey] || {};
             const qpCode = sessionCodes[courseKey] || "____"; 
             
+            // *** NEW: Use formatting function ***
+            const presentListHtml = formatRegNoList(courseData.present);
+            const absentListHtml = formatRegNoList(courseData.absent);
+            
             // V57: Add page break logic. Each course is a new page.
             allPagesHtml += `
                 <div class="print-page">
@@ -1101,13 +1154,13 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
                             <tr>
                                 <td><strong>Present (${courseData.present.length})</strong></td>
                                 <td class="regno-list">
-                                    ${courseData.present.length > 0 ? courseData.present.map(regNo => `<span>${regNo}</span>`).join('') : '<em>None</em>'}
+                                    ${presentListHtml}
                                 </td>
                             </tr>
                             <tr>
                                 <td><strong>Absent (${courseData.absent.length})</strong></td>
                                 <td class="regno-list">
-                                    ${courseData.absent.length > 0 ? courseData.absent.map(regNo => `<span>${regNo}</span>`).join('') : '<em>None</em>'}
+                                    ${absentListHtml}
                                 </td>
                             </tr>
                         </tbody>
@@ -1139,1001 +1192,8 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
     }
 });
-        
-// *** NEW: Event listener for "Generate Scribe Report" ***
-generateScribeReportButton.addEventListener('click', async () => {
-    generateScribeReportButton.disabled = true;
-    generateScribeReportButton.textContent = "Generating...";
-    reportOutputArea.innerHTML = "";
-    reportControls.classList.add('hidden');
-    roomCsvDownloadContainer.innerHTML = "";
-    lastGeneratedReportType = "";
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    try {
-        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
-        // 1. Get all data
-        const allData = JSON.parse(jsonDataStore.innerHTML || '[]');
-        if (allData.length === 0) {
-            alert("No data loaded.");
-            return;
-        }
-        
-        // 2. Get global scribe list
-        loadGlobalScribeList();
-        if (globalScribeList.length === 0) {
-            alert("No students have been added to the Scribe List in Scribe Settings.");
-            return;
-        }
-        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-        
-        // 3. Get all scribe students from the main data
-        const allScribeStudents = allData.filter(s => scribeRegNos.has(s['Register Number']));
-        
-        // 4. Get Original Room Allotments (by running the "original" allocation logic)
-        const performOriginalAllocation = (data) => {
-            const { roomNames: masterRoomNames, roomCapacities: masterRoomCaps } = getRoomCapacitiesFromStorage();
-            const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-            const processed_rows = [];
-            const sessionRoomFills = {};
-            const DEFAULT_OVERFLOW_CAPACITY = 30;
-            for (const row of data) {
-                const sessionKey = `${row.Date}_${row.Time}`;
-                const sessionKeyPipe = `${row.Date} | ${row.Time}`;
-                let assignedRoomName = "";
-                const manualAllotment = allAllotments[sessionKeyPipe];
-                if (manualAllotment && manualAllotment.length > 0) {
-                    for (const room of manualAllotment) {
-                        if (room.students.includes(row['Register Number'])) {
-                            assignedRoomName = room.roomName;
-                            break;
-                        }
-                    }
-                }
-                if (assignedRoomName === "") {
-                    if (!sessionRoomFills[sessionKey]) sessionRoomFills[sessionKey] = new Array(masterRoomCaps.length).fill(0);
-                    const currentFills = sessionRoomFills[sessionKey];
-                    for (let i = 0; i < masterRoomCaps.length; i++) {
-                        if (currentFills[i] < masterRoomCaps[i]) {
-                            currentFills[i]++;
-                            assignedRoomName = masterRoomNames[i];
-                            break;
-                        }
-                    }
-                    if (assignedRoomName === "") {
-                        let foundOverflowSpot = false;
-                        for (let i = masterRoomCaps.length; i < currentFills.length; i++) {
-                            if (currentFills[i] < DEFAULT_OVERFLOW_CAPACITY) {
-                                currentFills[i]++;
-                                assignedRoomName = `Room ${i + 1}`;
-                                foundOverflowSpot = true;
-                                break;
-                            }
-                        }
-                        if (!foundOverflowSpot) {
-                            currentFills.push(1); 
-                            assignedRoomName = `Room ${currentFills.length}`;
-                        }
-                    }
-                }
-                processed_rows.push({ ...row, 'Room No': assignedRoomName });
-            }
-            return processed_rows;
-        };
-        const originalAllotments = performOriginalAllocation(allData);
-        const originalRoomMap = originalAllotments.reduce((map, s) => {
-            map[s['Register Number']] = s['Room No'];
-            return map;
-        }, {});
 
-        // 5. Load Scribe Allotments and QP Codes
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        loadQPCodes(); // populates qpCodeMap
-
-        // 6. Collate all data for the report
-        const reportRows = [];
-        for (const s of allScribeStudents) {
-            const sessionKey = `${s.Date} | ${s.Time}`;
-            const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
-            const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = cleanCourseKey(s.Course);
-            
-            reportRows.push({
-                Date: s.Date,
-                Time: s.Time,
-                RegisterNumber: s['Register Number'],
-                Name: s.Name,
-                Course: s.Course,
-                OriginalRoom: originalRoomMap[s['Register Number']] || 'N/A',
-                ScribeRoom: sessionScribeRooms[s['Register Number']] || 'Not Allotted',
-                QPCode: sessionQPCodes[courseKey] || 'N/A'
-            });
-        }
-        
-        // 7. Group by Session
-        const sessions = {};
-        for (const row of reportRows) {
-            const key = `${row.Date}_${row.Time}`;
-            if (!sessions[key]) {
-                sessions[key] = {
-                    Date: row.Date,
-                    Time: row.Time,
-                    students: []
-                };
-            }
-            sessions[key].students.push(row);
-        }
-
-        // 8. Build HTML
-        let allPagesHtml = '';
-        let totalPages = 0;
-        const sortedSessionKeys = Object.keys(sessions).sort();
-
-        if (sortedSessionKeys.length === 0) {
-            alert("No scribe students found for any session with loaded data.");
-            return;
-        }
-
-        sortedSessionKeys.forEach(key => {
-            const session = sessions[key];
-            totalPages++;
-            
-            let tableRowsHtml = '';
-            session.students.forEach((student, index) => {
-                tableRowsHtml += `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td>${student.RegisterNumber}</td>
-                        <td>${student.Name}</td>
-                        <td>${student.Course}</td>
-                        <td>${student.QPCode}</td>
-                        <td>${student.OriginalRoom}</td>
-                        <td>${student.ScribeRoom}</td>
-                    </tr>
-                `;
-            });
-            
-            allPagesHtml += `
-                <div class="print-page">
-                    <div class="print-header-group">
-                        <h1>${currentCollegeName}</h1>
-                        <h2>Scribe Assistance Report</h2>
-                        <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
-                    </div>
-                    
-                    <table class="scribe-report-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 5%;">Sl</th>
-                                <th style="width: 15%;">Register No</th>
-                                <th style="width: 20%;">Name</th>
-                                <th style="width: 25%;">Course / Paper</th>
-                                <th style="width: 10%;">QP Code</th>
-                                <th style="width: 10%;">Original Room</th>
-                                <th style="width: 15%;">Scribe Room</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRowsHtml}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        });
-        
-        // 9. Show report
-        reportOutputArea.innerHTML = allPagesHtml;
-        reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPages} scribe report pages for ${sortedSessionKeys.length} sessions.`;
-        reportControls.classList.remove('hidden');
-        lastGeneratedReportType = "Scribe_Assistance_Report";
-
-    } catch (e) {
-        console.error("Error generating scribe report:", e);
-        reportStatus.textContent = "An error occurred generating the report.";
-        reportControls.classList.remove('hidden');
-    } finally {
-        generateScribeReportButton.disabled = false;
-        generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
-    }
-});
-// *******************************************************
-
-// --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
-// downloadPdfButton.addEventListener('click', ... removed ...)
-
-// --- Event listener for the "Print" button ---
-finalPrintButton.addEventListener('click', () => {
-    // This button now exclusively uses the native browser print function
-    window.print();
-});
-
-// --- Event listener for the "Clear" button ---
-clearReportButton.addEventListener('click', clearReport);
-
-// --- Centralized logic for clearing reports ---
-function clearReport() {
-    reportOutputArea.innerHTML = "";
-    reportOutputArea.style.display = 'none'; 
-    reportControls.classList.add('hidden');
-    roomCsvDownloadContainer.innerHTML = ""; // Clear CSV button
-    lastGeneratedRoomData = []; // Clear data
-    lastGeneratedReportType = ""; // V91: Clear report type
-}
-
-// --- Function to download the room-allocated CSV ---
-function downloadRoomCsv() {
-    if (!lastGeneratedRoomData || lastGeneratedRoomData.length === 0) {
-        alert("No room data to download.");
-        return;
-    }
-    
-    // (V28) Add Location to CSV
-    const headers = ['Date', 'Time', 'Course', 'Register Number', 'Name', 'Room No', 'Location'];
-    let csvContent = headers.join(",") + "\n";
-    
-    lastGeneratedRoomData.forEach(row => {
-        // (V28) Get location for this row
-        const roomInfo = currentRoomConfig[row['Room No']];
-        const location = (roomInfo && roomInfo.location) ? row['Location'] || roomInfo.location.toString() : ""; // V91 FIX: Use row location if present
-        
-        const values = headers.map(header => {
-            let val = row[header] ? row[header].toString() : "";
-            if (header === 'Location') { val = location; } // V91 FIX: Explicitly set location
-            
-            val = val.replace(/"/g, '""');
-            if (val.includes(',') || val.includes('\n')) {
-                val = `"${val}"`;
-            }
-            return val;
-        });
-        csvContent += values.join(",") + "\n";
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "Room_Allocation_Report.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-
-// --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
-navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
-navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
-navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
-navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment));
-navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
-navReports.addEventListener('click', () => showView(viewReports, navReports));
-navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
-navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
-// document.getElementById('nav-room-settings').addEventListener('click', ...); // Removed
-
-function showView(viewToShow, buttonToActivate) {
-    allViews.forEach(view => view.classList.add('hidden'));
-    allNavButtons.forEach(btn => {
-        btn.classList.add('nav-button-inactive');
-        btn.classList.remove('nav-button-active');
-    });
-    viewToShow.classList.remove('hidden');
-    buttonToActivate.classList.remove('nav-button-inactive');
-    buttonToActivate.classList.add('nav-button-active');
-    
-    clearReport(); // Always clear reports when switching views
-}
-
-// --- (V97) College Name Save Logic (in Settings) ---
-saveCollegeNameButton.addEventListener('click', () => {
-    const collegeName = collegeNameInput.value.trim() || "University of Calicut";
-    localStorage.setItem(COLLEGE_NAME_KEY, collegeName);
-    currentCollegeName = collegeName; // Update global var immediately
-    
-    collegeNameStatus.textContent = "College name saved!";
-    setTimeout(() => { collegeNameStatus.textContent = ""; }, 2000);
-});
-
-// --- (V48) Save from dynamic form (in Settings) ---
-saveRoomConfigButton.addEventListener('click', () => {
-    try {
-        // NOTE: College Name saving is now handled by saveCollegeNameButton
-        
-        // Save Room Config
-        const newConfig = {};
-        // V79: Get all rows, re-read and save
-        const roomRows = roomConfigContainer.querySelectorAll('.room-row');
-        
-        roomRows.forEach(row => {
-            // V79: Read current values (name label is the source of truth for the room key)
-            const roomName = row.querySelector('.room-name-label').textContent.replace(':', '').trim();
-            let capacity = parseInt(row.querySelector('.room-capacity-input').value, 10);
-            let location = row.querySelector('.room-location-input').value.trim();
-            
-            // Default to 30 if blank or invalid
-            if (isNaN(capacity) || capacity <= 0) {
-                capacity = 30;
-            }
-            
-            if (roomName) {
-                // V79: Re-save all rooms with new sequential names and updated data
-                newConfig[roomName] = {
-                    capacity: capacity,
-                    location: location
-                };
-            }
-        });
-        
-        localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(newConfig));
-        
-        // Show success message
-        roomConfigStatus.textContent = "Settings saved successfully!";
-        setTimeout(() => { roomConfigStatus.textContent = ""; }, 2000);
-        
-        // V79: RE-RENDER the list to fix numbering and apply UX rules (remove button on last row only)
-        loadRoomConfig();
-        
-    } catch (e) {
-        roomConfigStatus.textContent = "Error saving settings.";
-        console.error("Error saving room config:", e);
-    }
-});
-
-// --- (V79) Load data into dynamic form (in Settings) ---
-function loadRoomConfig() {
-    // V48: Load College Name
-    currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-    // *** V91 FIX: Populate the input field with the saved value ***
-    if (collegeNameInput) collegeNameInput.value = currentCollegeName; 
-    
-    // Load Room Config
-    let savedConfigJson = localStorage.getItem(ROOM_CONFIG_KEY);
-    let config;
-    
-    if (savedConfigJson) {
-        try {
-            config = JSON.parse(savedConfigJson);
-        } catch (e) {
-            console.error("Error parsing saved config, resetting.", e);
-            config = {};
-        }
-    } else {
-        config = {};
-    }
-    
-    // (V28) Store in global var for other functions to use
-    currentRoomConfig = config;
-    
-    if (Object.keys(config).length === 0) {
-        // *** (V27): Default to 30 rooms ***
-        console.log("Using default room config (30 rooms of 30)");
-        config = {};
-        for (let i = 1; i <= 30; i++) {
-            config[`Room ${i}`] = { capacity: 30, location: "" };
-        }
-        localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(config));
-        currentRoomConfig = config; // Update global var
-    }
-    
-    // Populate the dynamic form
-    roomConfigContainer.innerHTML = ''; // Clear existing rows
-    const sortedKeys = Object.keys(config).sort((a, b) => {
-        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-        return numA - numB;
-    });
-    
-    // V79: Add rows, determining if 'isLast' is true
-    sortedKeys.forEach((roomName, index) => {
-        const roomData = config[roomName];
-        const isLast = (index === sortedKeys.length - 1);
-        const rowHtml = createRoomRowHtml(roomName, roomData.capacity, roomData.location, isLast);
-        roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
-    });
-}
-
-// --- (V28) Add New Room Button (in Settings) ---
-addRoomButton.addEventListener('click', () => {
-    const allRows = roomConfigContainer.querySelectorAll('.room-row');
-    let newName = "Room 1";
-    
-    if (allRows.length > 0) {
-        const lastRow = allRows[allRows.length - 1];
-        const lastName = lastRow.querySelector('.room-name-label').textContent.replace(':', '').trim();
-        let lastNum = 0;
-        try {
-            lastNum = parseInt(lastName.match(/(\d+)/)[0], 10);
-        } catch(e) {
-            lastNum = allRows.length; // Fallback
-        }
-        newName = `Room ${lastNum + 1}`;
-    }
-    
-    // V79: Before adding new row, remove remove button from the current last row
-    const currentLastRow = roomConfigContainer.lastElementChild;
-    if (currentLastRow) {
-        const removeButton = currentLastRow.querySelector('.remove-room-button');
-        if (removeButton) {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'w-[84px]'; // Match the button width for alignment
-            removeButton.parentNode.replaceChild(placeholder, removeButton);
-        }
-    }
-
-    const newRowHtml = createRoomRowHtml(newName, 30, "", true); // Add new row as the last row
-    roomConfigContainer.insertAdjacentHTML('beforeend', newRowHtml);
-});
-
-// --- (V79) Remove Room Button (Event Delegation for all rows, in Settings) ---
-roomConfigContainer.addEventListener('click', (e) => {
-    if (e.target.classList.contains('remove-room-button')) {
-        e.target.closest('.room-row').remove();
-        
-        // Re-save configuration to update the room names and persist the deletion
-        saveRoomConfigButton.click(); // Triggers re-saving and re-rendering to fix numbering and buttons
-    }
-});
-
-
-// --- Q-PAPER REPORT LOGIC ---
-// Listener moved above
-
-// --- (V33) NEW CSV UPLOAD LOGIC ---
-
-// V33: Function called by Python to clear the CSV upload status
-// *** FIX: Attached to window object ***
-window.clear_csv_upload_status = function() {
-    csvLoadStatus.textContent = "";
-    if (correctedCsvUpload) {
-        correctedCsvUpload.value = ""; // Clear the file input
-    }
-}
-
-// V33: Add event listener for the new "Load CSV" button
-loadCsvButton.addEventListener('click', () => {
-    const file = correctedCsvUpload.files[0];
-    if (!file) {
-        csvLoadStatus.textContent = "Please select a CSV file first.";
-        return;
-    }
-    
-    // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const csvText = event.target.result;
-        parseCsvAndLoadData(csvText);
-    };
-    reader.onerror = () => {
-        csvLoadStatus.textContent = "Error reading file.";
-        // *** WORKFLOW FIX: Removed logic that disables PDF buttons ***
-    };
-    reader.readAsText(file);
-});
-
-// V33: This function parses the CSV and overwrites the data stores
-function parseCsvAndLoadData(csvText) {
-    try {
-        const lines = csvText.trim().split('\n');
-        const headersLine = lines.shift().trim();
-        const headers = headersLine.split(',');
-
-        // Find indices, this is more robust
-        const dateIndex = headers.indexOf('Date');
-        const timeIndex = headers.indexOf('Time');
-        const courseIndex = headers.indexOf('Course');
-        const regNumIndex = headers.indexOf('Register Number');
-        const nameIndex = headers.indexOf('Name');
-
-        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-            csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
-            csvLoadStatus.classList.add('text-red-600');
-            csvLoadStatus.classList.remove('text-green-600');
-            // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
-            return;
-        }
-
-        const jsonData = [];
-        const qPaperSummary = {}; // Use an object for quick lookup
-
-        for (const line of lines) {
-            if (!line.trim()) continue;
-            
-            // Regex parser that handles quoted fields (commas inside courses)
-            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
-
-            if (values.length !== headers.length) {
-                console.warn("Skipping malformed CSV line:", line);
-                continue;
-            }
-
-            const student = {
-                'Date': values[dateIndex],
-                'Time': values[timeIndex],
-                'Course': values[courseIndex], // V60: This name should be normalized already
-                'Register Number': values[regNumIndex],
-                'Name': values[nameIndex]
-            };
-            
-            jsonData.push(student);
-            
-            // --- Regenerate Q-Paper Summary ---
-            const key = `${student.Date}_${student.Time}_${student.Course}`;
-            if (!qPaperSummary[key]) {
-                qPaperSummary[key] = { 
-                    Date: student.Date, 
-                    Time: student.Time, 
-                    Course: student.Course, 
-                    'Student Count': 0 
-                };
-            }
-            qPaperSummary[key]['Student Count']++;
-        }
-        
-        const qPaperArray = Object.values(qPaperSummary);
-
-        // --- Update Data Stores ---
-        jsonDataStore.innerHTML = JSON.stringify(jsonData);
-        qPaperDataStore.innerHTML = JSON.stringify(qPaperArray);
-        
-        // V65: Save the base data to localStorage
-        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(jsonData));
-
-        // --- Update UI ---
-        csvLoadStatus.textContent = `Successfully loaded and parsed ${jsonData.length} student records.`;
-        csvLoadStatus.classList.remove('text-red-600');
-        csvLoadStatus.classList.add('text-green-600');
-        
-        // Enable report buttons
-        generateReportButton.disabled = false;
-        generateQPaperReportButton.disabled = false;
-        generateDaywiseReportButton.disabled = false;
-        generateScribeReportButton.disabled = false; // <-- NEW
-        
-        // V56: Enable and populate absentee tab
-        disable_absentee_tab(false);
-        populate_session_dropdown();
-        
-        // V61: Enable and populate QP Code tab
-        disable_qpcode_tab(false);
-        populate_qp_code_session_dropdown();
-        
-        // Enable and populate Room Allotment tab
-        disable_room_allotment_tab(false);
-        populate_room_allotment_session_dropdown();
-
-        // *** NEW: Enable Scribe Tabs ***
-        disable_scribe_tabs(false);
-        populate_scribe_session_dropdown();
-        loadGlobalScribeList();
-        // *****************************
-        
-        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
-
-
-    } catch (e) {
-        console.error("Error parsing CSV:", e);
-        csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
-        csvLoadStatus.classList.add('text-red-600');
-        csvLoadStatus.classList.remove('text-green-600');
-        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
-    }
-}
-
-
-// --- (V56) NEW ABSENTEE LOGIC ---
-
-function disable_absentee_tab(disabled) {
-    navAbsentees.disabled = disabled;
-    if (disabled) {
-        absenteeLoader.classList.remove('hidden');
-        absenteeContentWrapper.classList.add('hidden');
-        navAbsentees.classList.add('opacity-50', 'cursor-not-allowed');
-    } else {
-        absenteeLoader.classList.add('hidden');
-        absenteeContentWrapper.classList.remove('hidden');
-        navAbsentees.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
-}
-
-function populate_session_dropdown() {
-    try {
-        allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
-        if (allStudentData.length === 0) {
-            disable_absentee_tab(true);
-            return;
-        }
-        
-        // Get unique sessions
-        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-        allStudentSessions = Array.from(sessions).sort();
-        
-        sessionSelect.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
-        reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>'; // V68: Clear and set default for reports
-        
-        // Find today's session
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
-        let defaultSession = "";
-        
-        allStudentSessions.forEach(session => {
-            sessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
-            reportsSessionSelect.innerHTML += `<option value="${session}">${session}</option>`; // V68
-            if (session.startsWith(todayStr)) {
-                defaultSession = session;
-            }
-        });
-        
-        if (defaultSession) {
-            sessionSelect.value = defaultSession;
-            sessionSelect.dispatchEvent(new Event('change')); // Trigger change to load list
-        }
-        
-        // V68: Ensure report filters are visible and default set
-        reportFilterSection.classList.remove('hidden');
-        // V81: Set Specific Session as default
-        filterSessionRadio.checked = true;
-        reportsSessionDropdownContainer.classList.remove('hidden');
-        // Ensure the report select box defaults to today's session if found
-        reportsSessionSelect.value = defaultSession || reportsSessionSelect.options[1]?.value || "all";
-
-    } catch (e) {
-        console.error("Failed to populate sessions:", e);
-        disable_absentee_tab(true);
-    }
-}
-
-sessionSelect.addEventListener('change', () => {
-    const sessionKey = sessionSelect.value;
-    if (sessionKey) {
-        absenteeSearchSection.classList.remove('hidden');
-        absenteeListSection.classList.remove('hidden');
-        generateAbsenteeReportButton.disabled = false;
-        loadAbsenteeList(sessionKey);
-    } else {
-        absenteeSearchSection.classList.add('hidden');
-        absenteeListSection.classList.add('hidden');
-        generateAbsenteeReportButton.disabled = true;
-        currentAbsenteeListDiv.innerHTML = "";
-    }
-    clearSearch();
-});
-
-absenteeSearchInput.addEventListener('input', () => {
-    const query = absenteeSearchInput.value.trim().toUpperCase();
-    if (query.length < 3) {
-        autocompleteResults.classList.add('hidden');
-        return;
-    }
-    
-    const sessionKey = sessionSelect.value;
-    if (!sessionKey) return;
-    const [date, time] = sessionKey.split(' | ');
-    
-    // Filter students for this session
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    
-    // Filter by search query
-    const matches = sessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
-    
-    if (matches.length > 0) {
-        autocompleteResults.innerHTML = '';
-        matches.forEach(student => {
-            const item = document.createElement('div');
-            item.className = 'autocomplete-item';
-            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
-            item.onclick = () => selectStudent(student);
-            autocompleteResults.appendChild(item);
-        });
-        autocompleteResults.classList.remove('hidden');
-    } else {
-        autocompleteResults.classList.add('hidden');
-    }
-});
-
-function selectStudent(student) {
-    selectedStudent = student;
-    absenteeSearchInput.value = student['Register Number'];
-    autocompleteResults.classList.add('hidden');
-    
-    // V87 FIX: Allocate rooms for the *entire* session to find the correct room
-    const sessionKey = sessionSelect.value;
-    const [date, time] = sessionKey.split(' | ');
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    
-    // Perform allocation on the *entire* session
-    // *** THIS NOW USES THE MAIN ALLOCATION, WHICH IS SCRIBE-AWARE ***
-    const allocatedSessionData = performRoomAllocation(sessionStudents);
-    
-    // Find our selected student in the allocated list
-    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === student['Register Number']);
-    
-    const roomNo = allocatedStudent ? allocatedStudent['Room No'] : 'N/A';
-    const roomInfo = currentRoomConfig[roomNo];
-    const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
-    
-    selectedStudentName.textContent = student.Name;
-    selectedStudentCourse.textContent = student.Course;
-    selectedStudentRoom.textContent = `Room: ${roomNo} ${location}`; // Use the correctly allocated room
-    if (allocatedStudent && allocatedStudent.isScribe) { // <-- NEW
-        selectedStudentRoom.textContent += ' (Scribe)';
-    }
-    selectedStudentDetails.classList.remove('hidden');
-}
-
-function clearSearch() {
-    selectedStudent = null;
-    absenteeSearchInput.value = "";
-    autocompleteResults.classList.add('hidden');
-    selectedStudentDetails.classList.add('hidden');
-}
-
-addAbsenteeButton.addEventListener('click', () => {
-    if (!selectedStudent) return;
-    
-    const sessionKey = sessionSelect.value;
-    const regNo = selectedStudent['Register Number'];
-    
-    if (currentAbsenteeList.includes(regNo)) {
-        alert(`${regNo} is already on the absentee list.`);
-        clearSearch();
-        return;
-    }
-    
-    // Add to list and save
-    currentAbsenteeList.push(regNo);
-    saveAbsenteeList(sessionKey);
-    renderAbsenteeList();
-    clearSearch();
-});
-
-function loadAbsenteeList(sessionKey) {
-    const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
-    currentAbsenteeList = allAbsentees[sessionKey] || [];
-    renderAbsenteeList();
-}
-
-function saveAbsenteeList(sessionKey) {
-    const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
-    allAbsentees[sessionKey] = currentAbsenteeList;
-    localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
-}
-
-function renderAbsenteeList() {
-    const sessionKey = sessionSelect.value;
-    currentAbsenteeListDiv.innerHTML = "";
-    
-    if (currentAbsenteeList.length === 0) {
-        currentAbsenteeListDiv.innerHTML = `<em class="text-gray-500">No absentees marked for this session.</em>`;
-        return;
-    }
-
-    // V81 FIX: Allocate rooms for the entire session first to get correct room numbers
-    const [date, time] = sessionKey.split(' | ');
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const allocatedSessionData = performRoomAllocation(sessionStudents);
-    const allocatedMap = allocatedSessionData.reduce((map, s) => {
-        map[s['Register Number']] = { room: s['Room No'], isScribe: s.isScribe }; // <-- NEW
-        return map;
-    }, {});
-
-    currentAbsenteeList.forEach(regNo => {
-        const roomData = allocatedMap[regNo] || { room: 'N/A', isScribe: false };
-        const room = roomData.room;
-        const roomInfo = currentRoomConfig[room];
-        const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
-        let roomDisplay = `${room} ${location}`;
-        if (roomData.isScribe) roomDisplay += ' (Scribe)'; // <-- NEW
-        
-        const item = document.createElement('div');
-        item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
-        item.innerHTML = `
-            <span class="font-medium">${regNo}</span>
-            <span class="text-sm text-gray-500">${roomDisplay}</span>
-            <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
-        `;
-        item.querySelector('button').onclick = () => removeAbsentee(regNo);
-        currentAbsenteeListDiv.appendChild(item);
-    });
-}
-
-function removeAbsentee(regNo) {
-    currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
-    saveAbsenteeList(sessionSelect.value);
-    renderAbsenteeList();
-}
-// --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
-
-function disable_qpcode_tab(disabled) {
-    navQPCodes.disabled = disabled;
-    if (disabled) {
-        qpcodeLoader.classList.remove('hidden');
-        qpcodeContentWrapper.classList.add('hidden');
-        navQPCodes.classList.add('opacity-50', 'cursor-not-allowed');
-    } else {
-        qpcodeLoader.classList.add('hidden');
-        qpcodeContentWrapper.classList.remove('hidden');
-        navQPCodes.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
-}
-
-// V89: Loads the *entire* QP code map from localStorage into the global var
-function loadQPCodes() {
-    qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
-}
-
-// V61: Populates the QP Code session dropdown
-function populate_qp_code_session_dropdown() {
-    try {
-        if (allStudentData.length === 0) {
-             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
-        }
-        if (allStudentData.length === 0) {
-            disable_qpcode_tab(true);
-            return;
-        }
-        
-        // Get unique sessions
-        const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-        allStudentSessions = Array.from(sessions).sort();
-        
-        sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
-        
-        // Find today's session
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
-        let defaultSession = "";
-        
-        allStudentSessions.forEach(session => {
-            sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
-            if (session.startsWith(todayStr)) {
-                defaultSession = session;
-            }
-        });
-        
-        if (defaultSession) {
-            sessionSelectQP.value = defaultSession;
-            sessionSelectQP.dispatchEvent(new Event('change')); // Trigger change to load course list
-        }
-
-    } catch (e) {
-        console.error("Failed to populate QP sessions:", e);
-        disable_qpcode_tab(true);
-    }
-}
-
-// V61: Event listener for the QP Code session dropdown
-sessionSelectQP.addEventListener('change', () => {
-    const sessionKey = sessionSelectQP.value;
-    if (sessionKey) {
-        qpEntrySection.classList.remove('hidden');
-        render_qp_code_list(sessionKey);
-    } else {
-        qpEntrySection.classList.add('hidden');
-        qpCodeContainer.innerHTML = '';
-        qpCodeStatus.textContent = '';
-        saveQpCodesButton.disabled = true; // V62: Disable save button
-    }
-});
-
-// V61: Renders the course list for the selected session
-function render_qp_code_list(sessionKey) {
-    
-    // 1. Filter students for this specific session
-    const [date, time] = sessionKey.split(' | ');
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    
-    // 2. Get unique courses for this session
-    const sessionCourses = new Set(sessionStudents.map(s => s.Course));
-    const uniqueCoursesArray = Array.from(sessionCourses).sort();
-    
-    // 3. V89: Load *all* codes, then get the ones for *this* session
-    loadQPCodes();
-    const sessionCodes = qpCodeMap[sessionKey] || {};
-    
-    // 4. Populate the UI
-    const htmlChunks = [];
-    
-    if (uniqueCoursesArray.length === 0) {
-        qpCodeContainer.innerHTML = '<p class="text-center text-gray-500">No courses found for this session.</p>';
-        saveQpCodesButton.disabled = true; 
-        return;
-    }
-
-    uniqueCoursesArray.forEach(courseName => {
-        const cleanKey = cleanCourseKey(courseName);
-
-        // V90 FIX: If the course name cleans to an empty string,
-        // don't render an input for it as it cannot be saved.
-        if (!cleanKey) {
-            console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
-            return; // Skip this iteration
-        }
-        
-        // V89: Look up the code in the session-specific map
-        const savedCode = sessionCodes[cleanKey] || "";
-        
-        htmlChunks.push(`
-            <div class="flex items-center gap-3 p-2 border-b border-gray-200">
-                <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
-                <input type="text" 
-                       class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
-                       value="${savedCode}" 
-                       data-course="${cleanKey}" 
-                       placeholder="Enter QP Code">
-            </div>
-        `);
-    });
-    
-    qpCodeContainer.innerHTML = htmlChunks.join('');
-    
-    saveQpCodesButton.disabled = false;
-    qpCodeStatus.textContent = ''; // Clear status on new load
-}
-
-// V89: NEW SAVE STRATEGY
-saveQpCodesButton.addEventListener('click', () => {
-    const sessionKey = sessionSelectQP.value;
-    if (!sessionKey) {
-        alert("No session selected.");
-        return;
-    }
-    
-    // V90 FIX: Ensure qpCodeMap is initialized before loading from storage
-    if (typeof qpCodeMap === 'undefined') {
-        qpCodeMap = {};
-    }
-
-    // 1. Load the entire master map from storage
-    // This ensures we don't overwrite other sessions
-    loadQPCodes(); 
-    
-    // 2. Create a new, empty map *just for this session's data*
-    const thisSessionCodes = {};
-    
-    // 3. Read all inputs from the DOM
-    const qpInputs = qpCodeContainer.querySelectorAll('.qp-code-input');
-    
-    for (let i = 0; i < qpInputs.length; i++) {
-        const input = qpInputs[i];
-        const courseKey = input.dataset.course; // Already cleaned
-        const qpCode = input.value.trim();
-
-        if (courseKey && qpCode) {
-            thisSessionCodes[courseKey] = qpCode;
-        }
-    }
-
-    // 4. Update the master map with the new data for this session
-    qpCodeMap[sessionKey] = thisSessionCodes;
-
-    // 5. Save the *entire* master map back to localStorage
-    localStorage.setItem(QP_CODE_LIST_KEY, JSON.stringify(qpCodeMap));
-
-    // 6. Show success message
-    qpCodeStatus.classList.remove('text-red-600');
-    qpCodeStatus.classList.add('text-green-600');
-    qpCodeStatus.textContent = `QP Codes saved successfully!`;
-    setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
-});
-
-// V89: NEW INPUT STRATEGY
-// The input listener is now *only* for user feedback.
-// It does NOT update any data.
-qpCodeContainer.addEventListener('input', (e) => {
-    if (e.target.classList.contains('qp-code-input')) {
-        // Show pending status
-        qpCodeStatus.classList.remove('text-green-600');
-        qpCodeStatus.classList.add('text-red-600');
-        qpCodeStatus.textContent = 'Unsaved changes... Click SAVE QP CODES to commit.';
-    }
-});
-
-
-// --- V68: Report Filter Logic ---
+// --- (V68) Report Filter Logic ---
 filterSessionRadio.addEventListener('change', () => {
     if (filterSessionRadio.checked) {
         reportsSessionDropdownContainer.classList.remove('hidden');
@@ -2892,6 +1952,14 @@ scribeCloseRoomModal.addEventListener('click', () => {
 });
 
 // **********************************
+
+// --- Helper function to disable all report buttons ---
+function disable_all_report_buttons(disabled) {
+    generateReportButton.disabled = disabled;
+    generateQPaperReportButton.disabled = disabled;
+    generateDaywiseReportButton.disabled = disabled;
+    generateScribeReportButton.disabled = disabled;
+}
 
 
 // --- Run on initial page load ---
