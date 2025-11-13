@@ -361,7 +361,7 @@ function performOriginalAllocation(data) {
                 
                 // If no existing overflow has space, create a *new* overflow
                 if (!foundOverflowSpot) {
-                    assignedRoomName = `Room ${currentFills.length}`;
+                    assignedRoomName = `Room ${currentFills.length + 1}`; // FIX: Use .length + 1 for new room
                     if (!isScribe) {
                         currentFills.push(1); 
                     } else {
@@ -388,10 +388,6 @@ function performOriginalAllocation(data) {
     }
     return processed_rows_with_rooms;
 }
-
-// *** THIS IS THE OLD performRoomAllocation. IT'S NO LONGER NEEDED ***
-// We now use performOriginalAllocation and modify its output.
-// function performRoomAllocation(data) { ... }
 
 
 // V68: Helper function to filter data based on selected report filter
@@ -456,7 +452,7 @@ generateReportButton.addEventListener('click', async () => {
                 const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
                 const scribeRoom = sessionScribeAllotment[student['Register Number']] || 'N/A';
                 
-                // *** FIX: Add a 'remark' property ***
+                // *** FIX: Add a 'remark' property instead of changing the name ***
                 final_student_list_for_report.push({ 
                     ...student, 
                     Name: student.Name, // Keep original name
@@ -2258,7 +2254,7 @@ scribeSearchInput.addEventListener('input', () => {
     }
     
     if (uniqueMatches.length > 0) {
-        autocompleteResults.innerHTML = '';
+        scribeAutocompleteResults.innerHTML = '';
         uniqueMatches.forEach(student => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
