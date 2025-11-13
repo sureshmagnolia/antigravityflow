@@ -648,6 +648,114 @@ generateReportButton.addEventListener('click', async () => {
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
 });
+// --- V91: Event listener for "Generate Question Paper Report" (Added report type set) ---
+generateQPaperReportButton.addEventListener('click', async () => {
+    generateQPaperReportButton.disabled = true;
+    generateQPaperReportButton.textContent = "Generating...";
+    reportOutputArea.innerHTML = "";
+    reportControls.classList.add('hidden');
+    roomCsvDownloadContainer.innerHTML = "";
+    lastGeneratedReportType = ""; // V91: Reset report type
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    try {
+        // *** V95 FIX: Refresh college name from local storage BEFORE generation ***
+        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+        
+        // V68: Get Filtered data
+        const filteredData = getFilteredReportData('q-paper');
+        
+        // Group the filtered data to generate the Q-Paper summary dynamically
+        const qPaperSummary = {};
+        filteredData.forEach(item => {
+            const key = `${item.Date}_${item.Time}`;
+            if (!qPaperSummary[key]) {
+                qPaperSummary[key] = { Date: item.Date, Time: item.Time, courses: {} };
+            }
+            const courseKey = item.Course;
+            if (!qPaperSummary[key].courses[courseKey]) {
+                qPaperSummary[key].courses[courseKey] = 0;
+            }
+            qPaperSummary[key].courses[courseKey]++;
+        });
+
+        const sessions = qPaperSummary;
+        
+        if (Object.keys(sessions).length === 0) {
+            alert("No question paper data found for the selected filter/session.");
+            return;
+        }
+        
+        let allPagesHtml = '';
+        let totalPages = 0;
+        const sortedSessionKeys = Object.keys(sessions).sort((a, b) => a.localeCompare(b));
+        
+        sortedSessionKeys.forEach(key => {
+            const session = sessions[key];
+            totalPages++;
+            let totalStudentsInSession = 0;
+            
+            let tableRowsHtml = '';
+            const sortedCourses = Object.keys(session.courses).sort();
+
+            sortedCourses.forEach((courseName, index) => {
+                const count = session.courses[courseName];
+                totalStudentsInSession += count;
+                tableRowsHtml += `
+                    <tr>
+                        <td class="sl-col">${index + 1}</td>
+                        <td class="course-col">${courseName}</td>
+                        <td class="count-col">${count}</td>
+                    </tr>
+                `;
+            });
+            
+            const pageHtml = `
+                <div class="print-page">
+                    <div class="print-header-group">
+                        <h1>${currentCollegeName}</h1> <h2>Question Paper Summary</h2>
+                        <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                    </div>
+                    
+                    <table class="q-paper-table print-table">
+                        <thead>
+                            <tr>
+                                <th class="sl-col">Sl No</th>
+                                <th class="course-col">Course Name</th>
+                                <th class="count-col">Student Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHtml}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="2" style="text-align: right;"><strong>Total Students</strong></td>
+                                <td class="count-col"><strong>${totalStudentsInSession}</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `;
+            allPagesHtml += pageHtml;
+        });
+        
+        reportOutputArea.innerHTML = allPagesHtml;
+        reportOutputArea.style.display = 'block'; 
+        reportStatus.textContent = `Generated ${totalPages} summary pages for ${sortedSessionKeys.length} sessions.`;
+        reportControls.classList.remove('hidden');
+        lastGeneratedReportType = "Question_Paper_Summary"; // V91: Set report type
+
+    } catch(e) {
+        console.error("Error generating Q-Paper report:", e);
+        reportStatus.textContent = "An error occurred generating the report.";
+        reportControls.classList.remove('hidden');
+    } finally {
+        generateQPaperReportButton.disabled = false;
+        generateQPaperReportButton.textContent = "Generate Question Paper Report";
+    }
+});
+        
 // *** NEW: Helper for Absentee Report ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
@@ -2249,7 +2357,7 @@ scribeSearchInput.addEventListener('input', () => {
     }
     
     if (uniqueMatches.length > 0) {
-        scribeAutocompleteResults.innerHTML = '';
+        autocompleteResults.innerHTML = '';
         uniqueMatches.forEach(student => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
@@ -2446,7 +2554,12 @@ async function findAvailableRooms(sessionKey) {
         room.students.forEach(regNo => manuallyAllottedRegNos.add(regNo));
     });
     
-    const studentsForAutoAllot = sessionStudents.filter(s => !manuallyAllottedRegNos.has(s['Register Number']));
+    // *** FIX: Scribes should NOT be part of this auto-allot simulation ***
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    const studentsForAutoAllot = sessionStudents.filter(s => 
+        !manuallyAllottedRegNos.has(s['Register Number']) && 
+        !scribeRegNos.has(s['Register Number'])
+    );
     
     // Run a lightweight auto-allot simulation
     const sessionRoomFills = {};
