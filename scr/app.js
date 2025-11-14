@@ -37,11 +37,9 @@ let currentSessionKey = '';
 let globalScribeList = []; // Array of { regNo: "...", name: "..." }
 let currentScribeAllotment = {}; // For the selected session, { regNo: "RoomName" }
 let studentToAllotScribeRoom = null; // Holds regNo of student being allotted
+let allUniqueStudentsForScribeSearch = []; // <-- ADDED: For fast scribe search
 // **************************
-// ... (other global variables)
-let studentToAllotScribeRoom = null; // Holds regNo of student being allotted
-let allUniqueStudentsForScribeSearch = []; // <-- ADD THIS LINE
-// **************************
+
 
 // --- Get references to all Report elements ---
 const generateReportButton = document.getElementById('generate-report-button');
@@ -68,17 +66,18 @@ const navAbsentees = document.getElementById('nav-absentees');
 // const navRoomSettings = document.getElementById('nav-room-settings'); // <-- No longer a main view
 // *** NEW SCRIBE NAV ***
 const navScribeSettings = document.getElementById('nav-scribe-settings');
-const navScribeAllotment = document.getElementById('nav-scribe-allotment');
+// const navScribeAllotment = document.getElementById('nav-scribe-allotment'); // REMOVED
 // **********************
 const navRoomAllotment = document.getElementById('nav-room-allotment');
 const viewRoomAllotment = document.getElementById('view-room-allotment');
 // *** NEW SCRIBE VIEWS ***
 const viewScribeSettings = document.getElementById('view-scribe-settings');
-const viewScribeAllotment = document.getElementById('view-scribe-allotment');
+// const viewScribeAllotment = document.getElementById('view-scribe-allotment'); // REMOVED
 // **********************
-// *** UPDATED allNavButtons and allViews TO MATCH NEW ORDER ***
-const allNavButtons = [navExtractor, navScribeSettings, navRoomAllotment, navScribeAllotment, navQPCodes, navReports, navAbsentees, navSettings];
-const allViews = [viewExtractor, viewScribeSettings, viewRoomAllotment, viewScribeAllotment, viewQPCodes, viewReports, viewAbsentees, viewSettings];
+
+// *** MODIFIED allNavButtons and allViews TO MATCH NEW UI ***
+const allNavButtons = [navExtractor, navScribeSettings, navRoomAllotment, navQPCodes, navReports, navAbsentees, navSettings];
+const allViews = [viewExtractor, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewReports, viewAbsentees, viewSettings];
 
 // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
 const collegeNameInput = document.getElementById('college-name-input');
@@ -167,10 +166,10 @@ const addScribeStudentButton = document.getElementById('add-scribe-student-butto
 const currentScribeListDiv = document.getElementById('current-scribe-list');
 // ************************************
 
-// *** NEW SCRIBE ALLOTMENT ELEMENTS ***
-const scribeAllotmentLoader = document.getElementById('scribe-allotment-loader');
-const scribeAllotmentContentWrapper = document.getElementById('scribe-allotment-content-wrapper');
-const scribeSessionSelect = document.getElementById('scribe-session-select');
+// *** MODIFIED: SCRIBE ALLOTMENT ELEMENTS (Now part of Room Allotment view) ***
+// const scribeAllotmentLoader = document.getElementById('scribe-allotment-loader'); // No longer needed
+// const scribeAllotmentContentWrapper = document.getElementById('scribe-allotment-content-wrapper'); // No longer needed
+// const scribeSessionSelect = document.getElementById('scribe-session-select'); // No longer needed
 const scribeAllotmentListSection = document.getElementById('scribe-allotment-list-section');
 const scribeAllotmentList = document.getElementById('scribe-allotment-list');
 const scribeRoomModal = document.getElementById('scribe-room-modal');
@@ -971,40 +970,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
         generateQPaperReportButton.textContent = "Generate Question Paper Report";
     }
 });
-
-function clearSearch() {
-    selectedStudent = null;
-    absenteeSearchInput.value = "";
-    autocompleteResults.classList.add('hidden');
-    selectedStudentDetails.classList.add('hidden');
-}
-
-// --- ADD THIS NEW FUNCTION ---
-function updateUniqueStudentList() {
-    console.log("Updating unique student list for search...");
-    const seenRegNos = new Set();
-    allUniqueStudentsForScribeSearch = []; // Clear it
-    if (!allStudentData || allStudentData.length === 0) {
-        console.log("No student data to build unique list from.");
-        return;
-    }
-    for (const student of allStudentData) {
-        if (!seenRegNos.has(student['Register Number'])) {
-            seenRegNos.add(student['Register Number']);
-            // Store just what's needed
-            allUniqueStudentsForScribeSearch.push({ 
-                regNo: student['Register Number'], 
-                name: student.Name 
-            });
-        }
-    }
-    console.log(`Updated unique student list: ${allUniqueStudentsForScribeSearch.length} students found.`);
-}
-// --- END OF NEW FUNCTION ---
-
-addAbsenteeButton.addEventListener('click', () => {
-
-
+        
 // *** NEW: Helper for Absentee Report ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
@@ -1392,7 +1358,7 @@ function downloadRoomCsv() {
 navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
 navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
 navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
-navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment));
+// navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment)); // REMOVED
 navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
 navReports.addEventListener('click', () => showView(viewReports, navReports));
 navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
@@ -1692,8 +1658,8 @@ function parseCsvAndLoadData(csvText) {
         populate_room_allotment_session_dropdown();
 
         // *** NEW: Enable Scribe Tabs ***
-        disable_scribe_tabs(false);
-        populate_scribe_session_dropdown();
+        disable_scribe_settings_tab(false); // MODIFIED
+        // populate_scribe_session_dropdown(); // REMOVED
         loadGlobalScribeList();
         // *****************************
         
@@ -1734,7 +1700,9 @@ window.populate_session_dropdown = function() {
             disable_absentee_tab(true);
             return;
         }
-        updateUniqueStudentList();
+        
+        updateUniqueStudentList(); // <-- ADDED: Build unique student list
+        
         // Get unique sessions
         const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
         allStudentSessions = Array.from(sessions).sort();
@@ -1858,6 +1826,30 @@ function clearSearch() {
     autocompleteResults.classList.add('hidden');
     selectedStudentDetails.classList.add('hidden');
 }
+
+// --- ADDED: New helper function for Scribe Search ---
+function updateUniqueStudentList() {
+    console.log("Updating unique student list for search...");
+    const seenRegNos = new Set();
+    allUniqueStudentsForScribeSearch = []; // Clear it
+    if (!allStudentData || allStudentData.length === 0) {
+        console.log("No student data to build unique list from.");
+        return;
+    }
+    for (const student of allStudentData) {
+        if (!seenRegNos.has(student['Register Number'])) {
+            seenRegNos.add(student['Register Number']);
+            // Store just what's needed
+            allUniqueStudentsForScribeSearch.push({ 
+                regNo: student['Register Number'], 
+                name: student.Name 
+            });
+        }
+    }
+    console.log(`Updated unique student list: ${allUniqueStudentsForScribeSearch.length} students found.`);
+}
+// --- END: New helper function ---
+
 
 addAbsenteeButton.addEventListener('click', () => {
     if (!selectedStudent) return;
@@ -2217,12 +2209,12 @@ function loadInitialData() {
                 disable_absentee_tab(false);
                 disable_qpcode_tab(false);
                 disable_room_allotment_tab(false);
-                disable_scribe_tabs(false); // <-- NEW
+                disable_scribe_settings_tab(false); // <-- MODIFIED
                 
                 populate_session_dropdown();
                 populate_qp_code_session_dropdown();
                 populate_room_allotment_session_dropdown();
-                populate_scribe_session_dropdown(); // <-- NEW
+                // populate_scribe_session_dropdown(); // <-- REMOVED
                 loadGlobalScribeList(); // <-- NEW
                 
                 console.log(`Successfully loaded ${savedData.length} records from local storage.`);
@@ -2493,11 +2485,14 @@ allotmentSessionSelect.addEventListener('change', () => {
     const sessionKey = allotmentSessionSelect.value;
     if (sessionKey) {
         loadRoomAllotment(sessionKey);
+        loadScribeAllotment(sessionKey); // <-- ADDED: Load scribe data at the same time
     } else {
+        // Hide all sections
         allotmentStudentCountSection.classList.add('hidden');
         addRoomSection.classList.add('hidden');
         allottedRoomsSection.classList.add('hidden');
         saveAllotmentSection.classList.add('hidden');
+        scribeAllotmentListSection.classList.add('hidden'); // <-- ADDED
     }
 });
 
@@ -2520,26 +2515,19 @@ saveRoomAllotmentButton.addEventListener('click', () => {
 
 // *** NEW: SCRIBE FUNCTIONALITY ***
 
-// Disable/Enable Scribe Tabs
+// Disable/Enable Scribe Settings Tab (MODIFIED)
 // *** FIX: Attach to window object ***
-window.disable_scribe_tabs = function(disabled) {
+window.disable_scribe_settings_tab = function(disabled) {
     navScribeSettings.disabled = disabled;
-    navScribeAllotment.disabled = disabled;
     
     if (disabled) {
         scribeLoader.classList.remove('hidden');
         scribeContentWrapper.classList.add('hidden');
-        scribeAllotmentLoader.classList.remove('hidden');
-        scribeAllotmentContentWrapper.classList.add('hidden');
-        [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.add('opacity-50', 'cursor-not-allowed'));
+        navScribeSettings.classList.add('opacity-50', 'cursor-not-allowed');
     } else {
-        // *** FIX: This logic was inverted, causing the "loader" bug ***
         scribeLoader.classList.add('hidden');
         scribeContentWrapper.classList.remove('hidden');
-        scribeAllotmentLoader.classList.add('hidden');
-        scribeAllotmentContentWrapper.classList.remove('hidden');
-        // ***************************************************************
-        [navScribeSettings, navScribeAllotment].forEach(nav => nav.classList.remove('opacity-50', 'cursor-not-allowed'));
+        navScribeSettings.classList.remove('opacity-50', 'cursor-not-allowed');
     }
 }
 
@@ -2579,13 +2567,13 @@ function removeScribeStudent(regNo) {
     localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
     renderGlobalScribeList();
     // Also re-render allotment list if that view is active
-    if (scribeSessionSelect.value) {
-        renderScribeAllotmentList(scribeSessionSelect.value);
+    if (allotmentSessionSelect.value) { // MODIFIED: Check the main allotment dropdown
+        renderScribeAllotmentList(allotmentSessionSelect.value);
     }
 }
 
 // Scribe Search Autocomplete
-// Scribe Search Autocomplete
+// --- THIS IS THE REPLACED, CORRECTED FUNCTION ---
 scribeSearchInput.addEventListener('input', () => {
     const query = scribeSearchInput.value.trim().toUpperCase();
     scribeAutocompleteResults.innerHTML = ''; // Clear previous results
@@ -2627,6 +2615,8 @@ scribeSearchInput.addEventListener('input', () => {
         scribeAutocompleteResults.classList.add('hidden');
     }
 });
+// --- END OF REPLACED FUNCTION ---
+
 
 // Select a student from autocomplete
 let selectedScribeStudent = null;
@@ -2668,45 +2658,14 @@ function clearScribeSearch() {
     scribeSelectedStudentDetails.classList.add('hidden');
 }
 
-// --- Scribe Allotment Page Logic ---
+// --- Scribe Allotment Page Logic (MOVED) ---
 
-// Populate Scribe Allotment Session Dropdown
-// *** FIX: Attach to window object ***
-window.populate_scribe_session_dropdown = function() {
-    try {
-        if (allStudentData.length === 0) {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
-        }
-        if (allStudentData.length === 0) {
-            disable_scribe_tabs(true);
-            return;
-        }
-        
-        scribeSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
-        let defaultSession = "";
-        const todayStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
-        
-        allStudentSessions.forEach(session => {
-            scribeSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
-            if (session.startsWith(todayStr)) {
-                defaultSession = session;
-            }
-        });
-        
-        if (defaultSession) {
-            scribeSessionSelect.value = defaultSession;
-            scribeSessionSelect.dispatchEvent(new Event('change'));
-        }
-        
-    } catch (e) {
-        console.error("Failed to populate scribe allotment sessions:", e);
-        disable_scribe_tabs(true);
-    }
-}
+// THIS FUNCTION IS NO LONGER NEEDED
+// window.populate_scribe_session_dropdown = function() { ... }
 
-// Scribe session dropdown change
-scribeSessionSelect.addEventListener('change', () => {
-    const sessionKey = scribeSessionSelect.value;
+
+// NEW FUNCTION: This loads the scribe allotment data for the session
+function loadScribeAllotment(sessionKey) {
     if (sessionKey && globalScribeList.length > 0) {
         // Load the allotments for this session
         const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
@@ -2718,7 +2677,8 @@ scribeSessionSelect.addEventListener('change', () => {
         scribeAllotmentListSection.classList.add('hidden');
         scribeAllotmentList.innerHTML = "";
     }
-});
+}
+
 
 // Render the list of scribe students for the selected session
 function renderScribeAllotmentList(sessionKey) {
@@ -2850,7 +2810,7 @@ async function openScribeRoomModal(regNo, studentName) {
     studentToAllotScribeRoom = regNo;
     scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
     
-    const sessionKey = scribeSessionSelect.value;
+    const sessionKey = allotmentSessionSelect.value; // MODIFIED: Use main allotment selector
     const availableRooms = await findAvailableRooms(sessionKey);
     
     scribeRoomSelectionList.innerHTML = '';
@@ -2879,7 +2839,7 @@ async function openScribeRoomModal(regNo, studentName) {
 function selectScribeRoom(roomName) {
     if (!studentToAllotScribeRoom) return;
     
-    const sessionKey = scribeSessionSelect.value;
+    const sessionKey = allotmentSessionSelect.value; // MODIFIED: Use main allotment selector
     
     // Add to this session's allotment
     currentScribeAllotment[studentToAllotScribeRoom] = roomName;
