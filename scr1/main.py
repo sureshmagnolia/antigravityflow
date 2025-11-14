@@ -269,7 +269,7 @@ async def start_extraction(event=None):
     This function is the entry point from the "Run" button.
     It calls the main extraction function.
     """
-    # V55: No need to import js, it's global
+    # V5V5: No need to import js, it's global
     try:
         show_loader(True)
         await asyncio.sleep(0) # Let loader show
@@ -387,7 +387,7 @@ async def run_extraction_py(event=None):
                             page_students = extract_old_format_students(page, file_name, page_num)
                         
                         if page_students:
-                            total_students_in_file += len(page_students)
+                            total_students_in_.file += len(page_students)
                             # 3. Apply the STORED header info to all students found
                             for student in page_students:
                                 all_exam_rows.append({
@@ -401,7 +401,7 @@ async def run_extraction_py(event=None):
                             log_status(f"No students found on page.", is_error=False, file_name=file_name, page=page_num)
                     
                     log_message(f"Found {total_students_in_file} students in this file.")
-                    # --- END V44 STATEFUL LOGIC ---
+                    # --- END V4KA STATEFUL LOGIC ---
 
             except Exception as e:
                 error_msg = f"CRITICAL ERROR processing file. Skipping this file. Details: {e}"
@@ -475,7 +475,7 @@ async def run_extraction_py(event=None):
         js.disable_qpcode_tab(False) # V58: Enable QP Code tab
         js.disable_room_allotment_tab(False) # Enable room allotment tab
         
-        # --- FIX: ADDED THESE 2 LINES ---
+        # --- THIS IS THE FIX ---
         js.disable_scribe_settings_tab(False) # Enable Scribe tab
         js.disable_search_tab(False) # Enable Search tab
         # --- END FIX ---
@@ -484,7 +484,7 @@ async def run_extraction_py(event=None):
         js.populate_qp_code_session_dropdown() # V61: Populate QP Code dropdown
         js.populate_room_allotment_session_dropdown() # Populate room allotment dropdown
         
-        # --- FIX: ADDED THESE 2 LINES ---
+        # --- THIS IS THE FIX ---
         js.populate_search_session_dropdown() # Populate search dropdown
         js.loadGlobalScribeList() # Load any existing scribe data
         # --- END FIX ---
