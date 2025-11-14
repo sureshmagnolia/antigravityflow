@@ -2750,25 +2750,23 @@ function renderScribeAllotmentList(sessionKey) {
 }
 
 // Find available rooms for scribes
+// Find available rooms for scribes
 async function findAvailableRooms(sessionKey) {
-    // const [date, time] = sessionKey.split(' | '); // No longer needed
-    // const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time); // No longer needed
     
-    // 1. Get all "master" rooms
+    // 1. Get all "master" rooms from your settings
     getRoomCapacitiesFromStorage(); // Populates currentRoomConfig
     const masterRoomNames = new Set(Object.keys(currentRoomConfig));
 
     // 2. Get all rooms used by "Manual Allotment" FOR THIS SESSION
     const allManualAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
     const sessionManualAllotment = allManualAllotments[sessionKey] || [];
+    
+    // 3. Remove only the manually allotted rooms from the list
     sessionManualAllotment.forEach(room => {
         masterRoomNames.delete(room.roomName);
     });
-
-    // 3. The automatic allotment simulation is NOW REMOVED.
-    // We no longer check where automatic allotment students would go.
-    // This means any room NOT manually allotted is available for scribes.
-
+    
+    // 4. Return the remaining list, sorted numerically
     return Array.from(masterRoomNames).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
