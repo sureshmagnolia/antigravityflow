@@ -22,7 +22,6 @@
             <button id="nav-extractor" class="nav-button nav-button-active">Data</button>
             <button id="nav-scribe-settings" class="nav-button nav-button-inactive">Scribe Assistance</button>
             <button id="nav-room-allotment" class="nav-button nav-button-inactive">Room Allotment</button>
-            <button id="nav-scribe-allotment" class="nav-button nav-button-inactive">Scribe Allotment</button>
             <button id="nav-qpcodes" class="nav-button nav-button-inactive">QP Codes</button>
             <button id="nav-reports" class="nav-button nav-button-inactive">Reports</button>
             <button id="nav-absentees" class="nav-button nav-button-inactive">Absentees</button>
@@ -43,8 +42,7 @@
                     <li>Click 'Run Batch Extraction'. Check the **Status Log** for errors.</li>
                     <li>(Optional) Download the CSV, correct any mistakes, and re-upload it using the "Load Corrected Data" option. This will be your new base data.</li>
                     <li>Go to **Scribe Assistance** to mark any students who need it.</li>
-                    <li>Go to **Room Allotment** for manual allotment (if needed).</li>
-                    <li>Go to **Scribe Allotment** to assign special rooms.</li>
+                    <li>Go to **Room Allotment** for manual allotment and scribe room assignment.</li>
                     <li>Go to **QP Codes** to assign codes to each course.</li>
                     <li>Go to **Reports** to generate seating lists, scribe lists, and QP counts.</li>
                     <li>Go to **Absentees** to mark absentees and generate the final statement.</li>
@@ -331,9 +329,9 @@
                     Add students who require scribe assistance. This list is global and will apply to all exam sessions.
                 </p>
                 <div class="mb-6">
-                    <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search Student (Register Number):</label>
+                    <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search Student (Register Number or Name):</label>
                     <div class="autocomplete-container">
-                        <input type="text" id="scribe-search" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm" placeholder="Type 3 chars of Register Number...">
+                        <input type="text" id="scribe-search" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm" placeholder="Type 2+ chars of Register Number or Name...">
                         <div id="scribe-autocomplete-results" class="autocomplete-results hidden"></div>
                     </div>
                     
@@ -358,30 +356,6 @@
             </div>
         </div>
     </div>
-    <div id="view-scribe-allotment" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
-        <div class="bg-white p-8 rounded-lg shadow-xl w-full">
-            <h1 class="text-3xl font-bold text-gray-800 mb-6">Scribe Allotment</h1>
-            
-            <div id="scribe-allotment-content-wrapper" class="hidden">
-                <div class="mb-4">
-                    <label for="scribe-session-select" class="block text-sm font-medium text-gray-700 mb-1">Select Exam Session:</label>
-                    <select id="scribe-session-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                        <option value="">-- Select a Session --</option>
-                    </select>
-                </div>
-
-                <div id="scribe-allotment-list-section" class="hidden">
-                    <h3 class="text-lg font-medium text-gray-900 mb-3">Scribe Students for this Session:</h3>
-                    <div id="scribe-allotment-list" class="space-y-3">
-                        </div>
-                </div>
-            </div>
-            
-            <div id="scribe-allotment-loader" class="text-center text-gray-600">
-                <p>Please load data and add students to the Scribe List to enable this feature.</p>
-            </div>
-        </div>
-    </div>
     
     <div id="scribe-room-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
@@ -399,6 +373,7 @@
             </div>
         </div>
     </div>
+
     <div id="view-room-allotment" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
         <div class="bg-white p-8 rounded-lg shadow-xl w-full">
             <h1 class="text-3xl font-bold text-gray-800 mb-6">Room Allotment</h1>
@@ -411,60 +386,77 @@
                     </select>
                 </div>
 
-                <div id="allotment-student-count-section" class="mb-6 hidden">
-                    <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Total Students:</h3>
-                                <p class="text-2xl font-bold text-blue-600" id="total-students-count">0</p>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Awaiting Room Allotment:</h3>
-                                <p class="text-2xl font-bold text-orange-600" id="remaining-students-count">0</p>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800">Allotted:</h3>
-                                <p class="text-2xl font-bold text-green-600" id="allotted-students-count">0</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="add-room-section" class="mb-6 hidden">
-                    <button id="add-room-allotment-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
-                        + Add Room
-                    </button>
-                </div>
-
-                <div id="room-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                        <div class="mt-3">
-                            <h3 class="text-lg font-medium text-gray-900 mb-4">Select Room</h3>
-                            <div id="room-selection-list" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
+                        Regular Room Allotment (Manual)
+                    </h2>
+                    <div id="allotment-student-count-section" class="mb-6 hidden">
+                        <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-800">Total Students:</h3>
+                                    <p class="text-2xl font-bold text-blue-600" id="total-students-count">0</p>
                                 </div>
-                            <div class="mt-4">
-                                <button id="close-room-modal" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
-                                    Cancel
-                                </button>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-800">Awaiting Room Allotment:</h3>
+                                    <p class="text-2xl font-bold text-orange-600" id="remaining-students-count">0</p>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-800">Allotted:</h3>
+                                    <p class="text-2xl font-bold text-green-600" id="allotted-students-count">0</p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div id="allotted-rooms-section" class="mb-6 hidden">
-                    <h3 class="text-lg font-medium text-gray-900 mb-3">Allotted Rooms:</h3>
-                    <div id="allotted-rooms-list" class="space-y-3">
+                    <div id="add-room-section" class="mb-6 hidden">
+                        <button id="add-room-allotment-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+                            + Add Room
+                        </button>
+                    </div>
+
+                    <div id="allotted-rooms-section" class="mb-6 hidden">
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Allotted Rooms:</h3>
+                        <div id="allotted-rooms-list" class="space-y-3">
                         </div>
+                    </div>
+
+                    <div id="save-allotment-section" class="hidden">
+                        <button id="save-room-allotment-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                            Save Room Allotment
+                        </button>
+                        <div id="room-allotment-status" class="text-sm text-green-600 font-medium text-center h-5 mt-2"></div>
+                    </div>
                 </div>
 
-                <div id="save-allotment-section" class="hidden">
-                    <button id="save-room-allotment-button" class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
-                        Save Room Allotment
-                    </button>
-                    <div id="room-allotment-status" class="text-sm text-green-600 font-medium text-center h-5 mt-2"></div>
+                <div class="border border-gray-200 rounded-lg p-4 mt-8">
+                    <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
+                        Scribe Allotment
+                    </h2>
+                    <div id="scribe-allotment-list-section" class="hidden">
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Scribe Students for this Session:</h3>
+                        <div id="scribe-allotment-list" class="space-y-3">
+                            </div>
+                    </div>
                 </div>
+
             </div>
             
+            <div id="room-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4">Select Room</h3>
+                        <div id="room-selection-list" class="space-y-2 max-h-96 overflow-y-auto">
+                            </div>
+                        <div class="mt-4">
+                            <button id="close-room-modal" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div id="room-allotment-loader" class="text-center text-gray-600">
                 <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
             </div>
