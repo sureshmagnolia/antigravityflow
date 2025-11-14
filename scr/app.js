@@ -38,7 +38,10 @@ let globalScribeList = []; // Array of { regNo: "...", name: "..." }
 let currentScribeAllotment = {}; // For the selected session, { regNo: "RoomName" }
 let studentToAllotScribeRoom = null; // Holds regNo of student being allotted
 // **************************
-
+// ... (other global variables)
+let studentToAllotScribeRoom = null; // Holds regNo of student being allotted
+let allUniqueStudentsForScribeSearch = []; // <-- ADD THIS LINE
+// **************************
 
 // --- Get references to all Report elements ---
 const generateReportButton = document.getElementById('generate-report-button');
@@ -968,7 +971,40 @@ generateQPaperReportButton.addEventListener('click', async () => {
         generateQPaperReportButton.textContent = "Generate Question Paper Report";
     }
 });
-        
+
+function clearSearch() {
+    selectedStudent = null;
+    absenteeSearchInput.value = "";
+    autocompleteResults.classList.add('hidden');
+    selectedStudentDetails.classList.add('hidden');
+}
+
+// --- ADD THIS NEW FUNCTION ---
+function updateUniqueStudentList() {
+    console.log("Updating unique student list for search...");
+    const seenRegNos = new Set();
+    allUniqueStudentsForScribeSearch = []; // Clear it
+    if (!allStudentData || allStudentData.length === 0) {
+        console.log("No student data to build unique list from.");
+        return;
+    }
+    for (const student of allStudentData) {
+        if (!seenRegNos.has(student['Register Number'])) {
+            seenRegNos.add(student['Register Number']);
+            // Store just what's needed
+            allUniqueStudentsForScribeSearch.push({ 
+                regNo: student['Register Number'], 
+                name: student.Name 
+            });
+        }
+    }
+    console.log(`Updated unique student list: ${allUniqueStudentsForScribeSearch.length} students found.`);
+}
+// --- END OF NEW FUNCTION ---
+
+addAbsenteeButton.addEventListener('click', () => {
+
+
 // *** NEW: Helper for Absentee Report ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
@@ -1698,7 +1734,7 @@ window.populate_session_dropdown = function() {
             disable_absentee_tab(true);
             return;
         }
-        
+        updateUniqueStudentList();
         // Get unique sessions
         const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
         allStudentSessions = Array.from(sessions).sort();
@@ -2549,33 +2585,41 @@ function removeScribeStudent(regNo) {
 }
 
 // Scribe Search Autocomplete
+// Scribe Search Autocomplete
 scribeSearchInput.addEventListener('input', () => {
     const query = scribeSearchInput.value.trim().toUpperCase();
-    if (query.length < 3) {
+    scribeAutocompleteResults.innerHTML = ''; // Clear previous results
+
+    if (query.length < 2) { // Start searching after 2 characters
         scribeAutocompleteResults.classList.add('hidden');
         return;
     }
     
-    // Search ALL students
-    const matches = allStudentData.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+    // Filter the *unique* list by RegNo or Name
+    const matches = allUniqueStudentsForScribeSearch.filter(s => 
+        s.regNo.toUpperCase().includes(query) || 
+        s.name.toUpperCase().includes(query)
+    ).slice(0, 50); // Limit to 50 results for performance
     
-    // Get unique register numbers from matches
-    const uniqueMatches = [];
-    const seenRegNos = new Set();
-    for (const student of matches) {
-        if (!seenRegNos.has(student['Register Number'])) {
-            seenRegNos.add(student['Register Number']);
-            uniqueMatches.push(student);
-        }
-    }
-    
-    if (uniqueMatches.length > 0) {
-        autocompleteResults.innerHTML = '';
-        uniqueMatches.forEach(student => {
+    if (matches.length > 0) {
+        matches.forEach(student => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
-            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
-            item.onclick = () => selectScribeStudent(student);
+            
+            // Create a safe regex to highlight the query
+            const queryRegex = new RegExp(query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+            
+            // Highlight matching parts in both RegNo and Name
+            const regDisplay = student.regNo.replace(queryRegex, '<strong>$&</strong>');
+            const nameDisplay = student.name.replace(queryRegex, '<strong>$&</strong>');
+            
+            item.innerHTML = `${regDisplay} (${nameDisplay})`;
+            
+            // When clicked, pass the student object to the select function
+            item.onclick = () => selectScribeStudent({ 
+                'Register Number': student.regNo, 
+                'Name': student.name 
+            });
             scribeAutocompleteResults.appendChild(item);
         });
         scribeAutocompleteResults.classList.remove('hidden');
