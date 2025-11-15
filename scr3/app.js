@@ -3366,13 +3366,13 @@ async function openScribeRoomModal(regNo, studentName) {
             const roomOption = document.createElement('div');
             roomOption.className = 'p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50';
             
-            // --- MODIFIED: Add count to innerHTML ---
+// --- MODIFIED: Add count to innerHTML ---
             roomOption.innerHTML = `
                 <div class="flex justify-between items-center">
                     <div class="font-medium text-gray-800">${roomName}${location}</div>
                     <div class="text-sm font-bold text-blue-600">Allotted: ${count}</div>
                 </div>
-                <div class_=("text-sm text-gray-600">Capacity: ${room.capacity}</div>
+                <div class="text-sm text-gray-600">Capacity: ${room.capacity}</div>
             `;
             // --- END MODIFIED ---
             
