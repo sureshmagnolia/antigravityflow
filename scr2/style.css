@@ -396,6 +396,38 @@
     }
     /* ************************************** */
 }
+/* *** NEW: QP Distribution Report (Print) *** */
+    .print-page h4.room-header {
+        font-size: 12pt;
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #666;
+        break-after: avoid;
+    }
+    .qp-distribution-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+        margin-top: 0.5rem;
+        margin-bottom: 1.5rem; /* Space between rooms */
+        break-inside: avoid; /* Keep table from breaking */
+    }
+    .qp-distribution-table th,
+    .qp-distribution-table td {
+        border: 1px solid #000;
+        padding: 6px;
+        text-align: left;
+    }
+    .qp-distribution-table th {
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+        font-weight: bold;
+    }
+/* ****************************************** */
+
 /* *** NEW: Scribe Proforma Styles (Print) *** */
     .proforma-table { 
         width: 100%; 
@@ -662,7 +694,34 @@ tr.scribe-row-highlight {
     font-weight: normal; 
 }
 /* ********************************************* */
-/* ***************************************** */
+
+/* *** NEW: QP Distribution Report (On-screen) *** */
+.print-page h4.room-header {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #666;
+}
+.qp-distribution-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem; /* Space between rooms */
+}
+.qp-distribution-table th,
+.qp-distribution-table td {
+    border: 1px solid #000;
+    padding: 6px;
+    text-align: left;
+}
+.qp-distribution-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+/* ********************************************* */
 
 /* --- (V56) Autocomplete Styles --- */
 .autocomplete-container {
