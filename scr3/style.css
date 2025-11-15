@@ -312,7 +312,7 @@
         width: 100%;
         border-collapse: collapse;
         /* V100 FIX: Increased font size for better readability/fit */
-        font-size: 7pt; 
+        font-size: 8pt; 
         /* V100 FIX: Removed fixed layout in print media to allow natural column width adjustment */
         table-layout: auto; 
         /* V90 FIX: Add break-before: avoid to tables to keep with headers */
@@ -321,7 +321,7 @@
     .daywise-report-table th,
     .daywise-report-table td {
         border: 1px solid #999; /* Darker border for print */
-        padding: 2px;
+        padding: 3px;
         text-align: left;
         word-wrap: break-word;
     }
