@@ -396,6 +396,35 @@
     }
     /* ************************************** */
 }
+/* *** NEW: Scribe Proforma Styles (Print) *** */
+    .proforma-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-top: 1.5rem; 
+        font-size: 11pt; 
+        break-before: avoid;
+    }
+    .proforma-table td { 
+        border: 1px solid #000; 
+        padding: 12px; 
+        vertical-align: top;
+    }
+    .proforma-table td.label { 
+        width: 35%; 
+        font-weight: bold; 
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+    }
+    .proforma-table td.data { 
+        width: 65%; 
+        font-weight: bold; 
+    }
+    .proforma-table td.fillable { 
+        height: 60px; /* Give space to write */
+        font-weight: normal; 
+    }
+    /* ****************************************** */
 /* --- END PRINT STYLES --- */
 
 /* --- Report styles for the *viewer* (on-screen) --- */
@@ -607,7 +636,32 @@ tr.scribe-row-highlight {
     font-weight: bold;
 }
 /* ***************************************** */
-
+/* *** NEW: Scribe Proforma Styles (On-screen) *** */
+.proforma-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin-top: 1.5rem; 
+    font-size: 11pt; 
+}
+.proforma-table td { 
+    border: 1px solid #000; 
+    padding: 12px; 
+    vertical-align: top;
+}
+.proforma-table td.label { 
+    width: 35%; 
+    font-weight: bold; 
+    background-color: #eee;
+}
+.proforma-table td.data { 
+    width: 65%; 
+    font-weight: bold; 
+}
+.proforma-table td.fillable { 
+    height: 60px; /* Give space to write */
+    font-weight: normal; 
+}
+/* ********************************************* */
 /* --- (V56) Autocomplete Styles --- */
 .autocomplete-container {
     position: relative;
