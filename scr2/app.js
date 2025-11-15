@@ -1157,155 +1157,155 @@ generateQpDistributionByCodeReportButton.addEventListener('click', async () => {
     }
 });
 
-// *** NEW: Event listener for QP Distribution by QP-Code Report ***
-
+// *** NEW: Event listener for QP Distribution by Room Report ***
 // *** NEW: Event listener for QP Distribution by Room Report ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
-    generateQpDistributionReportButton.disabled = true;
-    generateQpDistributionReportButton.textContent = "Generating...";
-    reportOutputArea.innerHTML = "";
-    reportControls.classList.add('hidden');
-    roomCsvDownloadContainer.innerHTML = "";
-    lastGeneratedReportType = "";
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    try {
-        // 1. Get College Name
-        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
-        // 2. Get FILTERED RAW student data
-        const data = getFilteredReportData('qp-distribution');
-        if (data.length === 0) {
-            alert("No data found for the selected filter/session.");
-            generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
-            return;
-        }
+    generateQpDistributionReportButton.disabled = true;
+    generateQpDistributionReportButton.textContent = "Generating...";
+    reportOutputArea.innerHTML = "";
+    reportControls.classList.add('hidden');
+    roomCsvDownloadContainer.innerHTML = "";
+    lastGeneratedReportType = "";
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    try {
+        // 1. Get College Name
+        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+        
+        // 2. Get FILTERED RAW student data
+        const data = getFilteredReportData('qp-distribution');
+        if (data.length === 0) {
+            alert("No data found for the selected filter/session.");
+            generateQpDistributionReportButton.disabled = false;
+            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+            return;
+        }
 
-        // 3. Get ORIGINAL allocation. This is key, as it includes scribes in their original rooms.
-        const processed_rows_with_rooms = performOriginalAllocation(data);
+        // 3. Get ORIGINAL allocation. This is key, as it includes scribes in their original rooms.
+        const processed_rows_with_rooms = performOriginalAllocation(data);
 
-        // 4. Load QP Codes
-        loadQPCodes(); // populates qpCodeMap
+        // 4. Load QP Codes
+        loadQPCodes(); // populates qpCodeMap
 
-        // 5. Aggregate data
-        const sessions = {};
-        for (const student of processed_rows_with_rooms) {
-            const sessionKey = `${student.Date}_${student.Time}`;
-            const roomName = student['Room No'];
-            const courseName = student.Course;
-            const courseKey = cleanCourseKey(courseName);
+        // 5. Aggregate data
+        const sessions = {};
+        for (const student of processed_rows_with_rooms) {
+            const sessionKey = `${student.Date}_${student.Time}`;
+            const roomName = student['Room No'];
+            const courseName = student.Course;
+            const courseKey = cleanCourseKey(courseName);
 
-            // Get QP Code
-            const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-            const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-            const qpCode = sessionQPCodes[courseKey] || 'N/A';
+            // Get QP Code
+            const sessionKeyPipe = `${student.Date} | ${student.Time}`;
+            const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+            const qpCode = sessionQPCodes[courseKey] || 'N/A';
 
-            // Initialize nested objects
-            if (!sessions[sessionKey]) {
-                sessions[sessionKey] = { Date: student.Date, Time: student.Time, rooms: {} };
-            }
-            if (!sessions[sessionKey].rooms[roomName]) {
-                sessions[sessionKey].rooms[roomName] = { courses: {} };
-            }
-            if (!sessions[sessionKey].rooms[roomName].courses[courseKey]) {
-                sessions[sessionKey].rooms[roomName].courses[courseKey] = {
-                    name: courseName,
-                    qpCode: qpCode,
-                    count: 0
-                };
-            }
-            // Increment count
-            sessions[sessionKey].rooms[roomName].courses[courseKey].count++;
-        }
-        
-        // 6. Build HTML
-        let allPagesHtml = '';
-        const sortedSessionKeys = Object.keys(sessions).sort();
-        
-        if (sortedSessionKeys.length === 0) {
-            alert("No data to report.");
-            generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
-            return;
-        }
+            // Initialize nested objects
+            if (!sessions[sessionKey]) {
+                sessions[sessionKey] = { Date: student.Date, Time: student.Time, rooms: {} };
+            }
+            if (!sessions[sessionKey].rooms[roomName]) {
+                sessions[sessionKey].rooms[roomName] = { courses: {} };
+            }
+            if (!sessions[sessionKey].rooms[roomName].courses[courseKey]) {
+                sessions[sessionKey].rooms[roomName].courses[courseKey] = {
+                    name: courseName,
+                    qpCode: qpCode,
+                    count: 0
+                };
+            }
+            // Increment count
+            sessions[sessionKey].rooms[roomName].courses[courseKey].count++;
+        }
+        
+        // 6. Build HTML
+        let allPagesHtml = '';
+        const sortedSessionKeys = Object.keys(sessions).sort();
+        
+        if (sortedSessionKeys.length === 0) {
+            alert("No data to report.");
+            generateQpDistributionReportButton.disabled = false;
+            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+            return;
+        }
 
-        for (const sessionKey of sortedSessionKeys) {
-            const session = sessions[sessionKey];
-            
-            // Start a new page for each session
-            allPagesHtml += `
-                <div class="print-page">
-                    <div class="print-header-group">
-                        <h1>${currentCollegeName}</h1>
-                        <h2>Question Paper Distribution by Room</h2>
-                        <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
-                    </div>
-            `;
-            
-            // Sort rooms numerically
-            const sortedRoomKeys = Object.keys(session.rooms).sort((a, b) => {
-                const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-                const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-                return numA - numB;
-            });
+        for (const sessionKey of sortedSessionKeys) {
+            const session = sessions[sessionKey];
+            
+            // Start a new page for each session
+            allPagesHtml += `
+                <div class="print-page">
+                    <div class="print-header-group">
+                        <h1>${currentCollegeName}</h1>
+Â                      <h2>Question Paper Distribution by Room</h2>
+Â                      <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                    </div>
+            `;
+            
+            // Sort rooms numerically
+            const sortedRoomKeys = Object.keys(session.rooms).sort((a, b) => {
+                const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                return numA - numB;
+            });
 
-            // Loop through each room and create a table
-            for (const roomName of sortedRoomKeys) {
-                const roomData = session.rooms[roomName];
-                
-                // Add Room Header (uses .room-header)
-                allPagesHtml += `<h4 class="room-header">${roomName}</h4>`;
-                
-                // Add Table
-                allPagesHtml += `
-                    <table class="qp-distribution-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 60%;">Course Name</th>
-                                <th style="width: 20%;">QP Code</th>
-                                <th style="width: 20%;">Student Count</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-                
-                // Sort courses by name
-                const sortedCourseKeys = Object.keys(roomData.courses).sort((a, b) => 
-                    roomData.courses[a].name.localeCompare(roomData.courses[b].name)
-                );
+            // Loop through each room and create a table
+            for (const roomName of sortedRoomKeys) {
+                const roomData = session.rooms[roomName];
+                
+                // Add Room Header (uses .room-header)
+id="generate-qp-distribution-report-button"               allPagesHtml += `<h4 class="room-header">${roomName}</h4>`;
+                
+                // Add Table
+                allPagesHtml += `
+                    <table class="qp-distribution-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 60%;">Course Name</th>
+                s[courseKey]             <th style="width: 20%;">QP Code</th>
+                                <th style="width: 20%;">Student Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                // Sort courses by name
+s[courseKey]               const sortedCourseKeys = Object.keys(roomData.courses).sort((a, b) => 
+                    roomData.courses[a].name.localeCompare(roomData.courses[b].name)
+                );
 
-                for (const courseKey of sortedCourseKeys) {
-                    const course = roomData.courses[courseKey];
-                    allPagesHtml += `
-                        <tr>
-                            <td>${course.name}</td>
-                            <td>${course.qpCode}</td>
-                            <td>${course.count}</td>
-                        </tr>
-                    `;
-                }
-                
-                allPagesHtml += `</tbody></table>`;
-            }
-            
-            allPagesHtml += `</div>`; // Close print-page
-        }
-        
-        // 7. Show report
-        reportOutputArea.innerHTML = allPagesHtml;
-        reportStatus.textContent = `Generated QP Distribution Report for ${sortedSessionKeys.length} sessions.`;
-        reportControls.classList.remove('hidden');
-        lastGeneratedReportType = "QP_Distribution_By_Room_Report";
+                for (const courseKey of sortedCourseKeys) {
+  tributionReportButton.disabled = false;
+                    const course = roomData.courses[courseKey];
+                    allPagesHtml += `
+                        <tr>
+                            <td>${course.name}</td>
+                      Indented block      <td>${course.qpCode}</td>
+                            <td>${course.count}</td>
+                        </tr>
+                    `;
+                }
+                
+                allPagesHtml += `</tbody></table>`;
+Example           }
+            
+            allPagesHtml += `</div>`; // Close print-page
+        }
+        
+        // 7. Show report
+        reportOutputArea.innerHTML = allPagesHtml;
+        reportStatus.textContent = `Generated QP Distribution Report for ${sortedSessionKeys.length} sessions.`;
+        reportControls.classList.remove('hidden');
+  s[courseKey]   lastGeneratedReportType = "QP_Distribution_By_Room_Report";
 
-    } catch (e) {
-        console.error("Error generating QP Distribution by Room report:", e);
-        reportStatus.textContent = "An error occurred generating the report.";
-        reportControls.classList.remove('hidden');
-    } finally {
-        generateQpDistributionReportButton.disabled = false;
-        generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
-    }
+    } catch (e) {
+        console.error("Error generating QP Distribution by Room report:", e);
+        reportStatus.textContent = "An error occurred generating the report.";
+        reportControls.classList.remove('hidden');
+    } finally {
+        generateQpDistributionReportButton.disabled = false;
+        generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+    }
 });
 
 // *** NEW: Helper for Absentee Report (V10.1 FIX) ***
@@ -2729,12 +2729,13 @@ function loadInitialData() {
                 qPaperDataStore.innerHTML = JSON.stringify(Object.values(qPaperSummary));
                 
                 // Enable UI tabs
-                generateReportButton.disabled = false;
-                generateQPaperReportButton.disabled = false;
-                generateQpDistributionReportButton.disabled = false; // <-- ADD THIS
-                generateDaywiseReportButton.disabled = false;
-                generateScribeReportButton.disabled = false; // <-- NEW
-                generateScribeProformaButton.disabled = false; // <-- ADD THIS
+                generateReportButton.disabled = false;
+                generateQPaperReportButton.disabled = false;
+                generateQpDistributionReportButton.disabled = false;
+                generateQpDistributionByCodeReportButton.disabled = false; // <-- ADD THIS
+                generateDaywiseReportButton.disabled = false;
+                generateScribeReportButton.disabled = false; // <-- NEW
+                generateScribeProformaButton.disabled = false; // <-- ADD THIS
                 disable_absentee_tab(false);
                 disable_qpcode_tab(false);
                 disable_room_allotment_tab(false);
