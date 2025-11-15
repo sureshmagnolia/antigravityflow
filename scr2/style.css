@@ -279,7 +279,7 @@
     /* *** UPDATED WIDTHS *** */
     .sl-col { width: 5%; }
     .course-col { width: 30%; } /* Increased */
-    .reg-col { width: 15%; } /* Reduced */
+    .reg-col { width: 15%; text-align: right; } /* Reduced */
     .name-col { width: 25%; } /* Reduced */
     .signature-col { width: 10%; } 
     .remarks-col { width: 15%; } /* Increased */
@@ -527,7 +527,7 @@ tr.scribe-row-highlight {
 /* *** UPDATED WIDTHS *** */
 .print-page .sl-col { width: 5%; }
 .print-page .course-col { width: 30%; } /* Increased */
-.print-page .reg-col { width: 15%; } /* Reduced */
+.print-page .reg-col { width: 15%; text-align: right; } /* Reduced */
 .print-page .name-col { width: 25%; } /* Reduced */
 .print-page .signature-col { width: 10%; } 
 .print-page .remarks-col { width: 15%; } /* Increased */
