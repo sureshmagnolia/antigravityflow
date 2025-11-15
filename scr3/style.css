@@ -52,6 +52,15 @@
     color: #1d4ed8; /* blue-700 */
 }
 
+/* *** NEW: Edit Data Button Colors *** */
+#nav-edit-data {
+    background-color: #6b7280; /* gray-500 */
+}
+#nav-edit-data.nav-button-active {
+    background-color: #f3f4f6; /* gray-100 */
+    color: #1f2937; /* gray-800 */
+}
+
 #nav-settings {
     background-color: #16a34a; /* green-600 */
 }
@@ -555,7 +564,42 @@
 tr.scribe-row-highlight {
     background-color: #f0f0f0; /* Light grey */
 }
-        
+/* *** NEW: Edit Data Table Styles *** */
+.edit-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.edit-data-table th,
+.edit-data-table td {
+    border: 1px solid #e5e7eb; /* gray-200 */
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+.edit-data-table th {
+    background-color: #f9fafb; /* gray-50 */
+    font-weight: 600;
+}
+.edit-data-table .edit-field {
+    display: block;
+    width: 100%;
+}
+.edit-data-table .view-field {
+    min-height: 2.25rem; /* Match input height */
+    padding-top: 0.25rem;
+}
+.edit-data-table input[type="text"] {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.edit-data-table .actions-cell {
+    width: 100px;
+    text-align: center;
+}
+/* ********************************************* */        
 /* --- Room-wise Seating Report Columns (w/ Remarks) --- */
 /* *** UPDATED WIDTHS *** */
 .print-page .sl-col { width: 5%; }
