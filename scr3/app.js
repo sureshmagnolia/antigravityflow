@@ -1948,9 +1948,15 @@ roomConfigContainer.addEventListener('click', (e) => {
 // V33: Function called by Python to clear the CSV upload status
 // *** FIX: Attached to window object ***
 window.clear_csv_upload_status = function() {
-    csvLoadStatus.textContent = "";
-    if (correctedCsvUpload) {
-        correctedCsvUpload.value = ""; // Clear the file input
+    // Query DOM elements directly to avoid scope issues
+    const csvLoadStatusElement = document.getElementById('csv-load-status');
+    const correctedCsvUploadElement = document.getElementById('corrected-csv-upload');
+    
+    if (csvLoadStatusElement) {
+        csvLoadStatusElement.textContent = "";
+    }
+    if (correctedCsvUploadElement) {
+        correctedCsvUploadElement.value = ""; // Clear the file input
     }
 }
 
