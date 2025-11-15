@@ -410,6 +410,7 @@ function getFilteredReportData(reportType) {
 
 
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
+// --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
     
     generateReportButton.disabled = true;
@@ -557,7 +558,11 @@ generateReportButton.addEventListener('click', async () => {
                 </div>
             `;
 
+            // --- START OF MODIFIED SECTION ---
             let previousCourseName = ""; 
+            let previousRegNoPrefix = ""; // <-- ADDED
+            const regNoRegex = /^([A-Z]+)(\d+)$/; // <-- ADDED
+
             function generateTableRows(studentList) {
                 let rowsHtml = '';
                 studentList.forEach((student) => { 
@@ -585,6 +590,23 @@ generateReportButton.addEventListener('click', async () => {
                     let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
                     if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
 
+                    // --- NEW Register Number Logic ---
+                    const regNo = student['Register Number'];
+                    let displayRegNo = regNo;
+                    const match = regNo.match(regNoRegex);
+                    
+                    if (match) {
+                        const prefix = match[1];
+                        const number = match[2];
+                        if (prefix === previousRegNoPrefix) {
+                            displayRegNo = number; // Show only the number
+                        }
+                        previousRegNoPrefix = prefix; // Set for next loop
+                    } else {
+                        previousRegNoPrefix = ""; // Reset if no match
+                    }
+                    // --- END NEW Logic ---
+
                     // *** FIX: Use class for highlighting ***
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     
@@ -594,7 +616,7 @@ generateReportButton.addEventListener('click', async () => {
                         <tr ${rowClass}>
                             <td class="sl-col">${seatNumber}${asterisk}</td>
                             <td class="course-col">${displayCourseName}</td>
-                            <td class="reg-col">${student['Register Number']}</td>
+                            <td class="reg-col">${displayRegNo}</td>
                             <td class="name-col">${student.Name}</td>
                             <td class="remarks-col">${remarkText}</td>
                             <td class="signature-col"></td>
@@ -603,6 +625,7 @@ generateReportButton.addEventListener('click', async () => {
                 });
                 return rowsHtml;
             }
+            // --- END OF MODIFIED SECTION ---
             
             // *** FIX: Use student.seatNumber for sorting ***
             const studentsWithIndex = session.students.sort((a, b) => a.seatNumber - b.seatNumber);
@@ -611,6 +634,7 @@ generateReportButton.addEventListener('click', async () => {
             const studentsPage2 = studentsWithIndex.slice(20);
 
             previousCourseName = ""; 
+            previousRegNoPrefix = ""; // <-- ADDED
             const tableRowsPage1 = generateTableRows(studentsPage1);
             // V92 FIX: Ensure table is properly closed on every page
             allPagesHtml += `<div class="print-page">${pageHeaderHtml}${tableHeaderHtml}${tableRowsPage1}</tbody></table>`; 
@@ -620,6 +644,7 @@ generateReportButton.addEventListener('click', async () => {
             
             if (studentsPage2.length > 0) {
                 previousCourseName = ""; 
+                previousRegNoPrefix = ""; // <-- ADDED
                 const tableRowsPage2 = generateTableRows(studentsPage2);
                 // V92 FIX: Ensure table is properly closed on every page
                 allPagesHtml += `<div class="print-page">${tableHeaderHtml}${tableRowsPage2}</tbody></table>${invigilatorFooterHtml}</div>`; 
