@@ -999,6 +999,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
 });
 
 // *** NEW: Event listener for QP Distribution by Room Report ***
+// *** NEW: Event listener for QP Distribution by QP-Code Report ***
 generateQpDistributionReportButton.addEventListener('click', async () => {
     generateQpDistributionReportButton.disabled = true;
     generateQpDistributionReportButton.textContent = "Generating...";
@@ -1017,7 +1018,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         if (data.length === 0) {
             alert("No data found for the selected filter/session.");
             generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+            generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
             return;
         }
 
@@ -1027,7 +1028,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         // 4. Load QP Codes
         loadQPCodes(); // populates qpCodeMap
 
-        // 5. Aggregate data
+        // 5. Aggregate data (NEW LOGIC: Group by QP Code first)
         const sessions = {};
         for (const student of processed_rows_with_rooms) {
             const sessionKey = `${student.Date}_${student.Time}`;
@@ -1042,20 +1043,22 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
 
             // Initialize nested objects
             if (!sessions[sessionKey]) {
-                sessions[sessionKey] = { Date: student.Date, Time: student.Time, rooms: {} };
+                sessions[sessionKey] = { Date: student.Date, Time: student.Time, qps: {} };
             }
-            if (!sessions[sessionKey].rooms[roomName]) {
-                sessions[sessionKey].rooms[roomName] = { courses: {} };
-            }
-            if (!sessions[sessionKey].rooms[roomName].courses[courseKey]) {
-                sessions[sessionKey].rooms[roomName].courses[courseKey] = {
-                    name: courseName,
-                    qpCode: qpCode,
-                    count: 0
+            if (!sessions[sessionKey].qps[qpCode]) {
+                sessions[sessionKey].qps[qpCode] = {
+                    courseName: courseName,
+                    rooms: {},
+                    total: 0
                 };
             }
-            // Increment count
-            sessions[sessionKey].rooms[roomName].courses[courseKey].count++;
+            if (!sessions[sessionKey].qps[qpCode].rooms[roomName]) {
+                sessions[sessionKey].qps[qpCode].rooms[roomName] = 0;
+            }
+            
+            // Increment counts
+            sessions[sessionKey].qps[qpCode].rooms[roomName]++;
+            sessions[sessionKey].qps[qpCode].total++;
         }
         
         // 6. Build HTML
@@ -1065,7 +1068,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         if (sortedSessionKeys.length === 0) {
             alert("No data to report.");
             generateQpDistributionReportButton.disabled = false;
-            generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+            generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
             return;
         }
 
@@ -1077,55 +1080,61 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
                 <div class="print-page">
                     <div class="print-header-group">
                         <h1>${currentCollegeName}</h1>
-                        <h2>Question Paper Distribution by Room</h2>
+                        <h2>Question Paper Distribution by QP Code</h2>
                         <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
                     </div>
             `;
             
-            // Sort rooms numerically
-            const sortedRoomKeys = Object.keys(session.rooms).sort((a, b) => {
-                const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-                const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-                return numA - numB;
-            });
+            // Sort QP codes
+            const sortedQPCodes = Object.keys(session.qps).sort();
 
-            // Loop through each room and create a table
-            for (const roomName of sortedRoomKeys) {
-                const roomData = session.rooms[roomName];
+            // Loop through each QP Code and create a table
+            for (const qpCode of sortedQPCodes) {
+                const qpData = session.qps[qpCode];
                 
-                // Add Room Header
-                allPagesHtml += `<h4 class="room-header">${roomName}</h4>`;
+                // Add QP Header
+                allPagesHtml += `<h4 class="qp-header">QP Code: ${qpCode} &nbsp; (Course: ${qpData.courseName})</h4>`;
                 
                 // Add Table
                 allPagesHtml += `
                     <table class="qp-distribution-table">
                         <thead>
                             <tr>
-                                <th style="width: 60%;">Course Name</th>
-                                <th style="width: 20%;">QP Code</th>
+                                <th style="width: 80%;">Room</th>
                                 <th style="width: 20%;">Student Count</th>
                             </tr>
                         </thead>
                         <tbody>
                 `;
                 
-                // Sort courses by name
-                const sortedCourseKeys = Object.keys(roomData.courses).sort((a, b) => 
-                    roomData.courses[a].name.localeCompare(roomData.courses[b].name)
-                );
+                // Sort rooms numerically
+                const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
+                    const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                    const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                    return numA - numB;
+                });
 
-                for (const courseKey of sortedCourseKeys) {
-                    const course = roomData.courses[courseKey];
+                for (const roomName of sortedRoomKeys) {
+                    const count = qpData.rooms[roomName];
                     allPagesHtml += `
                         <tr>
-                            <td>${course.name}</td>
-                            <td>${course.qpCode}</td>
-                            <td>${course.count}</td>
+                            <td>${roomName}</td>
+                            <td>${count}</td>
                         </tr>
                     `;
                 }
                 
-                allPagesHtml += `</tbody></table>`;
+                // Add total row
+                allPagesHtml += `
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td style="text-align: right; font-weight: bold;">Total</td>
+                            <td style="font-weight: bold;">${qpData.total}</td>
+                        </tr>
+                    </tfoot>
+                    </table>
+                `;
             }
             
             allPagesHtml += `</div>`; // Close print-page
@@ -1144,7 +1153,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         reportControls.classList.remove('hidden');
     } finally {
         generateQpDistributionReportButton.disabled = false;
-        generateQpDistributionReportButton.textContent = "Generate QP Distribution by Room Report";
+        generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
     }
 });
 
