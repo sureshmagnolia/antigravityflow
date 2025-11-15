@@ -406,6 +406,15 @@
         border-bottom: 2px solid #666;
         break-after: avoid;
     }
+.print-page h4.qp-header { {
+        font-size: 12pt;
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #666;
+        break-after: avoid;
+    }
     .qp-distribution-table {
         width: 100%;
         border-collapse: collapse;
@@ -697,6 +706,14 @@ tr.scribe-row-highlight {
 
 /* *** NEW: QP Distribution Report (On-screen) *** */
 .print-page h4.room-header {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #666;
+}
+.print-page h4.qp-header {
     font-size: 12pt;
     font-weight: bold;
     margin-top: 1.5rem;
