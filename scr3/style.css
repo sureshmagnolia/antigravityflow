@@ -398,7 +398,7 @@
 }
 
 /* *** NEW: QP Distribution Report (Print) *** */
-    .print-page h4.room-header {
+    .print-page h4.qp-header {
         font-size: 12pt;
         font-weight: bold;
         margin-top: 1.5rem;
@@ -696,7 +696,7 @@ tr.scribe-row-highlight {
 }
 /* ********************************************* */
 /* *** NEW: QP Distribution Report (On-screen) *** */
-.print-page h4.room-header {
+.print-page h4.qp-header {
     font-size: 12pt;
     font-weight: bold;
     margin-top: 1.5rem;
