@@ -85,11 +85,34 @@ const viewRoomAllotment = document.getElementById('view-room-allotment');
 // *** NEW SCRIBE VIEWS ***
 const viewScribeSettings = document.getElementById('view-scribe-settings');
 // const viewScribeAllotment = document.getElementById('view-scribe-allotment'); // REMOVED
+
+// *** NEW SEARCH ELEMENTS ***
+const navSearch = document.getElementById('nav-search');
+const viewSearch = document.getElementById('view-search');
+const searchSessionSelect = document.getElementById('search-session-select');
+const studentSearchSection = document.getElementById('student-search-section');
+const studentSearchInput = document.getElementById('student-search-input');
+const studentSearchAutocomplete = document.getElementById('student-search-autocomplete');
+const studentSearchStatus = document.getElementById('student-search-status');
+
+// Search Result Modal Elements
+const searchResultModal = document.getElementById('student-search-result-modal');
+const searchResultName = document.getElementById('search-result-name');
+const searchResultRegNo = document.getElementById('search-result-regno');
+const searchResultCourse = document.getElementById('search-result-course');
+const searchResultQPCode = document.getElementById('search-result-qpcode');
+const searchResultRoom = document.getElementById('search-result-room');
+const searchResultSeat = document.getElementById('search-result-seat');
+const searchResultScribeBlock = document.getElementById('search-result-scribe-block');
+const searchResultScribeRoom = document.getElementById('search-result-scribe-room');
+const modalCloseSearchResult = document.getElementById('modal-close-search-result');
+// ***************************
+
 // **********************
 const viewEditData = document.getElementById('view-edit-data');
 // *** MODIFIED allNavButtons and allViews TO MATCH NEW UI ***
-const allNavButtons = [navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navReports, navAbsentees, navSettings]; // <-- ADD navEditData
-const allViews = [viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewReports, viewAbsentees, viewSettings]; // <-- ADD viewEditData
+const allNavButtons = [navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
+const allViews = [viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
 
 // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
 const collegeNameInput = document.getElementById('college-name-input');
@@ -1779,13 +1802,12 @@ function downloadRoomCsv() {
 
 
 // --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
-// --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
 navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
 navEditData.addEventListener('click', () => showView(viewEditData, navEditData)); // <-- ADD THIS
 navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
 navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
-// navScribeAllotment.addEventListener('click', () => showView(viewScribeAllotment, navScribeAllotment)); // REMOVED
 navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
+navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); // <-- ADD THIS
 navReports.addEventListener('click', () => showView(viewReports, navReports));
 navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
 navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
@@ -2208,7 +2230,7 @@ window.populate_session_dropdown = function() {
         sessionSelect.innerHTML = '<option value="">-- Select a Session --</option>'; // Clear
         reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>'; // V68: Clear and set default for reports
         editSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>'; // <-- ADD THIS
-        
+        searchSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>'; // <-- ADD THIS
         // Find today's session
         const today = new Date();
         const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
@@ -2218,6 +2240,7 @@ window.populate_session_dropdown = function() {
             sessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
             reportsSessionSelect.innerHTML += `<option value="${session}">${session}</option>`; // V68
             editSessionSelect.innerHTML += `<option value="${session}">${session}</option>`; // <-- ADD THIS
+            searchSessionSelect.innerHTML += `<option value="${session}">${session}</option>`; // <-- ADD THIS
             if (session.startsWith(todayStr)) {
                 defaultSession = session;
             }
@@ -3932,5 +3955,121 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
         generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
     }
 });
+// --- NEW: STUDENT SEARCH FUNCTIONALITY ---
+
+let searchSessionStudents = []; // Holds students for the selected search session
+
+// 1. Listen for session change
+searchSessionSelect.addEventListener('change', () => {
+    const sessionKey = searchSessionSelect.value;
+    studentSearchInput.value = '';
+    studentSearchAutocomplete.classList.add('hidden');
+    
+    if (sessionKey) {
+        const [date, time] = sessionKey.split(' | ');
+        // Get all students for this session
+        searchSessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        studentSearchSection.classList.remove('hidden');
+        studentSearchStatus.textContent = `Loaded ${searchSessionStudents.length} students for this session.`;
+    } else {
+        studentSearchSection.classList.add('hidden');
+        studentSearchStatus.textContent = '';
+        searchSessionStudents = [];
+    }
+});
+
+// 2. Autocomplete for search input
+studentSearchInput.addEventListener('input', () => {
+    const query = studentSearchInput.value.trim().toUpperCase();
+    if (query.length < 2) {
+        studentSearchAutocomplete.classList.add('hidden');
+        return;
+    }
+
+    // Filter students by register number
+    const matches = searchSessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+    
+    if (matches.length > 0) {
+        studentSearchAutocomplete.innerHTML = '';
+        matches.forEach(student => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+            // When clicked, fetch details and show modal
+            item.onclick = () => {
+                studentSearchInput.value = student['Register Number'];
+                studentSearchAutocomplete.classList.add('hidden');
+                showStudentDetailsModal(student['Register Number'], searchSessionSelect.value);
+            };
+            studentSearchAutocomplete.appendChild(item);
+        });
+        studentSearchAutocomplete.classList.remove('hidden');
+    } else {
+        studentSearchAutocomplete.classList.add('hidden');
+    }
+});
+
+// 3. Main function to fetch all student details
+function showStudentDetailsModal(regNo, sessionKey) {
+    const [date, time] = sessionKey.split(' | ');
+    
+    // 1. Find the base student record
+    const student = allStudentData.find(s => 
+        s.Date === date && s.Time === time && s['Register Number'] === regNo
+    );
+    
+    if (!student) {
+        alert("Could not find student details.");
+        return;
+    }
+
+    // 2. Get Room & Seat: Run allocation for the *entire* session
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+
+    // 3. Get Scribe Room (if any)
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+    const scribeRoom = sessionScribeAllotment[regNo];
+
+    // 4. Get QP Code (if any)
+    loadQPCodes(); // Ensures qpCodeMap is populated
+    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+    const courseKey = cleanCourseKey(student.Course);
+    const qpCode = sessionQPCodes[courseKey] || "Not Entered";
+
+    // 5. Populate Modal
+    searchResultName.textContent = student.Name;
+    searchResultRegNo.textContent = student['Register Number'];
+    searchResultCourse.textContent = student.Course;
+    searchResultQPCode.textContent = qpCode;
+
+    if (allocatedStudent) {
+        searchResultRoom.textContent = allocatedStudent['Room No'];
+        searchResultSeat.textContent = allocatedStudent.seatNumber;
+    } else {
+        searchResultRoom.textContent = "Not Allotted";
+        searchResultSeat.textContent = "N/A";
+    }
+
+    if (scribeRoom) {
+        searchResultScribeRoom.textContent = scribeRoom;
+        searchResultScribeBlock.classList.remove('hidden');
+    } else {
+        searchResultScribeRoom.textContent = "N/A";
+        searchResultScribeBlock.classList.add('hidden'); // Hide if not a scribe
+    }
+
+    // 6. Show Modal
+    searchResultModal.classList.remove('hidden');
+}
+
+// 4. Close modal button
+modalCloseSearchResult.addEventListener('click', () => {
+    searchResultModal.classList.add('hidden');
+});
+
+// --- END: STUDENT SEARCH FUNCTIONALITY ---
 // --- Run on initial page load ---
 loadInitialData();
