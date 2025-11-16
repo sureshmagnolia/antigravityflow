@@ -34,16 +34,63 @@
 /* In style.css, inside @media print { ... } */
 
 /* Hide EVERYTHING by default */
-#main-nav, /* <-- #report-controls was REMOVED from this line */
-#student-edit-modal, #room-selection-modal, #student-search-result-modal,
-body > py-config, body > py-script,
+/* --- REPLACEMENT CSS FOR PRINT SECTION --- */
 
-/* FIX: Add all main view containers to this list */
-#view-extractor, #view-edit-data, #view-scribe-settings, #view-room-allotment,
-#view-qpcodes, #view-search, #view-reports, #view-absentees, #view-settings,
+/* 1. Hide Navigation, Modals, PyScript, and Sibling Views */
+#main-nav,
+#student-edit-modal,
+#room-selection-modal,
+#student-search-result-modal,
+#scribe-room-modal,  /* Added missing modal */
+body > py-config,
+body > py-script,
+/* Hide all the main 'View' containers (siblings of report-controls) */
+#view-extractor,
+#view-edit-data,
+#view-scribe-settings,
+#view-room-allotment,
+#view-qpcodes,
+#view-search,
+#view-reports,
+#view-absentees,
+#view-settings,
 #view-room-settings {
     display: none !important;
     visibility: hidden !important;
+}
+
+/* 2. Hide everything INSIDE '#report-controls' (buttons, status text)... */
+#report-controls > * {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* 3. ...EXCEPT the '#report-output-area', which must be explicitly visible */
+/* (Note: This rule likely already exists in your file, just ensure it looks like this) */
+#report-output-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+}
+
+/* 4. Reset the layout of Main and Report Controls so they don't restrict the page */
+main, #report-controls {
+    display: block !important;
+    visibility: visible !important; /* Ensure parents are visible */
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    max-width: none !important; /* Remove the 'max-w-2xl' restriction */
+    background: transparent !important; /* Remove gray background */
+    border: none !important;
+    box-shadow: none !important;
 }
 
     /* NEW RULE TO ADD */
