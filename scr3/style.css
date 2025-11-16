@@ -814,3 +814,45 @@ tr.scribe-row-highlight {
     display: none;
 }
 /* --- END REPORT STYLES --- */
+/* --- NEW: Edit Data Table Styles (V10.1) --- */
+.edit-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem; /* Make font slightly smaller */
+    table-layout: fixed; /* Allow us to control column widths */
+}
+.edit-data-table th,
+.edit-data-table td {
+    border: 1px solid #e5e7eb; /* gray-200 */
+    padding: 6px 8px; /* Tighter padding */
+    text-align: left;
+    vertical-align: top;
+    word-wrap: break-word; /* Break long words */
+}
+.edit-data-table th {
+    background-color: #f9fafb; /* gray-50 */
+    font-weight: 600;
+}
+
+/* Column Widths */
+.edit-data-table th:nth-child(1),
+.edit-data-table td:nth-child(1) { width: 12%; } /* Date */
+
+.edit-data-table th:nth-child(2),
+.edit-data-table td:nth-child(2) { width: 12%; } /* Time */
+
+.edit-data-table th:nth-child(3),
+.edit-data-table td:nth-child(3) { width: 26%; } /* Course */
+
+.edit-data-table th:nth-child(4),
+.edit-data-table td:nth-child(4) { width: 18%; } /* RegNo */
+
+.edit-data-table th:nth-child(5),
+.edit-data-table td:nth-child(5) { width: 20%; } /* Name */
+
+.edit-data-table th.actions-cell,
+.edit-data-table td.actions-cell {
+    width: 12%; /* Actions */
+    text-align: center;
+}
+/* --- End of Edit Data Table Styles --- */
