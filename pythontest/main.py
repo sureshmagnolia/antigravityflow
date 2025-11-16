@@ -341,25 +341,25 @@ async def run_extraction_py(event=None):
                                         
                 with pdfplumber.open(pdf_file_obj) as pdf:
                     if not pdf.pages:
-                        log_status("File has no pages.", is_error=True, file_name=file_name, page="N/A")
-                        errors_list.append("File has no pages")
-                        continue
+                        # ... (this part is fine)
 
                     # 1. Read Page 1 to get header and determine format
                     page1_text = pdf.pages[0].extract_text(y_tolerance=3, x_tolerance=3)
-
+                    
                     # --- NEW DETECTION LOGIC ---
-                    # First, try to extract using the "New" format rules (looking for "Exam Date:", "Paper Details:")
+                    # This block must be at the SAME indentation level as the page1_text line above
                     file_date, file_time, file_course = extract_new_format_header(page1_text)
-
+                    
                     if file_date == "Unknown" and file_course == "Unknown":
-                            # If "New" format fails, fall back to "Old" format rules
+                        # This "if" must be at the SAME level as the line above
                         log_message("Trying 'Old' PDF format...")
-                            file_date, file_time, file_course = extract_old_format_header(page1_text)
+                        file_date, file_time, file_course = extract_old_format_header(page1_text)
                         log_message("Detected 'Old' PDF format.")
                     else:
-                            # If "New" format succeeds, we are done
+                        # This "else" must be at the SAME level as the "if"
                         log_message("Detected 'New' PDF format.")
+                    
+                    # --- END NEW DETECTION LOGIC ---
 
 # --- END NEW DETECTION LOGIC ---
 
