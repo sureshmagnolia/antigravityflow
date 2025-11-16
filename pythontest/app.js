@@ -4124,7 +4124,9 @@ function loadPyScript() {
             // 1. Add PyScript CSS
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = 'https://pyscript.net/releases/2024.1.1/core.css';
+            link.href = 'https://pyscript.net/releases/2023.11.1/core.css';
+            // ...
+            script.src = 'https://pyscript.net/releases/2023.11.1/core.js';
             document.head.appendChild(link);
 
             // 2. Add py-config (must be in body)
