@@ -47,15 +47,15 @@ main {
     }
     
     /* Show ONLY the report content area and ensure it's visible */
-    #report-output-area {
-        display: block !important;
-        visibility: visible !important;
-        position: static; /* Use static positioning for print flow */
-        width: 100%;
-        overflow-y: visible;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
+   #report-output-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important; /* <--- ADDED !IMPORTANT */
+    width: 100% !important;
+    height: auto !important; /* <--- ADDED FOR SAFTEY */
+    margin: 0 !important;
+    padding: 0 !important;
+}
 
     /* Make sure each page is visible and breaks correctly */
     .print-page {
