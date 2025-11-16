@@ -4130,6 +4130,7 @@ function loadPyScript() {
             // 2. Add py-config (must be in body)
             const config = document.createElement('py-config');
             config.innerHTML = 'packages = ["pandas", "pdfplumber==0.10.4"]';
+            console.log("CACHE BUST SUCCESS: Loading pdfplumber 0.10.4");
             document.body.appendChild(config);
 
             // 3. Add py-script (must be in body)
