@@ -32,12 +32,17 @@
     }
 
 /* In style.css, inside @media print { ... } */
-
 /* Hide EVERYTHING by default */
-/* *** FIX: Removed 'main' from this list. *** */
 #main-nav, #report-controls,
 #student-edit-modal, #room-selection-modal, #student-search-result-modal,
-body > py-config, body > py-script {
+body > py-config, body > py-script,
+
+/* FIX: Add all main view containers to this list.
+  This hides #view-reports (the buttons) and all other UI views.
+*/
+#view-extractor, #view-edit-data, #view-scribe-settings, #view-room-allotment,
+#view-qpcodes, #view-search, #view-reports, #view-absentees, #view-settings,
+#view-room-settings {
     display: none !important;
     visibility: hidden !important;
 }
