@@ -3447,14 +3447,6 @@ let editCurrentPage = 1;
 const STUDENTS_PER_EDIT_PAGE = 10;
 let currentEditSession = '';
 let currentEditCourse = '';
-let currentCourseStudents = [];
-
-// --- NEW: STUDENT DATA EDIT FUNCTIONALITY ---
-
-let editCurrentPage = 1;
-const STUDENTS_PER_EDIT_PAGE = 10;
-let currentEditSession = '';
-let currentEditCourse = '';
 let currentCourseStudents = []; // This will hold the "working copy" of students
 let hasUnsavedEdits = false;
 
