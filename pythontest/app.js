@@ -4181,7 +4181,7 @@ async function onRunExtractionClick() {
         // This fixes the race condition where py:ready fires before window.pyscript exists.
         while (typeof window.pyscript === 'undefined' || typeof window.pyscript.interpreter === 'undefined') {
             console.log("Waiting for window.pyscript to be defined...");
-            await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait 100ms
         }
         // --- END FIX ---
         
