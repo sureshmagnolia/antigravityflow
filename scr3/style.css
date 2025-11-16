@@ -21,13 +21,6 @@
         display: block !important;
     }
     
-/* NEW: Force main container to reset from flex to a simple block */
-main {
-    display: block !important; /* <--- CRITICAL FIX */
-    overflow-y: visible !important;
-    height: auto !important;
-}
-
     @page {
         margin: 0.5cm; /* Minimal margin */
     }
