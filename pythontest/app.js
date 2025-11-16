@@ -4149,7 +4149,7 @@ function loadPyScript() {
             // This MUST be last, as it triggers the loading process
             const script = document.createElement('script');
             script.type = 'module';
-            script.src = 'https.pyscript.net/releases/2024.1.1/core.js';
+            script.src = 'https://pyscript.net/releases/2024.1.1/core.js';
             script.onerror = () => {
                 reject(new Error("Failed to load PyScript core."));
                 showLoader(false);
