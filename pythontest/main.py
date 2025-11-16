@@ -341,8 +341,9 @@ async def run_extraction_py(event=None):
                                         
                 with pdfplumber.open(pdf_file_obj) as pdf:
                     if not pdf.pages:
-                        # ... (this part is fine)
-
+                        log_status("File has no pages.", is_error=True, file_name=file_name, page="N/A")
+                        errors_list.append("File has no pages")
+                        continue
                     # 1. Read Page 1 to get header and determine format
                     page1_text = pdf.pages[0].extract_text(y_tolerance=3, x_tolerance=3)
                     
