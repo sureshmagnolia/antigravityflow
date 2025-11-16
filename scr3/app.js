@@ -69,6 +69,7 @@ const reportControls = document.getElementById('report-controls');
 const reportOutputArea = document.getElementById('report-output-area');
 const reportStatus = document.getElementById('report-status');
 const finalPrintButton = document.getElementById('final-print-button');
+const downloadPdfButton = document.getElementById('download-pdf-button'); // <-- ADD THIS
 const clearReportButton = document.getElementById('clear-report-button');
 const roomCsvDownloadContainer = document.getElementById('room-csv-download-container');
 
@@ -1761,7 +1762,47 @@ finalPrintButton.addEventListener('click', () => {
     // This button now exclusively uses the native browser print function
     window.print();
 });
+// --- NEW: Event listener for the "Download PDF" button ---
+    downloadPdfButton.addEventListener('click', () => {
+        // 1. Get the element to save
+        const element = reportOutputArea;
+        
+        // 2. Get a dynamic filename from the variable we set during report generation
+        const filename = `${lastGeneratedReportType || 'Exam_Report'}_${new Date().toISOString().split('T')[0]}.pdf`;
 
+        // 3. Show a "saving" state on the button
+        downloadPdfButton.disabled = true;
+        downloadPdfButton.textContent = "Saving PDF...";
+
+        // 4. Configure html2pdf to match your print styles
+        const opt = {
+            margin:       0.5, // cm (matches your @page margin in style.css)
+            filename:     filename,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'cm', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['css', 'legacy'], before: '.print-page' } // Uses your .print-page class for breaks
+        };
+
+        // 5. Check if this is the landscape report
+        if (lastGeneratedReportType === "Daywise_Seating_Details") {
+            opt.jsPDF.orientation = 'landscape';
+        }
+
+        // 6. Run the save function
+        html2pdf().from(element).set(opt).save().then(() => {
+            // 7. Reset the button after saving is complete
+            downloadPdfButton.disabled = false;
+            downloadPdfButton.textContent = "Save as PDF";
+        }).catch((err) => {
+            // Handle errors
+            console.error("Error saving PDF:", err);
+            downloadPdfButton.disabled = false;
+            downloadPdfButton.textContent = "Save as PDF";
+            alert("Error saving PDF. See console for details.");
+        });
+    });
+    // --- END OF NEW LISTENER ---
 // --- Event listener for the "Clear" button ---
 clearReportButton.addEventListener('click', clearReport);
 
