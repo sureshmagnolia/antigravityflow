@@ -21,6 +21,30 @@ const ALL_DATA_KEYS = [
     SCRIBE_ALLOTMENT_KEY
 ];
 // **********************************
+// *** NEW JS LOADER FUNCTION ***
+function showLoader(isLoading, message = "Processing...") {
+    if (isLoading) {
+        run_button.disabled = true;
+        spinner.classList.remove("hidden");
+        button_text.textContent = message;
+    } else {
+        run_button.disabled = false;
+        spinner.classList.add("hidden");
+        button_text.textContent = "2. Run Batch Extraction";
+    }
+}
+// ****************************
+// *** NEW LOADER/PYSCRIPT ELEMENTS ***
+const run_button = document.getElementById("run-button");
+const spinner = document.getElementById("spinner");
+const button_text = document.getElementById("button-text");
+const status_div = document.getElementById("status");
+const status_log_div = document.getElementById("status-log");
+const csv_download_container = document.getElementById("csv-download-container");
+// **********************************
+
+// --- Global var to hold data ...
+// **********************************
 // --- Global var to hold data from the last *report run* ---
 let lastGeneratedRoomData = [];
 let lastGeneratedReportType = "";
@@ -4071,5 +4095,90 @@ modalCloseSearchResult.addEventListener('click', () => {
 });
 
 // --- END: STUDENT SEARCH FUNCTIONALITY ---
+// --- NEW: ON-DEMAND PYSCRIPT LOADING ---
+let pyScriptPromise = null;
+let isPyScriptReady = false;
+
+// This function dynamically loads all PyScript files
+function loadPyScript() {
+    // If it's already loading or ready, don't do it again
+    if (isPyScriptReady) return Promise.resolve();
+    if (pyScriptPromise) return pyScriptPromise;
+
+    pyScriptPromise = new Promise((resolve, reject) => {
+        try {
+            status_div.innerHTML = "<p>&gt; Loading Python Environment... (this may take a moment on first run)</p>";
+            showLoader(true, "Loading Python Env...");
+
+            // 1. Add PyScript CSS
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://pyscript.net/releases/2024.1.1/core.css';
+            document.head.appendChild(link);
+
+            // 2. Add py-config (must be in body)
+            const config = document.createElement('py-config');
+            config.innerHTML = 'packages = ["pandas", "pdfplumber==0.9.0"]';
+            document.body.appendChild(config);
+
+            // 3. Add py-script (must be in body)
+            const pyScriptTag = document.createElement('py-script');
+            pyScriptTag.src = 'main.py';
+            document.body.appendChild(pyScriptTag);
+
+            // 4. Listen for the 'py:ready' event
+            // This event fires when PyScript is fully initialized and main.py is loaded
+            document.addEventListener('py:ready', () => {
+                console.log("PyScript is fully ready.");
+                isPyScriptReady = true;
+                resolve();
+            }, { once: true });
+
+            // 5. Add the main PyScript loader script
+            // This MUST be last, as it triggers the loading process
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = 'https.pyscript.net/releases/2024.1.1/core.js';
+            script.onerror = () => {
+                reject(new Error("Failed to load PyScript core."));
+                showLoader(false);
+                status_div.innerHTML = "<p class='text-red-600'>&gt; Error: Failed to load PyScript. Check your internet connection.</p>";
+            };
+            document.head.appendChild(script);
+
+        } catch (e) {
+            reject(e);
+        }
+    });
+    return pyScriptPromise;
+}
+
+// This function is the new click handler for the "Run" button
+async function onRunExtractionClick() {
+    try {
+        // Step 1: Check if PyScript is loaded. If not, load it and wait.
+        if (!isPyScriptReady) {
+            await loadPyScript();
+            // loadPyScript will show the "Loading Env..." message
+        }
+        
+        // Step 2: PyScript is now guaranteed to be ready.
+        // Get the 'start_extraction' function from Python's global scope
+        const start_extraction = pyscript.interpreter.globals.get('start_extraction');
+        
+        // Step 3: Run the Python function
+        start_extraction();
+
+    } catch (error) {
+        console.error("Failed to load or run PyScript:", error);
+        status_div.innerHTML = `<p class='text-red-600'>&gt; A critical error occurred: ${error.message}</p>`;
+        showLoader(false);
+    }
+}
+
+// Assign the new click handler to the button
+run_button.addEventListener('click', onRunExtractionClick);
+
+// --- END OF ON-DEMAND LOADING LOGIC ---
 // --- Run on initial page load ---
 loadInitialData();
