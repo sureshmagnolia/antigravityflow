@@ -966,3 +966,30 @@ tr.scribe-row-highlight {
     flex-shrink: 0;
 }
 /* --- END NEW Sidebar Styles --- */
+/* --- NEW: Search Result Modal Styles --- */
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.detail-item:last-child {
+    border-bottom: none;
+}
+.detail-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #4b5563; /* text-gray-600 */
+}
+.detail-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #111827; /* text-gray-900 */
+    text-align: right;
+}
+#search-result-scribe-block .detail-value {
+    font-weight: 700;
+    color: #c2410c; /* orange-700 */
+}
+/* --- END OF  Search Result Modal Styles --- */
