@@ -886,4 +886,10 @@ tr.scribe-row-highlight {
     font-weight: 700;
     color: #c2410c; /* orange-700 */
 }
+
+/* --- NEW: Sidebar transition --- */
+#main-nav {
+    transition: width 0.3s ease-in-out, padding 0.3s ease-in-out;
+    overflow-x: hidden; /* Prevents text from spilling during animation */
+}
 /* --- END OF  Search Result Modal Styles --- */
