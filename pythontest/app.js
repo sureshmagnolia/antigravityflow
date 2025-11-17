@@ -769,7 +769,6 @@ generateReportButton.addEventListener('click', async () => {
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
 });
-
 // --- (V29) Event listener for the "Day-wise Student List" button ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     generateDaywiseReportButton.disabled = true;
@@ -1263,8 +1262,6 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
         generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
     }
 });
-
-
 // *** NEW: Helper for Absentee Report (V10.1 FIX) ***
 function formatRegNoList(regNos) {
     if (!regNos || regNos.length === 0) return '<em>None</em>';
@@ -1795,7 +1792,6 @@ function clearReport() {
     lastGeneratedRoomData = []; // Clear data
     lastGeneratedReportType = ""; // V91: Clear report type
 }
-
 // --- Function to download the room-allocated CSV ---
 function downloadRoomCsv() {
     if (!lastGeneratedRoomData || lastGeneratedRoomData.length === 0) {
@@ -2229,8 +2225,6 @@ function parseCsvAndLoadData(csvText) {
         // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
     }
 }
-
-
 // --- (V56) NEW ABSENTEE LOGIC ---
 
 // *** FIX: Attach to window object ***
@@ -2688,7 +2682,6 @@ filterAllRadio.addEventListener('change', () => {
         reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
     }
 });
-
 // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 document.addEventListener('DOMContentLoaded', () => {
     
@@ -4124,14 +4117,17 @@ function loadPyScript() {
             // --- 1. Add PyScript CSS ---
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = 'https://pyscript.net/releases/2024.1.1/core.css'; // <-- FIX: Use correct version
-            document.head.appendChild(link); // <-- Correctly append the link immediately
+            link.href = 'https://pyscript.net/releases/2024.1.1/core.css';
+            document.head.appendChild(link);
 
             // --- 2. Add py-config (must be in body) ---
             const config = document.createElement('py-config');
-            // We'll stick with 0.9.0 as you confirmed it fixed the pypdfium2 error
-            config.innerHTML = 'packages = ["pandas", "pdfplumber==0.9.0"]'; 
-            console.log("CACHE BUST SUCCESS: Loading pdfplumber 0.9.0"); // <-- FIX: Changed log version
+
+            // --- THIS IS THE CORRECTED CONFIG ---
+            config.innerHTML = 'packages = ["pandas", "pdfplumber"]';
+            // ------------------------------------
+            
+            console.log("Loading PyScript with pandas and pdfplumber...");
             document.body.appendChild(config);
 
             // --- 3. Add py-script (must be in body) ---
@@ -4150,8 +4146,7 @@ function loadPyScript() {
             // --- 5. Add the main PyScript loader script (MUST be last) ---
             const script = document.createElement('script');
             script.type = 'module';
-            // <-- FIX: Use correct URL and version to avoid the ReferenceError
-           script.src = 'https://pyscript.net/releases/2024.1.1/core.js'; 
+            script.src = 'https://pyscript.net/releases/2024.1.1/core.js'; 
             
             script.onerror = () => {
                 reject(new Error("Failed to load PyScript core."));
@@ -4181,7 +4176,7 @@ async function onRunExtractionClick() {
         // This fixes the race condition where py:ready fires before window.pyscript exists.
         while (typeof window.pyscript === 'undefined' || typeof window.pyscript.interpreter === 'undefined') {
             console.log("Waiting for window.pyscript to be defined...");
-            await new Promise(resolve => setTimeout(resolve, 500)); // Wait 100ms
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
         }
         // --- END FIX ---
         
@@ -4206,4 +4201,4 @@ run_button.addEventListener('click', onRunExtractionClick);
 // --- END OF ON-DEMAND LOADING LOGIC ---
 // --- Run on initial page load ---
 loadInitialData();
-}); // <-- ADD THIS CLOSING BRACKET AND PARENTHESIS
+}); // <-- This is the closing bracket for 'DOMContentLoaded'
