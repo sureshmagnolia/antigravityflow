@@ -240,23 +240,16 @@ const viewSettings = document.getElementById('view-settings');
 const viewQPCodes = document.getElementById('view-qpcodes');
 const viewReports = document.getElementById('view-reports');
 const viewAbsentees = document.getElementById('view-absentees');
-// const viewRoomSettings = document.getElementById('view-room-settings'); // <-- No longer a main view
 const navExtractor = document.getElementById('nav-extractor');
 const navEditData = document.getElementById('nav-edit-data'); // <-- ADD THIS
 const navSettings = document.getElementById('nav-settings');
 const navQPCodes = document.getElementById('nav-qpcodes');
 const navReports = document.getElementById('nav-reports');
 const navAbsentees = document.getElementById('nav-absentees');
-// const navRoomSettings = document.getElementById('nav-room-settings'); // <-- No longer a main view
-// *** NEW SCRIBE NAV ***
 const navScribeSettings = document.getElementById('nav-scribe-settings');
-// const navScribeAllotment = document.getElementById('nav-scribe-allotment'); // REMOVED
-// **********************
 const navRoomAllotment = document.getElementById('nav-room-allotment');
 const viewRoomAllotment = document.getElementById('view-room-allotment');
-// *** NEW SCRIBE VIEWS ***
 const viewScribeSettings = document.getElementById('view-scribe-settings');
-// const viewScribeAllotment = document.getElementById('view-scribe-allotment'); // REMOVED
 
 // *** NEW SEARCH ELEMENTS ***
 const navSearch = document.getElementById('nav-search');
@@ -284,9 +277,7 @@ const searchResultScribeRoomLocation = document.getElementById('search-result-sc
 const modalCloseSearchResult = document.getElementById('modal-close-search-result');
 // ***************************
 
-// **********************
 const viewEditData = document.getElementById('view-edit-data');
-// *** MODIFIED allNavButtons and allViews TO MATCH NEW UI ***
 const allNavButtons = [navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings];
 const allViews = [viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings];
 
@@ -302,14 +293,10 @@ const roomConfigStatus = document.getElementById('room-config-status');
 // --- Get references to Q-Paper Report elements ---
 const qPaperDataStore = document.getElementById('q-paper-data-store');
 const generateQPaperReportButton = document.getElementById('generate-qpaper-report-button');
-const generateQpDistributionReportButton = document.getElementById('generate-qp-distribution-report-button'); // <-- ADD THIS
-// *** NEW SCRIBE REPORT BUTTON ***
+const generateQpDistributionReportButton = document.getElementById('generate-qp-distribution-report-button');
 const generateScribeReportButton = document.getElementById('generate-scribe-report-button');
-const generateScribeProformaButton = document.getElementById('generate-scribe-proforma-button'); // <-- ADD THIS
-// ****************************
-// *** NEW INVIGILATOR REPORT BUTTON ***
-const generateInvigilatorReportButton = document.getElementById('generate-invigilator-report-button'); // <-- ADD THIS
-// --- Get references to Day-wise Report elements ---
+const generateScribeProformaButton = document.getElementById('generate-scribe-proforma-button');
+const generateInvigilatorReportButton = document.getElementById('generate-invigilator-report-button');
 const generateDaywiseReportButton = document.getElementById('generate-daywise-report-button');
 
 // --- Get references to CSV Upload elements ---
@@ -415,38 +402,17 @@ const restoreDataButton = document.getElementById('restore-data-button');
 const restoreStatus = document.getElementById('restore-status');
 // *********************************
 
-// --// V90 FIX: Aggressive Key Cleaning Function (Fixes key collision) ---
-function cleanCourseKey(courseName) {
-    if (typeof courseName !== 'string') return '';
-    // V90 FIX: Keep only alphanumeric characters and the course code part
-    // The course code is the most unique part (e.g., BOT3CJ201)
-    let cleaned = courseName.toUpperCase();
-    
-    // 1. Extract the course code (e.g., BOT3CJ201) and the syllabus year (e.g., 2024)
-    const codeMatch = cleaned.match(/([A-Z]{3}\d[A-Z]{2}\d{3})/);
-    const syllabusMatch = cleaned.match(/(\d{4})\s+SYLLABUS/);
-    
-    let key = '';
-    if (codeMatch) {
-        key += codeMatch[1];
+// *** NEW: Universal Base64 key generator ***
+function getBase64CourseKey(courseName) {
+    try {
+        // This creates a stable Base64 key from the full course name
+        return btoa(unescape(encodeURIComponent(courseName)));
+    } catch (e) {
+        console.warn("Could not create Base64 key for:", courseName, e);
+        return null; // Return null on failure
     }
-    if (syllabusMatch) {
-        key += syllabusMatch[1];
-    }
-    
-    // Fallback: If no code is found, use the old aggressive cleaning method
-    if (!key) {
-        // Remove all non-standard chars (including BOM, non-breaking spaces, and control chars)
-        cleaned = cleaned.replace(/[\ufeff\u00A0\u200B\u200C\u200D\u200E\u200F\uFEFF]/g, ' ').toUpperCase(); 
-        // Remove ALL non-alphanumeric chars (except spaces, - ( ) [ ] / & , ; .)
-        cleaned = cleaned.replace(/[^\w\s\-\(\)\[\]\/&,;.]/g, ''); 
-        // Replace multiple spaces with one, then trim
-        key = cleaned.replace(/\s+/g, ' ').trim();
-    }
-    
-    return key;
-}        
-
+}
+      
 // --- Helper function to numerically sort room keys ---
 function getNumericSortKey(key) {
     const parts = key.split('_'); // Date_Time_Room 1
@@ -866,8 +832,11 @@ generateReportButton.addEventListener('click', async () => {
                     // *** NEW: Get QP Code ***
                     const sessionKey = `${student.Date} | ${student.Time}`;
                     const sessionQPCodes = qpCodeMap[sessionKey] || {};
-                    const courseKey = cleanCourseKey(student.Course);
+                    
+                    // --- MODIFIED TO USE Base64 KEY ---
+                    const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
+                    // --- END MODIFICATION ---
                     
                     // *** FIX: QP Code first, then course name ***
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; // e.g., "(QP123) "
@@ -1340,12 +1309,15 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             const sessionKey = `${student.Date}_${student.Time}`;
             const roomName = student['Room No'];
             const courseName = student.Course;
-            const courseKey = cleanCourseKey(courseName);
+
+            // --- MODIFIED TO USE Base64 KEY ---
+            const courseKey = getBase64CourseKey(courseName);
+            // --- END MODIFICATION ---
 
             // Get QP Code
             const sessionKeyPipe = `${student.Date} | ${student.Time}`;
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-            const qpCode = sessionQPCodes[courseKey] || 'N/A';
+            const qpCode = sessionQPCodes[courseKey] || 'N/A'; // <-- Use Base64 key for lookup
 
             // Initialize nested objects
             if (!sessions[sessionKey]) {
@@ -1567,7 +1539,11 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         const courses = {};
         for (const student of sessionStudents) {
             const courseDisplay = student.Course;
-            const courseKey = cleanCourseKey(courseDisplay); // V64 FIX: Ensure course key is aggressively cleaned
+
+            // --- MODIFIED TO USE Base64 KEY ---
+            const courseKey = getBase64CourseKey(courseDisplay);
+            if (!courseKey) continue; // Skip if key can't be created
+            // --- END MODIFICATION ---
             
             if (!courses[courseKey]) {
                 courses[courseKey] = {
@@ -1595,10 +1571,13 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         for (const courseKey of sortedCourseKeys) {
             totalPages++;
             const courseData = courses[courseKey];
-            // V64 FIX: Use the clean key for lookup
+            
             // V89: Load session-specific codes
             const sessionCodes = qpCodeMap[sessionKey] || {};
-            const qpCode = sessionCodes[courseKey] || "____"; 
+            
+            // --- MODIFIED TO USE Base64 KEY ---
+            const qpCode = sessionCodes[courseKey] || "____"; // Use the Base64 key
+            // --- END MODIFICATION ---
             
             // *** NEW: Use formatting function ***
             const presentListHtml = formatRegNoList(courseData.present);
@@ -1665,7 +1644,6 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
     }
 });
-        
 // *** NEW: Event listener for "Generate Scribe Report" ***
 generateScribeReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1715,7 +1693,10 @@ generateScribeReportButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = cleanCourseKey(s.Course);
+
+            // --- MODIFIED TO USE Base64 KEY ---
+            const courseKey = getBase64CourseKey(s.Course);
+            // --- END MODIFICATION ---
             
             reportRows.push({
                 Date: s.Date,
@@ -1725,7 +1706,7 @@ generateScribeReportButton.addEventListener('click', async () => {
                 Course: s.Course,
                 OriginalRoom: originalRoomMap[s['Register Number']] || 'N/A',
                 ScribeRoom: sessionScribeRooms[s['Register Number']] || 'Not Allotted',
-                QPCode: sessionQPCodes[courseKey] || 'N/A'
+                QPCode: sessionQPCodes[courseKey] || 'N/A' // <-- Use Base64 key for lookup
             });
         }
         
@@ -1871,7 +1852,10 @@ generateScribeProformaButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = cleanCourseKey(s.Course);
+
+            // --- MODIFIED TO USE Base64 KEY ---
+            const courseKey = getBase64CourseKey(s.Course);
+            // --- END MODIFICATION ---
             
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
             
@@ -1883,7 +1867,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
                 Course: s.Course,
                 OriginalRoom: `${originalRoomData.room} (Seat: ${originalRoomData.seat})`,
                 ScribeRoom: sessionScribeRooms[s['Register Number']] || 'Not Allotted',
-                QPCode: sessionQPCodes[courseKey] || 'N/A'
+                QPCode: sessionQPCodes[courseKey] || 'N/A' // <-- Use Base64 key for lookup
             });
         }
         
@@ -2034,6 +2018,8 @@ function downloadRoomCsv() {
     link.click();
     document.body.removeChild(link);
 }
+
+
 // --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
 navExtractor.addEventListener('click', () => showView(viewExtractor, navExtractor));
 navEditData.addEventListener('click', () => showView(viewEditData, navEditData)); // <-- ADD THIS
@@ -2044,7 +2030,6 @@ navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); // <
 navReports.addEventListener('click', () => showView(viewReports, navReports));
 navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
 navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
-// document.getElementById('nav-room-settings').addEventListener('click', ...); // Removed
 
 function showView(viewToShow, buttonToActivate) {
     allViews.forEach(view => view.classList.add('hidden'));
@@ -2208,11 +2193,6 @@ roomConfigContainer.addEventListener('click', (e) => {
         saveRoomConfigButton.click(); // Triggers re-saving and re-rendering to fix numbering and buttons
     }
 });
-
-
-// --- Q-PAPER REPORT LOGIC ---
-// Listener moved above
-
 // --- (V33) NEW CSV UPLOAD LOGIC ---
 
 // V33: Add event listener for the new "Load CSV" button
@@ -2400,19 +2380,20 @@ function parseCsvAndLoadData(csvText) {
         // *** NEW: Enable Edit Data Tab ***
         disable_edit_data_tab(false);
         // *********************************
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
+
+
     } catch (e) {
         console.error("Error parsing CSV:", e);
         csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
         csvLoadStatus.classList.add('text-red-600');
         csvLoadStatus.classList.remove('text-green-600');
+        // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
     }
 }
 
 
 // --- (V56) NEW ABSENTEE LOGIC ---
-
-// This function is now just a stub. The real one is defined and attached to window.
-// function disable_absentee_tab(disabled) { ... }
 
 // *** FIX: This is the REAL implementation of the function Python calls ***
 window.real_populate_session_dropdown = function() {
@@ -2458,6 +2439,7 @@ window.real_populate_session_dropdown = function() {
             }
             
             // IMPORTANT: Fix the data for the rest of the app
+            // This ensures the 692 (unique) count is used everywhere
             allStudentData = uniqueStudentEntries;
         }
         // ### END: Data Analysis and Reporting ###
@@ -2692,11 +2674,7 @@ function removeAbsentee(regNo) {
     saveAbsenteeList(sessionSelect.value);
     renderAbsenteeList();
 }
-
 // --- (V89) NEW QP CODE LOGIC (DIFFERENT STRATEGY) ---
-
-// This function is now just a stub. The real one is defined and attached to window.
-// function disable_qpcode_tab(disabled) { ... }
 
 // V89: Loads the *entire* QP code map from localStorage into the global var
 function loadQPCodes() {
@@ -2783,28 +2761,28 @@ function render_qp_code_list(sessionKey) {
     }
 
     uniqueCoursesArray.forEach(courseName => {
-        const cleanKey = cleanCourseKey(courseName);
-
-        // V90 FIX: If the course name cleans to an empty string,
-        // don't render an input for it as it cannot be saved.
-        if (!cleanKey) {
+        // --- MODIFIED TO USE Base64 KEY ---
+        // 1. Create the new Base64 key
+        const base64Key = getBase64CourseKey(courseName); 
+        if (!base64Key) {
             console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
             return; // Skip this iteration
         }
-        
-        // V89: Look up the code in the session-specific map
-        const savedCode = sessionCodes[cleanKey] || "";
-        
-        htmlChunks.push(`
-            <div class="flex items-center gap-3 p-2 border-b border-gray-200">
-                <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
-                <input type="text" 
-                       class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
-                       value="${savedCode}" 
-                       data-course="${cleanKey}" 
-                       placeholder="Enter QP Code">
-            </div>
-        `);
+
+        // 2. Look up the code using the Base64 key
+        const savedCode = sessionCodes[base64Key] || "";
+
+       htmlChunks.push(`
+        <div class="flex items-center gap-3 p-2 border-b border-gray-200">
+            <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+            <input type="text" 
+                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+                   value="${savedCode}" 
+                   data-course-key="${base64Key}"
+                   placeholder="Enter QP Code">
+        </div>
+       `);
+       // --- END MODIFICATION ---
     });
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
@@ -2812,6 +2790,7 @@ function render_qp_code_list(sessionKey) {
     saveQpCodesButton.disabled = false;
     qpCodeStatus.textContent = ''; // Clear status on new load
 }
+
 // V89: NEW SAVE STRATEGY
 saveQpCodesButton.addEventListener('click', () => {
     const sessionKey = sessionSelectQP.value;
@@ -2835,15 +2814,18 @@ saveQpCodesButton.addEventListener('click', () => {
     // 3. Read all inputs from the DOM
     const qpInputs = qpCodeContainer.querySelectorAll('.qp-code-input');
     
+    // --- MODIFIED TO USE Base64 KEY ---
     for (let i = 0; i < qpInputs.length; i++) {
         const input = qpInputs[i];
-        const courseKey = input.dataset.course; // Already cleaned
+        const base64Key = input.dataset.courseKey; // Read the Base64 key
         const qpCode = input.value.trim();
 
-        if (courseKey && qpCode) {
-            thisSessionCodes[courseKey] = qpCode;
+        if (base64Key && qpCode) {
+            // Save using the Base64 key
+            thisSessionCodes[base64Key] = qpCode;
         }
     }
+    // --- END MODIFICATION ---
 
     // 4. Update the master map with the new data for this session
     qpCodeMap[sessionKey] = thisSessionCodes;
@@ -3065,10 +3047,6 @@ function loadInitialData() {
 
 // --- ROOM ALLOTMENT FUNCTIONALITY ---
 
-// This function is now just a stub. The real one is defined and attached to window.
-// function disable_room_allotment_tab(disabled) { ... }
-
-// Populate Room Allotment Session Dropdown
 // *** FIX: This is the REAL implementation of the function Python calls ***
 window.real_populate_room_allotment_session_dropdown = function() {
     try {
@@ -3333,10 +3311,6 @@ saveRoomAllotmentButton.addEventListener('click', () => {
 
 // *** NEW: SCRIBE FUNCTIONALITY ***
 
-// This function is now just a stub. The real one is defined and attached to window.
-// function disable_scribe_settings_tab(disabled) { ... }
-
-// Load the global list from localStorage
 // *** FIX: This is the REAL implementation of the function Python calls ***
 window.real_loadGlobalScribeList = function() {
     globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
@@ -3658,13 +3632,13 @@ scribeCloseRoomModal.addEventListener('click', () => {
 // --- Helper function to disable all report buttons ---
 // *** FIX: This is the REAL implementation of the function Python calls ***
 window.real_disable_all_report_buttons = function(disabled) {
-    generateReportButton.disabled = disabled;
-    generateQPaperReportButton.disabled = disabled;
-    generateDaywiseReportButton.disabled = disabled;
-    generateScribeReportButton.disabled = disabled;
-    generateScribeProformaButton.disabled = disabled;
-    generateQpDistributionReportButton.disabled = disabled; // <-- ADD THIS
-    generateInvigilatorReportButton.disabled = disabled; // <-- ADD THIS
+    if (generateReportButton) generateReportButton.disabled = disabled;
+    if (generateQPaperReportButton) generateQPaperReportButton.disabled = disabled;
+    if (generateDaywiseReportButton) generateDaywiseReportButton.disabled = disabled;
+    if (generateScribeReportButton) generateScribeReportButton.disabled = disabled;
+    if (generateScribeProformaButton) generateScribeProformaButton.disabled = disabled;
+    if (generateQpDistributionReportButton) generateQpDistributionReportButton.disabled = disabled;
+    if (generateInvigilatorReportButton) generateInvigilatorReportButton.disabled = disabled;
 }
 
 // --- NEW: STUDENT DATA EDIT FUNCTIONALITY (MODAL VERSION) ---
@@ -3690,10 +3664,6 @@ const modalRegNo = document.getElementById('modal-edit-regno');
 const modalName = document.getElementById('modal-edit-name');
 const modalSaveBtn = document.getElementById('modal-save-student');
 const modalCancelBtn = document.getElementById('modal-cancel-student');
-
-
-// This function is now just a stub. The real one is defined and attached to window.
-// function disable_edit_data_tab(disabled) { ... }
 
 // 1. Session selection (Same as before)
 editSessionSelect.addEventListener('change', () => {
@@ -4237,8 +4207,11 @@ function showStudentDetailsModal(regNo, sessionKey) {
     // 4. Get QP Code (if any)
     loadQPCodes(); // Ensures qpCodeMap is populated
     const sessionQPCodes = qpCodeMap[sessionKey] || {};
-    const courseKey = cleanCourseKey(student.Course);
+    
+    // --- MODIFIED TO USE Base64 KEY ---
+    const courseKey = getBase64CourseKey(student.Course);
     const qpCode = sessionQPCodes[courseKey] || "Not Entered";
+    // --- END MODIFICATION ---
 
    // 5. Populate Modal
     searchResultName.textContent = student.Name;
