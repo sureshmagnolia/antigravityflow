@@ -1158,7 +1158,7 @@ generateQpDistributionReportButton.addEventListener('click', async () => {
             // Get QP Code
             const sessionKeyPipe = `${student.Date} | ${student.Time}`;
             const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-            const qpCode = sessionQPCodes[courseKey] || 'N/A';
+            const qpCode = sessionQPCodes[student.Course] || 'N/A';
 
             // Initialize nested objects
             if (!sessions[sessionKey]) {
