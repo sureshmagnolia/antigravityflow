@@ -3,37 +3,37 @@ import pdfplumber
 import re
 import io
 import js # V55: FIX - Import the main js module
-from js import document, console, URL, Blob, window, localStorage # V55: FIX - Import specific parts
+# from js import document, console, URL, Blob, window, localStorage # V55: FIX - DELETED THIS LINE
 import asyncio
 import json
 import math
 from datetime import datetime
 
 # --- Get references to our HTML elements ---
-status_div = document.getElementById("status")
-status_log_div = document.getElementById("status-log")
+status_div = js.document.getElementById("status")
+status_log_div = js.document.getElementById("status-log")
 
-csv_download_container = document.getElementById("csv-download-container")
-generate_report_button = document.getElementById("generate-report-button")
-json_data_store = document.getElementById("json-data-store")
-report_controls = document.getElementById("report-controls")
-report_output_area = document.getElementById("report-output-area")
+csv_download_container = js.document.getElementById("csv-download-container")
+generate_report_button = js.document.getElementById("generate-report-button")
+json_data_store = js.document.getElementById("json-data-store")
+report_controls = js.document.getElementById("report-controls")
+report_output_area = js.document.getElementById("report-output-area")
 
-q_paper_data_store = document.getElementById("q-paper-data-store")
-generate_qpaper_report_button = document.getElementById("generate-qpaper-report-button")
+q_paper_data_store = js.document.getElementById("q-paper-data-store")
+generate_qpaper_report_button = js.document.getElementById("generate-qpaper-report-button")
 
-generate_daywise_report_button = document.getElementById("generate-daywise-report-button")
+generate_daywise_report_button = js.document.getElementById("generate-daywise-report-button")
 
-run_button = document.getElementById("run-button")
-spinner = document.getElementById("spinner")
-button_text = document.getElementById("button-text")
+run_button = js.document.getElementById("run-button")
+spinner = js.document.getElementById("spinner")
+button_text = js.document.getElementById("button-text")
 
 # V56: Absentee view elements
-absentee_loader = document.getElementById("absentee-loader")
-absentee_content_wrapper = document.getElementById("absentee-content-wrapper")
+absentee_loader = js.document.getElementById("absentee-loader")
+absentee_content_wrapper = js.document.getElementById("absentee-content-wrapper")
 # V58: QP Code view elements
-qpcode_loader = document.getElementById("qpcode-loader")
-qpcode_content_wrapper = document.getElementById("qpcode-content-wrapper")
+qpcode_loader = js.document.getElementById("qpcode-loader")
+qpcode_content_wrapper = js.document.getElementById("qpcode-content-wrapper")
 
 ROOM_CONFIG_KEY = 'examRoomConfig'
 COLLEGE_NAME_KEY = 'examCollegeName' # V48: New key
@@ -41,13 +41,13 @@ BASE_DATA_KEY = 'examBaseData'; # V65: New key for persistent base data
 
 def log_message(message):
     """Helper function to print messages to the HTML (Processing) log."""
-    console.log(f"Process Log: {message}")
+    js.console.log(f"Process Log: {message}")
     status_div.innerHTML += f'<p class="mb-1">&gt; {message}</p>'
     status_div.scrollTop = status_div.scrollHeight
 
 def log_status(message, is_error=False, file_name=None, page=None):
     """Helper function to print messages to the HTML Status log."""
-    console.log(f"Status Log: {message}")
+    js.console.log(f"Status Log: {message}")
     color = "text-red-600" if is_error else "text-green-700"
     
     prefix = ""
@@ -89,7 +89,7 @@ def get_sort_key(row):
         
         return (date_obj, time_obj, course_name) # Return a 3-part tuple
     except ValueError as e:
-        console.log(f"Sort Error: Could not parse Date '{row['Date']}' or Time '{row['Time']}'. Error: {e}")
+        js.console.log(f"Sort Error: Could not parse Date '{row['Date']}' or Time '{row['Time']}'. Error: {e}")
         # NEW: Still return 3 parts for consistent sorting
         return (datetime.min, datetime.min, row.get('Course', ''))
 
@@ -281,7 +281,7 @@ async def start_extraction(event=None):
         await asyncio.sleep(0) # Let loader show
         
         # *** FIX for on-demand loading: Call window. ***
-        window.clear_csv_upload_status()
+        js.window.clear_csv_upload_status()
             
         # Call the main logic function
         await run_extraction_py()
@@ -305,9 +305,9 @@ async def run_extraction_py(event=None):
         generate_daywise_report_button.disabled = True
         
         # *** FIX for on-demand loading: Call window. ***
-        window.disable_absentee_tab(True)
-        window.disable_qpcode_tab(True)
-        window.disable_room_allotment_tab(True)
+        js.window.disable_absentee_tab(True)
+        js.window.disable_qpcode_tab(True)
+        js.window.disable_room_allotment_tab(True)
         
         json_data_store.innerHTML = ""
         q_paper_data_store.innerHTML = ""
@@ -319,7 +319,7 @@ async def run_extraction_py(event=None):
         
         log_message("Starting batch extraction...")
         
-        file_input = document.getElementById("pdf-file")
+        file_input = js.document.getElementById("pdf-file")
         file_list = file_input.files
                         
         if file_list.length == 0:
@@ -448,8 +448,8 @@ async def run_extraction_py(event=None):
         df_csv = df[['Date', 'Time', 'Course', 'Register Number', 'Name']]
         csv_data = df_csv.to_csv(index=False, encoding='utf-8')
         
-        blob = Blob.new([csv_data], {type: "text/csv;charset=utf-8"})
-        url = URL.createObjectURL(blob)
+        blob = js.Blob.new([csv_data], {type: "text/csv;charset=utf-8"})
+        url = js.URL.createObjectURL(blob)
         csv_filename = 'Combined_Nominal_Roll.csv'
         
         csv_download_container.innerHTML = f"""
@@ -463,19 +463,19 @@ async def run_extraction_py(event=None):
         json_data_store.innerHTML = json_data
         
         # V65: Save the base data to localStorage
-        localStorage.setItem(BASE_DATA_KEY, json_data)
+        js.localStorage.setItem(BASE_DATA_KEY, json_data)
         
         generate_report_button.disabled = False
         generate_qpaper_report_button.disabled = False
         generate_daywise_report_button.disabled = False
         
         # *** FIX for on-demand loading: Call window. ***
-        window.disable_absentee_tab(False)
-        window.disable_qpcode_tab(False)
-        window.disable_room_allotment_tab(False)
-        window.populate_session_dropdown()
-        window.populate_qp_code_session_dropdown()
-        window.populate_room_allotment_session_dropdown()
+        js.window.disable_absentee_tab(False)
+        js.window.disable_qpcode_tab(False)
+        js.window.disable_room_allotment_tab(False)
+        js.window.populate_session_dropdown()
+        js.window.populate_qp_code_session_dropdown()
+        js.window.populate_room_allotment_session_dropdown()
                         
         log_message("Success! Your combined files are ready.")
     
