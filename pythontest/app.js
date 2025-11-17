@@ -4124,7 +4124,7 @@ function loadPyScript() {
             const config = document.createElement('py-config');
 
             // --- THIS IS THE CORRECTED CONFIG ---
-            config.innerHTML = 'packages = ["pandas", "pdfplumber"]';
+            config.innerHTML = 'packages = ["pandas", "pdfplumber==0.10.3", "pdfminer.six==20221105"]';
             // ------------------------------------
             
             console.log("Loading PyScript with pandas and pdfplumber...");
