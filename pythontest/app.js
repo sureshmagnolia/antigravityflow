@@ -4104,6 +4104,11 @@ let pyScriptPromise = null;
 let isPyScriptReady = false;
 
 // This function dynamically loads all PyScript files
+// --- NEW: ON-DEMAND PYSCRIPT LOADING ---
+let pyScriptPromise = null;
+let isPyScriptReady = false;
+
+// This function dynamically loads all PyScript files
 function loadPyScript() {
     // If it's already loading or ready, don't do it again
     if (isPyScriptReady) return Promise.resolve();
@@ -4129,7 +4134,7 @@ function loadPyScript() {
             config.innerHTML = 'packages = ["pandas", "pdfplumber==0.10.3", "pdfminer.six==20221105"]';
             // ------------------------------------
             
-            console.log("Loading PyScript with pinned pdfplumber==0.10.3 and pdfminer.six...");
+            console.log("Loading PyScript with pinned pdfplumber==0.10.3 and pdfminer.six..."); // <-- NEW LOG
             document.body.appendChild(config);
 
             // --- 3. Add py-script (must be in body) ---
