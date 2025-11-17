@@ -266,7 +266,7 @@ function cleanCourseKey(courseName) {
     let cleaned = courseName.toUpperCase();
     
     // 1. Extract the course code (e.g., BOT3CJ201) and the syllabus year (e.g., 2024)
-    const codeMatch = cleaned.match(/([A-Z]{3}\d[A-Z]{2}\d{3})/);
+    const codeMatch = cleaned.match(/([A-Z]{3}\d[A-Z]\d{2,})/);
     const syllabusMatch = cleaned.match(/(\d{4})\s+SYLLABUS/);
     
     let key = '';
