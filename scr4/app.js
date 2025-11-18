@@ -1717,7 +1717,8 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
         generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
     }
 });
-// *** CORRECTED: Event listener for "Generate Scribe Report" ***
+
+// *** UPDATED: Event listener for "Generate Scribe Report" ***
 generateScribeReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1734,8 +1735,7 @@ generateScribeReportButton.addEventListener('click', async () => {
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         getRoomCapacitiesFromStorage(); 
         
-        // 1. Get FILTERED data (Respects "All Sessions" vs "Specific Session")
-        //
+        // 1. Get FILTERED data
         const data = getFilteredReportData('scribe-report'); 
         if (!data || data.length === 0) {
             alert("No data found for the selected filter/session.");
@@ -1757,13 +1757,10 @@ generateScribeReportButton.addEventListener('click', async () => {
             return;
         }
         
-        // 4. Get Original Room Allotments
-        // We run allocation on the FULL dataset to ensure correct seat numbers/rooms
-        // even if we are only reporting on a subset.
+        // 4. Get Original Room Allotments (FULL Session)
         const allDataRaw = JSON.parse(jsonDataStore.innerHTML || '[]');
         const originalAllotments = performOriginalAllocation(allDataRaw); 
         
-        // *** FIX 1: Store Object { room, seat } instead of just String ***
         const originalRoomMap = originalAllotments.reduce((map, s) => {
             map[s['Register Number']] = { room: s['Room No'], seat: s.seatNumber };
             return map;
@@ -1773,28 +1770,36 @@ generateScribeReportButton.addEventListener('click', async () => {
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         loadQPCodes(); 
 
-        // 6. Collate all data for the report
+        // 6. Collate all data
         const reportRows = [];
         for (const s of allScribeStudents) {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
             
-            // *** FIX 2: Use cleanCourseKey to match QP Code storage ***
+            // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
             const courseKey = getBase64CourseKey(s.Course);
             
-            // *** FIX 1 Usage: Access .room and .seat properties safely ***
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
-            const originalRoomDisplay = `${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
             
-            // --- Logic to get Scribe Room + Location ---
+            // --- NEW: Get Room Serial Map for this session ---
+            const roomSerialMap = getRoomSerialMap(sessionKey);
+            
+            // --- Format Original Room with Serial ---
+            const orgSerial = roomSerialMap[originalRoomData.room] || '-';
+            const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
+            
+            // --- Format Scribe Room with Serial & Location ---
             const rawScribeRoom = sessionScribeRooms[s['Register Number']];
             let scribeRoomDisplay = 'Not Allotted';
             
             if (rawScribeRoom) {
                 const rInfo = currentRoomConfig[rawScribeRoom];
                 const rLoc = (rInfo && rInfo.location) ? ` (${rInfo.location})` : ""; 
-                scribeRoomDisplay = `${rawScribeRoom}${rLoc}`;
+                
+                // Get Serial for Scribe Room
+                const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
+                scribeRoomDisplay = `${scribeSerial} - ${rawScribeRoom}${rLoc}`;
             }
 
             reportRows.push({
@@ -1803,7 +1808,7 @@ generateScribeReportButton.addEventListener('click', async () => {
                 RegisterNumber: s['Register Number'],
                 Name: s.Name,
                 Course: s.Course,
-                OriginalRoom: originalRoomDisplay, // Uses the fixed display string
+                OriginalRoom: originalRoomDisplay,
                 ScribeRoom: scribeRoomDisplay,
                 QPCode: sessionQPCodes[courseKey] || 'N/A'
             });
@@ -1814,11 +1819,7 @@ generateScribeReportButton.addEventListener('click', async () => {
         for (const row of reportRows) {
             const key = `${row.Date}_${row.Time}`;
             if (!sessions[key]) {
-                sessions[key] = {
-                    Date: row.Date,
-                    Time: row.Time,
-                    students: []
-                };
+                sessions[key] = { Date: row.Date, Time: row.Time, students: [] };
             }
             sessions[key].students.push(row);
         }
@@ -1854,22 +1855,19 @@ generateScribeReportButton.addEventListener('click', async () => {
                         <h2>Scribe Assistance Report</h2>
                         <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
                     </div>
-                    
                     <table class="scribe-report-table">
                         <thead>
                             <tr>
                                 <th style="width: 5%;">Sl</th>
                                 <th style="width: 15%;">Register No</th>
                                 <th style="width: 20%;">Name</th>
-                                <th style="width: 25%;">Course / Paper</th>
+                                <th style="width: 20%;">Course / Paper</th>
                                 <th style="width: 10%;">QP Code</th>
-                                <th style="width: 10%;">Original Room</th>
+                                <th style="width: 15%;">Original Room</th>
                                 <th style="width: 15%;">Scribe Room</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${tableRowsHtml}
-                        </tbody>
+                        <tbody>${tableRowsHtml}</tbody>
                     </table>
                 </div>
             `;
@@ -1891,8 +1889,11 @@ generateScribeReportButton.addEventListener('click', async () => {
         generateScribeReportButton.disabled = false;
         generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
     }
-});
+});    
+
 // *******************************************************
+
+// --- ROBUST VERSION: Scribe Proforma Report (With Serial Numbers) ---
 
 // --- ROBUST VERSION: Scribe Proforma Report (With Serial Numbers) ---
 generateScribeProformaButton.addEventListener('click', async () => {
@@ -1906,37 +1907,22 @@ generateScribeProformaButton.addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-        // 1. Load Settings
-        if (typeof getRoomCapacitiesFromStorage === 'function') {
-            getRoomCapacitiesFromStorage(); 
-        }
-        if (typeof loadQPCodes === 'function') {
-            loadQPCodes(); 
-        }
+        if (typeof getRoomCapacitiesFromStorage === 'function') getRoomCapacitiesFromStorage(); 
+        if (typeof loadQPCodes === 'function') loadQPCodes(); 
         
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
-        // 2. Get Filtered Data
         const data = getFilteredReportData('scribe-proforma');
-        if (!data || data.length === 0) {
-            throw new Error("No student data found for the selected session.");
-        }
+        if (!data || data.length === 0) throw new Error("No student data found for the selected session.");
         
-        // 3. Get Global Scribe List
         const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-        if (globalScribeList.length === 0) {
-            throw new Error("Scribe List is empty.");
-        }
+        if (globalScribeList.length === 0) throw new Error("Scribe List is empty.");
         const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
         
-        // 4. Filter Scribes
         const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
-        if (allScribeStudents.length === 0) {
-            throw new Error("No scribe students found in the selected session.");
-        }
+        if (allScribeStudents.length === 0) throw new Error("No scribe students found in the selected session.");
         
-        // 5. Run Allocation & Prepare Maps
         const originalAllotments = performOriginalAllocation(data); 
         const originalRoomMap = originalAllotments.reduce((map, s) => {
             map[s['Register Number']] = { room: s['Room No'], seat: s.seatNumber };
@@ -1950,20 +1936,17 @@ generateScribeProformaButton.addEventListener('click', async () => {
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
             
-            // *** Use cleanCourseKey to match QP Code logic ***
-            const courseKey = cleanCourseKey(s.Course);
+            // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
+            const courseKey = getBase64CourseKey(s.Course);
             
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
-            
-            // --- NEW: Get Room Serial Numbers for this session ---
             const roomSerialMap = getRoomSerialMap(sessionKey);
-            // ----------------------------------------------------
 
-            // --- Format Original Room with Serial ---
+            // --- Format Original Room ---
             const orgSerial = roomSerialMap[originalRoomData.room] || '-';
             const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
 
-            // --- Format Scribe Room with Serial & Location ---
+            // --- Format Scribe Room ---
             const rawScribeRoom = sessionScribeRooms[s['Register Number']];
             let scribeRoomDisplay = '<span style="color:red;">Not Allotted</span>';
             
@@ -1973,7 +1956,6 @@ generateScribeProformaButton.addEventListener('click', async () => {
                     const rLoc = currentRoomConfig[rawScribeRoom].location;
                     if (rLoc) locText = ` (${rLoc})`;
                 }
-                // Get Serial for Scribe Room
                 const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
                 scribeRoomDisplay = `<strong>${scribeSerial} - ${rawScribeRoom}</strong>${locText}`;
             }
@@ -1990,7 +1972,6 @@ generateScribeProformaButton.addEventListener('click', async () => {
             });
         }
         
-        // 6. Generate HTML
         let allPagesHtml = '';
         reportRows.forEach(student => {
             allPagesHtml += `
@@ -2068,8 +2049,6 @@ generateScribeProformaButton.addEventListener('click', async () => {
         generateScribeProformaButton.textContent = "Generate Scribe Proforma (One Page Per Scribe)";
     }
 });
-
-
 
 // --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
 // downloadPdfButton.addEventListener('click', ... removed ...)
