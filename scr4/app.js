@@ -1049,8 +1049,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
-        const STUDENTS_PER_COLUMN = 30; 
-        const COLUMNS_PER_PAGE = 2; 
+        const STUDENTS_PER_COLUMN = 45; 
+        const COLUMNS_PER_PAGE = 1; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
         function buildColumnTable(studentChunk) {
