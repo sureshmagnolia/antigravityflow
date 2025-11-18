@@ -1724,20 +1724,31 @@ generateScribeReportButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-
-            // --- MODIFIED TO USE Base64 KEY ---
-            const courseKey = getBase64CourseKey(s.Course);
-            // --- END MODIFICATION ---
+            const courseKey = cleanCourseKey(s.Course);
             
+            const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
+            
+            // --- NEW: Logic to get Scribe Room + Location ---
+            const rawScribeRoom = sessionScribeRooms[s['Register Number']];
+            let scribeRoomDisplay = 'Not Allotted';
+            
+            if (rawScribeRoom) {
+                const rInfo = currentRoomConfig[rawScribeRoom];
+                // Check if location exists and format it
+                const rLoc = (rInfo && rInfo.location) ? ` (${rInfo.location})` : ""; 
+                scribeRoomDisplay = `${rawScribeRoom}${rLoc}`;
+            }
+            // ------------------------------------------------
+
             reportRows.push({
                 Date: s.Date,
                 Time: s.Time,
                 RegisterNumber: s['Register Number'],
                 Name: s.Name,
                 Course: s.Course,
-                OriginalRoom: originalRoomMap[s['Register Number']] || 'N/A',
-                ScribeRoom: sessionScribeRooms[s['Register Number']] || 'Not Allotted',
-                QPCode: sessionQPCodes[courseKey] || 'N/A' // <-- Use Base64 key for lookup
+                OriginalRoom: `${originalRoomData.room} (Seat: ${originalRoomData.seat})`,
+                ScribeRoom: scribeRoomDisplay, // <--- Updated to use the new display string
+                QPCode: sessionQPCodes[courseKey] || 'N/A'
             });
         }
         
