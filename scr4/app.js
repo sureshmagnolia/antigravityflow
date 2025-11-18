@@ -1053,12 +1053,12 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
                 // Add the student row
                 const roomInfo = currentRoomConfig[roomName];
-                const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
-                const roomDisplay = location ? `${roomName} (${location})` : roomName;
+                
+                // 1. SHOW ONLY LOCATION: Use location if available; otherwise fall back to room name
+                const roomDisplay = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
 
-                // V48: Check if same as above
-                const displayRoom = (roomDisplay === previousRoomDisplay) ? '"' : roomDisplay;
-                previousRoomDisplay = roomDisplay; // Update for next iteration
+                // 2. SHOW IN EVERY CELL: No "ditto" check. Always use the full text.
+                const displayRoom = roomDisplay;
                 
                 rowsHtml += `
                     <tr style="${rowStyle}">
