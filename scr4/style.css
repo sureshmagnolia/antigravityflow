@@ -225,10 +225,16 @@ main, #report-controls {
         background-color: #eee;
     }
 
-    tr.scribe-row-highlight {
-        background-color: #f0f0f0 !important;
-        -webkit-print-color-adjust: exact;
-        color-adjust: exact;
+tr.scribe-row-highlight {
+        background-color: #000000 !important; /* Black Background */
+        color: #ffffff !important;             /* White Text */
+        -webkit-print-color-adjust: exact;     /* Force print background */
+        print-color-adjust: exact;             /* Standard property */
+    }
+    
+    /* Optional: Ensure cell borders inside this row remain visible (white) */
+    tr.scribe-row-highlight td {
+        border-color: #ffffff !important;
     }
     
     .print-table {
