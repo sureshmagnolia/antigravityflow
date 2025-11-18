@@ -526,7 +526,11 @@ main, #report-controls {
 }
 
 tr.scribe-row-highlight {
-    background-color: #f0f0f0;
+    background-color: #000000;
+    color: #ffffff;
+}
+tr.scribe-row-highlight td {
+    border-color: #ffffff;
 }
 
 .edit-data-table {
