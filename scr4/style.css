@@ -286,12 +286,13 @@ main, #report-controls {
         table-layout: auto; 
         break-before: avoid;
     }
-    .daywise-report-table th,
+.daywise-report-table th,
     .daywise-report-table td {
         border: 1px solid #999;
-        padding: 3px;
+        padding: 1px 2px; /* Top/Bottom: 1px, Left/Right: 2px */
         text-align: left;
         word-wrap: break-word;
+        line-height: 1.1; /* Optional: Compresses text height slightly */
     }
     .daywise-report-table th {
         background: #eee;
@@ -917,5 +918,13 @@ tr.scribe-row-highlight td.signature-col {
 #main-nav {
     transition: width 0.3s ease-in-out, padding 0.3s ease-in-out;
     overflow-x: hidden; /* Prevents text from spilling during animation */
+}
+/* At the bottom of style.css */
+.daywise-report-table th,
+.daywise-report-table td {
+    border: 1px solid #ccc;
+    padding: 1px 2px; /* <--- MATCH THE PRINT SETTING */
+    text-align: left;
+    word-wrap: break-word;
 }
 /* --- END OF  Search Result Modal Styles --- */
