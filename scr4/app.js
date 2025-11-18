@@ -1719,6 +1719,8 @@ generateAbsenteeReportButton.addEventListener('click', async () => {
 });
 
 // *** UPDATED: Event listener for "Generate Scribe Report" ***
+
+// *** CORRECTED: Event listener for "Generate Scribe Report" ***
 generateScribeReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1757,12 +1759,14 @@ generateScribeReportButton.addEventListener('click', async () => {
             return;
         }
         
-        // 4. Get Original Room Allotments (FULL Session)
-        const allDataRaw = JSON.parse(jsonDataStore.innerHTML || '[]');
-        const originalAllotments = performOriginalAllocation(allDataRaw); 
+        // 4. Get Original Room Allotments
+        // We use 'data' here (which is already filtered by session) to generate correct seat numbers
+        const originalAllotments = performOriginalAllocation(data); 
         
+        // *** FIX 1: Use COMPOSITE KEY (Date|Time|RegNo) to prevent overwriting ***
         const originalRoomMap = originalAllotments.reduce((map, s) => {
-            map[s['Register Number']] = { room: s['Room No'], seat: s.seatNumber };
+            const key = `${s.Date}|${s.Time}|${s['Register Number']}`;
+            map[key] = { room: s['Room No'], seat: s.seatNumber };
             return map;
         }, {});
 
@@ -1777,12 +1781,14 @@ generateScribeReportButton.addEventListener('click', async () => {
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
             
-            // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
+            // Use Base64 Key
             const courseKey = getBase64CourseKey(s.Course);
             
-            const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
+            // *** FIX 2: Look up using the COMPOSITE KEY ***
+            const lookupKey = `${s.Date}|${s.Time}|${s['Register Number']}`;
+            const originalRoomData = originalRoomMap[lookupKey] || { room: 'N/A', seat: 'N/A' };
             
-            // --- NEW: Get Room Serial Map for this session ---
+            // --- Get Room Serial Map for this session ---
             const roomSerialMap = getRoomSerialMap(sessionKey);
             
             // --- Format Original Room with Serial ---
@@ -1808,8 +1814,8 @@ generateScribeReportButton.addEventListener('click', async () => {
                 RegisterNumber: s['Register Number'],
                 Name: s.Name,
                 Course: s.Course,
-                OriginalRoom: originalRoomDisplay,
-                ScribeRoom: scribeRoomDisplay,
+                OriginalRoom: originalRoomDisplay, // Correct Data
+                ScribeRoom: scribeRoomDisplay,     // Correct Data
                 QPCode: sessionQPCodes[courseKey] || 'N/A'
             });
         }
@@ -1889,7 +1895,7 @@ generateScribeReportButton.addEventListener('click', async () => {
         generateScribeReportButton.disabled = false;
         generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
     }
-});    
+});
 
 // *******************************************************
 
