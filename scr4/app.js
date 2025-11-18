@@ -735,6 +735,8 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 // --- 1. Event listener for the "Generate Room-wise Report" button ---
+
+// --- 1. Event listener for the "Generate Room-wise Report" button ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     generateReportButton.disabled = true;
@@ -825,11 +827,11 @@ generateReportButton.addEventListener('click', async () => {
             const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
             const locationHtml = location ? `<div class="report-location-header">Location: ${location}</div>` : "";
 
-            // --- NEW: Get Room Serial Number ---
+            // --- Get Room Serial Number ---
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
             const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
             const serialNo = roomSerialMap[session.Room] || '-';
-            // -----------------------------------
+            // ------------------------------
 
             // Prepare Course Summary
             let courseSummaryHtml = '';
@@ -837,7 +839,7 @@ generateReportButton.addEventListener('click', async () => {
                 courseSummaryHtml += `<div style="font-weight: bold;">${courseName}: ${count} Student(s)</div>`; 
             }
             
-            // *** FIX: Added Serial Number to the header ***
+            // Header with Serial Number
             const pageHeaderHtml = `
                 <div class="print-header-group">
                     <h1>${currentCollegeName}</h1> 
@@ -864,6 +866,7 @@ generateReportButton.addEventListener('click', async () => {
             const hasScribe = session.students.some(s => s.isPlaceholder);
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote">* = Scribe Assistance</div>' : '';
 
+            // *** FIX: Updated Footer Text ***
             const invigilatorFooterHtml = `
                 <div class="invigilator-footer">
                     <div class="course-summary-footer">
@@ -874,7 +877,7 @@ generateReportButton.addEventListener('click', async () => {
                     <div><strong>Answer Booklets Used:</strong> _________________</div>
                     <div><strong>Answer Booklets Returned (Balance):</strong> _________________</div>
                     <div class="signature">
-                        Chief Superintendent
+                        Name and Dated Signature of the Invigilator
                     </div>
                     ${scribeFootnote}
                 </div>
