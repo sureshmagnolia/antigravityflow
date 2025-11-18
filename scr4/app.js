@@ -3546,6 +3546,12 @@ function clearScribeSearch() {
 
 // NEW FUNCTION: This loads the scribe allotment data for the session
 function loadScribeAllotment(sessionKey) {
+    // *** FIX: Ensure global scribe list is loaded before checking length ***
+    if (globalScribeList.length === 0) {
+        globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+    }
+    // **********************************************************************
+
     if (sessionKey && globalScribeList.length > 0) {
         // Load the allotments for this session
         const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
