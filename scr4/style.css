@@ -226,16 +226,23 @@ main, #report-controls {
     }
 
 /* --- FIND THIS BLOCK AND REPLACE IT --- */
+   /* --- INVERTED SCRIBE ROW STYLES (Print) --- */
     tr.scribe-row-highlight {
         background-color: #000000 !important; /* Black Background */
         color: #ffffff !important;             /* White Text */
-        -webkit-print-color-adjust: exact;     /* Force print background */
-        print-color-adjust: exact;             /* Standard property */
+        -webkit-print-color-adjust: exact; 
+        print-color-adjust: exact;
     }
     
-    /* Optional: Make borders white inside the black row for readability */
+    /* Standard cells get white borders */
     tr.scribe-row-highlight td {
-        border-color: #ffffff !important;
+        border: 1px solid #ffffff !important;
+    }
+
+    /* EXCEPTION: Make Signature Cell White */
+    tr.scribe-row-highlight td.signature-col {
+        background-color: #ffffff !important; /* White Background */
+        border: 1px solid #000000 !important; /* Black Border (to see the box) */
     }
     
     .print-table {
@@ -525,12 +532,18 @@ main, #report-controls {
     background-color: #eee;
 }
 
+/* --- INVERTED SCRIBE ROW STYLES (Screen) --- */
 tr.scribe-row-highlight {
     background-color: #000000;
     color: #ffffff;
 }
 tr.scribe-row-highlight td {
     border-color: #ffffff;
+}
+/* EXCEPTION: Make Signature Cell White on Screen too */
+tr.scribe-row-highlight td.signature-col {
+    background-color: #ffffff;
+    border: 1px solid #000000;
 }
 
 .edit-data-table {
