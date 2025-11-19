@@ -136,78 +136,80 @@
     </nav>
 
     <main class="flex-1 overflow-y-auto">
-        <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen">
+
+    <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen">
         <div class="bg-white p-8 rounded-lg shadow-xl w-full">
             
-            <h1 class="text-3xl font-bold text-gray-800 mb-6">Data</h1>
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Data Management</h1>
+            <p class="text-gray-600 mb-6">Choose your data source to begin.</p>
 
-            <div class="bg-indigo-50 border border-indigo-200 p-4 rounded-md mb-6">
-                <h4 class="font-semibold text-gray-800">How to Use:</h4>
-                <ol class="list-decimal list-inside text-sm text-gray-700 mt-2 space-y-1">
-                    <li>Go to **Settings** and define Room Capacities and College Name. Save changes.</li>
-                    <li>Click 'Select PDF Files' and choose 1 or 100+ PDF files.</li>
-                    <li>Click 'Run Batch Extraction'. Check the **Status Log** for errors.</li>
-                    <li>(Optional) Download the CSV, correct any mistakes, and re-upload it using the "Load Corrected Data" option. This will be your new base data.</li>
-                    <li>Go to **Scribe Assistance** to mark any students who need it.</li>
-                    <li>Go to **Room Allotment** for manual allotment and scribe room assignment.</li>
-                    <li>Go to **QP Codes** to assign codes to each course.</li>
-                    <li>Go to **Reports** to generate seating lists, scribe lists, and QP counts.</li>
-                    <li>Go to **Absentees** to mark absentees and generate the final statement.</li>
-                </ol>
-            </div>
-            <div class="space-y-4">
-                <div>
-                    <label for="pdf-file" class="block text-sm font-medium text-gray-700">1. Select PDF Files:</label>
-                    <input type="file" id="pdf-file" accept=".pdf" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
-                </div>
-                
-                <button id="run-button" 
-                        py-click="start_extraction" 
-                        class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50">
-                    <span id="spinner" class="loader-spin -ml-1 mr-3 h-5 w-5 text-white hidden"></span>
-                    <span id="button-text">2. Run Batch Extraction</span>
-                </button>
-            </div>
-            
-
-            <div class="mt-6">
-                <h3 class="text-lg font-medium text-gray-900">Processing Log:</h3>
-                <div id="status" class="w-full h-48 p-3 mt-2 bg-gray-900 text-gray-200 text-sm font-mono rounded-md overflow-y-auto">
-                    Waiting for file...
-                </div>
-            </div>
-
-            <div class="mt-6">
-                <h3 class="text-lg font-medium text-gray-900">Status Log:</h3>
-                <div id="status-log" class="w-full h-48 p-3 mt-2 bg-gray-100 border border-gray-300 text-gray-800 text-sm font-mono rounded-md overflow-y-auto">
-                    Waiting for extraction to complete...
-                </div>
-            </div>
-
-            <div id="download-area" class="mt-6 space-y-3">
-                <div id="csv-download-container"></div>
-            </div>
-            
-            <div class="bg-gray-50 border border-gray-200 p-4 rounded-md mt-6">
-                <h4 class="font-semibold text-gray-800">3. Load Corrected Data (Optional)</h4>
-                <p class="text-sm text-gray-600 mt-1 mb-3">
-                    Upload a corrected `Combined_Nominal_Roll.csv` file to overwrite the extracted data.
-                    This is your base data source for all reports.
-                </p>
-                <div class="flex items-center gap-2">
-                    <input type="file" id="corrected-csv-upload" accept=".csv" class="block w-full text-sm text-gray-500
-                                  file:mr-4 file:py-2 file:px-4
-                                  file:rounded-md file:border-0
-                                  file:text-sm file:font-semibold
-                                  file:bg-green-50 file:text-green-700
-                                  hover:file:bg-green-100"/>
-                    <button id="load-csv-button" class="inline-flex justify-center items-center rounded-md border border-transparent bg-gray-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-gray-700">
-                        Load CSV
+            <div class="bg-green-50 border border-green-200 p-5 rounded-lg mb-8">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-green-800 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                            Option 1: Upload CSV File
+                        </h2>
+                        <p class="text-sm text-green-800 mt-1">Fastest method. Works offline without Python.</p>
+                    </div>
+                    <button id="download-sample-csv-btn" class="text-sm bg-white border border-green-300 text-green-700 px-3 py-1.5 rounded hover:bg-green-50 font-medium transition flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" /></svg>
+                        Download Template
                     </button>
                 </div>
-                <span id="csv-load-status" class="text-sm font-medium text-green-600 mt-2 block h-5"></span>
+
+                <div class="space-y-3">
+                    <label class="block text-sm font-medium text-gray-700">Select CSV File:</label>
+                    <div class="flex gap-2">
+                        <input type="file" id="main-csv-upload" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200"/>
+                        <button id="main-load-csv-btn" class="inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-6 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                            Load Data
+                        </button>
+                    </div>
+                    <div id="main-csv-status" class="text-sm font-medium min-h-[20px]"></div>
+                </div>
             </div>
+
+            <div class="relative flex py-2 items-center">
+                <div class="flex-grow border-t border-gray-300"></div>
+                <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">OR</span>
+                <div class="flex-grow border-t border-gray-300"></div>
             </div>
+
+            <div class="mt-6 opacity-90">
+                <h2 class="text-xl font-bold text-indigo-800 mb-2 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                    Option 2: Extract from PDF
+                </h2>
+                <p class="text-sm text-gray-600 mb-4">Use this if you only have the raw Nominal Roll PDF. Requires active internet/Python engine.</p>
+
+                <div class="space-y-4 p-4 border border-indigo-100 rounded-lg">
+                    <div>
+                        <label for="pdf-file" class="block text-sm font-medium text-gray-700">Select PDF Files:</label>
+                        <input type="file" id="pdf-file" accept=".pdf" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                    </div>
+                    
+                    <button id="run-button" 
+                            py-click="start_extraction" 
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50">
+                        <span id="spinner" class="loader-spin -ml-1 mr-3 h-5 w-5 text-white hidden"></span>
+                        <span id="button-text">Run Batch Extraction</span>
+                    </button>
+
+                    <div class="mt-2">
+                        <h3 class="text-xs font-medium text-gray-500 uppercase">Processing Log:</h3>
+                        <div id="status" class="w-full h-24 p-2 mt-1 bg-gray-900 text-gray-200 text-xs font-mono rounded-md overflow-y-auto">
+                            Ready for extraction...
+                        </div>
+                        <div id="status-log" class="hidden"></div>
+                    </div>
+                    <div id="download-area">
+                         <div id="csv-download-container"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
     </div>
 
     <div id="view-edit-data" class="w-full mx-auto p-4 min-h-screen hidden">
