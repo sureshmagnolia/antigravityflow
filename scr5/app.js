@@ -814,16 +814,37 @@ function getNumericSortKey(key) {
 }
 
 // --- (V28) Helper function to create a new room row HTML (with location) ---
-function createRoomRowHtml(roomName, capacity, location, isLast = false) {
+// --- Helper function to create a new room row HTML (with Edit/Lock) ---
+function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocked = true) {
+    // If locked, inputs are disabled
+    const disabledAttr = isLocked ? 'disabled' : '';
+    const bgClass = isLocked ? 'bg-gray-50 text-gray-500' : 'bg-white';
+
+    // Edit Button Icon
+    const editBtnHtml = `
+        <button class="edit-room-btn text-blue-600 hover:text-blue-800 p-1" title="Edit Row">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+            </svg>
+        </button>
+    `;
+
+    // Remove Button (Only for last row)
     const removeButtonHtml = isLast ? 
-        `<button class="remove-room-button ml-auto text-sm text-red-600 hover:text-red-800 font-medium">&times; Remove</button>` : 
-        `<div class="w-[84px]"></div>`; // Placeholder for alignment
+        `<button class="remove-room-button ml-2 text-sm text-red-600 hover:text-red-800 font-medium">&times; Remove</button>` : 
+        `<div class="w-[70px]"></div>`; // Placeholder
     
     return `
-        <div class="room-row flex items-center gap-3 p-2 border-b border-gray-200" data-room-name="${roomName}">
+        <div class="room-row flex items-center gap-2 p-2 border-b border-gray-200" data-room-name="${roomName}">
             <label class="room-name-label font-medium text-gray-700 w-24 shrink-0">${roomName}:</label>
-            <input type="number" class="room-capacity-input block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm" value="${capacity}" min="1" placeholder="30">
-            <input type="text" class="room-location-input block flex-grow p-2 border border-gray-300 rounded-md shadow-sm text-sm" value="${location}" placeholder="e.g., Commerce Block">
+            
+            <input type="number" class="room-capacity-input block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass}" 
+                   value="${capacity}" min="1" placeholder="30" ${disabledAttr}>
+            
+            <input type="text" class="room-location-input block flex-grow p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass}" 
+                   value="${location}" placeholder="e.g., Commerce Block" ${disabledAttr}>
+            
+            ${editBtnHtml}
             ${removeButtonHtml}
         </div>
     `;
@@ -2534,154 +2555,124 @@ function showView(viewToShow, buttonToActivate) {
     clearReport(); // Always clear reports when switching views
 }
 
-// --- (V97) College Name Save Logic (in Settings) ---
-saveCollegeNameButton.addEventListener('click', () => {
-    const collegeName = collegeNameInput.value.trim() || "University of Calicut";
-    localStorage.setItem(COLLEGE_NAME_KEY, collegeName);
-    currentCollegeName = collegeName; // Update global var immediately
-    
-    collegeNameStatus.textContent = "College name saved!";
-    setTimeout(() => { collegeNameStatus.textContent = ""; }, 2000);
-});
-
 // --- (V48) Save from dynamic form (in Settings) ---
 saveRoomConfigButton.addEventListener('click', () => {
     try {
-        // NOTE: College Name saving is now handled by saveCollegeNameButton
-        
-        // Save Room Config
+        // ... (Existing save logic: gather data from DOM) ...
         const newConfig = {};
-        // V79: Get all rows, re-read and save
         const roomRows = roomConfigContainer.querySelectorAll('.room-row');
-        
         roomRows.forEach(row => {
-            // V79: Read current values (name label is the source of truth for the room key)
-            const roomName = row.querySelector('.room-name-label').textContent.replace(':', '').trim();
-            let capacity = parseInt(row.querySelector('.room-capacity-input').value, 10);
-            let location = row.querySelector('.room-location-input').value.trim();
-            
-            // Default to 30 if blank or invalid
-            if (isNaN(capacity) || capacity <= 0) {
-                capacity = 30;
-            }
-            
-            if (roomName) {
-                // V79: Re-save all rooms with new sequential names and updated data
-                newConfig[roomName] = {
-                    capacity: capacity,
-                    location: location
-                };
-            }
+             // ... (Same logic as before) ...
+             const roomName = row.querySelector('.room-name-label').textContent.replace(':', '').trim();
+             const capacity = parseInt(row.querySelector('.room-capacity-input').value, 10) || 30;
+             const location = row.querySelector('.room-location-input').value.trim();
+             newConfig[roomName] = { capacity, location };
         });
         
         localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(newConfig));
         
-        // Show success message
         roomConfigStatus.textContent = "Settings saved successfully!";
         setTimeout(() => { roomConfigStatus.textContent = ""; }, 2000);
         
-        // V79: RE-RENDER the list to fix numbering and apply UX rules (remove button on last row only)
-        loadRoomConfig();
-        syncDataToCloud(); // <--- ADD THIS
+        // Re-load to LOCK everything
+        loadRoomConfig(); 
+        syncDataToCloud();
         
     } catch (e) {
-        roomConfigStatus.textContent = "Error saving settings.";
-        console.error("Error saving room config:", e);
+        console.error(e);
     }
 });
 
 // --- (V79) Load data into dynamic form (in Settings) ---
+
+ // --- (V79) Load data into dynamic form (in Settings) ---
 function loadRoomConfig() {
     // V48: Load College Name
     currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-    // *** V91 FIX: Populate the input field with the saved value ***
-    if (collegeNameInput) collegeNameInput.value = currentCollegeName; 
+    if (collegeNameInput) {
+        collegeNameInput.value = currentCollegeName;
+        collegeNameInput.disabled = true; // Ensure locked on load
+    }
     
     // Load Room Config
     let savedConfigJson = localStorage.getItem(ROOM_CONFIG_KEY);
-    let config;
+    let config = {};
     
-    if (savedConfigJson) {
-        try {
-            config = JSON.parse(savedConfigJson);
-        } catch (e) {
-            console.error("Error parsing saved config, resetting.", e);
-            config = {};
-        }
-    } else {
-        config = {};
-    }
+    try { config = JSON.parse(savedConfigJson || '{}'); } catch (e) { config = {}; }
     
-    // (V28) Store in global var for other functions to use
-    currentRoomConfig = config;
-    
+    // ... (Keep existing default 30 rooms logic if config is empty) ...
     if (Object.keys(config).length === 0) {
-        // *** (V27): Default to 30 rooms ***
-        console.log("Using default room config (30 rooms of 30)");
-        config = {};
-        for (let i = 1; i <= 30; i++) {
-            config[`Room ${i}`] = { capacity: 30, location: "" };
-        }
-        localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(config));
-        currentRoomConfig = config; // Update global var
+         // ... (Your existing default logic here) ...
+         for (let i = 1; i <= 30; i++) config[`Room ${i}`] = { capacity: 30, location: "" };
+         localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(config));
     }
     
-    // Populate the dynamic form
-    roomConfigContainer.innerHTML = ''; // Clear existing rows
+    currentRoomConfig = config;
+    roomConfigContainer.innerHTML = ''; 
+    
     const sortedKeys = Object.keys(config).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
         return numA - numB;
     });
     
-    // V79: Add rows, determining if 'isLast' is true
+    // Add rows (LOCKED by default)
     sortedKeys.forEach((roomName, index) => {
         const roomData = config[roomName];
         const isLast = (index === sortedKeys.length - 1);
-        const rowHtml = createRoomRowHtml(roomName, roomData.capacity, roomData.location, isLast);
+        // Pass true for isLocked
+        const rowHtml = createRoomRowHtml(roomName, roomData.capacity, roomData.location, isLast, true);
         roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
     });
-}
+}   
 
 // --- (V28) Add New Room Button (in Settings) ---
+// --- Add New Room Button ---
 addRoomButton.addEventListener('click', () => {
     const allRows = roomConfigContainer.querySelectorAll('.room-row');
     let newName = "Room 1";
     
     if (allRows.length > 0) {
+        // ... (Keep existing naming logic) ...
         const lastRow = allRows[allRows.length - 1];
         const lastName = lastRow.querySelector('.room-name-label').textContent.replace(':', '').trim();
-        let lastNum = 0;
-        try {
-            lastNum = parseInt(lastName.match(/(\d+)/)[0], 10);
-        } catch(e) {
-            lastNum = allRows.length; // Fallback
-        }
+        let lastNum = parseInt(lastName.match(/(\d+)/)[0], 10) || allRows.length;
         newName = `Room ${lastNum + 1}`;
-    }
-    
-    // V79: Before adding new row, remove remove button from the current last row
-    const currentLastRow = roomConfigContainer.lastElementChild;
-    if (currentLastRow) {
-        const removeButton = currentLastRow.querySelector('.remove-room-button');
+        
+        // Remove "Remove" button from previous last row
+        const removeButton = lastRow.querySelector('.remove-room-button');
         if (removeButton) {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'w-[84px]'; // Match the button width for alignment
-            removeButton.parentNode.replaceChild(placeholder, removeButton);
+             const placeholder = document.createElement('div');
+             placeholder.className = 'w-[70px]';
+             removeButton.parentNode.replaceChild(placeholder, removeButton);
         }
     }
 
-    const newRowHtml = createRoomRowHtml(newName, 30, "", true); // Add new row as the last row
+    // Create NEW row -> isLocked = FALSE (Editable)
+    const newRowHtml = createRoomRowHtml(newName, 30, "", true, false); 
     roomConfigContainer.insertAdjacentHTML('beforeend', newRowHtml);
 });
 
 // --- (V79) Remove Room Button (Event Delegation for all rows, in Settings) ---
+// --- Remove OR Edit Room Button (Event Delegation) ---
 roomConfigContainer.addEventListener('click', (e) => {
+    // HANDLE REMOVE
     if (e.target.classList.contains('remove-room-button')) {
         e.target.closest('.room-row').remove();
-        
-        // Re-save configuration to update the room names and persist the deletion
-        saveRoomConfigButton.click(); // Triggers re-saving and re-rendering to fix numbering and buttons
+        saveRoomConfigButton.click(); // Auto-save and re-render
+    }
+    
+    // HANDLE EDIT (Unlock Row)
+    const editBtn = e.target.closest('.edit-room-btn');
+    if (editBtn) {
+        const row = editBtn.closest('.room-row');
+        const inputs = row.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.disabled = false;
+            input.classList.remove('bg-gray-50', 'text-gray-500');
+            input.classList.add('bg-white', 'text-black');
+        });
+        inputs[0].focus(); // Focus on capacity
     }
 });
 // --- (V33) NEW CSV UPLOAD LOGIC ---
@@ -4815,6 +4806,31 @@ modalCloseSearchResult.addEventListener('click', () => {
     searchResultModal.classList.add('hidden');
 });
 
+// --- College Name Edit/Save Logic ---
+const editCollegeNameBtn = document.getElementById('edit-college-name-btn');
+
+if (editCollegeNameBtn) {
+    editCollegeNameBtn.addEventListener('click', () => {
+        collegeNameInput.disabled = false;
+        collegeNameInput.classList.remove('disabled:bg-gray-100', 'disabled:text-gray-500');
+        collegeNameInput.focus();
+    });
+}
+
+saveCollegeNameButton.addEventListener('click', () => {
+    const collegeName = collegeNameInput.value.trim() || "University of Calicut";
+    localStorage.setItem(COLLEGE_NAME_KEY, collegeName);
+    currentCollegeName = collegeName;
+    
+    // Lock it again
+    collegeNameInput.disabled = true;
+    collegeNameInput.classList.add('disabled:bg-gray-100', 'disabled:text-gray-500');
+
+    collegeNameStatus.textContent = "College name saved!";
+    setTimeout(() => { collegeNameStatus.textContent = ""; }, 2000);
+    
+    syncDataToCloud();
+});
 // --- END: STUDENT SEARCH FUNCTIONALITY ---
 // --- Run on initial page load ---
 loadInitialData();
