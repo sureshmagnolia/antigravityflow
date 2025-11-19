@@ -15,10 +15,10 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         
-        // *** UPDATED: Added 'onSnapshot' and 'writeBatch' ***
+        // *** UPDATED: Added 'orderBy' to imports ***
         import { 
             getFirestore, doc, getDoc, setDoc, 
-            collection, query, where, getDocs, 
+            collection, query, where, getDocs, orderBy, // <-- Added orderBy
             addDoc, updateDoc, arrayUnion, arrayRemove,
             onSnapshot, writeBatch 
         } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -40,11 +40,11 @@
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
 
-        // *** EXPOSE ALL TOOLS TO WINDOW (Added onSnapshot, writeBatch) ***
+        // *** EXPOSE ALL TOOLS TO WINDOW ***
         window.firebase = { 
             auth, db, provider, signInWithPopup, signOut, onAuthStateChanged, 
             doc, getDoc, setDoc, 
-            collection, query, where, getDocs, 
+            collection, query, where, getDocs, orderBy, // <-- Added orderBy
             addDoc, updateDoc, arrayUnion, arrayRemove,
             onSnapshot, writeBatch 
         };
