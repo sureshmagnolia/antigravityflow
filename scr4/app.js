@@ -2586,21 +2586,21 @@ window.real_populate_session_dropdown = function() {
             }
         });
         
-if (defaultSession) {
+        if (defaultSession) {
             // 1. Default Absentee Tab
             sessionSelect.value = defaultSession;
             sessionSelect.dispatchEvent(new Event('change')); 
             
-            // 2. Default Search Tab (NEW)
+            // 2. Default Search Tab
             if (searchSessionSelect) {
                 searchSessionSelect.value = defaultSession;
-                searchSessionSelect.dispatchEvent(new Event('change')); // Load students for search immediately
+                searchSessionSelect.dispatchEvent(new Event('change')); 
             }
             
-            // 3. Default Edit Data Tab (Optional, good for UX)
+            // 3. Default Edit Data Tab (FIXED: Now triggers change to load courses)
             if (editSessionSelect) {
                 editSessionSelect.value = defaultSession;
-                // We don't trigger 'change' here to avoid auto-loading the edit table unnecessarily
+                editSessionSelect.dispatchEvent(new Event('change')); // <--- ADDED THIS
             }
         }
         
@@ -3845,18 +3845,33 @@ editSessionSelect.addEventListener('change', () => {
     }
 });
 
-// 2. Course selection (Same as before)
+// 2. Course selection (Updated with Student Count)
 editCourseSelect.addEventListener('change', () => {
     currentEditCourse = editCourseSelect.value;
     editCurrentPage = 1;
-    hasUnsavedEdits = false; // Reset unsaved flag
+    hasUnsavedEdits = false; 
+
+    // Get reference to count display or create it
+    let countDisplay = document.getElementById('edit-student-count');
+    if (!countDisplay && addNewStudentBtn) {
+        countDisplay = document.createElement('div');
+        countDisplay.id = 'edit-student-count';
+        countDisplay.className = 'mb-2 font-bold text-blue-700 text-sm';
+        // Insert just before the "Add New Student" button
+        addNewStudentBtn.parentNode.insertBefore(countDisplay, addNewStudentBtn);
+    }
 
     if (currentEditCourse) {
-        // Filter students for this course and make a "deep copy"
         const [date, time] = currentEditSession.split(' | ');
         currentCourseStudents = allStudentData
             .filter(s => s.Date === date && s.Time === time && s.Course === currentEditCourse)
-            .map(s => ({ ...s })); // Deep copy
+            .map(s => ({ ...s })); 
+        
+        // Update Count Text
+        if (countDisplay) {
+            countDisplay.textContent = `Total Students Mapped: ${currentCourseStudents.length}`;
+            countDisplay.classList.remove('hidden');
+        }
         
         renderStudentEditTable();
         editSaveSection.classList.remove('hidden');
@@ -3866,10 +3881,11 @@ editCourseSelect.addEventListener('change', () => {
         editPaginationControls.classList.add('hidden');
         editSaveSection.classList.add('hidden');
         addNewStudentBtn.classList.add('hidden');
+        if (countDisplay) countDisplay.classList.add('hidden');
     }
 });
 
-// 3. Render Table (NEW: View-only)
+// 3. Render Table (NEW: With Serial Number)
 function renderStudentEditTable() {
     editDataContainer.innerHTML = '';
     if (currentCourseStudents.length === 0) {
@@ -3886,7 +3902,7 @@ function renderStudentEditTable() {
         <table class="edit-data-table">
             <thead>
                 <tr>
-                    <th>Date</th>
+                    <th>Sl No</th> <th>Date</th>
                     <th>Time</th>
                     <th>Course</th>
                     <th>Register Number</th>
@@ -3898,11 +3914,12 @@ function renderStudentEditTable() {
     `;
 
     pageStudents.forEach((student, index) => {
-        const uniqueRowIndex = start + index; // This is the student's index in currentCourseStudents
+        const uniqueRowIndex = start + index; 
+        const serialNo = uniqueRowIndex + 1; // Calculate Serial Number
         
         tableHtml += `
             <tr data-row-index="${uniqueRowIndex}">
-                <td>${student.Date}</td>
+                <td>${serialNo}</td> <td>${student.Date}</td>
                 <td>${student.Time}</td>
                 <td>${student.Course}</td>
                 <td>${student['Register Number']}</td>
