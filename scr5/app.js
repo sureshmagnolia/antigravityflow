@@ -202,10 +202,22 @@ let isSyncing = false;
 
 // --- 1. AUTHENTICATION ---
 
+// 1. Login Handler
 if (loginBtn) {
     loginBtn.addEventListener('click', () => {
         const { auth, provider, signInWithPopup } = window.firebase;
-        signInWithPopup(auth, provider).catch((error) => alert("Login Failed: " + error.message));
+        
+        // *** NEW LINE: Force Google to show the account picker ***
+        provider.setCustomParameters({ prompt: 'select_account' }); 
+        
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("Logged in:", result.user);
+                // Auth listener will handle the rest
+            }).catch((error) => {
+                console.error(error);
+                alert("Login Failed: " + error.message);
+            });
     });
 }
 
