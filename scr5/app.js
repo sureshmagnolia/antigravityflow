@@ -4985,7 +4985,95 @@ async function findMyCollege(user) {
         updateSyncStatus("Auth Error", "error");
     }
 }
+// ==========================================
+    // 📄 CSV & TEMPLATE LOGIC (Works Offline)
+    // ==========================================
 
+    const SAMPLE_CSV_CONTENT = `Date,Time,Course,Register Number,Name
+24.11.2025,2:00 PM,ARA1FA102 (1) - BASIC ARABIC LANGUAGE SKILLS [ARABIC 2024 SYLLABUS],ABCDEFC001,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (1) - BASIC ARABIC LANGUAGE SKILLS [ARABIC 2024 SYLLABUS],ABCDEFC002,NAME TWO
+24.11.2025,2:00 PM,ARA1FA102 (1) - BASIC ARABIC LANGUAGE SKILLS [ARABIC 2024 SYLLABUS],ABCDEFC003,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (1) - BASIC ARABIC LANGUAGE SKILLS [ARABIC 2024 SYLLABUS],ABCDEFC004,NAME TWO
+24.11.2025,2:00 PM,ARA1FA102 (1) - BASIC ARABIC LANGUAGE SKILLS [ARABIC 2024 SYLLABUS],ABCDEFC005,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC006,NAME TWO
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC007,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC008,NAME TWO
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC009,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC010,NAME TWO
+24.11.2025,2:00 PM,ARA1FA102 (2) - MODERN STANDARD ARABIC 1 [ARABIC 2024 SYLLABUS],ABCDEFC011,NAME ONE
+24.11.2025,2:00 PM,ARA1FA102 (3) - ESSENTIAL SKILLS IN ARABIC [ARABIC 2024 SYLLABUS],ABCDEFC012,NAME TWO
+25.11.2025,2:00 PM,BCA1FM105 - DIGITAL MARKETING [COMPUTER APPLICATION 2024 SYLLABUS],ABCDEFC013,NAME ONE
+24.11.2025,2:00 PM,BHAG I [HINDI 2025 SYLLABUS],ABCDEFC014,NAME TWO
+24.11.2025,2:00 PM,BHAG I [HINDI 2025 SYLLABUS],ABCDEFC015,NAME ONE
+24.11.2025,2:00 PM,BHAG I [HINDI 2025 SYLLABUS],ABCDEFC016,NAME TWO
+24.11.2025,2:00 PM,BHAG I [HINDI 2025 SYLLABUS],ABCDEFC017,NAME ONE`;
+
+    // 1. Download Template Button
+    const downloadSampleBtn = document.getElementById('download-sample-csv-btn');
+    if (downloadSampleBtn) {
+        downloadSampleBtn.addEventListener('click', () => {
+            const blob = new Blob([SAMPLE_CSV_CONTENT], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "Student_Data_Template.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
+    // 2. Load CSV Button (The new primary button)
+    const mainLoadCsvBtn = document.getElementById('main-load-csv-btn');
+    const mainCsvInput = document.getElementById('main-csv-upload');
+    const mainCsvStatus = document.getElementById('main-csv-status');
+
+    if (mainLoadCsvBtn) {
+        mainLoadCsvBtn.addEventListener('click', () => {
+            const file = mainCsvInput.files[0];
+            if (!file) {
+                mainCsvStatus.textContent = "Please select a CSV file first.";
+                mainCsvStatus.className = "text-sm font-medium text-red-600";
+                return;
+            }
+            
+            mainCsvStatus.textContent = "Processing...";
+            mainCsvStatus.className = "text-sm font-medium text-blue-600";
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const csvText = event.target.result;
+                
+                // Use the existing parsing logic
+                // We temporarily point the 'csvLoadStatus' element to our new status div
+                // so the existing function updates the right UI
+                const originalStatus = document.getElementById('csv-load-status'); // Backup
+                
+                // Hijack the status display for the parsing function
+                if(typeof parseCsvAndLoadData === 'function') {
+                    try {
+                        parseCsvAndLoadData(csvText);
+                        mainCsvStatus.textContent = `Success! Loaded data. Syncing to cloud...`;
+                        mainCsvStatus.className = "text-sm font-medium text-green-600";
+                        
+                        // Trigger Cloud Sync if available
+                        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                        
+                    } catch(e) {
+                        console.error(e);
+                        mainCsvStatus.textContent = "Error parsing CSV. Check format.";
+                        mainCsvStatus.className = "text-sm font-medium text-red-600";
+                    }
+                }
+            };
+            reader.onerror = () => {
+                mainCsvStatus.textContent = "Error reading file.";
+                mainCsvStatus.className = "text-sm font-medium text-red-600";
+            };
+            reader.readAsText(file);
+        });
+    }
+    // ==========================================
 // --- Run on initial page load ---
 loadInitialData();
 });
