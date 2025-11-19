@@ -308,7 +308,7 @@ async function createNewCollege(user) {
 }
 
 // DOWNLOAD
-// 5. CLOUD DOWNLOAD FUNCTION (Chunked Strategy)
+// 5. CLOUD DOWNLOAD FUNCTION (Chunked Strategy + Fixed UI Load)
 function syncDataFromCloud(collegeId) {
     updateSyncStatus("Connecting...", "neutral");
     const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
@@ -321,20 +321,26 @@ function syncDataFromCloud(collegeId) {
             const mainData = docSnap.data();
             currentCollegeData = mainData; 
 
-            // Admin Permission Check
+            // Check Admin Permissions
             if (currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email)) {
                 if(adminBtn) adminBtn.classList.remove('hidden');
             } else {
                 if(adminBtn) adminBtn.classList.add('hidden');
             }
 
-            // Prevent Loop
+            // === LOOP PREVENTION CHECK ===
             const localTime = localStorage.getItem('lastUpdated');
             if (localTime && mainData.lastUpdated && localTime === mainData.lastUpdated) {
+                // Data is identical. No need to save to localStorage.
+                // *** FIX: BUT WE MUST STILL LOAD THE UI! ***
+                console.log("☁️ Data is up to date. Loading UI...");
+                updateSyncStatus("Synced", "success");
+                loadInitialData(); 
                 return; 
             }
+            // ==============================
 
-            console.log("☁️ Main config detected. Fetching full data...");
+            console.log("☁️ New cloud data detected. Downloading...");
             
             // 1. Save Main Keys
             ['examRoomConfig', 'examCollegeName', 'examQPCodes', 'examScribeList', 'examScribeAllotment', 'examAbsenteeList', 'lastUpdated'].forEach(key => {
@@ -344,6 +350,7 @@ function syncDataFromCloud(collegeId) {
             // 2. FETCH CHUNKS (Download and Stitch)
             try {
                 const dataColRef = collection(db, "colleges", collegeId, "data");
+                // Get all chunks sorted by index
                 const q = query(dataColRef, orderBy("index")); 
                 const querySnapshot = await getDocs(q);
                 
@@ -376,10 +383,14 @@ function syncDataFromCloud(collegeId) {
 
         } else {
             updateSyncStatus("No Data", "neutral");
+            // If no data exists in cloud, load local data
+            loadInitialData();
         }
     }, (error) => {
         console.error("Sync Error:", error);
         updateSyncStatus("Net Error", "error");
+        // Even on error, load local data so the app works offline
+        loadInitialData();
     });
 }
 
