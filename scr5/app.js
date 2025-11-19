@@ -35,6 +35,16 @@ function disable_absentee_tab(disabled) {
 }
 window.disable_absentee_tab = disable_absentee_tab;
 
+// --- Helper to split large strings for Cloud Storage ---
+function chunkString(str, size) {
+    const numChunks = Math.ceil(str.length / size);
+    const chunks = [];
+    for (let i = 0, o = 0; i < numChunks; ++i, o += size) {
+        chunks.push(str.substr(o, size));
+    }
+    return chunks;
+}
+
 function populate_session_dropdown() {
     // This function's body is complex and relies on DOM elements.
     // It will be called *after* extraction, so the elements *should* exist.
@@ -298,8 +308,6 @@ async function createNewCollege(user) {
 }
 
 // DOWNLOAD
-// 5. CLOUD DOWNLOAD FUNCTION (Split Strategy)
-
 // 5. CLOUD DOWNLOAD FUNCTION (Chunked Strategy)
 function syncDataFromCloud(collegeId) {
     updateSyncStatus("Connecting...", "neutral");
@@ -313,14 +321,14 @@ function syncDataFromCloud(collegeId) {
             const mainData = docSnap.data();
             currentCollegeData = mainData; 
 
-            // Check Admin Permissions
+            // Admin Permission Check
             if (currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email)) {
                 if(adminBtn) adminBtn.classList.remove('hidden');
             } else {
                 if(adminBtn) adminBtn.classList.add('hidden');
             }
 
-            // Prevent loop (Don't reload if update is from us)
+            // Prevent Loop
             const localTime = localStorage.getItem('lastUpdated');
             if (localTime && mainData.lastUpdated && localTime === mainData.lastUpdated) {
                 return; 
@@ -333,10 +341,9 @@ function syncDataFromCloud(collegeId) {
                 if (mainData[key]) localStorage.setItem(key, mainData[key]);
             });
 
-            // 2. FETCH CHUNKS (One-time fetch on main update)
+            // 2. FETCH CHUNKS (Download and Stitch)
             try {
                 const dataColRef = collection(db, "colleges", collegeId, "data");
-                // Get all chunks sorted by index
                 const q = query(dataColRef, orderBy("index")); 
                 const querySnapshot = await getDocs(q);
                 
@@ -362,6 +369,7 @@ function syncDataFromCloud(collegeId) {
             updateSyncStatus("Synced", "success");
             console.log("Refreshing UI...");
             loadInitialData();
+            // Refresh Allotment View if open
             if (!viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
                  allotmentSessionSelect.dispatchEvent(new Event('change'));
             }
@@ -383,7 +391,7 @@ async function syncDataToCloud() {
     isSyncing = true;
     updateSyncStatus("Saving...", "neutral");
 
-    const { db, doc, writeBatch, collection, getDocs } = window.firebase; 
+    const { db, doc, writeBatch } = window.firebase; 
     
     // 1. Prepare MAIN Data (Small Settings)
     const mainData = { lastUpdated: new Date().toISOString() };
@@ -402,7 +410,7 @@ async function syncDataToCloud() {
         if(val) bulkDataObj[key] = val;
     });
     
-    // Convert large data to string and split into 800KB chunks (safe margin for 1MB limit)
+    // Convert large data to string and split into 800KB chunks
     const bulkString = JSON.stringify(bulkDataObj);
     const chunks = chunkString(bulkString, 800000); 
 
@@ -414,34 +422,23 @@ async function syncDataToCloud() {
         batch.update(mainRef, mainData);
 
         // B. Save Chunks to Sub-collection 'data'
-        // First, we overwrite existing chunks (chunk_0, chunk_1...)
         chunks.forEach((chunkStr, index) => {
             const chunkRef = doc(db, "colleges", currentCollegeId, "data", `chunk_${index}`);
             batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
         });
         
-        // C. Clean up leftover chunks (e.g., if we had 5 chunks before but only 2 now)
-        // We can't easily delete in the same batch without knowing IDs. 
-        // Strategy: We write a metadata doc saying how many chunks we have.
-        const metaRef = doc(db, "colleges", currentCollegeId, "data", "_metadata");
-        batch.set(metaRef, { totalChunks: chunks.length });
-
         await batch.commit();
         
         console.log(`Data synced! Split into ${chunks.length} chunk(s).`);
         updateSyncStatus("Saved", "success");
     } catch (e) {
         console.error("Sync Up Error:", e);
+        // Fallback if doc doesn't exist
         if (e.code === 'not-found') {
-            // Fallback: Create main doc if missing
              try {
                  await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId), mainData);
-                 // Retry the batch... (simplified: just alert user to retry)
                  updateSyncStatus("Retry Save", "error");
-             } catch (retryErr) {
-                 console.error("Retry failed", retryErr);
-                 updateSyncStatus("Save Fail", "error");
-             }
+             } catch (retryErr) { console.error(retryErr); }
         } else {
             updateSyncStatus("Save Fail", "error");
         }
