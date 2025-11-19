@@ -258,28 +258,52 @@ setTimeout(() => {
 // --- 2. CORE SYNC FUNCTIONS ---
 
 async function findMyCollege(user) {
+    // Run Super Admin Check
+    checkSuperAdminAccess(user);
+
     updateSyncStatus("Searching...", "neutral");
-    const { db, collection, query, where, getDocs, setDoc, doc } = window.firebase;
+    const { db, collection, query, where, getDocs, doc, getDoc } = window.firebase;
     const email = user.email;
 
     try {
-        // Query: Find any college where 'allowedUsers' array contains my email
-        // Note: This requires an index, but usually works for small arrays automatically
-        const collegesRef = window.firebase.collection(db, "colleges");
-        const q = window.firebase.query(collegesRef, window.firebase.where("allowedUsers", "array-contains", email));
-        const querySnapshot = await window.firebase.getDocs(q);
+        // 1. Try to find an EXISTING college where this user is a member
+        const collegesRef = collection(db, "colleges");
+        const q = query(collegesRef, where("allowedUsers", "array-contains", email));
+        const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-            // FOUND EXISTING COLLEGE
-            const collegeDoc = querySnapshot.docs[0]; // Use the first one found
+            // SUCCESS: Found existing college
+            const collegeDoc = querySnapshot.docs[0];
             currentCollegeId = collegeDoc.id;
             console.log("Joined College:", currentCollegeId);
             syncDataFromCloud(currentCollegeId);
         } else {
-            // NO COLLEGE FOUND -> CREATE NEW ONE
-            console.log("No college found. Creating new...");
-            if(confirm("No existing college found for your account. Create a new Database for your team?")) {
-                await createNewCollege(user);
+            // FAIL: No college found. 
+            // 2. CHECK WHITELIST: Is this user allowed to create a NEW college?
+            console.log("Checking whitelist authorization...");
+            const whitelistRef = doc(db, "global", "whitelist");
+            const whitelistSnap = await getDoc(whitelistRef);
+            
+            let isAuthorized = false;
+            if (whitelistSnap.exists()) {
+                const allowedEmails = whitelistSnap.data().emails || [];
+                if (allowedEmails.includes(email) || email === SUPER_ADMIN_EMAIL) {
+                    isAuthorized = true;
+                }
+            } else if (email === SUPER_ADMIN_EMAIL) {
+                // Allow Super Admin to create the very first DB
+                isAuthorized = true; 
+            }
+
+            if (isAuthorized) {
+                if(confirm("No existing database found for your account, but you are AUTHORIZED.\n\nClick OK to create a new College Database.")) {
+                    await createNewCollege(user);
+                }
+            } else {
+                // BLOCKED
+                alert("⛔ ACCESS DENIED ⛔\n\nYou are not part of any college team, and you are not authorized to create a new database.\n\nPlease contact the Super Admin to get access.");
+                const { auth, signOut } = window.firebase;
+                signOut(auth).then(() => location.reload());
             }
         }
     } catch (e) {
@@ -4844,6 +4868,119 @@ saveCollegeNameButton.addEventListener('click', () => {
     syncDataToCloud();
 });
 // --- END: STUDENT SEARCH FUNCTIONALITY ---
+// ==========================================
+// 🚀 SUPER ADMIN LOGIC
+// ==========================================
+
+const SUPER_ADMIN_EMAIL = "sureshmagnolia@gmail.com"; // YOUR EMAIL
+
+const superAdminBtn = document.getElementById('super-admin-btn');
+const superAdminModal = document.getElementById('super-admin-modal');
+const closeSuperModal = document.getElementById('close-super-modal');
+const whitelistInput = document.getElementById('whitelist-email-input');
+const addWhitelistBtn = document.getElementById('add-whitelist-btn');
+const whitelistContainer = document.getElementById('whitelist-container');
+
+// 1. CHECK IF USER IS SUPER ADMIN
+function checkSuperAdminAccess(user) {
+    if (user.email === SUPER_ADMIN_EMAIL) {
+        if(superAdminBtn) superAdminBtn.classList.remove('hidden');
+    } else {
+        if(superAdminBtn) superAdminBtn.classList.add('hidden');
+    }
+}
+
+// 2. OPEN MODAL & LOAD LIST
+if(superAdminBtn) {
+    superAdminBtn.addEventListener('click', () => {
+        superAdminModal.classList.remove('hidden');
+        loadWhitelist();
+    });
+}
+
+if(closeSuperModal) {
+    closeSuperModal.addEventListener('click', () => {
+        superAdminModal.classList.add('hidden');
+    });
+}
+
+// 3. LOAD WHITELIST
+async function loadWhitelist() {
+    const { db, doc, getDoc } = window.firebase;
+    whitelistContainer.innerHTML = '<li class="text-gray-400 italic">Loading...</li>';
+    
+    try {
+        const docRef = doc(db, "global", "whitelist");
+        const docSnap = await getDoc(docRef);
+        
+        whitelistContainer.innerHTML = '';
+        
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            const emails = data.emails || [];
+            
+            if (emails.length === 0) {
+                whitelistContainer.innerHTML = '<li class="text-gray-400 italic">No authorized emails yet.</li>';
+            }
+            
+            emails.forEach(email => {
+                const li = document.createElement('li');
+                li.className = "flex justify-between items-center border-b border-gray-200 pb-1";
+                li.innerHTML = `
+                    <span>${email}</span>
+                    <button class="text-red-500 hover:text-red-700 font-bold px-2" onclick="removeFromWhitelist('${email}')">&times;</button>
+                `;
+                whitelistContainer.appendChild(li);
+            });
+        } else {
+            whitelistContainer.innerHTML = '<li class="text-gray-400 italic">Whitelist empty. Add first user.</li>';
+        }
+    } catch (e) {
+        console.error("Whitelist Load Error:", e);
+        whitelistContainer.innerHTML = '<li class="text-red-500">Error loading list. Check console.</li>';
+    }
+}
+
+// 4. ADD TO WHITELIST
+if(addWhitelistBtn) {
+    addWhitelistBtn.addEventListener('click', async () => {
+        const email = whitelistInput.value.trim();
+        if (!email || !email.includes('@')) return alert("Invalid Email");
+        
+        const { db, doc, setDoc, arrayUnion } = window.firebase;
+        addWhitelistBtn.textContent = "Adding...";
+        
+        try {
+            await setDoc(doc(db, "global", "whitelist"), {
+                emails: arrayUnion(email)
+            }, { merge: true });
+            
+            whitelistInput.value = '';
+            loadWhitelist(); 
+            alert(`✅ ${email} authorized!`);
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            addWhitelistBtn.textContent = "Add";
+        }
+    });
+}
+
+// 5. REMOVE FROM WHITELIST
+window.removeFromWhitelist = async function(email) {
+    if (!confirm(`Revoke authorization for ${email}?`)) return;
+    
+    const { db, doc, updateDoc, arrayRemove } = window.firebase;
+    try {
+        await updateDoc(doc(db, "global", "whitelist"), {
+            emails: arrayRemove(email)
+        });
+        loadWhitelist();
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+};
+
 // --- Run on initial page load ---
 loadInitialData();
 });
