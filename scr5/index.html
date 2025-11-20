@@ -144,6 +144,38 @@
                 <h1 class="text-3xl font-bold text-gray-800 mb-2">Data Management</h1>
                 <p class="text-gray-600 mb-6">Choose your data source to begin.</p>
 
+<div id="data-snapshot" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 hidden">
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center shadow-sm">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-500 font-bold uppercase tracking-wider">Total Students</p>
+                        <p id="dash-student-count" class="text-2xl font-bold text-gray-800">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg flex items-center shadow-sm">
+                    <div class="p-3 rounded-full bg-purple-100 text-purple-600 mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+                    </div>
+                    <div>
+                        <p class="text-xs text-purple-500 font-bold uppercase tracking-wider">Unique Courses</p>
+                        <p id="dash-course-count" class="text-2xl font-bold text-gray-800">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-center shadow-sm">
+                    <div class="p-3 rounded-full bg-orange-100 text-orange-600 mr-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                    </div>
+                    <div>
+                        <p class="text-xs text-orange-500 font-bold uppercase tracking-wider">Exam Days</p>
+                        <p id="dash-day-count" class="text-2xl font-bold text-gray-800">0</p>
+                    </div>
+                </div>
+            </div>
+                
                 <div class="bg-green-50 border border-green-200 p-5 rounded-lg mb-8">
                     <div class="flex justify-between items-start mb-4">
                         <div>
