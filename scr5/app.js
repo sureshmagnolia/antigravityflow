@@ -884,161 +884,111 @@ function getRoomCapacitiesFromStorage() {
 // --- *** NEW CENTRAL ALLOCATION FUNCTION *** ---
 // This function performs the *original* (non-scribe) allotment and assigns
 // a definitive seat number to every student.
+// --- *** CENTRAL ALLOCATION FUNCTION (Manual Only) *** ---
 function performOriginalAllocation(data) {
-    // 1. Get CURRENT room capacities
-    const { roomNames: masterRoomNames, roomCapacities: masterRoomCaps } = getRoomCapacitiesFromStorage();
-    
-    // 2. Get manual room allotments
     const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-
-    // 3. Get Scribe List
-    const scribeRegNos = new Set( (JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo) );
+    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
     
-    // 4. Pre-process data to populate sessionRoomFills with MANUAL allotments
-    //    This is the FIX for the 50-in-30 bug.
-    const sessionRoomFills = {}; // Tracks { "Room 1": 0, "Room 2": 0 }
-    const processed_data_with_manual = []; // Will hold data with manual rooms pre-assigned
+    // Helper to track seat numbers per room
+    const sessionRoomOccupancy = {}; 
 
-    for (const row of data) {
+    const processed_rows_with_rooms = [];
+    
+    data.forEach(row => {
         const sessionKey = `${row.Date}_${row.Time}`;
         const sessionKeyPipe = `${row.Date} | ${row.Time}`;
-        let assignedRoomName = ""; // Start blank
+        const isScribe = scribeRegNos.has(row['Register Number']);
 
-        // Find manual allotment
+        if (!sessionRoomOccupancy[sessionKey]) sessionRoomOccupancy[sessionKey] = {};
+
+        let assignedRoomName = "Unallotted";
+        let seatNumber = "N/A";
+
+        // 1. Check Manual Allotment
         const manualAllotment = allAllotments[sessionKeyPipe];
-        if (manualAllotment && manualAllotment.length > 0) {
+        if (manualAllotment) {
             for (const room of manualAllotment) {
+                // Check if student is in this room's list
                 if (room.students.includes(row['Register Number'])) {
                     assignedRoomName = room.roomName;
+                    
+                    // Generate Seat Number
+                    sessionRoomOccupancy[sessionKey][assignedRoomName] = (sessionRoomOccupancy[sessionKey][assignedRoomName] || 0) + 1;
+                    seatNumber = sessionRoomOccupancy[sessionKey][assignedRoomName];
                     break;
                 }
             }
         }
-
-        // If manually assigned, increment the fill count for that room
-        if (assignedRoomName !== "") {
-            if (!sessionRoomFills[sessionKey]) {
-                sessionRoomFills[sessionKey] = new Array(masterRoomCaps.length).fill(0);
-            }
-            
-            const roomIndex = masterRoomNames.indexOf(assignedRoomName);
-            if (roomIndex !== -1) {
-                // Increment the count. This respects manual allotment.
-                sessionRoomFills[sessionKey][roomIndex]++; 
-            }
-        }
-        
-        processed_data_with_manual.push({ ...row, assignedRoomName }); // Store intermediate result
-    }
-
-    // 5. Perform FINAL allocation (automatic for remaining)
-    const processed_rows_with_rooms = [];
-    const sessionRoomStudentCount = {}; // Tracks seat numbers
-    const DEFAULT_OVERFLOW_CAPACITY = 30;
-
-    for (const row_data of processed_data_with_manual) {
-        const sessionKey = `${row_data.Date}_${row_data.Time}`;
-        let assignedRoomName = row_data.assignedRoomName; // Get pre-assigned room
-        const isScribe = scribeRegNos.has(row_data['Register Number']);
-
-        // If no manual room, run automatic allocation
-        const sessionKeyPipe = `${row_data.Date} | ${row_data.Time}`;
-        const sessionManualAllotment = allAllotments[sessionKeyPipe];
-        if (assignedRoomName === "") {
-            if (assignedRoomName === "" && (!sessionManualAllotment || sessionManualAllotment.length === 0)) {
-                sessionRoomFills[sessionKey] = new Array(masterRoomCaps.length).fill(0);
-            }
-            
-            const currentFills = sessionRoomFills[sessionKey];
-            
-            // Try to fill configured rooms
-            for (let i = 0; i < masterRoomCaps.length; i++) {
-                if (currentFills[i] < masterRoomCaps[i]) {
-                    assignedRoomName = masterRoomNames[i];
-                    currentFills[i]++;
-                    break;
-                }
-            }
-            
-            // If all configured rooms are full, create overflow
-            if (assignedRoomName === "") {
-                let foundOverflowSpot = false;
-                for (let i = masterRoomCaps.length; i < currentFills.length; i++) {
-                    if (currentFills[i] < DEFAULT_OVERFLOW_CAPACITY) {
-                        assignedRoomName = `Room ${i + 1}`;
-                        currentFills[i]++;
-                        foundOverflowSpot = true;
-                        break;
-                    }
-                }
-                
-                // If no existing overflow has space, create a *new* overflow
-                if (!foundOverflowSpot) {
-                    assignedRoomName = `Room ${currentFills.length + 1}`;
-                    currentFills.push(1); 
-                }
-            }
-        }
-        
-        // 5d. Assign the *original* seat number
-        const roomSessionKey = `${sessionKey}_${assignedRoomName}`;
-        if (!sessionRoomStudentCount[roomSessionKey]) {
-            sessionRoomStudentCount[roomSessionKey] = 0;
-        }
-        sessionRoomStudentCount[roomSessionKey]++;
-        const seatNumber = sessionRoomStudentCount[roomSessionKey];
 
         processed_rows_with_rooms.push({ 
-            ...row_data, 
+            ...row, 
             'Room No': assignedRoomName,
             'seatNumber': seatNumber, 
             'isScribe': isScribe 
         });
-    }
+    });
+
     return processed_rows_with_rooms;
 }
 
 // --- NEW: Helper to generate Room Serial Numbers (1, 2, 3...) ---
+
+ // --- Helper: Generate Room Serial Numbers (Grouped by Stream) ---
 function getRoomSerialMap(sessionKey) {
     const serialMap = {};
     let counter = 1;
-
-    // 1. Regular Allotment (Respects order in the array "Top to Bottom")
+    
     const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-    const regularRooms = allAllotments[sessionKey] || [];
+    const currentSessionAllotment = allAllotments[sessionKey] || [];
 
-    regularRooms.forEach(roomObj => {
-        // Only assign if not already assigned (handles duplicates if any)
-        if (!serialMap[roomObj.roomName]) { 
-            serialMap[roomObj.roomName] = counter++;
+    // 1. Group Regular/Distance Rooms
+    // The 'stream' property is now saved in 'currentSessionAllotment'
+    
+    // Sort by Stream Priority (Index in config) then Room Name
+    currentSessionAllotment.sort((a, b) => {
+        const s1 = a.stream || "Regular";
+        const s2 = b.stream || "Regular";
+        const idx1 = currentStreamConfig.indexOf(s1);
+        const idx2 = currentStreamConfig.indexOf(s2);
+        
+        if (idx1 !== idx2) return idx1 - idx2;
+        
+        // If same stream, numeric sort of room name
+        const numA = parseInt(a.roomName.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.roomName.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+
+    const usedRegularRooms = new Set();
+
+    // Assign Serials to Regular/Distance
+    currentSessionAllotment.forEach(room => {
+        if (!serialMap[room.roomName]) {
+            serialMap[room.roomName] = counter++;
+            usedRegularRooms.add(room.roomName);
         }
     });
 
-    // 2. Scribe Allotment (Continue numbering)
+    // 2. Scribe Allotment (Always Last)
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const scribeMap = allScribeAllotments[sessionKey] || {};
     
-    // Collect unique scribe rooms
     const uniqueScribeRooms = new Set(Object.values(scribeMap));
-    
-    // Remove rooms that were already counted in Regular Allotment
-    // (e.g., if a Scribe is placed in a Regular Room, it keeps the Regular serial number)
-    regularRooms.forEach(r => uniqueScribeRooms.delete(r.roomName));
+    usedRegularRooms.forEach(r => uniqueScribeRooms.delete(r)); // Remove duplicates
 
-    // Sort remaining Scribe Rooms numerically/alphabetically
     const sortedScribeRooms = Array.from(uniqueScribeRooms).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
         return numA - numB;
     });
 
-    // Assign serial numbers to Scribe Rooms
     sortedScribeRooms.forEach(roomName => {
         serialMap[roomName] = counter++;
     });
 
     return serialMap;
-}
+}   
+    
 // --- Helper to split large strings for Cloud Storage ---
 function chunkString(str, size) {
     const numChunks = Math.ceil(str.length / size);
@@ -1243,24 +1193,31 @@ function generateSessionCardsHtml(dateStr) {
 
     
 // V68: Helper function to filter data based on selected report filter
+// Helper function to filter data based on selected report filter
 function getFilteredReportData(reportType) {
     const data = JSON.parse(jsonDataStore.innerHTML || '[]');
     if (data.length === 0) return [];
     
-    if (filterAllRadio.checked) {
-        // Return all data
-        return data;
-    } else if (filterSessionRadio.checked) {
+    let filteredData = data;
+
+    // 1. Filter by Session
+    if (filterSessionRadio.checked) {
         const sessionKey = reportsSessionSelect.value;
-        if (!sessionKey || sessionKey === 'all') { // Fallback if somehow 'all' is selected here
-            return data; 
+        if (sessionKey && sessionKey !== 'all') {
+            const [date, time] = sessionKey.split(' | ');
+            filteredData = filteredData.filter(s => s.Date === date && s.Time === time);
         }
-        const [date, time] = sessionKey.split(' | ');
-        
-        // Filter by selected session
-        return data.filter(s => s.Date === date && s.Time === time);
     }
-    return [];
+
+    // 2. Filter by Stream (NEW)
+    const streamFilter = document.getElementById('reports-stream-select');
+    if (streamFilter && streamFilter.value !== 'all') {
+        const targetStream = streamFilter.value;
+        // Strict check for stream match
+        filteredData = filteredData.filter(s => (s.Stream || "Regular") === targetStream);
+    }
+    
+    return filteredData;
 }
 
 // ### NEW HELPER FUNCTION ###
@@ -3782,79 +3739,166 @@ function saveRoomAllotment() {
 }
 
 // Update the display with current allotment status
+// Update the display with current allotment status (Stream-wise)
 function updateAllotmentDisplay() {
     const [date, time] = currentSessionKey.split(' | ');
-    const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);    
-    // *** FIX: Include scribe students in count - they occupy space in original room ***
-    const uniqueRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
-    const totalStudents = uniqueRegNos.size;    // ***************************************************
+    const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
     
-    // Calculate allotted students
-    let allottedCount = 0;
-    currentSessionAllotment.forEach(room => {
-        allottedCount += room.students.length;
+    const container = document.getElementById('allotment-student-count-section');
+    container.innerHTML = ''; // Clear previous
+    container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"; // Grid layout
+    container.classList.remove('hidden');
+
+    // 1. Calculate Stats Per Stream
+    const streamStats = {};
+    
+    // Initialize with configured streams so they appear even if empty
+    currentStreamConfig.forEach(stream => {
+        streamStats[stream] = { total: 0, allotted: 0 };
     });
-    
-    const remainingCount = totalStudents - allottedCount;
-    
-    // Update counts
-    totalStudentsCount.textContent = totalStudents;
-    allottedStudentsCount.textContent = allottedCount;
-    remainingStudentsCount.textContent = remainingCount;
-    
-    // Show/hide sections
-    allotmentStudentCountSection.classList.remove('hidden');
-    
-    if (remainingCount > 0) {
-        addRoomSection.classList.remove('hidden');
+    // Ensure "Regular" exists as fallback
+    if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0 };
+
+    // Count Totals (Excluding Scribes)
+    sessionStudentRecords.forEach(s => {
+        if (!scribeRegNos.has(s['Register Number'])) {
+            const strm = s.Stream || "Regular";
+            if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0 };
+            streamStats[strm].total++;
+        }
+    });
+
+    // Count Allotted
+    currentSessionAllotment.forEach(room => {
+        const roomStream = room.stream || "Regular";
+        if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0 };
+        streamStats[roomStream].allotted += room.students.length;
+    });
+
+    // 2. Generate Cards
+    Object.keys(streamStats).forEach(streamName => {
+        const stats = streamStats[streamName];
+        const remaining = stats.total - stats.allotted;
+        
+        // Visual Cues
+        const isComplete = (remaining <= 0 && stats.total > 0);
+        const borderColor = isComplete ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50";
+        const titleColor = isComplete ? "text-green-800" : "text-blue-800";
+
+        const cardHtml = `
+            <div class="${borderColor} border p-4 rounded-lg shadow-sm">
+                <h3 class="text-lg font-bold ${titleColor} mb-3 border-b border-gray-200 pb-1 flex justify-between">
+                    ${streamName} Stream
+                    ${isComplete ? '<span class="text-xs bg-green-200 text-green-800 px-2 py-1 rounded">Completed</span>' : ''}
+                </h3>
+                <div class="flex justify-between items-center text-sm">
+                    <div class="text-center">
+                        <p class="text-gray-500 font-medium">Total</p>
+                        <p class="text-xl font-bold text-gray-800">${stats.total}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-gray-500 font-medium">Allotted</p>
+                        <p class="text-xl font-bold text-blue-600">${stats.allotted}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-gray-500 font-medium">Remaining</p>
+                        <p class="text-xl font-bold ${remaining > 0 ? 'text-orange-600' : 'text-gray-400'}">${remaining}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', cardHtml);
+    });
+
+    // Show/Hide Add Button based on global remaining
+    const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
+    const addSection = document.getElementById('add-room-section');
+    if (totalRemaining > 0) {
+        addSection.classList.remove('hidden');
     } else {
-        addRoomSection.classList.add('hidden');
+        // Optional: Hide button if totally finished, or keep it to allow edits
+        addSection.classList.remove('hidden'); 
     }
-    
-    // Render allotted rooms
+
+    // Render Rooms
     renderAllottedRooms();
     
-    // Show save section if there are allotments
+    // Show Save Section
+    const saveSection = document.getElementById('save-allotment-section');
+    const allottedSection = document.getElementById('allotted-rooms-section');
     if (currentSessionAllotment.length > 0) {
-        allottedRoomsSection.classList.remove('hidden');
-        saveAllotmentSection.classList.remove('hidden');
+        allottedSection.classList.remove('hidden');
+        saveSection.classList.remove('hidden');
     } else {
-        allottedRoomsSection.classList.add('hidden');
-        saveAllotmentSection.classList.add('hidden');
+        allottedSection.classList.add('hidden');
+        saveSection.classList.add('hidden');
     }
 }
 
 // Render the list of allotted rooms (WITH SERIAL NUMBER)
+// Render the list of allotted rooms (WITH STREAM TAGS & SERIALS)
 function renderAllottedRooms() {
     allottedRoomsList.innerHTML = '';
-    
-    // --- NEW: Get Serial Map ---
     const roomSerialMap = getRoomSerialMap(currentSessionKey);
-    // ---------------------------
 
     if (currentSessionAllotment.length === 0) {
         allottedRoomsList.innerHTML = '<p class="text-gray-500 text-sm">No rooms allotted yet.</p>';
         return;
     }
     
+    // Sort by Stream (Regular first), then Serial Number
+    currentSessionAllotment.sort((a, b) => {
+        const s1 = a.stream || "Regular";
+        const s2 = b.stream || "Regular";
+        const idx1 = currentStreamConfig.indexOf(s1);
+        const idx2 = currentStreamConfig.indexOf(s2);
+        if (idx1 !== idx2) return idx1 - idx2;
+        
+        // Numeric Sort by Room Name if streams are same
+        const numA = parseInt(a.roomName.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.roomName.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+    });
+
     currentSessionAllotment.forEach((room, index) => {
         const roomDiv = document.createElement('div');
-        roomDiv.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
+        roomDiv.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow';
         
         const roomInfo = currentRoomConfig[room.roomName];
-        const location = (roomInfo && roomInfo.location) ? ` (${roomInfo.location})` : '';
-        
-        // --- NEW: Get Serial Number ---
+        const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 text-xs font-normal">(${roomInfo.location})</span>` : '';
         const serialNo = roomSerialMap[room.roomName] || '-';
         
+        // Stream Badge Color
+        const streamName = room.stream || "Regular";
+        let badgeColor = "bg-blue-100 text-blue-800"; // Default Regular
+        if (streamName !== "Regular") badgeColor = "bg-purple-100 text-purple-800"; // Distance/Others
+
         roomDiv.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div class="flex-grow">
-                    <h4 class="font-semibold text-gray-800">${serialNo} | ${room.roomName}${location}</h4>
-                    <p class="text-sm text-gray-600">Capacity: ${room.capacity} | Allotted: ${room.students.length}</p>
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-center justify-center w-10 h-10 bg-gray-100 rounded text-gray-600 font-bold text-sm">
+                        <span>#${serialNo}</span>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 text-base">
+                            ${room.roomName} ${location}
+                        </h4>
+                        <div class="flex gap-2 mt-1">
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}">
+                                ${streamName}
+                            </span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                ${room.students.length} / ${room.capacity} Students
+                            </span>
+                        </div>
+                    </div>
                 </div>
-                <button class="text-red-600 hover:text-red-800 font-medium text-sm" onclick="deleteRoom(${index})">
-                    Delete
+                
+                <button class="text-red-500 hover:text-red-700 p-2" onclick="deleteRoom(${index})" title="Remove Room">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
                 </button>
             </div>
         `;
@@ -3872,16 +3916,25 @@ window.deleteRoom = function(index) {
 };
 
 // Show room selection modal
+// Show room selection modal (Updated with Stream Selector)
 function showRoomSelectionModal() {
-    // Get room config
     getRoomCapacitiesFromStorage();
-    
     roomSelectionList.innerHTML = '';
-    
-    // Get already allotted room names
+
+    // 1. Create Stream Selector UI inside the modal
+    const streamSelectHtml = `
+        <div class="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Fill Room with Stream:</label>
+            <select id="allotment-stream-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                ${currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('')}
+            </select>
+        </div>
+    `;
+    roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
+
+    // 2. List Rooms
     const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
     
-    // Sort rooms numerically
     const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
         const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
@@ -3891,12 +3944,10 @@ function showRoomSelectionModal() {
     sortedRoomNames.forEach(roomName => {
         const room = currentRoomConfig[roomName];
         const location = room.location ? ` (${room.location})` : '';
-        
-        // Check if already allotted
         const isAllotted = allottedRoomNames.includes(roomName);
         
         const roomOption = document.createElement('div');
-        roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 ${isAllotted ? 'opacity-50 cursor-not-allowed' : ''}`;
+        roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 mb-2 ${isAllotted ? 'opacity-50 cursor-not-allowed' : ''}`;
         roomOption.innerHTML = `
             <div class="font-medium text-gray-800">${roomName}${location}</div>
             <div class="text-sm text-gray-600">Capacity: ${room.capacity}</div>
@@ -3904,7 +3955,11 @@ function showRoomSelectionModal() {
         `;
         
         if (!isAllotted) {
-            roomOption.onclick = () => selectRoomForAllotment(roomName, room.capacity);
+            roomOption.onclick = () => {
+                // Capture the selected stream when room is clicked
+                const selectedStream = document.getElementById('allotment-stream-select').value;
+                selectRoomForAllotment(roomName, room.capacity, selectedStream);
+            };
         }
         
         roomSelectionList.appendChild(roomOption);
@@ -3913,51 +3968,60 @@ function showRoomSelectionModal() {
     roomSelectionModal.classList.remove('hidden');
 }
 
-// Select a room and allot students
-function selectRoomForAllotment(roomName, capacity) {
+// Select a room and allot students (Updated for Stream)
+function selectRoomForAllotment(roomName, capacity, targetStream) {
     const [date, time] = currentSessionKey.split(' | ');
+    
+    // 1. Get all students for this session
     const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const uniqueSessionRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
     
-    // *** FIX: Check if this room already has students allocated ***
-    const existingRoom = currentSessionAllotment.find(r => r.roomName === roomName);
-    if (existingRoom) {
-        alert(`Room ${roomName} already has ${existingRoom.students.length} students allocated. Please delete the existing allocation first if you want to reallocate.`);
-        roomSelectionModal.classList.add('hidden');
-        return;
-    }
-    // ******************************************************
-    
-    // Get already allotted student register numbers
+    // 2. Get already allotted RegNos (Global for session)
     const allottedRegNos = new Set();
     currentSessionAllotment.forEach(room => {
         room.students.forEach(regNo => allottedRegNos.add(regNo));
     });
 
-    // Get unallotted students (including scribes)
-    const unallottedRegNos = [];
-for (const regNo of uniqueSessionRegNos) {
-    if (!allottedRegNos.has(regNo)) {
-        unallottedRegNos.push(regNo);
+    // 3. Find unallotted students MATCHING THE TARGET STREAM
+    // Also exclude Scribes (they are handled separately)
+    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
+
+    const candidates = [];
+    // Sort first to ensure consistent filling (Stream -> Course -> RegNo)
+    sessionStudentRecords.sort((a, b) => {
+        if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+        return a['Register Number'].localeCompare(b['Register Number']);
+    });
+
+    for (const student of sessionStudentRecords) {
+        const regNo = student['Register Number'];
+        const studentStream = student.Stream || "Regular"; // Default
+
+        // Condition: Not Allotted AND Not Scribe AND Matches Selected Stream
+        if (!allottedRegNos.has(regNo) && !scribeRegNos.has(regNo) && studentStream === targetStream) {
+            candidates.push(regNo);
+        }
     }
-}
     
-    // Allot up to capacity
-    const regNosToAllot = unallottedRegNos.slice(0, capacity);
+    // 4. Allot up to capacity
+    const newStudentRegNos = candidates.slice(0, capacity);
     
-    // *** FIX: Renamed this variable from 'allottedRegNos' to 'newStudentRegNos' ***
-    const newStudentRegNos = regNosToAllot;
-    
-    // Add to current session allotment
+    if (newStudentRegNos.length === 0) {
+        alert(`No unallotted students found for stream: ${targetStream}`);
+        return;
+    }
+
+    // 5. Add to allotment
     currentSessionAllotment.push({
         roomName: roomName,
         capacity: capacity,
-        students: newStudentRegNos // <-- Use the new, correct variable name
+        students: newStudentRegNos,
+        stream: targetStream // Save the stream tag for this room
     });
     
-    // Close modal and update display
     roomSelectionModal.classList.add('hidden');
     updateAllotmentDisplay();
+    
+    if (typeof syncDataToCloud === 'function') syncDataToCloud();
 }
 
 // Event Listeners for Room Allotment
@@ -5637,11 +5701,19 @@ async function findMyCollege(user) {
         });
     }
 
-    // Populate Dropdowns in Data Tab
+// Populate Dropdowns in Data Tab & Reports Tab
     function populateStreamDropdowns() {
         const optionsHtml = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        
         if (csvStreamSelect) csvStreamSelect.innerHTML = optionsHtml;
         if (pdfStreamSelect) pdfStreamSelect.innerHTML = optionsHtml;
+        
+        // NEW: Populate Report Filter
+        const reportStreamSelect = document.getElementById('reports-stream-select');
+        if (reportStreamSelect) {
+             // Keep "All" option at top
+             reportStreamSelect.innerHTML = `<option value="all">All Streams (Combined)</option>` + optionsHtml;
+        }
     }
 
     // Add Stream
