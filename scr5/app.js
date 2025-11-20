@@ -1510,11 +1510,14 @@ generateReportButton.addEventListener('click', async () => {
 // 📋 NOTICE BOARD REPORT LOGIC (Fixed & Robust)
 // ==========================================
 
+// ==========================================
+// 📋 NOTICE BOARD REPORT LOGIC (FINAL FIX)
+// ==========================================
+
 async function generateNoticeBoardReport(numCols) {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     
-    // UI Feedback
     const btn = numCols === 1 ? 
         document.getElementById('generate-daywise-1col-btn') : 
         document.getElementById('generate-daywise-2col-btn');
@@ -1531,10 +1534,8 @@ async function generateNoticeBoardReport(numCols) {
         const baseData = getFilteredReportData('day-wise');
         if (baseData.length === 0) { alert("No data found."); return; }
 
-        // --- CONSTANTS ---
         const MAX_ROWS_PER_COL = 40; 
         
-        // Split by Stream
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
@@ -1571,11 +1572,10 @@ async function generateNoticeBoardReport(numCols) {
 
             sortedSessionKeys.forEach(key => {
                 const session = daySessions[key];
-                
-                // 1. Flatten Data into a Print Queue
                 const printQueue = [];
-                const studentsByCourse = {};
                 
+                // Group by Course
+                const studentsByCourse = {};
                 session.students.forEach(s => {
                     if (!studentsByCourse[s.Course]) studentsByCourse[s.Course] = [];
                     studentsByCourse[s.Course].push(s);
@@ -1586,7 +1586,6 @@ async function generateNoticeBoardReport(numCols) {
                     const courseStudents = studentsByCourse[courseName];
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    // Header Row
                     printQueue.push({ type: 'header', text: courseName });
 
                     courseStudents.forEach(s => {
@@ -1600,10 +1599,9 @@ async function generateNoticeBoardReport(numCols) {
                         const location = roomInfo.location ? `(${roomInfo.location})` : "";
                         const serial = roomSerialMap[roomName] || "";
                         
-                        // Location Display (Guarded)
                         const locDisplay = location 
-                            ? `<b>${serial || ''} | ${roomInfo.location}</b><br><span style="font-size:0.75em">(${roomName})</span>`
-                            : `<b>${serial || ''} | ${roomName}</b>`;
+                            ? `<b>${serial} | ${roomInfo.location}</b><br><span style="font-size:0.75em">(${roomName})</span>`
+                            : `<b>${serial} | ${roomName}</b>`;
 
                         printQueue.push({
                             type: 'student',
@@ -1626,14 +1624,14 @@ async function generateNoticeBoardReport(numCols) {
                     scribeRows.forEach(r => printQueue.push(r));
                 }
 
-                // 2. Page Filler Engine
+                // Page Filler
                 let col1 = [];
                 let col2 = [];
                 
                 const flushPage = () => {
                     if (col1.length > 0 || col2.length > 0) {
                         totalPagesGenerated++;
-                        // *** FIX: Explicitly passing totalPagesGenerated as the 6th argument ***
+                        // *** FIX: Passing all 6 arguments correctly ***
                         let pageHtml = renderNoticePage(col1, col2, String(streamName), session, numCols, totalPagesGenerated);
                         allPagesHtml += pageHtml;
                         col1 = []; col2 = [];
@@ -1655,7 +1653,7 @@ async function generateNoticeBoardReport(numCols) {
                         }
                     }
                 });
-                flushPage(); // Flush remaining items
+                flushPage();
             });
         }
 
@@ -1672,7 +1670,7 @@ async function generateNoticeBoardReport(numCols) {
     }
 }
 
-// --- Helper: Render Page (Fixed Headers, Page No, Undefined) ---
+// --- Helper: Render Page (Fixed Header Variables) ---
 function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
     
     const renderColumn = (rows) => {
@@ -1685,14 +1683,12 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
                 html += `
                     <tr class="bg-gray-200 print:bg-gray-200">
                         <td colspan="4" style="font-weight: bold; font-size: 0.85em; padding: 3px 4px; border: 1px solid #000; text-align: left; border-top: 2px solid #000;">
-                            ${row.text || ""}
+                            ${row.text}
                         </td>
                     </tr>`;
                 lastLocation = ""; 
             } else if (row.type === 'student') {
                 const sClass = row.isScribe ? 'font-bold text-orange-700' : '';
-                
-                // Visual Merge Logic
                 let locContent = row.locationDisplay || "";
                 let rowBorder = "border-top: 2px solid #000;"; 
 
@@ -1740,15 +1736,16 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
                 <tbody>${renderColumn(col1)}</tbody>
             </table>`;
     } else {
+        // GRID LAYOUT - Ensures true 2-column print
         bodyContent = `
-            <div style="display: flex; gap: 15px; width: 100%; align-items: flex-start;">
-                <div style="flex: 1;">
+            <div style="display: grid; grid-template-columns: 49% 49%; gap: 2%; width: 100%; align-items: start;">
+                <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
                         <tbody>${renderColumn(col1)}</tbody>
                     </table>
                 </div>
-                <div style="flex: 1;">
+                <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
                         <tbody>${renderColumn(col2)}</tbody>
@@ -1757,24 +1754,21 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
             </div>`;
     }
 
-    // Safe Access for Date/Time
-    const dateStr = session?.Date || "Unknown Date";
-    const timeStr = session?.Time || "Unknown Time";
+    // Safe Date Access
+    const dateStr = (session && session.Date) ? session.Date : "Unknown Date";
+    const timeStr = (session && session.Time) ? session.Time : "Unknown Time";
 
     return `
         <div class="print-page print-page-daywise" style="height: 100%; display: flex; flex-direction: column;">
             
             <div class="print-header-group" style="width: 100%; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; position: relative;">
-                
                 <div style="position: absolute; top: 0; left: 0; border: 2px solid #000; padding: 4px 10px; background: #fff;">
                     <span style="font-size: 10pt; font-weight: bold;">Page</span><br>
                     <span style="font-size: 16pt; font-weight: bold;">${pageNo}</span>
                 </div>
-
                 <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px; background: #eee;">
                     ${streamName}
                 </div>
-
                 <div style="text-align: center; width: 100%;"> 
                     <h1 style="font-size: 16pt; font-weight: bold; margin: 0; text-transform: uppercase;">${currentCollegeName}</h1>
                     <h2 style="font-size: 12pt; margin: 4px 0 0 0; font-weight: bold;">Seating Details for Candidates</h2>
@@ -1788,6 +1782,7 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
         </div>
     `;
 }
+
 
 // --- Helper: Listeners ---
 const btnNoticeA = document.getElementById('generate-daywise-1col-btn');
