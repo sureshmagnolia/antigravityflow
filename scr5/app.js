@@ -1047,28 +1047,120 @@ function chunkString(str, size) {
 }
 
 // --- Update Dashboard Function ---
+
+// --- Update Dashboard Function (Global + Today's Stats) ---
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
     const dashCourse = document.getElementById('dash-course-count');
     const dashDay = document.getElementById('dash-day-count');
+    
+    // Today's Stats Elements
+    const todayContainer = document.getElementById('today-snapshot-section');
+    const todayDateDisplay = document.getElementById('today-date-display');
+    const todayGrid = document.getElementById('today-sessions-grid');
 
     if (!allStudentData || allStudentData.length === 0) {
         if(dashContainer) dashContainer.classList.add('hidden');
+        if(todayContainer) todayContainer.classList.add('hidden');
         return;
     }
 
-    // Calculate Stats
+    // 1. UPDATE GLOBAL STATS
     const totalStudents = allStudentData.length;
     const uniqueCourses = new Set(allStudentData.map(s => s.Course)).size;
     const uniqueDays = new Set(allStudentData.map(s => s.Date)).size;
 
-    // Update UI
     if(dashStudent) dashStudent.textContent = totalStudents.toLocaleString();
     if(dashCourse) dashCourse.textContent = uniqueCourses.toLocaleString();
     if(dashDay) dashDay.textContent = uniqueDays.toLocaleString();
-    
     if(dashContainer) dashContainer.classList.remove('hidden');
+
+    // 2. UPDATE "TODAY'S EXAM" STATS
+    const today = new Date();
+    // Format: DD.MM.YYYY (Matches CSV format)
+    const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); 
+    
+    // Optional: Manually set date for testing if today has no exams
+    // const todayStr = "24.11.2025"; 
+
+    if(todayDateDisplay) todayDateDisplay.textContent = today.toDateString();
+
+    // Filter students for today
+    const todayStudents = allStudentData.filter(s => s.Date === todayStr);
+
+    if (todayStudents.length === 0) {
+        if(todayContainer) todayContainer.classList.add('hidden'); // Hide if no exams today
+        return;
+    }
+
+    // Group by Session (Time)
+    const sessions = {};
+    todayStudents.forEach(s => {
+        if (!sessions[s.Time]) sessions[s.Time] = [];
+        sessions[s.Time].push(s);
+    });
+
+    // Ensure Scribe List is loaded for calculations
+    if (globalScribeList.length === 0) {
+        globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+    }
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+
+    // Build HTML for each session
+    let sessionsHtml = '';
+    const sortedTimes = Object.keys(sessions).sort(); // e.g., 9:30 AM before 1:30 PM
+
+    sortedTimes.forEach(time => {
+        const students = sessions[time];
+        const studentCount = students.length;
+        const courseCount = new Set(students.map(s => s.Course)).size;
+        
+        // Hall Calculation
+        let scribeCount = 0;
+        let regularCount = 0;
+        
+        students.forEach(s => {
+            if (scribeRegNos.has(s['Register Number'])) scribeCount++;
+            else regularCount++;
+        });
+
+        // Rule: 30 per Regular Hall, 5 per Scribe Hall
+        const regularHalls = Math.ceil(regularCount / 30);
+        const scribeHalls = Math.ceil(scribeCount / 5);
+        const totalHalls = regularHalls + scribeHalls;
+
+        sessionsHtml += `
+            <div class="bg-white border border-indigo-100 rounded-lg shadow-sm p-5 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
+                    <h3 class="text-lg font-bold text-indigo-900 bg-indigo-50 px-3 py-1 rounded-md">${time} Session</h3>
+                    <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Halls Required: ${totalHalls}</span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-gray-800">${studentCount}</div>
+                        <div class="text-xs text-gray-500 font-semibold uppercase">Candidates</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-gray-800">${courseCount}</div>
+                        <div class="text-xs text-gray-500 font-semibold uppercase">Courses</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-gray-800">${scribeCount}</div>
+                        <div class="text-xs text-gray-500 font-semibold uppercase">Scribes</div>
+                    </div>
+                </div>
+
+                <div class="mt-4 text-xs text-gray-400 text-center bg-gray-50 p-1 rounded">
+                    (Est: ${regularHalls} Regular Rooms + ${scribeHalls} Scribe Rooms)
+                </div>
+            </div>
+        `;
+    });
+
+    if(todayGrid) todayGrid.innerHTML = sessionsHtml;
+    if(todayContainer) todayContainer.classList.remove('hidden');
 }
     
 // V68: Helper function to filter data based on selected report filter
