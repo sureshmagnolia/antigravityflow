@@ -5342,6 +5342,65 @@ async function findMyCollege(user) {
         }
     }
     // ==========================================
+// ==========================================
+    // 🐍 PYTHON INTEGRATION (Connects PDF to Merge Logic)
+    // ==========================================
+
+    // This function is exposed to the global window object so Python can call it
+    window.handlePythonExtraction = function(jsonString) {
+        console.log("Received data from Python...");
+        try {
+            const parsedData = JSON.parse(jsonString);
+            
+            if (parsedData.length === 0) {
+                alert("Extraction completed, but no student data was found.");
+                return;
+            }
+
+            // 1. Assign to temp variable (same as CSV logic)
+            tempNewData = parsedData;
+
+            // 2. Check against existing data
+            if (!allStudentData || allStudentData.length === 0) {
+                // No existing data, load directly
+                loadStudentData(tempNewData);
+                alert(`Success! Extracted ${tempNewData.length} records from PDF.`);
+            } else {
+                // Data exists! Calculate Diff
+                const existingKeys = new Set(allStudentData.map(s => 
+                    `${s.Date}|${s.Time}|${s['Register Number']}|${s.Course}`.toUpperCase()
+                ));
+                
+                tempUniqueData = tempNewData.filter(s => {
+                    const key = `${s.Date}|${s.Time}|${s['Register Number']}|${s.Course}`.toUpperCase();
+                    return !existingKeys.has(key);
+                });
+
+                // 3. Show Options Modal
+                conflictExistingCount.textContent = allStudentData.length;
+                conflictTotalNew.textContent = tempNewData.length;
+                conflictUniqueCount.textContent = tempUniqueData.length;
+                
+                if (tempUniqueData.length === 0) {
+                    btnMerge.textContent = "No New Records to Add";
+                    btnMerge.disabled = true;
+                    btnMerge.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    btnMerge.innerHTML = `✅ Add <strong>${tempUniqueData.length}</strong> New Records (Merge)`;
+                    btnMerge.disabled = false;
+                    btnMerge.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+
+                // Show the modal
+                const conflictModal = document.getElementById('csv-conflict-modal');
+                conflictModal.classList.remove('hidden');
+            }
+
+        } catch(e) {
+            console.error("Error processing Python data:", e);
+            alert("An error occurred while processing the extracted data.");
+        }
+    };
 // --- Run on initial page load ---
 loadInitialData();
 });
