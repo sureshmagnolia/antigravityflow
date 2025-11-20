@@ -1663,9 +1663,7 @@ async function generateNoticeBoardReport(numCols) {
     }
 }
 
-// 2. Listeners (The code you asked about - YES, KEEP THIS!)
-const btnNoticeA = document.getElementById('generate-daywise-1col-btn');
-const btnNoticeB = document.getElementById('generate-daywise-2col-btn');
+
 
 if(btnNoticeA) {
     const newBtnA = btnNoticeA.cloneNode(true);
