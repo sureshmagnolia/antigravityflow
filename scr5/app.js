@@ -1677,13 +1677,40 @@ generateDaywiseReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Helper: Render Notice Page (Course Wise) ---
+// --- Helper: Render Notice Page (Course Wise with Merged Location) ---
 function renderNoticePage(rows, streamName, session, rowCount) {
     let tableBodyHtml = "";
     
-    rows.forEach(row => {
+    // 1. Pre-calculate RowSpans for the "Room" column
+    // Values: 0 = skip cell, >=1 = print cell with rowspan
+    const roomSpans = new Array(rows.length).fill(0); 
+    
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].type === 'header') {
+            roomSpans[i] = 1; // Headers don't merge
+            continue;
+        }
+        
+        if (roomSpans[i] === -1) continue; // Already processed
+        
+        // Start a new group
+        let span = 1;
+        // Look ahead
+        for (let j = i + 1; j < rows.length; j++) {
+            if (rows[j].type === 'student' && rows[j].room === rows[i].room) {
+                span++;
+                roomSpans[j] = -1; // Mark as merged (skip)
+            } else {
+                break; // Group ended
+            }
+        }
+        roomSpans[i] = span;
+    }
+
+    // 2. Build Table Body
+    rows.forEach((row, index) => {
         if (row.type === 'header') {
-            // Course Header
+            // Course Header (Spans all 4 columns)
             tableBodyHtml += `
                 <tr class="bg-gray-200 print:bg-gray-200">
                     <td colspan="4" style="font-weight: bold; font-size: 1.0em; padding: 4px 8px; border: 1px solid #000; text-align: left;">
@@ -1694,17 +1721,25 @@ function renderNoticePage(rows, streamName, session, rowCount) {
         } else {
             // Student Row
             const scribeStyle = row.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
+            
+            // Generate Location Cell (Only if it's the start of a span)
+            let roomCellHtml = '';
+            if (roomSpans[index] > 0) {
+                const spanAttr = roomSpans[index] > 1 ? `rowspan="${roomSpans[index]}"` : '';
+                roomCellHtml = `<td ${spanAttr} style="border: 1px solid #000; padding: 4px; width: 30%; font-size: 0.9em; vertical-align: middle; background-color: #fff; text-align: center;">${row.room}</td>`;
+            }
+
             tableBodyHtml += `
                 <tr style="${scribeStyle}">
-                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 15%;">${row.reg}</td>
-                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 35%;">${row.name}</td>
-                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 40%; font-size: 0.95em;">${row.room}</td>
-                    <td style="border: 1px solid #ccc; padding: 2px 4px; width: 10%; text-align: center; font-weight: bold;">${row.seat}</td>
+                    ${roomCellHtml} <td style="border: 1px solid #000; padding: 2px 6px; width: 20%;">${row.reg}</td>
+                    <td style="border: 1px solid #000; padding: 2px 6px; width: 40%;">${row.name}</td>
+                    <td style="border: 1px solid #000; padding: 2px 6px; width: 10%; text-align: center; font-weight: bold;">${row.seat}</td>
                 </tr>
             `;
         }
     });
 
+    // 3. Return Full Page HTML
     return `
         <div class="print-page print-page-daywise">
             <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
@@ -1718,9 +1753,9 @@ function renderNoticePage(rows, streamName, session, rowCount) {
             <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
                 <thead>
                     <tr style="background-color: #f3f4f6;">
+                        <th style="border: 1px solid #000; padding: 4px; text-align: center;">Room / Location</th>
                         <th style="border: 1px solid #000; padding: 4px; text-align: left;">Register No</th>
                         <th style="border: 1px solid #000; padding: 4px; text-align: left;">Name</th>
-                        <th style="border: 1px solid #000; padding: 4px; text-align: left;">Room / Location</th>
                         <th style="border: 1px solid #000; padding: 4px; text-align: center;">Seat</th>
                     </tr>
                 </thead>
@@ -1731,6 +1766,7 @@ function renderNoticePage(rows, streamName, session, rowCount) {
         </div>
     `;
 }
+
 
 // --- Helper: Render a Single Page of Seating Details ---
 function renderPage(rows, streamName, session, rowCount) {
