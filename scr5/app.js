@@ -519,6 +519,7 @@ function updateSyncStatus(status, type) {
     syncStatusDisplay.className = type === 'success' ? 'text-xs text-green-400' : (type === 'error' ? 'text-xs text-red-400' : 'text-xs text-yellow-400');
 }
 // --- Global localStorage Key ---
+const STREAM_CONFIG_KEY = 'examStreamsConfig'; // <-- Add this definition
 const ROOM_CONFIG_KEY = 'examRoomConfig';
 const COLLEGE_NAME_KEY = 'examCollegeName';
 const ABSENTEE_LIST_KEY = 'examAbsenteeList';
@@ -532,6 +533,7 @@ const SCRIBE_ALLOTMENT_KEY = 'examScribeAllotment';
 // *** NEW: All keys for backup/restore ***
 const ALL_DATA_KEYS = [
     ROOM_CONFIG_KEY,
+    STREAM_CONFIG_KEY, // <-- Add this
     COLLEGE_NAME_KEY,
     ABSENTEE_LIST_KEY,
     QP_CODE_LIST_KEY,
@@ -544,6 +546,7 @@ const ALL_DATA_KEYS = [
 // --- Global var to hold data from the last *report run* ---
 let lastGeneratedRoomData = [];
 let lastGeneratedReportType = "";
+let currentStreamConfig = ["Regular"]; // Default
 
 // --- (V28) Global var to hold room config map for report generation ---
 let currentRoomConfig = {};
@@ -5290,7 +5293,9 @@ async function findMyCollege(user) {
         const d = row.Date ? row.Date.toString().trim().toUpperCase() : "";
         const t = row.Time ? row.Time.toString().trim().toUpperCase() : "";
         const r = row['Register Number'] ? row['Register Number'].toString().trim().toUpperCase() : "";
-        return `${d}|${t}|${r}`;
+        // If existing data doesn't have a stream, assume 'Regular' (legacy support)
+        const s = row.Stream ? row.Stream.toString().trim().toUpperCase() : "REGULAR"; 
+        return `${d}|${t}|${r}|${s}`;
     }
     
 // ==========================================
@@ -5349,10 +5354,12 @@ async function findMyCollege(user) {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const csvText = event.target.result;
-                
+                // Capture the selected stream
+                const selectedStream = csvStreamSelect.value; 
+
                 try {
-                    // Step A: Parse the new file
-                    tempNewData = parseCsvRaw(csvText); 
+                    // Pass stream to parser
+                    tempNewData = parseCsvRaw(csvText, selectedStream);
                     
                     if (tempNewData.length === 0) {
                         throw new Error("No valid data found in CSV.");
@@ -5436,7 +5443,7 @@ async function findMyCollege(user) {
     }
 
     // --- Helper: Parse CSV String to JSON (No Side Effects) ---
-    function parseCsvRaw(csvText) {
+  function parseCsvRaw(csvText, streamName = "Regular") {
         const lines = csvText.trim().split('\n');
         const headersLine = lines.shift().trim();
         const headers = headersLine.split(',');
@@ -5464,7 +5471,8 @@ async function findMyCollege(user) {
                     'Time': values[timeIndex],
                     'Course': values[courseIndex], 
                     'Register Number': values[regNumIndex],
-                    'Name': values[nameIndex]
+                    'Name': values[nameIndex], // Comma added here
+                    'Stream': streamName       // Stream tag injected
                 });
             }
         }
@@ -5523,9 +5531,14 @@ async function findMyCollege(user) {
 
     window.handlePythonExtraction = function(jsonString) {
         console.log("Received data from Python...");
+        const selectedStream = pdfStreamSelect.value || "Regular"; // Grab from UI
         try {
             const parsedData = JSON.parse(jsonString);
-            
+            // INJECT STREAM TAG INTO PYTHON DATA
+            parsedData = parsedData.map(item => ({
+                ...item,
+                Stream: selectedStream
+            }));
             if (parsedData.length === 0) {
                 alert("Extraction completed, but no student data was found.");
                 return;
@@ -5574,6 +5587,78 @@ async function findMyCollege(user) {
             alert("An error occurred while processing the extracted data.");
         }
     };
+
+// ==========================================
+    // 🌊 STREAM MANAGEMENT LOGIC (Chunk 1)
+    // ==========================================
+
+    const streamContainer = document.getElementById('stream-config-container');
+    const newStreamInput = document.getElementById('new-stream-input');
+    const addStreamBtn = document.getElementById('add-stream-btn');
+    const csvStreamSelect = document.getElementById('csv-stream-select');
+    const pdfStreamSelect = document.getElementById('pdf-stream-select');
+
+    // Load Streams
+    function loadStreamConfig() {
+        const saved = localStorage.getItem(STREAM_CONFIG_KEY);
+        if (saved) {
+            currentStreamConfig = JSON.parse(saved);
+        } else {
+            currentStreamConfig = ["Regular"]; // Default
+            localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
+        }
+        renderStreamSettings();
+        populateStreamDropdowns();
+    }
+
+    // Render Settings List
+    function renderStreamSettings() {
+        if (!streamContainer) return;
+        streamContainer.innerHTML = '';
+        currentStreamConfig.forEach((stream, index) => {
+            const div = document.createElement('div');
+            div.className = "flex justify-between items-center bg-white border p-2 rounded text-sm";
+            div.innerHTML = `
+                <span class="font-medium">${stream}</span>
+                ${index > 0 ? `<button class="text-red-500 hover:text-red-700" onclick="deleteStream('${stream}')">&times;</button>` : '<span class="text-xs text-gray-400">(Default)</span>'}
+            `;
+            streamContainer.appendChild(div);
+        });
+    }
+
+    // Populate Dropdowns in Data Tab
+    function populateStreamDropdowns() {
+        const optionsHtml = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        if (csvStreamSelect) csvStreamSelect.innerHTML = optionsHtml;
+        if (pdfStreamSelect) pdfStreamSelect.innerHTML = optionsHtml;
+    }
+
+    // Add Stream
+    if (addStreamBtn) {
+        addStreamBtn.addEventListener('click', () => {
+            const name = newStreamInput.value.trim();
+            if (name && !currentStreamConfig.includes(name)) {
+                currentStreamConfig.push(name);
+                localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
+                newStreamInput.value = '';
+                loadStreamConfig();
+                syncDataToCloud(); // Sync setting change
+            } else if (currentStreamConfig.includes(name)) {
+                alert("Stream already exists.");
+            }
+        });
+    }
+
+    // Delete Stream
+    window.deleteStream = function(name) {
+        if (confirm(`Delete stream "${name}"?`)) {
+            currentStreamConfig = currentStreamConfig.filter(s => s !== name);
+            localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
+            loadStreamConfig();
+            syncDataToCloud();
+        }
+    };
+    
 // --- Run on initial page load ---
 loadInitialData();
 });
