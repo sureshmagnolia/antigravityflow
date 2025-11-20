@@ -6056,15 +6056,15 @@ scribeCloseRoomModal.addEventListener('click', () => {
 
 // --- Helper function to disable all report buttons ---
 window.real_disable_all_report_buttons = function(disabled) {
-    const ids = [
+const ids = [
         'generate-report-button',
-        'generate-daywise-report-button', // <--- RESTORED THIS
+        'generate-daywise-report-button', // <--- Updated to match HTML
         'generate-qpaper-report-button',
-        'generate-daywise-report-button', // Keep for safety if referenced elsewhere
         'generate-scribe-report-button',
         'generate-scribe-proforma-button',
         'generate-qp-distribution-report-button',
-        'generate-invigilator-report-button'
+        'generate-invigilator-report-button',
+        'generate-absentee-report-button'
     ];
 
     ids.forEach(id => {
@@ -7256,9 +7256,10 @@ async function findMyCollege(user) {
         disable_edit_data_tab(false);
 
         // *** FIX: Enable the NEW 1-Col and 2-Col Buttons ***
+    // *** FIX: Enable the SINGLE button ID ***
         const reportBtns = [
             'generate-report-button',
-            'generate-daywise-report-button', // <--- RESTORED THIS
+            'generate-daywise-report-button', // <--- Updated to match HTML
             'generate-qpaper-report-button',
             'generate-qp-distribution-report-button',
             'generate-scribe-report-button',
