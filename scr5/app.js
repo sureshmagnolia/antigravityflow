@@ -5539,9 +5539,7 @@ async function findMyCollege(user) {
             throw new Error("Missing required headers (Register Number, Name, Course)");
         }
 
-        const parsedData = [];
-        for (const line of lines) {
-            if (!line.trim()) continue;
+        if (!line.trim()) continue;
             // Regex for quoted CSV fields
             const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
             const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
