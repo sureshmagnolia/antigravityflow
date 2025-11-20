@@ -1506,7 +1506,11 @@ generateReportButton.addEventListener('click', async () => {
 // ==========================================
 // 📋 NOTICE BOARD REPORT LOGIC (FINAL FIX)
 // ==========================================
+// ==========================================
+// 📋 NOTICE BOARD REPORT LOGIC (Complete)
+// ==========================================
 
+// 1. Main Logic Function
 async function generateNoticeBoardReport(numCols) {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1528,9 +1532,7 @@ async function generateNoticeBoardReport(numCols) {
         const baseData = getFilteredReportData('day-wise');
         if (baseData.length === 0) { alert("No data found."); return; }
 
-        const MAX_ROWS_PER_COL = 40; // Strict limit for A4 fit
-        
-        // Split by Stream
+        const MAX_ROWS_PER_COL = 40; 
         const dataByStream = {};
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         
@@ -1542,14 +1544,12 @@ async function generateNoticeBoardReport(numCols) {
 
         const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
             if (a === "Regular") return -1;
-            if (b === "Regular") return 1;
             return a.localeCompare(b);
         });
 
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
 
-        // MAIN LOOP
         for (const streamName of sortedStreamNames) {
             const streamData = dataByStream[streamName];
             const processed_rows = performOriginalAllocation(streamData);
@@ -1580,7 +1580,6 @@ async function generateNoticeBoardReport(numCols) {
                     const courseStudents = studentsByCourse[courseName];
                     courseStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-                    // Header Row
                     printQueue.push({ type: 'header', text: courseName });
 
                     courseStudents.forEach(s => {
@@ -1600,7 +1599,7 @@ async function generateNoticeBoardReport(numCols) {
 
                         printQueue.push({
                             type: 'student',
-                            reg: s['Register Number'] || "Unknown",
+                            reg: s['Register Number'] || "-",
                             name: s.Name || "Unknown",
                             seat: s.isScribe ? 'Scribe' : (s.seatNumber || "-"),
                             locationRaw: roomName,
@@ -1611,7 +1610,6 @@ async function generateNoticeBoardReport(numCols) {
                     printQueue.push({ type: 'spacer' });
                 });
 
-                // Scribe Summary
                 const sessionScribes = session.students.filter(s => s.isScribe);
                 if (sessionScribes.length > 0) {
                     printQueue.push({ type: 'divider', text: "SCRIBE SUMMARY" });
@@ -1619,34 +1617,32 @@ async function generateNoticeBoardReport(numCols) {
                     scribeRows.forEach(r => printQueue.push(r));
                 }
 
-                // Page Filler
-                let col1Items = [];
-                let col2Items = [];
+                let col1 = [];
+                let col2 = [];
                 
                 const flushPage = () => {
-                    if (col1Items.length > 0 || col2Items.length > 0) {
+                    if (col1.length > 0 || col2.length > 0) {
                         totalPagesGenerated++;
-                        
-                        // *** FIX: PASSED 'totalPagesGenerated' CORRECTLY HERE ***
-                        let pageHtml = renderNoticePage(col1Items, col2Items, String(streamName), session, numCols, totalPagesGenerated);
+                        let pageHtml = renderNoticePage(
+                            col1, col2, String(streamName), session, numCols, totalPagesGenerated
+                        );
                         allPagesHtml += pageHtml;
-                        
-                        col1Items = []; col2Items = [];
+                        col1 = []; col2 = [];
                     }
                 };
 
                 printQueue.forEach(item => {
                     if (numCols === 1) {
-                        if (col1Items.length >= MAX_ROWS_PER_COL) flushPage();
-                        col1Items.push(item);
+                        if (col1.length >= MAX_ROWS_PER_COL) flushPage();
+                        col1.push(item);
                     } else {
-                        if (col1Items.length < MAX_ROWS_PER_COL) {
-                            col1Items.push(item);
-                        } else if (col2Items.length < MAX_ROWS_PER_COL) {
-                            col2Items.push(item);
+                        if (col1.length < MAX_ROWS_PER_COL) {
+                            col1.push(item);
+                        } else if (col2.length < MAX_ROWS_PER_COL) {
+                            col2.push(item);
                         } else {
                             flushPage();
-                            col1Items.push(item);
+                            col1.push(item);
                         }
                     }
                 });
@@ -1656,7 +1652,7 @@ async function generateNoticeBoardReport(numCols) {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages (${numCols} Col).`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} Pages.`;
         reportControls.classList.remove('hidden');
         lastGeneratedReportType = "Daywise_Seating_Details"; 
     } catch (e) {
@@ -1667,15 +1663,31 @@ async function generateNoticeBoardReport(numCols) {
     }
 }
 
-// --- Helper: Render Page (Fixed Arguments & Undefined) ---
+// 2. Listeners (The code you asked about - YES, KEEP THIS!)
+const btnNoticeA = document.getElementById('generate-daywise-1col-btn');
+const btnNoticeB = document.getElementById('generate-daywise-2col-btn');
+
+if(btnNoticeA) {
+    const newBtnA = btnNoticeA.cloneNode(true);
+    if (btnNoticeA.parentNode) btnNoticeA.parentNode.replaceChild(newBtnA, btnNoticeA);
+    newBtnA.addEventListener('click', () => generateNoticeBoardReport(1));
+}
+
+if(btnNoticeB) {
+    const newBtnB = btnNoticeB.cloneNode(true);
+    if (btnNoticeB.parentNode) btnNoticeB.parentNode.replaceChild(newBtnB, btnNoticeB);
+    newBtnB.addEventListener('click', () => generateNoticeBoardReport(2));
+}
+
+// 3. Helper: Render Page
 function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
     
-    const renderTable = (items) => {
-        if (!items || items.length === 0) return "";
+    const renderColumn = (rows) => {
+        if (!rows || rows.length === 0) return "";
         let html = "";
         let lastLocation = ""; 
 
-        items.forEach((row) => {
+        rows.forEach((row) => {
             if (row.type === 'header') {
                 const headerText = row.text || "";
                 html += `
@@ -1733,7 +1745,7 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
         bodyContent = `
             <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
                 ${tableHeader}
-                <tbody>${renderTable(col1)}</tbody>
+                <tbody>${renderColumn(col1)}</tbody>
             </table>`;
     } else {
         bodyContent = `
@@ -1741,19 +1753,18 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
                 <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
-                        <tbody>${renderTable(col1)}</tbody>
+                        <tbody>${renderColumn(col1)}</tbody>
                     </table>
                 </div>
                 <div>
                     <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
                         ${tableHeader}
-                        <tbody>${renderTable(col2)}</tbody>
+                        <tbody>${renderColumn(col2)}</tbody>
                     </table>
                 </div>
             </div>`;
     }
 
-    // Safe Date/Time Access
     const dateStr = (session && session.Date) ? session.Date : "Unknown Date";
     const timeStr = (session && session.Time) ? session.Time : "Unknown Time";
 
@@ -1781,32 +1792,11 @@ function renderNoticePage(col1, col2, streamName, session, numCols, pageNo) {
             <div style="flex-grow: 1;">
                 ${bodyContent}
             </div>
-            
-            <div style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: #666; border-top: 1px solid #eee; padding-top: 2px;">
-                Generated by ExamFlow System
-            </div>
         </div>
     `;
 }
 
-
-// --- Helper: Listeners ---
-const btnNoticeA = document.getElementById('generate-daywise-1col-btn');
-const btnNoticeB = document.getElementById('generate-daywise-2col-btn');
-
-if(btnNoticeA) {
-    const newBtnA = btnNoticeA.cloneNode(true);
-    if (btnNoticeA.parentNode) btnNoticeA.parentNode.replaceChild(newBtnA, btnNoticeA);
-    newBtnA.addEventListener('click', () => generateNoticeBoardReport(1));
-}
-
-if(btnNoticeB) {
-    const newBtnB = btnNoticeB.cloneNode(true);
-    if (btnNoticeB.parentNode) btnNoticeB.parentNode.replaceChild(newBtnB, btnNoticeB);
-    newBtnB.addEventListener('click', () => generateNoticeBoardReport(2));
-}
-
-// --- Helper: Scribe Rows ---
+// 4. Helper: Scribe Rows
 function prepareScribeSummaryRows_Notice(scribes, session, allotments) {
     const scribesByRoom = {};
     scribes.forEach(s => {
@@ -1830,6 +1820,26 @@ function prepareScribeSummaryRows_Notice(scribes, session, allotments) {
     });
     return rows;
 }
+
+
+
+// --- Helper: Listeners ---
+const btnNoticeA = document.getElementById('generate-daywise-1col-btn');
+const btnNoticeB = document.getElementById('generate-daywise-2col-btn');
+
+if(btnNoticeA) {
+    const newBtnA = btnNoticeA.cloneNode(true);
+    if (btnNoticeA.parentNode) btnNoticeA.parentNode.replaceChild(newBtnA, btnNoticeA);
+    newBtnA.addEventListener('click', () => generateNoticeBoardReport(1));
+}
+
+if(btnNoticeB) {
+    const newBtnB = btnNoticeB.cloneNode(true);
+    if (btnNoticeB.parentNode) btnNoticeB.parentNode.replaceChild(newBtnB, btnNoticeB);
+    newBtnB.addEventListener('click', () => generateNoticeBoardReport(2));
+}
+
+
 
 
 
