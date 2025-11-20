@@ -1167,7 +1167,7 @@ function formatDateToCSV(dateObj) {
     return `${dd}.${mm}.${yyyy}`;
 }
 
-// --- Helper: Generate HTML Cards for a Date ---
+// --- Helper: Generate HTML Cards for a Date (With Stream Breakdown) ---
 function generateSessionCardsHtml(dateStr) {
     const studentsForDate = allStudentData.filter(s => s.Date === dateStr);
     if (studentsForDate.length === 0) return null;
@@ -1188,41 +1188,50 @@ function generateSessionCardsHtml(dateStr) {
         const courseCount = new Set(students.map(s => s.Course)).size;
         
         let scribeCount = 0;
-        let regularCount = 0;
+        
+        // Stream Counts
+        const streamCounts = {};
         
         students.forEach(s => {
             if (scribeRegNos.has(s['Register Number'])) scribeCount++;
-            else regularCount++;
+            
+            // Count Streams (Default to Regular if missing)
+            const strm = s.Stream || "Regular";
+            streamCounts[strm] = (streamCounts[strm] || 0) + 1;
         });
 
-        const regularHalls = Math.ceil(regularCount / 30);
-        const scribeHalls = Math.ceil(scribeCount / 5);
-        const totalHalls = regularHalls + scribeHalls;
+        // Build Stream Breakdown String
+        let streamBreakdownHtml = '';
+        Object.keys(streamCounts).forEach(strm => {
+            streamBreakdownHtml += `<div class="text-xs text-gray-500">${strm}: <strong>${streamCounts[strm]}</strong></div>`;
+        });
+
+        // Simple Estimation (We will refine this in Chunk 3)
+        const totalHalls = Math.ceil(studentCount / 30); 
 
         sessionsHtml += `
             <div class="bg-white border border-indigo-100 rounded-lg shadow-sm p-5 hover:shadow-md transition-shadow">
                 <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
                     <h3 class="text-lg font-bold text-indigo-900 bg-indigo-50 px-3 py-1 rounded-md">${time} Session</h3>
-                    <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Halls Required: ${totalHalls}</span>
+                    <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">Est. Halls: ~${totalHalls}</span>
                 </div>
                 
                 <div class="grid grid-cols-3 gap-4 text-center">
-                    <div>
+                    <div class="flex flex-col justify-center">
                         <div class="text-2xl font-bold text-gray-800">${studentCount}</div>
-                        <div class="text-xs text-gray-500 font-semibold uppercase">Candidates</div>
+                        <div class="text-xs text-gray-500 font-semibold uppercase mb-1">Candidates</div>
+                        <div class="bg-gray-50 rounded p-1 border border-gray-100">
+                            ${streamBreakdownHtml}
+                        </div>
                     </div>
-                    <div>
+                    <div class="flex flex-col justify-center">
                         <div class="text-2xl font-bold text-gray-800">${courseCount}</div>
                         <div class="text-xs text-gray-500 font-semibold uppercase">Courses</div>
                     </div>
-                    <div>
+                    <div class="flex flex-col justify-center">
                         <div class="text-2xl font-bold text-gray-800">${scribeCount}</div>
                         <div class="text-xs text-gray-500 font-semibold uppercase">Scribes</div>
                     </div>
-                </div>
-
-                <div class="mt-4 text-xs text-gray-400 text-center bg-gray-50 p-1 rounded">
-                    (Est: ${regularHalls} Regular Rooms + ${scribeHalls} Scribe Rooms)
                 </div>
             </div>
         `;
@@ -4430,6 +4439,7 @@ editCourseSelect.addEventListener('change', () => {
 });
 
 // 3. Render Table (NEW: With Serial Number)
+// 3. Render Table (Updated with Stream Column)
 function renderStudentEditTable() {
     editDataContainer.innerHTML = '';
     if (currentCourseStudents.length === 0) {
@@ -4446,9 +4456,10 @@ function renderStudentEditTable() {
         <table class="edit-data-table">
             <thead>
                 <tr>
-                    <th>Sl No</th> <th>Date</th>
+                    <th>Sl No</th>
+                    <th>Date</th>
                     <th>Time</th>
-                    <th>Course</th>
+                    <th>Stream</th> <th>Course</th>
                     <th>Register Number</th>
                     <th>Name</th>
                     <th class="actions-cell">Actions</th>
@@ -4459,13 +4470,16 @@ function renderStudentEditTable() {
 
     pageStudents.forEach((student, index) => {
         const uniqueRowIndex = start + index; 
-        const serialNo = uniqueRowIndex + 1; // Calculate Serial Number
+        const serialNo = uniqueRowIndex + 1;
+        // Default to "Regular" if stream is missing
+        const streamDisplay = student.Stream || "Regular";
         
         tableHtml += `
             <tr data-row-index="${uniqueRowIndex}">
-                <td>${serialNo}</td> <td>${student.Date}</td>
+                <td>${serialNo}</td>
+                <td>${student.Date}</td>
                 <td>${student.Time}</td>
-                <td>${student.Course}</td>
+                <td class="font-medium text-indigo-600">${streamDisplay}</td> <td>${student.Course}</td>
                 <td>${student['Register Number']}</td>
                 <td>${student.Name}</td>
                 <td class="actions-cell">
@@ -4533,35 +4547,39 @@ editDataContainer.addEventListener('click', (e) => {
     }
 });
 
-// 7. NEW Function: Open the Edit/Add Modal
+// 7. NEW Function: Open the Edit/Add Modal (With Stream Support)
 function openStudentEditModal(rowIndex) {
+    // Populate Stream Dropdown
+    const streamSelect = document.getElementById('modal-edit-stream');
+    streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+
     if (rowIndex === null) {
         // --- ADDING A NEW STUDENT ---
         modalTitle.textContent = "Add New Student";
-        currentlyEditingIndex = null; // Signal that this is a new student
+        currentlyEditingIndex = null; 
         
-        // Pre-fill with session defaults
         const [date, time] = currentEditSession.split(' | ');
         modalDate.value = date;
         modalTime.value = time;
         modalCourse.value = currentEditCourse;
         modalRegNo.value = "ENTER_REG_NO";
         modalName.value = "New Student";
+        streamSelect.value = currentStreamConfig[0]; // Default to first stream
 
     } else {
         // --- EDITING AN EXISTING STUDENT ---
         modalTitle.textContent = "Edit Student Details";
-        currentlyEditingIndex = rowIndex; // Store the index
+        currentlyEditingIndex = rowIndex; 
         
-        // Get the student data and pre-fill the form
         const student = currentCourseStudents[rowIndex];
         modalDate.value = student.Date;
         modalTime.value = student.Time;
         modalCourse.value = student.Course;
         modalRegNo.value = student['Register Number'];
         modalName.value = student.Name;
+        streamSelect.value = student.Stream || currentStreamConfig[0]; // Set current stream
     }
-    // Show the modal
+    
     studentEditModal.classList.remove('hidden');
 }
 
@@ -4575,44 +4593,37 @@ function closeStudentEditModal() {
 modalCancelBtn.addEventListener('click', closeStudentEditModal);
 
 modalSaveBtn.addEventListener('click', () => {
-    // Read all values from the modal
     const newDate = modalDate.value.trim();
     const newTime = modalTime.value.trim();
     const newCourse = modalCourse.value.trim();
     const newRegNo = modalRegNo.value.trim();
     const newName = modalName.value.trim();
+    const newStream = document.getElementById('modal-edit-stream').value; // Capture Stream
 
     if (!newRegNo || !newName || !newDate || !newTime || !newCourse) {
         alert('All fields must be filled.');
         return;
     }
 
-    // Ask for confirmation
     if (confirm("Are you sure you want to save these changes?")) {
-        
+        const studentObj = {
+            Date: newDate,
+            Time: newTime,
+            Course: newCourse,
+            'Register Number': newRegNo,
+            Name: newName,
+            Stream: newStream // Save Stream
+        };
+
         if (currentlyEditingIndex !== null) {
-            // --- We are EDITING an existing student ---
-            currentCourseStudents[currentlyEditingIndex] = {
-                Date: newDate,
-                Time: newTime,
-                Course: newCourse,
-                'Register Number': newRegNo,
-                Name: newName
-            };
+            currentCourseStudents[currentlyEditingIndex] = studentObj;
         } else {
-            // --- We are ADDING a new student ---
-            currentCourseStudents.push({
-                Date: newDate,
-                Time: newTime,
-                Course: newCourse,
-                'Register Number': newRegNo,
-                Name: newName
-            });
+            currentCourseStudents.push(studentObj);
         }
         
-        setUnsavedChanges(true); // Mark that we have unsaved work
-        closeStudentEditModal(); // Close the modal
-        renderStudentEditTable(); // Re-render the table to show changes
+        setUnsavedChanges(true);
+        closeStudentEditModal(); 
+        renderStudentEditTable(); 
     }
 });
 
