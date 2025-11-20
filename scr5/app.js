@@ -1626,8 +1626,11 @@ generateDaywiseReportButton.addEventListener('click', async () => {
 
                 const flushPage = () => {
                     if (col1Items.length > 0 || col2Items.length > 0) {
-                        allPagesHtml += render2ColPage(col1Items, col2Items, streamName, session, NUM_COLS);
-                        totalPagesGenerated++;
+                       let pageHtml = render2ColPage(col1Items, col2Items, streamName, session, NUM_COLS);
+totalPagesGenerated++;
+// Inject actual page number
+pageHtml = pageHtml.replace('<span class="page-number-placeholder"></span>', totalPagesGenerated);
+allPagesHtml += pageHtml;
                         col1Items = []; col2Items = [];
                         h1 = 0; h2 = 0;
                         fillingRight = false;
