@@ -5701,17 +5701,21 @@ async function findMyCollege(user) {
         });
     }
 
-// Populate Dropdowns in Data Tab & Reports Tab
+// Populate Dropdowns (Safe Version)
     function populateStreamDropdowns() {
-        const optionsHtml = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        // Safety Net: If list is empty for any reason, pretend "Regular" exists
+        const streamsToRender = (currentStreamConfig && currentStreamConfig.length > 0) 
+                                ? currentStreamConfig 
+                                : ["Regular"];
+
+        const optionsHtml = streamsToRender.map(s => `<option value="${s}">${s}</option>`).join('');
         
         if (csvStreamSelect) csvStreamSelect.innerHTML = optionsHtml;
         if (pdfStreamSelect) pdfStreamSelect.innerHTML = optionsHtml;
         
-        // NEW: Populate Report Filter
+        // Report Filter
         const reportStreamSelect = document.getElementById('reports-stream-select');
         if (reportStreamSelect) {
-             // Keep "All" option at top
              reportStreamSelect.innerHTML = `<option value="all">All Streams (Combined)</option>` + optionsHtml;
         }
     }
@@ -5732,8 +5736,13 @@ async function findMyCollege(user) {
         });
     }
 
-    // Delete Stream
+// Delete Stream (Safe Version)
     window.deleteStream = function(name) {
+        if (currentStreamConfig.length <= 1) {
+            alert("You must have at least one stream defined (e.g., Regular).");
+            return;
+        }
+
         if (confirm(`Delete stream "${name}"?`)) {
             currentStreamConfig = currentStreamConfig.filter(s => s !== name);
             localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
