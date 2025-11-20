@@ -5570,7 +5570,7 @@ async function findMyCollege(user) {
         return parsedData;
     }
 
-    // --- Helper: Load Data into App & Cloud ---
+// --- Helper: Load Data into App & Cloud ---
     function loadStudentData(dataArray) {
         // 1. Update Global Var
         allStudentData = dataArray;
@@ -5585,25 +5585,44 @@ async function findMyCollege(user) {
         populate_session_dropdown();
         populate_qp_code_session_dropdown();
         populate_room_allotment_session_dropdown();
-        updateDashboard();
-        // Enable Tabs
+        updateDashboard(); // Update the top cards
+        
+        // 4. ENABLE ALL TABS AND BUTTONS
         disable_absentee_tab(false);
         disable_qpcode_tab(false);
         disable_room_allotment_tab(false);
         disable_scribe_settings_tab(false);
         disable_edit_data_tab(false);
-        if (generateReportButton) generateReportButton.disabled = false;
 
-        // 4. Sync
+        // *** FIX: Explicitly Enable ALL Report Buttons ***
+        const reportBtns = [
+            'generate-report-button',
+            'generate-daywise-report-button',
+            'generate-qpaper-report-button',
+            'generate-qp-distribution-report-button',
+            'generate-scribe-report-button',
+            'generate-scribe-proforma-button',
+            'generate-invigilator-report-button',
+            'generate-absentee-report-button' // Also enable this
+        ];
+        
+        reportBtns.forEach(id => {
+            const btn = document.getElementById(id);
+            if(btn) btn.disabled = false;
+        });
+        // *************************************************
+
+        // 5. Sync
         if (typeof syncDataToCloud === 'function') syncDataToCloud();
 
-        // 5. Feedback
+        // 6. Feedback
         if (mainCsvStatus) {
             mainCsvStatus.textContent = `Success! Loaded ${dataArray.length} records.`;
             mainCsvStatus.className = "text-sm font-medium text-green-600";
         }
     }
-    // ==========================================
+
+
 // ==========================================
     // 🐍 PYTHON INTEGRATION (Connects PDF to Merge Logic)
     // ==========================================
