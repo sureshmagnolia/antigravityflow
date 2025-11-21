@@ -6599,31 +6599,69 @@ function setUnsavedChanges(status) {
 }
 
 // ==========================================
-// ⚡ BULK COURSE UPDATE LOGIC
+// ⚡ BULK COURSE UPDATE LOGIC (V2: Safe Edit & Pickers)
 // ==========================================
 
 // 1. Elements
 const bulkUpdateContainer = document.getElementById('bulk-course-update-container');
+const bulkInputsWrapper = document.getElementById('bulk-inputs-wrapper');
+const bulkEditModeBtn = document.getElementById('btn-bulk-edit-mode');
 const bulkTargetCourseName = document.getElementById('bulk-target-course-name');
 const bulkNewDateInput = document.getElementById('bulk-new-date');
 const bulkNewTimeInput = document.getElementById('bulk-new-time');
 const bulkNewStreamSelect = document.getElementById('bulk-new-stream');
 const btnBulkApply = document.getElementById('btn-bulk-apply-changes');
 
-// 2. Listener to Show/Hide Bulk Section
-// (This runs in addition to your existing course select listener)
+// --- Helpers for Date/Time Conversion ---
+const bulkDateToInput = (dateStr) => {
+    if (!dateStr) return "";
+    const [d, m, y] = dateStr.split('.');
+    return `${y}-${m}-${d}`;
+};
+
+const bulkTimeToInput = (timeStr) => {
+    if (!timeStr) return "";
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return "";
+    let [_, h, m, p] = match;
+    h = parseInt(h);
+    if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+    if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${m}`;
+};
+
+// 2. Listener to Show/Hide Bulk Section & Pre-fill
 if (editCourseSelect) {
     editCourseSelect.addEventListener('change', () => {
         if (editCourseSelect.value) {
-            // Show Bulk Section
-            if(bulkUpdateContainer) bulkUpdateContainer.classList.remove('hidden');
-            if(bulkTargetCourseName) bulkTargetCourseName.textContent = editCourseSelect.value;
+            // Show Section
+            bulkUpdateContainer.classList.remove('hidden');
+            bulkTargetCourseName.textContent = editCourseSelect.value;
             
-            // Pre-fill with current session data for convenience
+            // RESET STATE: Lock Inputs
+            if(bulkInputsWrapper) {
+                bulkInputsWrapper.classList.add('opacity-50', 'pointer-events-none');
+            }
+            [bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
+                if(el) {
+                    el.disabled = true;
+                    if(el.tagName !== 'BUTTON') el.classList.add('bg-gray-50');
+                }
+            });
+            if(bulkEditModeBtn) {
+                bulkEditModeBtn.classList.remove('hidden');
+                bulkEditModeBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                    </svg> Unlock to Edit
+                `;
+            }
+
+            // Pre-fill with current session data (Converted to Input Format)
             if (editSessionSelect.value) {
                 const [currDate, currTime] = editSessionSelect.value.split(' | ');
-                if(bulkNewDateInput) bulkNewDateInput.value = currDate;
-                if(bulkNewTimeInput) bulkNewTimeInput.value = currTime;
+                if(bulkNewDateInput) bulkNewDateInput.value = bulkDateToInput(currDate);
+                if(bulkNewTimeInput) bulkNewTimeInput.value = bulkTimeToInput(currTime);
             }
             
             // Populate Stream Dropdown
@@ -6638,22 +6676,54 @@ if (editCourseSelect) {
     });
 }
 
-// 3. Handle Bulk Update Click
+// 3. Handle "Unlock to Edit" Click
+if (bulkEditModeBtn) {
+    bulkEditModeBtn.addEventListener('click', () => {
+        // Enable Container
+        if(bulkInputsWrapper) {
+            bulkInputsWrapper.classList.remove('opacity-50', 'pointer-events-none');
+        }
+        // Enable Inputs
+        [bulkNewDateInput, bulkNewTimeInput, bulkNewStreamSelect, btnBulkApply].forEach(el => {
+            if(el) {
+                el.disabled = false;
+                el.classList.remove('bg-gray-50');
+            }
+        });
+        // Hide or Change Button
+        bulkEditModeBtn.innerHTML = `<span class="text-green-600 font-bold">Editing Enabled</span>`;
+    });
+}
+
+// 4. Handle Bulk Apply Click
 if (btnBulkApply) {
     btnBulkApply.addEventListener('click', async () => {
-        const newDate = bulkNewDateInput.value.trim();
-        const newTime = bulkNewTimeInput.value.trim();
+        const rawDate = bulkNewDateInput.value; // YYYY-MM-DD
+        const rawTime = bulkNewTimeInput.value; // HH:MM
         const newStream = bulkNewStreamSelect.value;
         const targetCourse = editCourseSelect.value;
         const [oldDate, oldTime] = editSessionSelect.value.split(' | ');
 
-        if (!newDate || !newTime) {
-            alert("Please enter both a valid Date and Time.");
+        if (!rawDate || !rawTime) {
+            alert("Please select both a valid Date and Time.");
             return;
         }
 
-        // Calculate how many records will be affected
-        // We look at the GLOBAL 'allStudentData', not just the current view
+        // --- CONVERT BACK TO CSV FORMAT ---
+        // 1. Date: YYYY-MM-DD -> DD.MM.YYYY
+        const [y, m, d] = rawDate.split('-');
+        const newDate = `${d}.${m}.${y}`;
+
+        // 2. Time: HH:MM -> HH:MM AM/PM
+        const [h, min] = rawTime.split(':');
+        let hours = parseInt(h);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; 
+        const newTime = `${hours}:${min} ${ampm}`;
+        // ----------------------------------
+
+        // Check count
         const recordsToUpdate = allStudentData.filter(s => 
             s.Date === oldDate && 
             s.Time === oldTime && 
@@ -6671,15 +6741,14 @@ if (btnBulkApply) {
 Target Course: ${targetCourse}
 Students Affected: ${recordsToUpdate.length}
 
-OLD Schedule: ${oldDate} | ${oldTime}
-NEW Schedule: ${newDate} | ${newTime}
-NEW Stream:   ${newStream}
+OLD: ${oldDate} | ${oldTime}
+NEW: ${newDate} | ${newTime}
+Stream: ${newStream}
 
 Are you sure you want to move these students?
         `;
 
         if (confirm(confirmMsg)) {
-            // Perform Update
             let updateCount = 0;
             
             allStudentData.forEach(student => {
@@ -6691,14 +6760,10 @@ Are you sure you want to move these students?
                 }
             });
 
-            // Save & Refresh
             localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+            alert(`Successfully moved ${updateCount} students.\nThe page will now reload.`);
             
-            alert(`Successfully moved ${updateCount} students.\nThe page will now reload to reflect the new session structure.`);
-            
-            // Sync to cloud if enabled
             if (typeof syncDataToCloud === 'function') await syncDataToCloud();
-            
             window.location.reload();
         }
     });
