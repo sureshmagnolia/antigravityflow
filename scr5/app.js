@@ -1127,23 +1127,27 @@ function initCalendar() {
     }
 }
 
+// --- Calendar Render Logic (V2: Scribe Aware) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
     if (!grid || !title) return;
 
-    // 1. Setup Date Info
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
-    
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     title.textContent = `${monthNames[month]} ${year}`;
 
-    // 2. Calculate Days
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
-    // 3. Pre-process Data
+    // Load Scribes
+    if (globalScribeList.length === 0) {
+        const stored = localStorage.getItem(SCRIBE_LIST_KEY);
+        if (stored) globalScribeList = JSON.parse(stored);
+    }
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+
     const monthData = {};
     
     if (allStudentData && allStudentData.length > 0) {
@@ -1154,54 +1158,46 @@ function renderCalendar() {
             const [d, m, y] = s.Date.split('.');
             if (m === targetMonthStr && y === targetYearStr) {
                 const dayKey = parseInt(d); 
-                
-                // Determine Session
-                // Standard logic: "AM" implies FN, "PM" implies AN
                 const timeStr = s.Time.toUpperCase();
                 const isPM = timeStr.includes("PM") || (timeStr.includes("12:") && !timeStr.includes("AM"));
                 const sessionKey = isPM ? 'pm' : 'am';
                 
                 if (!monthData[dayKey]) monthData[dayKey] = { 
-                    am: { students: 0, regCount: 0, othCount: 0 }, 
-                    pm: { students: 0, regCount: 0, othCount: 0 } 
+                    am: { students: 0, regCount: 0, othCount: 0, scribeCount: 0 }, 
+                    pm: { students: 0, regCount: 0, othCount: 0, scribeCount: 0 } 
                 };
                 
                 const stats = monthData[dayKey][sessionKey];
                 stats.students++;
-                if (!s.Stream || s.Stream === "Regular") stats.regCount++;
-                else stats.othCount++;
+                
+                // Separate Scribes from Regular Halls
+                if (scribeRegNos.has(s['Register Number'])) {
+                    stats.scribeCount++;
+                } else {
+                    if (!s.Stream || s.Stream === "Regular") stats.regCount++;
+                    else stats.othCount++;
+                }
             }
         });
     }
 
-    // 4. Build Grid HTML
     let html = "";
+    for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 min-h-[90px] border-r border-b border-gray-100"></div>`;
 
-    // Empty cells for previous month
-    for (let i = 0; i < firstDayIndex; i++) {
-        html += `<div class="bg-gray-50 min-h-[90px] border-r border-b border-gray-100"></div>`;
-    }
-
-    // Actual Days
     for (let day = 1; day <= daysInMonth; day++) {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
-        // Styling Classes
         const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col relative hover:bg-blue-50 transition group";
         const dayNumClass = isToday 
             ? "bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center shadow-md text-xs" 
             : "text-gray-700 text-sm";
 
-        // Content Variables
         let topClass = "bg-transparent";
         let botClass = "bg-transparent";
         let topLabel = "";
         let botLabel = "";
         let tooltipHtml = "";
-
-        // -- LOGIC: Material Red for Active Sessions --
-        // Using 'bg-[#D32F2F]' which is Material Red 700 for good contrast
         const activeColor = "bg-[#D32F2F] text-white"; 
 
         if (data) {
@@ -1212,11 +1208,18 @@ function renderCalendar() {
                 
                 const regHalls = Math.ceil(data.am.regCount / 30);
                 const othHalls = Math.ceil(data.am.othCount / 30);
+                let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
+                
+                if (data.am.scribeCount > 0) {
+                    const scrHalls = Math.ceil(data.am.scribeCount / 5);
+                    details += ` | <span class="text-orange-300 font-bold">Scribe: ${scrHalls}</span>`;
+                }
+
                 tooltipHtml += `
                     <div class='mb-2 pb-2 border-b border-gray-600'>
                         <strong class='text-red-300 uppercase text-[10px]'>Morning (FN)</strong><br>
                         <span class='text-white'>${data.am.students} Candidates</span><br>
-                        <span class='text-gray-300 text-[10px]'>Reg: ${regHalls} Halls | Oth: ${othHalls} Halls</span>
+                        <span class='text-gray-300 text-[10px]'>${details} Halls</span>
                     </div>`;
             }
 
@@ -1227,40 +1230,42 @@ function renderCalendar() {
                 
                 const regHalls = Math.ceil(data.pm.regCount / 30);
                 const othHalls = Math.ceil(data.pm.othCount / 30);
+                let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
+
+                if (data.pm.scribeCount > 0) {
+                    const scrHalls = Math.ceil(data.pm.scribeCount / 5);
+                    details += ` | <span class="text-orange-300 font-bold">Scribe: ${scrHalls}</span>`;
+                }
+
                 tooltipHtml += `
                     <div>
                         <strong class='text-red-300 uppercase text-[10px]'>Afternoon (AN)</strong><br>
                         <span class='text-white'>${data.pm.students} Candidates</span><br>
-                        <span class='text-gray-300 text-[10px]'>Reg: ${regHalls} Halls | Oth: ${othHalls} Halls</span>
+                        <span class='text-gray-300 text-[10px]'>${details} Halls</span>
                     </div>`;
             }
         }
 
-        // Tooltip Wrapper
         const tooltip = tooltipHtml ? `
-            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-40 bg-gray-800 text-white text-xs rounded p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-gray-700">
+            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-gray-800 text-white text-xs rounded p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-gray-700">
                 ${tooltipHtml}
                 <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
             </div>
         ` : "";
 
-        // HTML Construction with Demarcation (Border between halves)
         html += `
             <div class="${baseClass}">
                 <div class="h-1/2 w-full ${topClass} p-1 border-b-2 border-white relative">
                     <span class="font-bold ${dayNumClass} relative z-10">${day}</span>
                     ${topLabel}
                 </div>
-                
                 <div class="h-1/2 w-full ${botClass} relative">
                     ${botLabel}
                 </div>
-                
                 ${tooltip}
             </div>
         `;
     }
-
     grid.innerHTML = html;
 }
 
