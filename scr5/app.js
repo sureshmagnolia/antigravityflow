@@ -1541,10 +1541,13 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         let allPagesHtml = '';
         let totalPagesGenerated = 0;
         
-        // Layout Constants
-        const STUDENTS_PER_COLUMN = 40; 
-        const COLUMNS_PER_PAGE = 2; 
-        const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
+// Layout Constants (Dynamic from UI)
+        const rowsInput = document.getElementById('daywise-rows');
+        const colsInput = document.getElementById('daywise-cols');
+
+        const STUDENTS_PER_COLUMN = rowsInput ? parseInt(rowsInput.value, 10) : 35; 
+        const COLUMNS_PER_PAGE = colsInput ? parseInt(colsInput.value, 10) : 1; 
+        const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE;
 
    // Helper to build a small table for one column (With Merged Location)
         function buildColumnTable(studentChunk) {
