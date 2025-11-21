@@ -3978,8 +3978,6 @@ function formatRegNoList(regNos) {
 }
         
 // --- Event listener for "Generate Absentee Statement" (V3: Stream-wise Split) ---
-const generateAbsenteeReportButton = document.getElementById('generate-absentee-report-button');
-
 if (generateAbsenteeReportButton) {
     generateAbsenteeReportButton.addEventListener('click', async () => {
         const sessionKey = sessionSelect.value;
