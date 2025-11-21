@@ -1270,7 +1270,7 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-// --- 1. Event listener for the "Generate Room-wise Report" button (V7: Bold QP, Single Name) ---
+// --- 1. Event listener for the "Generate Room-wise Report" button (V8: No 'Stream:' Label) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1337,7 +1337,6 @@ generateReportButton.addEventListener('click', async () => {
                 .room-report-row { 
                     height: 2.1rem !important; 
                 }
-                /* Ensure table cells don't expand height */
                 .room-report-row td {
                     height: 2.1rem !important;
                     overflow: hidden;
@@ -1479,9 +1478,8 @@ generateReportButton.addEventListener('click', async () => {
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     
-                    // --- Updated Course Column Logic ---
                     const isFirstOccurrence = (student.Course !== previousCourseName);
-                    previousCourseName = student.Course; // Update tracker
+                    previousCourseName = student.Course; 
 
                     // 1. QP Code (Bold, Always Show)
                     const qpPart = `<span style="font-weight:bold; margin-right:6px;">${qpCode}</span>`;
@@ -1493,7 +1491,7 @@ generateReportButton.addEventListener('click', async () => {
                         namePart = `<span style="font-size:0.85em; color:#333;">${smartName}</span>`;
                     }
                     
-                    // 3. Combined (Use ellipsis to enforce row height)
+                    // 3. Combined
                     const displayCourseCell = `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${qpPart}${namePart}</div>`;
 
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
