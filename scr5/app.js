@@ -788,7 +788,13 @@ function getBase64CourseKey(courseName) {
         return null; // Return null on failure
     }
 }
-      
+// --- Helper: Generate QP Key (Course + Stream) ---
+function getQpKey(courseName, streamName) {
+    // Default to Regular if stream is missing/null
+    const s = streamName || "Regular";
+    // Create a unique key combining both
+    return btoa(unescape(encodeURIComponent(`${courseName}|${s}`)));
+}      
 // --- Helper function to numerically sort room keys ---
 function getNumericSortKey(key) {
     const parts = key.split('_'); // Date_Time_Room 1
@@ -1270,13 +1276,13 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-// --- 1. Event listener for the "Generate Room-wise Report" button (V8: No 'Stream:' Label) ---
+// --- 1. Event listener for the "Generate Room-wise Report" button (V9: Stream-Aware QP Codes) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
     
     generateReportButton.disabled = true;
-    generateReportButton.textContent = "Allocating Rooms & Generating Report...";
+    generateReportButton.textContent = "Generating Report...";
     reportOutputArea.innerHTML = "";
     reportControls.classList.add('hidden');
     roomCsvDownloadContainer.innerHTML = "";
@@ -1290,10 +1296,7 @@ generateReportButton.addEventListener('click', async () => {
         loadQPCodes(); 
         
         const data = getFilteredReportData('room-wise');
-        if (data.length === 0) {
-            alert("No data found for the selected filter/session."); 
-            return;
-        }
+        if (data.length === 0) { alert("No data found."); return; }
         
         const processed_rows_with_rooms = performOriginalAllocation(data);
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
@@ -1314,40 +1317,33 @@ generateReportButton.addEventListener('click', async () => {
         lastGeneratedReportType = "Roomwise_Seating_Report";
 
         const sessions = {};
+        // Re-load codes to be safe
         loadQPCodes(); 
+
         final_student_list_for_report.forEach(student => {
             const key = `${student.Date}_${student.Time}_${student['Room No']}`;
             if (!sessions[key]) {
                 sessions[key] = {
                     Date: student.Date, Time: student.Time, Room: student['Room No'],
-                    students: [], courseCounts: {}
+                    students: [], courseCounts: {} // Note: simple count logic might need update if splitting streams in summary
                 };
             }
             sessions[key].students.push(student);
-            const course = student.Course;
-            sessions[key].courseCounts[course] = (sessions[key].courseCounts[course] || 0) + 1;
+            
+            // Count unique QP-Course combos
+            // We append stream to key to ensure "English (Reg)" and "English (Dist)" are counted separately in summary
+            const stream = student.Stream || "Regular";
+            const uniqueCourseKey = `${student.Course}|${stream}`;
+            sessions[key].courseCounts[uniqueCourseKey] = (sessions[key].courseCounts[uniqueCourseKey] || 0) + 1;
         });
 
-        // --- CUSTOM STYLES ---
         let allPagesHtml = `
             <style>
-                .print-page-room { 
-                    padding: 15mm !important; 
-                }
-                .room-report-row { 
-                    height: 2.1rem !important; 
-                }
-                .room-report-row td {
-                    height: 2.1rem !important;
-                    overflow: hidden;
-                    white-space: nowrap;
-                }
+                .print-page-room { padding: 15mm !important; }
+                .room-report-row { height: 2.1rem !important; }
+                .room-report-row td { height: 2.1rem !important; overflow: hidden; white-space: nowrap; }
                 @media print {
-                    .print-page-room, .print-page { 
-                        padding: 10mm !important; 
-                        box-shadow: none !important; 
-                        border: none !important;
-                    }
+                    .print-page-room, .print-page { padding: 10mm !important; box-shadow: none !important; border: none !important; }
                 }
             </style>
         `;
@@ -1355,7 +1351,6 @@ generateReportButton.addEventListener('click', async () => {
         let totalPagesGenerated = 0;
         const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
-        // Helper: Truncate Course Name
         function getSmartCourseName(fullName) {
             let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
             cleanName = cleanName.replace(/\s-\s$/, '').trim();
@@ -1380,15 +1375,20 @@ generateReportButton.addEventListener('click', async () => {
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
             
-            for (const [courseName, count] of Object.entries(session.courseCounts)) {
-                const courseKey = getBase64CourseKey(courseName);
+            for (const [comboKey, count] of Object.entries(session.courseCounts)) {
+                const [cName, cStream] = comboKey.split('|');
+                
+                // *** USE NEW KEY HELPER ***
+                const courseKey = getQpKey(cName, cStream); 
                 const qpCode = sessionQPCodes[courseKey];
                 const qpDisplay = qpCode || "N/A";
                 
                 if (qpCode) uniqueQPCodesInRoom.add(qpCode);
-                else uniqueQPCodesInRoom.add(courseName.substring(0, 10)); 
+                else uniqueQPCodesInRoom.add(cName.substring(0, 10)); 
                 
-                const smartName = getSmartCourseName(courseName);
+                const smartName = getSmartCourseName(cName);
+                // Optional: Add stream tag if mixed? 
+                // const streamTag = (cStream !== pageStream) ? ` (${cStream})` : "";
 
                 courseSummaryRows += `
                     <tr>
@@ -1408,7 +1408,6 @@ generateReportButton.addEventListener('click', async () => {
 
             const invigilatorFooterHtml = `
                 <div class="invigilator-footer" style="margin-top: 1rem; padding-top: 0; page-break-inside: avoid; font-size: 9pt;">
-                    
                     <div style="margin-bottom: 8px;">
                         <div style="font-weight: bold; margin-bottom: 2px;">Course Summary:</div>
                         <table style="width: 100%; border-collapse: collapse;">
@@ -1422,26 +1421,22 @@ generateReportButton.addEventListener('click', async () => {
                             <tbody>${courseSummaryRows}</tbody>
                         </table>
                     </div>
-
                     <div style="border: 1px solid #000; padding: 5px; margin-bottom: 10px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold;">
                             <span>Booklets Received: __________</span>
                             <span>Used: __________</span>
                             <span>Balance Returned: __________</span>
                         </div>
-                        
                         <div style="border-top: 1px dotted #999; padding-top: 5px; margin-bottom: 5px;">
                             <strong>Written Booklets (QP Wise):</strong><br>
                             <div style="margin-top: 3px; line-height: 1.5;">
                                 ${writtenScriptsHtml}
                             </div>
                         </div>
-                        
                         <div style="border-top: 1px dotted #999; padding-top: 5px; text-align: right;">
                             <strong>Total:</strong> __________
                         </div>
                     </div>
-                    
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="font-size: 9pt;">${scribeFootnote}</div>
                         <div class="signature" style="text-align: center; width: 200px;">
@@ -1475,24 +1470,17 @@ generateReportButton.addEventListener('click', async () => {
                     if (regLen > 12) regFontSize = "10pt";
                     else if (regLen > 10) regFontSize = "11pt";
 
-                    const courseKey = getBase64CourseKey(student.Course);
+                    // *** USE NEW KEY HELPER HERE TOO ***
+                    const courseKey = getQpKey(student.Course, student.Stream);
                     const qpCode = sessionQPCodes[courseKey] || "";
+                    const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
                     
-                    const isFirstOccurrence = (student.Course !== previousCourseName);
-                    previousCourseName = student.Course; 
-
-                    // 1. QP Code (Bold, Always Show)
-                    const qpPart = `<span style="font-weight:bold; margin-right:6px;">${qpCode}</span>`;
+                    const courseWords = student.Course.split(/\s+/);
+                    const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
+                    const tableCourseName = qpCodePrefix + truncatedCourse;
                     
-                    // 2. Name Part (Show only on first occurrence)
-                    let namePart = "";
-                    if (isFirstOccurrence) {
-                        const smartName = getSmartCourseName(student.Course);
-                        namePart = `<span style="font-size:0.85em; color:#333;">${smartName}</span>`;
-                    }
-                    
-                    // 3. Combined
-                    const displayCourseCell = `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${qpPart}${namePart}</div>`;
+                    let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
+                    if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
 
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     const remarkText = student.remark || ''; 
@@ -1500,7 +1488,7 @@ generateReportButton.addEventListener('click', async () => {
                     rowsHtml += `
                         <tr ${rowClass} class="room-report-row">
                             <td class="sl-col" style="padding: 0 4px;">${seatNumber}${asterisk}</td>
-                            <td class="course-col" style="padding: 0 4px;">${displayCourseCell}</td>
+                            <td class="course-col" style="padding: 0 4px;">${displayCourseCell(qpCode, student.Course, displayCourseName === '"')}</td>
                             <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 0 4px;">${displayRegNo}</td>
                             <td class="name-col" style="padding: 0 4px;">${student.Name}</td>
                             <td class="remarks-col" style="padding: 0 4px;">${remarkText}</td>
@@ -1510,8 +1498,17 @@ generateReportButton.addEventListener('click', async () => {
                 });
                 return rowsHtml;
             }
+
+            // Helper for bold QP in course cell
+            function displayCourseCell(qp, fullCourse, isDitto) {
+                if (isDitto) {
+                   return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> "</div>`;
+                }
+                const smart = getSmartCourseName(fullCourse);
+                return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> <span style="font-size:0.85em;">${smart}</span></div>`;
+            }
             
-            // --- 3. Render Pages ---
+            // Render Pages
             const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
             const studentsPage2 = session.students.slice(20); 
 
@@ -1554,10 +1551,9 @@ generateReportButton.addEventListener('click', async () => {
                     </thead>
                     <tbody>`;
 
-            // Render Page 1
+            // Page 1
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage1 = generateTableRows(studentsPage1);
-            
             allPagesHtml += `
                 <div class="print-page print-page-room" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(1)}
@@ -1570,16 +1566,10 @@ generateReportButton.addEventListener('click', async () => {
             `;
             totalPagesGenerated++;
 
-            // Render Page 2
+            // Page 2
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage2 = generateTableRows(studentsPage2);
-            
-            let page2TableContent = "";
-            if (studentsPage2.length > 0) {
-                page2TableContent = `${tableHeader}${tableRowsPage2}</tbody></table>`;
-            } else {
-                page2TableContent = `<div style="padding: 10px; text-align: center; font-style: italic; border-bottom: 1px solid #ccc; color: #666;">(End of Student List)</div>`;
-            }
+            let page2TableContent = studentsPage2.length > 0 ? `${tableHeader}${tableRowsPage2}</tbody></table>` : `<div style="padding: 10px; text-align: center; font-style: italic; border-bottom: 1px solid #ccc;">(End of Student List)</div>`;
 
             allPagesHtml += `
                 <div class="print-page print-page-room" style="height: 100%; display: flex; flex-direction: column;">
@@ -1594,7 +1584,7 @@ generateReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
+        reportStatus.textContent = `Generated Room-wise Report.`;
         reportControls.classList.remove('hidden');
         
         roomCsvDownloadContainer.innerHTML = `
@@ -1606,15 +1596,12 @@ generateReportButton.addEventListener('click', async () => {
 
     } catch (e) {
         console.error("Error:", e);
-        reportStatus.textContent = "Error generating report.";
+        alert("Error: " + e.message);
     } finally {
         generateReportButton.disabled = false;
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
 });
-    
-
-// --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
 // --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
@@ -3711,6 +3698,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
 
 
 // --- Event listener for "Generate QP Distribution Report" (V2: QP-Centric with Stream Demarcation) ---
+// --- Event listener for "Generate QP Distribution Report" (Stream-Aware) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -3720,8 +3708,6 @@ if (generateQpDistributionReportButton) {
         generateQpDistributionReportButton.textContent = "Generating...";
         reportOutputArea.innerHTML = "";
         reportControls.classList.add('hidden');
-        roomCsvDownloadContainer.innerHTML = "";
-        lastGeneratedReportType = "";
         await new Promise(resolve => setTimeout(resolve, 50));
         
         try {
@@ -3730,32 +3716,27 @@ if (generateQpDistributionReportButton) {
             loadQPCodes(); 
             
             const data = getFilteredReportData('qp-distribution');
-            if (data.length === 0) {
-                alert("No data found for the selected filter/session.");
-                return;
-            }
+            if (data.length === 0) { alert("No data found."); return; }
 
             const processed_rows_with_rooms = performOriginalAllocation(data);
-
-            // 1. Group by Session -> Then by QP Code (Unified across streams)
             const sessions = {};
+            
             for (const student of processed_rows_with_rooms) {
                 const sessionKey = `${student.Date}_${student.Time}`;
                 const roomName = student['Room No'];
                 const courseName = student.Course;
                 const streamName = student.Stream || "Regular"; 
 
-                const courseKey = getBase64CourseKey(courseName);
+                // *** FIX: Use Stream-Aware Key ***
+                const courseKey = getQpKey(courseName, streamName);
                 const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                 const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                 const qpCode = sessionQPCodes[courseKey] || 'N/A'; 
 
-                // Init Session
                 if (!sessions[sessionKey]) {
                     sessions[sessionKey] = { Date: student.Date, Time: student.Time, qpCodes: {} };
                 }
                 
-                // Init QP Code Bucket
                 if (!sessions[sessionKey].qpCodes[qpCode]) {
                     sessions[sessionKey].qpCodes[qpCode] = {
                         courseNames: new Set(),
@@ -3766,16 +3747,12 @@ if (generateQpDistributionReportButton) {
                 }
                 
                 const qpEntry = sessions[sessionKey].qpCodes[qpCode];
-                
-                // Update Stats
                 qpEntry.courseNames.add(courseName);
                 qpEntry.total++;
                 
-                // Stream Global Count
                 if (!qpEntry.streamTotals[streamName]) qpEntry.streamTotals[streamName] = 0;
                 qpEntry.streamTotals[streamName]++;
 
-                // Room Specific Count
                 if (!qpEntry.rooms[roomName]) {
                     qpEntry.rooms[roomName] = { total: 0, streams: {} };
                 }
@@ -3787,98 +3764,48 @@ if (generateQpDistributionReportButton) {
                 qpEntry.rooms[roomName].streams[streamName]++;
             }
             
+            // ... (Rest of the HTML generation logic remains same as V3) ...
+            // For brevity, reusing the existing HTML generation logic from V3 you have.
+            // Just ensure the loop above is replaced.
+            
             let allPagesHtml = '';
             const sortedSessionKeys = Object.keys(sessions).sort();
             
-            // Loop Sessions
             for (const sessionKey of sortedSessionKeys) {
                 const session = sessions[sessionKey];
                 const sessionKeyPipe = `${session.Date} | ${session.Time}`;
                 const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
 
-                allPagesHtml += `
-                    <div class="print-page">
-                        <div class="print-header-group">
-                            <h1>${currentCollegeName}</h1>
-                            <h2>Question Paper Distribution</h2>
-                            <h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
-                        </div>
-                `;
-                
+                allPagesHtml += `<div class="print-page"><div class="print-header-group"><h1>${currentCollegeName}</h1><h2>Question Paper Distribution</h2><h3>${session.Date} &nbsp;|&nbsp; ${session.Time}</h3></div>`;
                 const sortedQPCodes = Object.keys(session.qpCodes).sort();
 
-                // Loop QP Codes
                 for (const qpCode of sortedQPCodes) {
                     const qpData = session.qpCodes[qpCode];
                     const courseList = Array.from(qpData.courseNames).sort().join(', ');
-                    
-                    // Build Stream Total String (e.g., "Regular: 50, Distance: 20")
                     const grandStreamParts = [];
-                    Object.entries(qpData.streamTotals).forEach(([strm, cnt]) => {
-                        grandStreamParts.push(`${strm}: ${cnt}`);
-                    });
-                    const grandStreamString = grandStreamParts.join(', ');
+                    Object.entries(qpData.streamTotals).forEach(([strm, cnt]) => grandStreamParts.push(`${strm}: ${cnt}`));
 
                     allPagesHtml += `
                         <div style="margin-top: 1.5rem; border: 1px solid #000; padding: 10px; page-break-inside: avoid;">
-                            <h4 style="font-size: 12pt; font-weight: bold; margin: 0; border-bottom: 1px dotted #000; padding-bottom: 5px;">
-                                QP Code: <span style="background-color:#eee; padding:2px 5px;">${qpCode}</span>
-                            </h4>
-                            <div style="font-size: 9pt; margin-top: 5px; font-style: italic; color: #444;">
-                                Courses: ${courseList}
-                            </div>
-                        
+                            <h4 style="font-size: 12pt; font-weight: bold; margin: 0; border-bottom: 1px dotted #000; padding-bottom: 5px;">QP Code: <span style="background-color:#eee; padding:2px 5px;">${qpCode}</span></h4>
+                            <div style="font-size: 9pt; margin-top: 5px; font-style: italic; color: #444;">Courses: ${courseList}</div>
                             <table class="qp-distribution-table" style="margin-top: 10px; width: 100%; border-collapse: collapse; font-size: 10pt;">
-                                <thead>
-                                    <tr style="background-color: #f9f9f9;">
-                                        <th style="width: 50%; border: 1px solid #ccc; padding: 4px;">Room</th>
-                                        <th style="width: 35%; border: 1px solid #ccc; padding: 4px;">Stream Breakdown</th>
-                                        <th style="width: 15%; border: 1px solid #ccc; padding: 4px; text-align:center;">Count</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                    `;
+                                <thead><tr style="background-color: #f9f9f9;"><th style="width: 50%; border: 1px solid #ccc; padding: 4px;">Room</th><th style="width: 35%; border: 1px solid #ccc; padding: 4px;">Stream Breakdown</th><th style="width: 15%; border: 1px solid #ccc; padding: 4px; text-align:center;">Count</th></tr></thead>
+                                <tbody>`;
                     
-                    // Sort Rooms Numerically
-                    const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
-                        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-                        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-                        return numA - numB;
-                    });
+                    const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0));
 
                     for (const roomName of sortedRoomKeys) {
                         const rData = qpData.rooms[roomName];
                         const roomInfo = currentRoomConfig[roomName];
                         const displayLocation = (roomInfo && roomInfo.location) ? roomInfo.location : roomName;
                         const serialNo = roomSerialMap[roomName] || '-';
-                        
-                        // Build Room-Stream String
                         const streamParts = [];
-                        Object.entries(rData.streams).forEach(([strm, cnt]) => {
-                            streamParts.push(`<span style="white-space:nowrap;">${strm}: <strong>${cnt}</strong></span>`);
-                        });
+                        Object.entries(rData.streams).forEach(([strm, cnt]) => streamParts.push(`<span style="white-space:nowrap;">${strm}: <strong>${cnt}</strong></span>`));
                         
-                        allPagesHtml += `
-                            <tr>
-                                <td style="border: 1px solid #ccc; padding: 4px;"><strong>${serialNo} | ${displayLocation}</strong> <span style="font-size:0.85em; color:#666;">(${roomName})</span></td>
-                                <td style="border: 1px solid #ccc; padding: 4px; font-size: 0.9em;">${streamParts.join(', ')}</td>
-                                <td style="border: 1px solid #ccc; padding: 4px; text-align: center; font-weight: bold;">${rData.total}</td>
-                            </tr>
-                        `;
+                        allPagesHtml += `<tr><td style="border: 1px solid #ccc; padding: 4px;"><strong>${serialNo} | ${displayLocation}</strong> <span style="font-size:0.85em; color:#666;">(${roomName})</span></td><td style="border: 1px solid #ccc; padding: 4px; font-size: 0.9em;">${streamParts.join(', ')}</td><td style="border: 1px solid #ccc; padding: 4px; text-align: center; font-weight: bold;">${rData.total}</td></tr>`;
                     }
-                    
-                    allPagesHtml += `
-                                </tbody>
-                                <tfoot style="background-color: #f0f0f0;">
-                                    <tr>
-                                        <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: right;">Total:</td>
-                                        <td style="border: 1px solid #ccc; padding: 6px; font-size: 0.9em; font-weight:bold;">${grandStreamString}</td>
-                                        <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: center; font-size: 1.1em;">${qpData.total}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    `;
+                    allPagesHtml += `</tbody><tfoot style="background-color: #f0f0f0;"><tr><td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: right;">Total:</td><td style="border: 1px solid #ccc; padding: 6px; font-size: 0.9em; font-weight:bold;">${grandStreamParts.join(', ')}</td><td style="border: 1px solid #ccc; padding: 6px; font-weight: bold; text-align: center; font-size: 1.1em;">${qpData.total}</td></tr></tfoot></table></div>`;
                 }
                 allPagesHtml += `</div>`; 
             }
@@ -4002,7 +3929,7 @@ if (generateAbsenteeReportButton) {
             
             for (const student of sessionStudents) {
                 // Resolve QP Code
-                const courseKey = getBase64CourseKey(student.Course);
+                const courseKey = getQpKey(student.Course, student.Stream);
                 const sessionQPCodes = qpCodeMap[sessionKey] || {};
                 const qpCode = sessionQPCodes[courseKey] || "Not Entered"; 
                 
@@ -4190,7 +4117,7 @@ generateScribeReportButton.addEventListener('click', async () => {
             const sessionKey = `${s.Date} | ${s.Time}`;
             const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
-            const courseKey = getBase64CourseKey(s.Course);
+            const courseKey = getQpKey(s.Course, s.Stream);
             const lookupKey = `${s.Date}|${s.Time}|${s['Register Number']}`;
             const originalRoomData = originalRoomMap[lookupKey] || { room: 'N/A', seat: 'N/A' };
             const roomSerialMap = getRoomSerialMap(sessionKey);
@@ -4337,7 +4264,7 @@ generateScribeProformaButton.addEventListener('click', async () => {
             const sessionQPCodes = qpCodeMap[sessionKey] || {};
             
             // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
-            const courseKey = getBase64CourseKey(s.Course);
+            const courseKey = getQpKey(s.Course, s.Stream);
             
             const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
             const roomSerialMap = getRoomSerialMap(sessionKey);
@@ -5216,59 +5143,74 @@ sessionSelectQP.addEventListener('change', () => {
     }
 });
 
-// V61: Renders the course list for the selected session
+// V92: Renders the QP Code list (Grouped by Stream)
 function render_qp_code_list(sessionKey) {
-    
-    // 1. Filter students for this specific session
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
     
-    // 2. Get unique courses for this session
-    const sessionCourses = new Set(sessionStudents.map(s => s.Course));
-    const uniqueCoursesArray = Array.from(sessionCourses).sort();
+    // 1. Get Unique Pairs of (Course + Stream)
+    const uniquePairs = [];
+    const seen = new Set();
     
-    // 3. V89: Load *all* codes, then get the ones for *this* session
+    sessionStudents.forEach(s => {
+        const strm = s.Stream || "Regular";
+        const key = `${s.Course}|${strm}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniquePairs.push({ course: s.Course, stream: strm });
+        }
+    });
+
+    // 2. Sort: Stream first, then Course Name
+    uniquePairs.sort((a, b) => {
+        if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+        return a.course.localeCompare(b.course);
+    });
+
     loadQPCodes();
     const sessionCodes = qpCodeMap[sessionKey] || {};
-    
-    // 4. Populate the UI
     const htmlChunks = [];
-    
-    if (uniqueCoursesArray.length === 0) {
+
+    if (uniquePairs.length === 0) {
         qpCodeContainer.innerHTML = '<p class="text-center text-gray-500">No courses found for this session.</p>';
         saveQpCodesButton.disabled = true; 
         return;
     }
 
-    uniqueCoursesArray.forEach(courseName => {
-        // --- MODIFIED TO USE Base64 KEY ---
-        // 1. Create the new Base64 key
-        const base64Key = getBase64CourseKey(courseName); 
-        if (!base64Key) {
-            console.warn(`Skipping QP code input for un-keyable course: ${courseName}`);
-            return; // Skip this iteration
+    let currentStream = null;
+
+    uniquePairs.forEach(item => {
+        // Add Stream Header if it changes
+        if (item.stream !== currentStream) {
+            htmlChunks.push(`
+                <div class="bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 mt-4 first:mt-0">
+                    ${item.stream} Stream
+                </div>
+            `);
+            currentStream = item.stream;
         }
 
-        // 2. Look up the code using the Base64 key
+        // Generate Key using NEW Helper
+        const base64Key = getQpKey(item.course, item.stream);
         const savedCode = sessionCodes[base64Key] || "";
 
        htmlChunks.push(`
-        <div class="flex items-center gap-3 p-2 border-b border-gray-200">
-            <label class="font-medium text-gray-700 w-2/3 text-sm">${courseName}</label>
+        <div class="flex items-center gap-3 p-2 border-b border-gray-200 hover:bg-gray-50">
+            <label class="font-medium text-gray-700 w-2/3 text-sm">
+                ${item.course}
+            </label>
             <input type="text" 
-                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm" 
+                   class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500" 
                    value="${savedCode}" 
                    data-course-key="${base64Key}"
-                   placeholder="Enter QP Code">
+                   placeholder="QP Code">
         </div>
        `);
-       // --- END MODIFICATION ---
     });
     
     qpCodeContainer.innerHTML = htmlChunks.join('');
-    
     saveQpCodesButton.disabled = false;
-    qpCodeStatus.textContent = ''; // Clear status on new load
+    qpCodeStatus.textContent = '';
 }
 
 // V89: NEW SAVE STRATEGY
@@ -7114,69 +7056,140 @@ window.real_disable_all_report_buttons = function(disabled) {
         }, 250);
     });
 
+// 3A. Show Single Session Details (Stream-Aware)
+function showStudentDetailsModal(regNo, sessionKey) {
+    document.getElementById('search-result-single-view').classList.remove('hidden');
+    document.getElementById('search-result-global-view').classList.add('hidden');
 
-   // 3A. Show Single Session Details (Updated with Stream & Location)
-    function showStudentDetailsModal(regNo, sessionKey) {
-        document.getElementById('search-result-single-view').classList.remove('hidden');
-        document.getElementById('search-result-global-view').classList.add('hidden');
+    const [date, time] = sessionKey.split(' | ');
+    const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
+    
+    if (!student) { alert("Student not found in this session."); return; }
 
-        const [date, time] = sessionKey.split(' | ');
-        const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
-        
-        if (!student) { alert("Student not found in this session."); return; }
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
 
-        // Allocation Logic
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const allocatedSessionData = performOriginalAllocation(sessionStudents);
-        const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+    const scribeRoom = sessionScribeAllotment[regNo];
 
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
-        const scribeRoom = sessionScribeAllotment[regNo];
+    loadQPCodes(); 
+    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+    
+    // *** FIX: Use Stream-Aware Key ***
+    const streamName = student.Stream || "Regular";
+    const courseKey = getQpKey(student.Course, streamName);
+    const qpCode = sessionQPCodes[courseKey] || "N/A";
+    // *********************************
 
-        loadQPCodes(); 
-        const sessionQPCodes = qpCodeMap[sessionKey] || {};
-        const courseKey = getBase64CourseKey(student.Course);
-        const qpCode = sessionQPCodes[courseKey] || "N/A";
+    searchResultName.textContent = student.Name;
+    searchResultRegNo.textContent = student['Register Number'];
+    document.getElementById('search-result-stream').textContent = streamName; 
+    document.getElementById('search-result-course').textContent = student.Course;
+    document.getElementById('search-result-qpcode').textContent = qpCode;
 
-        // Populate Basic Info
-        searchResultName.textContent = student.Name;
-        searchResultRegNo.textContent = student['Register Number'];
-        
-        // *** FIX: Add Stream ***
-        document.getElementById('search-result-stream').textContent = student.Stream || "Regular"; 
-        document.getElementById('search-result-course').textContent = student.Course;
-        document.getElementById('search-result-qpcode').textContent = qpCode;
-
-        // *** FIX: Add Location ***
-        if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
-            const roomName = allocatedStudent['Room No'];
-            const roomInfo = currentRoomConfig[roomName] || {};
-            
-            document.getElementById('search-result-room').textContent = roomName;
-            document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
-            // Show Location
-            document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
-            document.getElementById('search-result-room-location-block').classList.remove('hidden');
-        } else {
-             document.getElementById('search-result-room').textContent = "Not Allotted";
-             document.getElementById('search-result-seat').textContent = "-";
-             document.getElementById('search-result-room-location-block').classList.add('hidden');
-        }
-
-        if (scribeRoom) {
-            const scribeInfo = currentRoomConfig[scribeRoom] || {};
-            document.getElementById('search-result-scribe-room').textContent = scribeRoom;
-            document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
-            document.getElementById('search-result-scribe-block').classList.remove('hidden');
-        } else {
-            document.getElementById('search-result-scribe-block').classList.add('hidden');
-        }
-
-        searchResultModal.classList.remove('hidden');
+    if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
+        const roomName = allocatedStudent['Room No'];
+        const roomInfo = currentRoomConfig[roomName] || {};
+        document.getElementById('search-result-room').textContent = roomName;
+        document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
+        document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
+        document.getElementById('search-result-room-location-block').classList.remove('hidden');
+    } else {
+            document.getElementById('search-result-room').textContent = "Not Allotted";
+            document.getElementById('search-result-seat').textContent = "-";
+            document.getElementById('search-result-room-location-block').classList.add('hidden');
     }
 
-    // 3B. Show Global Details (New Function)
+    if (scribeRoom) {
+        const scribeInfo = currentRoomConfig[scribeRoom] || {};
+        document.getElementById('search-result-scribe-room').textContent = scribeRoom;
+        document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
+        document.getElementById('search-result-scribe-block').classList.remove('hidden');
+    } else {
+        document.getElementById('search-result-scribe-block').classList.add('hidden');
+    }
+
+    searchResultModal.classList.remove('hidden');
+}
+
+// 3B. Show Global Details (Stream-Aware)
+function showGlobalStudentDetails(regNo) {
+    document.getElementById('search-result-single-view').classList.add('hidden');
+    document.getElementById('search-result-global-view').classList.remove('hidden');
+
+    const exams = allStudentData.filter(s => s['Register Number'] === regNo);
+    if (exams.length === 0) return;
+
+    exams.sort((a, b) => {
+            const d1 = a.Date.split('.').reverse().join('');
+            const d2 = b.Date.split('.').reverse().join('');
+            return d1.localeCompare(d2) || a.Time.localeCompare(b.Time);
+    });
+
+    searchResultName.textContent = exams[0].Name;
+    searchResultRegNo.textContent = regNo;
+
+    const tbody = document.getElementById('global-search-table-body');
+    tbody.innerHTML = '';
+
+    loadQPCodes();
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    
+    exams.forEach(exam => {
+        const sessionKey = `${exam.Date} | ${exam.Time}`;
+        const sessionQPCodes = qpCodeMap[sessionKey] || {};
+        
+        // *** FIX: Use Stream-Aware Key ***
+        const streamDisplay = exam.Stream || "Regular";
+        const courseKey = getQpKey(exam.Course, streamDisplay);
+        const qpCode = sessionQPCodes[courseKey] || "";
+        const qpDisplay = qpCode ? `[QP: ${qpCode}]` : "";
+        // *********************************
+
+        const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
+        const allocatedSession = performOriginalAllocation(sessionStudents);
+        const studentAlloc = allocatedSession.find(s => s['Register Number'] === regNo);
+
+        let roomDisplay = "Not Allotted";
+        let rowClass = "";
+
+        if (studentAlloc && studentAlloc['Room No'] !== "Unallotted") {
+            const roomName = studentAlloc['Room No'];
+            const roomInfo = currentRoomConfig[roomName] || {};
+            const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
+            
+            roomDisplay = `<strong>${roomName}</strong> (Seat: ${studentAlloc.seatNumber})${location}`;
+            
+            const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+            const scribeRoom = sessionScribeMap[regNo];
+            if (scribeRoom) {
+                const sInfo = currentRoomConfig[scribeRoom] || {};
+                const sLoc = sInfo.location ? ` (${sInfo.location})` : "";
+                roomDisplay += `<br><span class="text-orange-600 text-xs font-bold">Scribe: ${scribeRoom}${sLoc}</span>`;
+                rowClass = "bg-orange-50";
+            }
+        }
+
+        const tr = document.createElement('tr');
+        if(rowClass) tr.className = rowClass;
+        tr.innerHTML = `
+            <td class="px-3 py-2 border-b">${exam.Date}</td>
+            <td class="px-3 py-2 border-b">${exam.Time}</td>
+            <td class="px-3 py-2 border-b text-xs">
+                ${exam.Course}<br>
+                <span class="font-bold text-gray-600">${qpDisplay}</span>
+                <span class="text-indigo-600 ml-1">(${streamDisplay})</span>
+            </td>
+            <td class="px-3 py-2 border-b text-sm">${roomDisplay}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    searchResultModal.classList.remove('hidden');
+}
+  
     // 3B. Show Global Details (Updated with Location)
     function showGlobalStudentDetails(regNo) {
         document.getElementById('search-result-single-view').classList.add('hidden');
