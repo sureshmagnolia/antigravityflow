@@ -1548,7 +1548,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const COLUMNS_PER_PAGE = colsInput ? parseInt(colsInput.value, 10) : 1; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
-        // Helper to build a small table for one column (Optimized Widths & Merging)
+        // Helper to build a small table for one column (Updated Widths: Name 30%)
         function buildColumnTable(studentChunk) {
             // 1. Pre-process data for RowSpans
             const processedRows = studentChunk.map((student, index) => {
@@ -1591,7 +1591,8 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 processedRows[i].span = span;
             }
 
-            // 3. Build HTML with OPTIMIZED COLUMN WIDTHS
+            // 3. Build HTML with USER-DEFINED COLUMN WIDTHS
+            // Widths: Loc(35%), Reg(25%), Name(30%), Seat(10%)
             let rowsHtml = '';
             
             processedRows.forEach(row => {
@@ -1625,7 +1626,7 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 25%;"> <col style="width: 15%;"> <col style="width: 52%;"> <col style="width: 8%;">  </colgroup>
+                        <col style="width: 35%;"> <col style="width: 25%;"> <col style="width: 30%;"> <col style="width: 10%;"> </colgroup>
                     <thead>
                         <tr>
                             <th>Location</th>
