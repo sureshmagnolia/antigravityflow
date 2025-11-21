@@ -7705,7 +7705,8 @@ async function findMyCollege(user) {
 
         // 6. Feedback
         if (mainCsvStatus) {
-            mainCsvStatus.textContent = `Success! Loaded ${dataArray.length} records.`;
+            // FIX: Use allStudentData.length to show the ACTUAL count after deduplication
+            mainCsvStatus.textContent = `Success! Loaded ${allStudentData.length} records.`;
             mainCsvStatus.className = "text-sm font-medium text-green-600";
         }
         
