@@ -6750,7 +6750,7 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate Room Stickers" (V5: Multi-Col Courses & Overflow Fix) ---
+// --- Event listener for "Generate Room Stickers" (V6: 3-Column Compact & Font Fix) ---
 const generateStickerButton = document.getElementById('generate-sticker-button');
 
 if (generateStickerButton) {
@@ -6809,10 +6809,10 @@ if (generateStickerButton) {
 
                 const roomInfo = currentRoomConfig[session.Room] || {};
                 
-                // Header Display Logic
+                // Header Logic
                 const hasLocation = (roomInfo.location && roomInfo.location.trim() !== "");
                 const headerTitle = hasLocation ? roomInfo.location : session.Room;
-                const roomSubTitle = hasLocation ? `<span style="font-size: 16pt; font-weight: bold;">${session.Room}</span>` : "";
+                const roomSubTitle = hasLocation ? `<span style="font-size: 14pt; font-weight: bold; margin-left: 5px;">(${session.Room})</span>` : "";
 
                 // Group Students
                 const studentsByCourse = {};
@@ -6825,17 +6825,20 @@ if (generateStickerButton) {
                 const numCourses = sortedCourses.length;
                 const totalStudents = session.students.length;
 
-                // --- DYNAMIC LAYOUT CALCULATIONS ---
-                // If many courses, split into 2 columns to save vertical space
-                const useMultiColCourses = (numCourses > 6);
+                // --- DYNAMIC LAYOUT (3-Column Force) ---
+                // Default to 3 columns to save vertical space
+                let internalCols = "1fr 1fr 1fr"; 
                 
-                // If crowded, reduce spacing
-                const isCrowded = (totalStudents > 30 || numCourses > 8);
-                const rowFontSize = isCrowded ? "8.5pt" : "10pt";
-                const rowPadding = isCrowded ? "0px" : "2px";
-                const courseMargin = isCrowded ? "3px" : "6px";
-                
-                // Build HTML for Courses
+                // Adjust font size based on density
+                let rowPadding = "1px";
+                let regFontSize = "9pt"; // Smaller default
+                let nameFontSize = "8pt"; // Smaller for narrow columns
+
+                // If super crowded (many courses), make it even tighter
+                if (numCourses > 6) {
+                    rowPadding = "0px";
+                }
+
                 let courseBlocksHtml = '';
                 
                 sortedCourses.forEach(courseName => {
@@ -6843,59 +6846,50 @@ if (generateStickerButton) {
                     students.sort((a, b) => (a.seatNumber || 999) - (b.seatNumber || 999));
                     
                     let studentGridHtml = '';
-                    // Internal Grid for students: 1 col if multi-col-courses, else 2 cols
-                    // Actually, sticking to 2-col student grid is usually safest unless column is very narrow.
-                    // Let's adapt: If MultiColCourses -> 1 Col Student Grid. Else -> 2 Col Student Grid.
-                    const internalCols = useMultiColCourses ? "1fr" : "1fr 1fr";
-
+                    
                     students.forEach(s => {
-                        const scribeBadge = s.isScribeDisplay ? '<span style="font-size:0.7em; color:white; bg-color:black; padding:0 2px; border-radius:2px; background:black; margin-left:2px;">SCRIBE</span>' : '';
+                        const scribeBadge = s.isScribeDisplay ? '<span style="font-size:0.6em; color:white; bg-color:black; padding:0 1px; border-radius:2px; background:black; margin-left:1px;">S</span>' : '';
                         const seatDisplay = s.seatNumber !== undefined ? s.seatNumber : '-';
                         
+                        // Compact 3-Col Layout: Seat | Reg | Name
                         studentGridHtml += `
-                            <div style="display:flex; align-items:center; border-bottom:1px dotted #ccc; padding:${rowPadding} 0; font-size:${rowFontSize}; overflow:hidden;">
-                                <span style="font-weight:bold; width:22px; text-align:center; border-right:1px solid #ddd; margin-right:4px; flex-shrink:0;">${seatDisplay}</span>
-                                <span style="font-weight:bold; width:90px; flex-shrink:0;">${s['Register Number']}</span>
-                                <span style="overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#333;">${s.Name} ${scribeBadge}</span>
+                            <div style="display:flex; align-items:center; border-bottom:1px dotted #ccc; padding:${rowPadding} 0; overflow:hidden;">
+                                <span style="font-weight:bold; font-size:${regFontSize}; width:18px; text-align:center; border-right:1px solid #ddd; margin-right:3px; flex-shrink:0;">${seatDisplay}</span>
+                                <span style="font-weight:bold; font-size:${regFontSize}; width:72px; flex-shrink:0;">${s['Register Number']}</span>
+                                <span style="font-size:${nameFontSize}; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#444;">${s.Name} ${scribeBadge}</span>
                             </div>
                         `;
                     });
 
                     courseBlocksHtml += `
-                        <div style="margin-bottom: ${courseMargin}; break-inside: avoid; border: 1px solid #eee; padding: 2px; background: #fafafa;">
-                            <div style="font-weight:bold; font-size:9pt; background:#e5e7eb; padding:2px 5px; margin-bottom:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
-                                ${courseName} <span style="background:#fff; padding:0 4px; border-radius:4px; margin-left:4px; font-size:8pt;">${students.length}</span>
+                        <div style="margin-bottom: 4px; break-inside: avoid; border: 1px solid #eee; padding: 2px; background: #fafafa;">
+                            <div style="font-weight:bold; font-size:8.5pt; background:#e5e7eb; padding:1px 4px; margin-bottom:1px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+                                ${courseName} <span style="background:#fff; padding:0 3px; border-radius:4px; margin-left:3px; font-size:8pt; border:1px solid #ccc;">${students.length}</span>
                             </div>
-                            <div style="display: grid; grid-template-columns: ${internalCols}; column-gap: 10px; row-gap: 0;">
+                            <div style="display: grid; grid-template-columns: ${internalCols}; column-gap: 8px; row-gap: 0;">
                                 ${studentGridHtml}
                             </div>
                         </div>
                     `;
                 });
 
-                // Container Style for Courses (Grid vs Block)
-                const courseContainerStyle = useMultiColCourses 
-                    ? `display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; align-items: start;` 
-                    : `display: block;`;
-
-                // Sticker HTML
+                // Sticker HTML (Fixed 135mm)
                 const stickerHtml = `
-                    <div class="exam-sticker" style="border: 2px dashed #000; padding: 8px; height: 135mm; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; background: white; width: 100%;">
+                    <div class="exam-sticker" style="border: 2px dashed #000; padding: 6px 10px; height: 135mm; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; background: white; width: 100%;">
                         
-                        <div style="text-align: center; margin-bottom: 4px; flex-shrink: 0; border-bottom: 2px solid #000; padding-bottom: 4px;">
+                        <div style="text-align: center; margin-bottom: 3px; flex-shrink: 0; border-bottom: 2px solid #000; padding-bottom: 3px;">
                             <h1 style="font-size: 12pt; font-weight: bold; margin: 0; text-transform: uppercase; line-height: 1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentCollegeName}</h1>
-                            <div style="font-size: 9pt; font-weight: bold; margin-top: 2px; color: #444;">
+                            <div style="font-size: 9pt; font-weight: bold; margin-top: 1px; color: #444;">
                                 ${session.Date} &nbsp;|&nbsp; ${session.Time}
                             </div>
                             
-                            <div style="margin-top: 4px; border: 2px solid #000; padding: 2px 8px; display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size: 13pt; font-weight: bold; line-height:1.1; text-align:left;">${headerTitle}</span>
-                                ${roomSubTitle}
+                            <div style="margin-top: 3px; border: 2px solid #000; padding: 2px 6px; display:flex; justify-content:center; align-items:center;">
+                                <span style="font-size: 12pt; font-weight: bold; line-height:1.1; text-align:center;">${headerTitle} ${roomSubTitle}</span>
                             </div>
                         </div>
 
                         <div style="flex: 1 1 auto; overflow: hidden; min-height: 0; padding-top: 2px;">
-                             <div style="${courseContainerStyle}">
+                             <div style="display: block;">
                                 ${courseBlocksHtml}
                              </div>
                         </div>
