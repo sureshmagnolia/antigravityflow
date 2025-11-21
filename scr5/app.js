@@ -1546,60 +1546,109 @@ generateDaywiseReportButton.addEventListener('click', async () => {
         const COLUMNS_PER_PAGE = 2; 
         const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE; 
 
-   // Helper to build a small table for one column
+   // Helper to build a small table for one column (With Merged Location)
         function buildColumnTable(studentChunk) {
-            let rowsHtml = '';
-            let currentCourse = ""; 
+            // 1. Pre-process data to calculate RowSpans
+            const processedRows = studentChunk.map((student, index) => {
+                // Determine if this row starts a new Course block
+                // (First item in chunk always triggers a header for clarity)
+                const prevCourse = (index === 0) ? "" : studentChunk[index-1].Course;
+                const isCourseHeader = (student.Course !== prevCourse);
 
-            studentChunk.forEach(student => {
-                if (student.Course !== currentCourse) {
-                    currentCourse = student.Course;
-                    // Course Header Row
-                    rowsHtml += `
-                        <tr>
-                            <td colspan="4" style="background-color: #eee; font-weight: bold; padding: 2px 4px; border: 1px solid #999; font-size: 0.85em;">
-                                ${student.Course}
-                            </td>
-                        </tr>
-                    `;
-                }
-
+                // Determine Room/Location Display
                 let roomName = student['Room No'];
-                let seatNo = student.seatNumber; 
+                let seatNo = student.seatNumber;
                 let rowStyle = '';
 
                 if (student.isScribe) {
                     const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                     const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[student['Register Number']];
                     if(scribeRoom) roomName = scribeRoom;
-                    seatNo = 'Scribe'; 
-                    rowStyle = 'font-weight: bold; color: #c2410c;'; 
+                    seatNo = 'Scribe';
+                    rowStyle = 'font-weight: bold; color: #c2410c;';
                 }
 
                 const roomInfo = currentRoomConfig[roomName] || {};
-                
-                // *** UPDATED LOGIC: Show Location only; Fallback to Room Name ***
+                // Show Location only; Fallback to Room Name
                 const displayRoom = (roomInfo.location && roomInfo.location.trim() !== "") ? roomInfo.location : roomName;
+
+                return {
+                    student,
+                    isCourseHeader,
+                    displayRoom,
+                    seatNo,
+                    rowStyle,
+                    courseName: student.Course,
+                    span: 1,            // Default span
+                    skipLocation: false // Default visibility
+                };
+            });
+
+            // 2. Calculate Merges (RowSpan Logic)
+            for (let i = 0; i < processedRows.length; i++) {
+                if (processedRows[i].skipLocation) continue;
+
+                let span = 1;
+                // Look ahead to find identical locations
+                for (let j = i + 1; j < processedRows.length; j++) {
+                    const current = processedRows[i];
+                    const next = processedRows[j];
+
+                    // STOP merging if:
+                    // 1. A Course Header appears (it interrupts the visual flow)
+                    if (next.isCourseHeader) break;
+                    // 2. The location changes
+                    if (next.displayRoom !== current.displayRoom) break;
+
+                    // If safe, increment span and hide the next cell
+                    span++;
+                    next.skipLocation = true;
+                }
+                processedRows[i].span = span;
+            }
+
+            // 3. Build HTML
+            let rowsHtml = '';
+            
+            processedRows.forEach(row => {
+                // Insert Course Header Row if needed
+                if (row.isCourseHeader) {
+                    rowsHtml += `
+                        <tr>
+                            <td colspan="4" style="background-color: #eee; font-weight: bold; padding: 2px 4px; border: 1px solid #999; font-size: 0.85em;">
+                                ${row.courseName}
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                rowsHtml += `<tr style="${row.rowStyle}">`;
                 
-                // *** UPDATED ORDER: Location -> Reg No -> Name -> Seat ***
+                // LOCATION CELL (Merged)
+                if (!row.skipLocation) {
+                    const rowspanAttr = row.span > 1 ? `rowspan="${row.span}"` : '';
+                    // Center vertically if merged
+                    const valign = row.span > 1 ? 'vertical-align: middle;' : 'vertical-align: top;';
+                    // White background ensures text remains readable
+                    rowsHtml += `<td ${rowspanAttr} style="padding: 2px 4px; font-size:0.85em; background-color: #fff; ${valign}">${row.displayRoom}</td>`;
+                }
+
+                // DATA CELLS
                 rowsHtml += `
-                    <tr style="${rowStyle}">
-                        <td style="padding: 1px 4px; font-size:0.85em;">${displayRoom}</td>
-                        <td style="padding: 1px 4px;">${student['Register Number']}</td>
-                        <td style="padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${student.Name}</td>
-                        <td style="padding: 1px 4px; text-align: center;">${seatNo}</td>
+                        <td style="padding: 1px 4px;">${row.student['Register Number']}</td>
+                        <td style="padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;">${row.student.Name}</td>
+                        <td style="padding: 1px 4px; text-align: center;">${row.seatNo}</td>
                     </tr>
                 `;
             });
 
-            // *** UPDATED HEADER ORDER ***
             return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt;">
                     <thead>
                         <tr>
-                            <th style="width: 35%;">Location / Room</th>
+                            <th style="width: 30%;">Location</th>
                             <th style="width: 20%;">Reg No</th>
-                            <th style="width: 35%;">Name</th>
+                            <th style="width: 40%;">Name</th>
                             <th style="width: 10%;">Seat</th>
                         </tr>
                     </thead>
