@@ -3977,155 +3977,182 @@ function formatRegNoList(regNos) {
     return outputHtml.join('<br>');
 }
         
-// --- (V56) Event listener for "Generate Absentee Statement" (Stream Label Added) ---
-generateAbsenteeReportButton.addEventListener('click', async () => {
-    const sessionKey = sessionSelect.value;
-    if (!sessionKey) { alert("Please select a session first."); return; }
+// --- Event listener for "Generate Absentee Statement" (V3: Stream-wise Split) ---
+const generateAbsenteeReportButton = document.getElementById('generate-absentee-report-button');
 
-    generateAbsenteeReportButton.disabled = true;
-    generateAbsenteeReportButton.textContent = "Generating...";
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    try {
-        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        const [date, time] = sessionKey.split(' | ');
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
-        const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
-        loadQPCodes(); 
-        
-        const qpGroups = {};
-        
-        for (const student of sessionStudents) {
-            const courseDisplay = student.Course;
-            const courseKey = getBase64CourseKey(courseDisplay);
-            if (!courseKey) continue; 
-            
-            const sessionCodes = qpCodeMap[sessionKey] || {};
-            const qpCode = sessionCodes[courseKey] || "Not Entered"; 
-            
-            if (!qpGroups[qpCode]) {
-                qpGroups[qpCode] = { code: qpCode, courses: {}, grandTotalPresent: 0, grandTotalAbsent: 0, streams: new Set() };
-            }
-            
-            qpGroups[qpCode].streams.add(student.Stream || "Regular"); // Track streams for this QP
+if (generateAbsenteeReportButton) {
+    generateAbsenteeReportButton.addEventListener('click', async () => {
+        const sessionKey = sessionSelect.value;
+        if (!sessionKey) { alert("Please select a session first."); return; }
 
-            if (!qpGroups[qpCode].courses[courseDisplay]) {
-                qpGroups[qpCode].courses[courseDisplay] = { name: courseDisplay, present: [], absent: [] };
-            }
-            
-            if (absenteeRegNos.has(student['Register Number'])) {
-                qpGroups[qpCode].courses[courseDisplay].absent.push(student['Register Number']);
-                qpGroups[qpCode].grandTotalAbsent++;
-            } else {
-                qpGroups[qpCode].courses[courseDisplay].present.push(student['Register Number']);
-                qpGroups[qpCode].grandTotalPresent++;
-            }
-        }
+        generateAbsenteeReportButton.disabled = true;
+        generateAbsenteeReportButton.textContent = "Generating...";
+        reportOutputArea.innerHTML = "";
+        reportControls.classList.add('hidden');
+        await new Promise(resolve => setTimeout(resolve, 50));
         
-        let allPagesHtml = '';
-        let totalPages = 0;
-        const sortedQpKeys = Object.keys(qpGroups).sort();
-        
-        for (const qpCode of sortedQpKeys) {
-            totalPages++;
-            const qpData = qpGroups[qpCode];
+        try {
+            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            const [date, time] = sessionKey.split(' | ');
             
-            // Determine Stream Label
-            const streamList = Array.from(qpData.streams);
-            const streamLabel = streamList.length === 1 ? streamList[0] : "Combined";
-
-            // Dynamic Font Size Logic
-            let totalStudentsInQP = 0;
-            Object.values(qpData.courses).forEach(c => totalStudentsInQP += c.present.length + c.absent.length);
-            let dynamicFontSize = '13pt';
-            let dynamicLineHeight = '1.6';
-            if (totalStudentsInQP > 150) { dynamicFontSize = '9pt'; dynamicLineHeight = '1.3'; }
-            else if (totalStudentsInQP > 100) { dynamicFontSize = '10pt'; dynamicLineHeight = '1.4'; }
-            else if (totalStudentsInQP > 60) { dynamicFontSize = '11pt'; dynamicLineHeight = '1.5'; }
-
-            const sortedCourses = Object.keys(qpData.courses).sort();
-            let tableRowsHtml = '';
+            // 1. Get Data for Session
+            const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+            const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+            const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
+            loadQPCodes(); 
             
-            for (const courseName of sortedCourses) {
-                const courseData = qpData.courses[courseName];
-                const presentListHtml = formatRegNoList(courseData.present);
-                const absentListHtml = formatRegNoList(courseData.absent);
+            // 2. Group by QP CODE + STREAM (This ensures separate reports)
+            const qpStreamGroups = {};
+            
+            for (const student of sessionStudents) {
+                // Resolve QP Code
+                const courseKey = getBase64CourseKey(student.Course);
+                const sessionQPCodes = qpCodeMap[sessionKey] || {};
+                const qpCode = sessionQPCodes[courseKey] || "Not Entered"; 
                 
+                // Resolve Stream
+                const streamName = student.Stream || "Regular";
+                
+                // Create Unique Key for Grouping (Crucial Change)
+                const groupKey = `${qpCode}|${streamName}`;
+                
+                if (!qpStreamGroups[groupKey]) {
+                    qpStreamGroups[groupKey] = { 
+                        qpCode: qpCode, 
+                        stream: streamName, 
+                        courses: {}, 
+                        grandTotal: 0, 
+                        grandPresent: 0, 
+                        grandAbsent: 0 
+                    };
+                }
+                
+                const group = qpStreamGroups[groupKey];
+
+                if (!group.courses[student.Course]) {
+                    group.courses[student.Course] = { name: student.Course, present: [], absent: [] };
+                }
+                
+                if (absenteeRegNos.has(student['Register Number'])) {
+                    group.courses[student.Course].absent.push(student['Register Number']);
+                    group.grandAbsent++;
+                } else {
+                    group.courses[student.Course].present.push(student['Register Number']);
+                    group.grandPresent++;
+                }
+                group.grandTotal++;
+            }
+            
+            // 3. Generate HTML
+            let allPagesHtml = '';
+            let totalPages = 0;
+            
+            // Sort Keys: QP Code first, then Stream
+            const sortedKeys = Object.keys(qpStreamGroups).sort();
+            
+            for (const key of sortedKeys) {
+                totalPages++;
+                const data = qpStreamGroups[key];
+                
+                // Dynamic Font Size Logic (for dense pages)
+                let dynamicFontSize = '12pt';
+                let dynamicLineHeight = '1.5';
+                if (data.grandTotal > 150) { dynamicFontSize = '9pt'; dynamicLineHeight = '1.3'; }
+                else if (data.grandTotal > 100) { dynamicFontSize = '10pt'; dynamicLineHeight = '1.4'; }
+                else if (data.grandTotal > 60) { dynamicFontSize = '11pt'; dynamicLineHeight = '1.5'; }
+
+                const sortedCourses = Object.keys(data.courses).sort();
+                let tableRowsHtml = '';
+                
+                for (const courseName of sortedCourses) {
+                    const courseData = data.courses[courseName];
+                    const presentListHtml = formatRegNoList(courseData.present); // Uses existing helper
+                    const absentListHtml = formatRegNoList(courseData.absent);   // Uses existing helper
+                    
+                    tableRowsHtml += `
+                        <tr style="background-color: #f3f4f6;">
+                            <td colspan="2" style="font-weight: bold; border-bottom: 2px solid #ccc; padding: 8px;">Course: ${courseData.name}</td>
+                        </tr>
+                        <tr>
+                            <td style="vertical-align: top; width: 20%; padding: 8px; border: 1px solid #ccc;">
+                                <strong>Present (${courseData.present.length})</strong>
+                            </td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">
+                                ${presentListHtml}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="vertical-align: top; padding: 8px; border: 1px solid #ccc;">
+                                <strong>Absent (${courseData.absent.length})</strong>
+                            </td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; color: red;">
+                                ${absentListHtml}
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                // Summary Row
                 tableRowsHtml += `
-                    <tr style="background-color: #f9fafb;">
-                        <td colspan="2" style="font-weight: bold; border-bottom: 2px solid #ccc;">Course: ${courseData.name}</td>
-                    </tr>
-                    <tr>
-                        <td style="vertical-align: top; width: 25%;"><strong>Present (${courseData.present.length})</strong></td>
-                        <td class="regno-list" style="vertical-align: top; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">${presentListHtml}</td>
-                    </tr>
-                    <tr>
-                        <td style="vertical-align: top;"><strong>Absent (${courseData.absent.length})</strong></td>
-                        <td class="regno-list" style="vertical-align: top; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight};">${absentListHtml}</td>
+                    <tr style="background-color: #eee; border-top: 3px double #000;">
+                        <td colspan="2" style="padding: 12px;">
+                            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em;">
+                                <span>QP CODE: ${data.qpCode}</span>
+                                <span>Total: ${data.grandTotal} &nbsp;|&nbsp; Present: ${data.grandPresent} &nbsp;|&nbsp; Absent: ${data.grandAbsent}</span>
+                            </div>
+                        </td>
                     </tr>
                 `;
+                
+                allPagesHtml += `
+                    <div class="print-page">
+                        <div class="print-header-group" style="position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                            <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 2px solid #000; padding: 4px 10px; background: #fff;">
+                                Stream: ${data.stream}
+                            </div>
+                            <h1>${currentCollegeName}</h1>
+                            <h2>Statement of Answer Scripts</h2>
+                            <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+                            <div style="margin-top: 10px; font-weight: bold; font-size: 14pt; text-align: center;">
+                                QP Code: <span style="background: #eee; padding: 2px 8px; border: 1px solid #999;">${data.qpCode}</span>
+                            </div>
+                        </div>
+                        
+                        <table class="absentee-report-table" style="width: 100%; border-collapse: collapse;">
+                            <tbody>
+                                ${tableRowsHtml}
+                            </tbody>
+                        </table>
+                        
+                        <div class="absentee-footer" style="margin-top: 50px; display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div style="font-size: 10pt;">
+                                <strong>Generated by ExamFlow</strong>
+                            </div>
+                            <div class="signature" style="text-align: center; width: 200px; border-top: 1px solid #000; padding-top: 5px;">
+                                Chief Superintendent
+                            </div>
+                        </div>
+                    </div>
+                `;
             }
-            
-            tableRowsHtml += `
-                <tr style="background-color: #eee; border-top: 3px double #000;">
-                    <td colspan="2" style="padding: 10px;">
-                        <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em;">
-                            <span>TOTAL FOR QP CODE: ${qpCode}</span>
-                            <span>Present: ${qpData.grandTotalPresent} &nbsp;|&nbsp; Absent: ${qpData.grandTotalAbsent}</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
-            
-            allPagesHtml += `
-                <div class="print-page">
-                    <div class="print-header-group" style="position: relative;">
-                        <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 1px solid #000; padding: 2px 8px;">
-                            Stream: ${streamLabel}
-                        </div>
-                        <h1>${currentCollegeName}</h1>
-                        <h2>Statement of Answer Scripts</h2>
-                        <h3>${date} &nbsp;|&nbsp; ${time}</h3>
-                        <h3 style="border: 1px solid black; padding: 5px; display: inline-block; margin-top: 5px;">QP Code: ${qpCode}</h3>
-                    </div>
-                    <table class="absentee-report-table" style="margin-top: 1rem;">
-                        <thead>
-                            <tr>
-                                <th>Status</th>
-                                <th>Register Numbers</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRowsHtml}
-                        </tbody>
-                    </table>
-                    <div class="absentee-footer">
-                        <div class="signature">
-                            Chief Superintendent
-                        </div>
-                    </div>
-                </div>
-            `;
+
+            reportOutputArea.innerHTML = allPagesHtml;
+            reportOutputArea.style.display = 'block'; 
+            reportStatus.textContent = `Generated ${totalPages} page(s) (Split by Stream).`;
+            reportControls.classList.remove('hidden');
+            roomCsvDownloadContainer.innerHTML = ""; 
+            lastGeneratedReportType = "Absentee_Statement"; 
+
+        } catch (e) {
+            console.error("Error generating absentee report:", e);
+            reportStatus.textContent = "An error occurred while generating the report.";
+            reportControls.classList.remove('hidden');
+        } finally {
+            generateAbsenteeReportButton.disabled = false;
+            generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
         }
-
-        reportOutputArea.innerHTML = allPagesHtml;
-        reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPages} page(s) for ${sortedQpKeys.length} QP Codes.`;
-        reportControls.classList.remove('hidden');
-        roomCsvDownloadContainer.innerHTML = ""; 
-        lastGeneratedReportType = `Statement_Answer_Scripts_${date.replace(/\./g, '_')}_${time.replace(/\s/g, '')}`; 
-
-    } catch (e) {
-        console.error("Error generating absentee report:", e);
-        reportStatus.textContent = "An error occurred while generating the report.";
-        reportControls.classList.remove('hidden');
-    } finally {
-        generateAbsenteeReportButton.disabled = false;
-        generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
-    }
-});
-
+    });
+}
 
 // *** UPDATED: Event listener for "Generate Scribe Report" (Stream Label Added) ***
 generateScribeReportButton.addEventListener('click', async () => {
