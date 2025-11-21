@@ -7018,7 +7018,7 @@ Are you sure you want to move these students?
     });
 }
 
-// *** NEW: Event listener for Invigilator Report ***
+// --- Event listener for Invigilator Report (Stream-Wise V2) ---
 generateInvigilatorReportButton.addEventListener('click', async () => {
     generateInvigilatorReportButton.disabled = true;
     generateInvigilatorReportButton.textContent = "Calculating...";
@@ -7029,138 +7029,153 @@ generateInvigilatorReportButton.addEventListener('click', async () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     
     try {
-        loadGlobalScribeList(); // <-- ADD THIS LINE
-        // 1. Get College Name
+        loadGlobalScribeList(); 
         currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        // 2. Get FILTERED RAW student data
+        // 1. Get Data
         const data = getFilteredReportData('invigilator-summary');
         if (data.length === 0) {
             alert("No data found for the selected filter/session.");
             return;
         }
         
-        // 3. Get global scribe list
+        // 2. Get Scribes
         const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
         const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
         
-        // 4. Collate stats for each session
+        // 3. Collate Stats (Session -> Stream -> Count)
         const sessionStats = {};
         
         for (const student of data) {
             const sessionKey = `${student.Date} | ${student.Time}`;
             
-            // Initialize session if it's new
             if (!sessionStats[sessionKey]) {
                 sessionStats[sessionKey] = {
-                    date: student.Date,
-                    time: student.Time,
-                    regularStudents: 0,
-                    scribeStudents: 0
+                    streams: {}, // Object to hold stream-wise counts
+                    scribeCount: 0
                 };
             }
 
-            // 5. Check if student is a scribe
             const isScribe = scribeRegNos.has(student['Register Number']);
             
             if (isScribe) {
-                sessionStats[sessionKey].scribeStudents++;
+                sessionStats[sessionKey].scribeCount++;
             } else {
-                sessionStats[sessionKey].regularStudents++;
+                // Separate by Stream
+                const strm = student.Stream || "Regular";
+                if (!sessionStats[sessionKey].streams[strm]) {
+                    sessionStats[sessionKey].streams[strm] = 0;
+                }
+                sessionStats[sessionKey].streams[strm]++;
             }
         }
         
-        // 6. Calculate invigilators for the report
-        const reportData = [];
-        for (const sessionKey in sessionStats) {
-            const stats = sessionStats[sessionKey];
+        // 4. Build Report Data
+        const sortedSessionKeys = Object.keys(sessionStats).sort();
+        let tableRowsHtml = '';
+        
+        // Grand Totals
+        let grandTotalInvigs = 0;
+
+        sortedSessionKeys.forEach(key => {
+            const stats = sessionStats[key];
             
-            // Logic: 1 invigilator per 30 regular students
-            const regularInvigilators = Math.ceil(stats.regularStudents / 30);
+            // A. Stream Breakdown
+            let streamHtmlParts = [];
+            let streamInvigTotal = 0;
             
-            // Logic: 1 invigilator per 5 scribe students
-            const scribeInvigilators = Math.ceil(stats.scribeStudents / 5);
-            
-            const totalInvigilators = regularInvigilators + scribeInvigilators;
-            
-            reportData.push({
-                session: sessionKey,
-                regularStudents: stats.regularStudents,
-                regularInvigilators: regularInvigilators,
-                scribeStudents: stats.scribeStudents,
-                scribeInvigilators: scribeInvigilators,
-                totalInvigilators: totalInvigilators
+            // Sort streams (Regular first)
+            const sortedStreams = Object.keys(stats.streams).sort((a, b) => {
+                if (a === "Regular") return -1;
+                if (b === "Regular") return 1;
+                return a.localeCompare(b);
             });
-        }
+
+            sortedStreams.forEach(strm => {
+                const count = stats.streams[strm];
+                const requiredInvigs = Math.ceil(count / 30); // 1 per 30 rule PER STREAM
+                streamInvigTotal += requiredInvigs;
+                
+                streamHtmlParts.push(`
+                    <div class="flex justify-between items-center text-sm mb-1 border-b border-gray-200 pb-1 last:border-0">
+                        <span class="font-medium text-gray-700">${strm}:</span>
+                        <span class="text-gray-600">
+                            <strong>${count}</strong> Students 
+                            <span class="text-xs text-gray-400">→</span> 
+                            <strong class="text-blue-600">${requiredInvigs}</strong> Inv
+                        </span>
+                    </div>
+                `);
+            });
+
+            // B. Scribe Breakdown
+            const scribeCount = stats.scribeCount;
+            const scribeInvigs = Math.ceil(scribeCount / 5); // 1 per 5 rule
+            
+            // C. Session Total
+            const sessionTotalInvigs = streamInvigTotal + scribeInvigs;
+            grandTotalInvigs += sessionTotalInvigs;
+
+            tableRowsHtml += `
+                <tr>
+                    <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">${key}</td>
+                    <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
+                        ${streamHtmlParts.join('')}
+                    </td>
+                    <td style="border: 1px solid #ccc; padding: 8px; text-align: center; vertical-align: top;">
+                        <div class="text-sm">
+                            <strong>${scribeCount}</strong> Students<br>
+                            <span class="text-xs text-gray-500">↓</span><br>
+                            <strong class="text-orange-600">${scribeInvigs}</strong> Inv
+                        </div>
+                    </td>
+                    <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; vertical-align: middle; background-color: #f9fafb;">
+                        ${sessionTotalInvigs}
+                    </td>
+                </tr>
+            `;
+        });
         
-        // Sort by session
-        reportData.sort((a, b) => a.session.localeCompare(b.session));
-        
-        // 7. Build HTML
-        let allPagesHtml = '';
-        
-        allPagesHtml += `
+        // 5. Generate HTML
+        const allPagesHtml = `
             <div class="print-page">
-                <div class="print-header-group">
+                <div class="print-header-group" style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
                     <h1>${currentCollegeName}</h1>
-                    <h2>Invigilator Requirement Summary</h2>
-                    <h3 style="font-size: 11pt; font-style: italic;">
-                        Calculation: 1 per 30 Regular Students, 1 per 5 Scribe Students
+                    <h2>Invigilator Requirement Summary (Stream-Wise)</h2>
+                    <h3 style="font-size: 10pt; font-style: italic; margin-top: 5px; color: #555;">
+                        <strong>Norms:</strong> 1 Invigilator per 30 Candidates (Calculated separately per stream) | 1 Invigilator per 5 Scribes
                     </h3>
                 </div>
                 
-                <table class="invigilator-report-table">
+                <table class="invigilator-report-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                     <thead>
-                        <tr>
-                            <th>Session (Date | Time)</th>
-                            <th>Regular Students</th>
-                            <th>Regular Invigilators</th>
-                            <th>Scribe Students</th>
-                            <th>Scribe Invigilators</th>
-                            <th>Total Invigilators</th>
+                        <tr style="background-color: #f3f4f6;">
+                            <th style="border: 1px solid #000; padding: 10px; width: 20%;">Session</th>
+                            <th style="border: 1px solid #000; padding: 10px; width: 45%;">Candidate Breakdown (Stream-wise)</th>
+                            <th style="border: 1px solid #000; padding: 10px; width: 20%; text-align: center;">Scribe Req.</th>
+                            <th style="border: 1px solid #000; padding: 10px; width: 15%; text-align: center;">Total Required</th>
                         </tr>
                     </thead>
                     <tbody>
-        `;
-        
-        let totalRegular = 0;
-        let totalScribe = 0;
-        let totalAll = 0;
-
-        reportData.forEach(row => {
-            allPagesHtml += `
-                <tr>
-                    <td>${row.session}</td>
-                    <td>${row.regularStudents}</td>
-                    <td>${row.regularInvigilators}</td>
-                    <td>${row.scribeStudents}</td>
-                    <td>${row.scribeInvigilators}</td>
-                    <td>${row.totalInvigilators}</td>
-                </tr>
-            `;
-            totalRegular += row.regularInvigilators;
-            totalScribe += row.scribeInvigilators;
-            totalAll += row.totalInvigilators;
-        });
-
-        // Add Total Row
-        allPagesHtml += `
+                        ${tableRowsHtml}
                     </tbody>
                     <tfoot>
-                        <tr>
-                            <td><strong>Total</strong></td>
-                            <td colspan="1"></td>
-                            <td><strong>${totalRegular}</strong></td>
-                            <td colspan="1"></td>
-                            <td><strong>${totalScribe}</strong></td>
-                            <td><strong>${totalAll}</strong></td>
+                        <tr style="background-color: #eee;">
+                            <td colspan="3" style="border: 1px solid #000; padding: 10px; text-align: right; font-weight: bold; text-transform: uppercase;">Grand Total Invigilator Duties:</td>
+                            <td style="border: 1px solid #000; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em;">${grandTotalInvigs}</td>
                         </tr>
                     </tfoot>
                 </table>
+                
+                <div style="margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div style="font-size: 9pt; color: #666;">Generated by ExamFlow</div>
+                    <div class="signature" style="text-align: center; width: 200px; border-top: 1px solid #000; padding-top: 5px;">
+                        Chief Superintendent
+                    </div>
+                </div>
             </div>
         `;
         
-        // 8. Show report
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
         reportStatus.textContent = `Generated Invigilator Requirement Summary.`;
