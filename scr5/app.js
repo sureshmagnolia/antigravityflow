@@ -1270,7 +1270,8 @@ function checkManualAllotment(sessionKey) {
     return true;
 }
 
-// --- 1. Event listener for the "Generate Room-wise Report" button (Optimized V2) ---
+
+// --- 1. Event listener for the "Generate Room-wise Report" button (V3: Layout & Data Fixes) ---
 generateReportButton.addEventListener('click', async () => {
     const sessionKey = reportsSessionSelect.value; 
     if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
@@ -1332,10 +1333,17 @@ generateReportButton.addEventListener('click', async () => {
         let totalPagesGenerated = 0;
         const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
 
-        // --- Helper: Truncate Course Name (1st 3 words ... Last word) ---
-        function getTruncatedCourseName(fullName) {
-            const words = fullName.split(/\s+/);
-            if (words.length <= 4) return fullName;
+        // --- Helper: Clean & Truncate Course Name ---
+        function getSmartCourseName(fullName) {
+            // 1. Remove content inside square brackets []
+            let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
+            
+            // 2. Remove trailing hyphens or spaces
+            cleanName = cleanName.replace(/\s-\s$/, '').trim();
+
+            // 3. Truncate: 1st 3 Words ... Last Word
+            const words = cleanName.split(/\s+/);
+            if (words.length <= 4) return cleanName;
             return `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
         }
 
@@ -1353,7 +1361,7 @@ generateReportButton.addEventListener('click', async () => {
 
             // --- 1. Build Footer Content (Vertical Stack) ---
             
-            // A. Course Summary (QP Code First)
+            // A. Course Summary (QP Code First, Smart Name)
             let courseSummaryRows = '';
             const uniqueQPCodesInRoom = new Set();
             
@@ -1363,37 +1371,36 @@ generateReportButton.addEventListener('click', async () => {
                 const qpDisplay = qpCode || "N/A";
                 
                 if (qpCode) uniqueQPCodesInRoom.add(qpCode);
-                else uniqueQPCodesInRoom.add(courseName.substring(0, 10)); // Fallback key
+                else uniqueQPCodesInRoom.add(courseName.substring(0, 10)); 
                 
-                const truncatedName = getTruncatedCourseName(courseName);
+                const smartName = getSmartCourseName(courseName);
 
                 courseSummaryRows += `
                     <tr>
-                        <td style="border: 1px solid #ccc; padding: 2px 4px; font-weight:bold; width: 15%;">${qpDisplay}</td>
-                        <td style="border: 1px solid #ccc; padding: 2px 4px; width: 75%; font-size: 8.5pt;">${truncatedName}</td>
-                        <td style="border: 1px solid #ccc; padding: 2px 4px; text-align: center; font-weight: bold; width: 10%;">${count}</td>
+                        <td style="border: 1px solid #ccc; padding: 1px 3px; font-weight:bold; width: 15%; text-align:left;">${qpDisplay}</td>
+                        <td style="border: 1px solid #ccc; padding: 1px 3px; width: 75%; font-size: 8.5pt;">${smartName}</td>
+                        <td style="border: 1px solid #ccc; padding: 1px 3px; text-align: center; font-weight: bold; width: 10%;">${count}</td>
                     </tr>`;
             }
 
-            // B. Booklet Balance (Inline Style)
-            let qpBalanceHtml = '';
+            // B. Booklet Details (Written Scripts)
+            let writtenScriptsHtml = '';
             uniqueQPCodesInRoom.forEach(code => {
-                // Inline span for compactness
-                qpBalanceHtml += `<span style="margin-right: 15px; display:inline-block;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 30px;"></span></span> `;
+                writtenScriptsHtml += `<span style="margin-right: 15px; white-space: nowrap;">${code}: <span style="border-bottom: 1px solid #000; display: inline-block; width: 35px;"></span></span> `;
             });
             
             const hasScribe = session.students.some(s => s.isPlaceholder);
             const scribeFootnote = hasScribe ? '<div class="scribe-footnote" style="margin-top:5px;">* = Scribe Assistance</div>' : '';
 
-            // C. Full Footer HTML (Stacked)
+            // C. Full Footer HTML (Neat Vertical Stack)
             const invigilatorFooterHtml = `
-                <div class="invigilator-footer" style="margin-top: auto; padding-top: 0.5rem; page-break-inside: avoid;">
+                <div class="invigilator-footer" style="margin-top: 1rem; padding-top: 0; page-break-inside: avoid; font-size: 9pt;">
                     
                     <div style="margin-bottom: 8px;">
-                        <div style="font-weight: bold; font-size: 9pt; margin-bottom: 2px;">Course Summary:</div>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+                        <div style="font-weight: bold; margin-bottom: 2px;">Course Summary:</div>
+                        <table style="width: 100%; border-collapse: collapse;">
                             <thead>
-                                <tr style="background-color: #f9f9f9;">
+                                <tr style="background-color: #f0f0f0;">
                                     <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">QP Code</th>
                                     <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">Course Name</th>
                                     <th style="border: 1px solid #ccc; padding: 2px; text-align: center;">Count</th>
@@ -1403,14 +1410,22 @@ generateReportButton.addEventListener('click', async () => {
                         </table>
                     </div>
 
-                    <div style="border: 1px solid #000; padding: 6px; font-size: 9pt; margin-bottom: 10px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: bold;">
-                            <span>Booklets Received: _______</span>
-                            <span>Used: _______</span>
-                            <span>Total Returned: _______</span>
+                    <div style="border: 1px solid #000; padding: 5px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold;">
+                            <span>Booklets Received: __________</span>
+                            <span>Used: __________</span>
+                            <span>Total: __________</span>
                         </div>
-                        <div style="border-top: 1px dotted #ccc; padding-top: 4px;">
-                            <strong>Balance:</strong> ${qpBalanceHtml}
+                        
+                        <div style="border-top: 1px dotted #999; padding-top: 5px; margin-bottom: 5px;">
+                            <strong>Written Booklets (QP Wise):</strong><br>
+                            <div style="margin-top: 3px; line-height: 1.5;">
+                                ${writtenScriptsHtml}
+                            </div>
+                        </div>
+                        
+                        <div style="border-top: 1px dotted #999; padding-top: 5px; text-align: right;">
+                            <strong>Total Booklets Written:</strong> __________
                         </div>
                     </div>
                     
@@ -1450,6 +1465,10 @@ generateReportButton.addEventListener('click', async () => {
                     const courseKey = getBase64CourseKey(student.Course);
                     const qpCode = sessionQPCodes[courseKey] || "";
                     const qpCodePrefix = qpCode ? `(${qpCode}) ` : ""; 
+                    
+                    // Use same clean name logic for table too? 
+                    // User said "Course Name Truncated Dynamically" inside *Course Summary*.
+                    // For Main Table, let's keep the standard short truncation to save space.
                     const courseWords = student.Course.split(/\s+/);
                     const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
                     const tableCourseName = qpCodePrefix + truncatedCourse;
@@ -1460,14 +1479,15 @@ generateReportButton.addEventListener('click', async () => {
                     const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
                     const remarkText = student.remark || ''; 
                     
+                    // *** TIGHTER PADDING HERE (2px) TO PREVENT PAGE 1 OVERFLOW ***
                     rowsHtml += `
-                        <tr ${rowClass}>
-                            <td class="sl-col">${seatNumber}${asterisk}</td>
-                            <td class="course-col">${displayCourseName}</td>
-                            <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold;">${displayRegNo}</td>
-                            <td class="name-col">${student.Name}</td>
-                            <td class="remarks-col">${remarkText}</td>
-                            <td class="signature-col"></td>
+                        <tr ${rowClass} style="height: 2.5rem;">
+                            <td class="sl-col" style="padding: 2px 4px;">${seatNumber}${asterisk}</td>
+                            <td class="course-col" style="padding: 2px 4px;">${displayCourseName}</td>
+                            <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 2px 4px;">${displayRegNo}</td>
+                            <td class="name-col" style="padding: 2px 4px;">${student.Name}</td>
+                            <td class="remarks-col" style="padding: 2px 4px;">${remarkText}</td>
+                            <td class="signature-col" style="padding: 2px 4px;"></td>
                         </tr>
                     `;
                 });
@@ -1480,20 +1500,22 @@ generateReportButton.addEventListener('click', async () => {
 
             const getHeader = (pageNum) => {
                 if (pageNum === 1) {
-                    // FULL Header for Page 1
                     return `
-                        <div class="print-header-group" style="position: relative; margin-bottom: 10px;">
+                        <div class="print-header-group" style="position: relative; margin-bottom: 5px;">
                             <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
                                 ${pageStream}
+                            </div>
+                            <div style="position: absolute; top: 0; left: 0; font-weight: bold; font-size: 12pt;">
+                                Page ${pageNum}
                             </div>
                             <h1>${currentCollegeName}</h1> 
                             <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
                             ${locationHtml} 
                         </div>`;
                 } else {
-                    // MINIMAL Header for Page 2
+                    // Minimal Header
                     return `
-                        <div class="print-header-group" style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 4px;">
+                        <div class="print-header-group" style="margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 2px;">
                             <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10pt; color: #444;">
                                 <span>Hall: ${serialNo} (${session.Room})</span>
                                 <span>Page 2 - ${pageStream}</span>
@@ -1503,15 +1525,15 @@ generateReportButton.addEventListener('click', async () => {
             };
 
             const tableHeader = `
-                <table class="print-table">
+                <table class="print-table" style="border-collapse: collapse; width: 100%;">
                     <thead>
                         <tr>
-                            <th class="sl-col">Seat</th>
-                            <th class="course-col">Course (QP Code)</th>
-                            <th class="reg-col">Reg No</th>
-                            <th class="name-col">Name</th>
-                            <th class="remarks-col">Remarks</th>
-                            <th class="signature-col">Sign</th>
+                            <th class="sl-col" style="padding: 3px;">Seat</th>
+                            <th class="course-col" style="padding: 3px;">Course (QP Code)</th>
+                            <th class="reg-col" style="padding: 3px;">Register Number</th>
+                            <th class="name-col" style="padding: 3px;">Name</th>
+                            <th class="remarks-col" style="padding: 3px;">Remarks</th>
+                            <th class="signature-col" style="padding: 3px;">Sign</th>
                         </tr>
                     </thead>
                     <tbody>`;
@@ -1519,6 +1541,7 @@ generateReportButton.addEventListener('click', async () => {
             // --- RENDER PAGE 1 ---
             previousCourseName = ""; previousRegNoPrefix = ""; 
             const tableRowsPage1 = generateTableRows(studentsPage1);
+            
             allPagesHtml += `
                 <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(1)}
@@ -1526,7 +1549,7 @@ generateReportButton.addEventListener('click', async () => {
                     ${tableRowsPage1}
                     </tbody></table>
                     <div style="flex-grow: 1;"></div> 
-                    <div style="text-align:right; font-size:9pt; margin-top:5px;">Continued on Page 2...</div>
+                    <div style="text-align:right; font-size:8pt; margin-top:2px; color:#666;">Continued on Page 2...</div>
                 </div>
             `;
             totalPagesGenerated++;
@@ -1546,8 +1569,8 @@ generateReportButton.addEventListener('click', async () => {
                 <div class="print-page" style="height: 100%; display: flex; flex-direction: column;">
                     ${getHeader(2)}
                     ${page2TableContent}
-                    <div style="flex-grow: 1;"></div> 
-                    ${invigilatorFooterHtml}
+                    ${invigilatorFooterHtml} 
+                    <div style="flex-grow: 1;"></div>
                 </div>
             `;
             totalPagesGenerated++;
@@ -1555,7 +1578,7 @@ generateReportButton.addEventListener('click', async () => {
 
         reportOutputArea.innerHTML = allPagesHtml;
         reportOutputArea.style.display = 'block'; 
-        reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
+        reportStatus.textContent = `Generated ${totalPagesGenerated} total pages for ${sortedSessionKeys.length} room sessions.`;
         reportControls.classList.remove('hidden');
         
         roomCsvDownloadContainer.innerHTML = `
@@ -1572,8 +1595,7 @@ generateReportButton.addEventListener('click', async () => {
         generateReportButton.disabled = false;
         generateReportButton.textContent = "Generate Room-wise Seating Report";
     }
-});
-    
+});    
 
 // --- (V29 Restored) Event listener for the "Day-wise Student List" (Single Button) ---
 generateDaywiseReportButton.addEventListener('click', async () => {
