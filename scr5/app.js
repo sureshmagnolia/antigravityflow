@@ -3696,8 +3696,6 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-
-// --- Event listener for "Generate QP Distribution Report" (V2: QP-Centric with Stream Demarcation) ---
 // --- Event listener for "Generate QP Distribution Report" (Stream-Aware) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
@@ -3825,7 +3823,6 @@ if (generateQpDistributionReportButton) {
         }
     });
 }
-
 
 // *** NEW: Helper for Absentee Report (V10.1 FIX) ***
 function formatRegNoList(regNos) {
@@ -5144,6 +5141,7 @@ sessionSelectQP.addEventListener('change', () => {
 });
 
 // V92: Renders the QP Code list (Grouped by Stream)
+// V93: Renders the QP Code list (Regular First, then Alphabetical)
 function render_qp_code_list(sessionKey) {
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -5161,9 +5159,16 @@ function render_qp_code_list(sessionKey) {
         }
     });
 
-    // 2. Sort: Stream first, then Course Name
+    // 2. Sort: Regular Stream First, then Other Streams Alphabetically, then Course Name
     uniquePairs.sort((a, b) => {
+        // Force "Regular" to the top
+        if (a.stream === "Regular" && b.stream !== "Regular") return -1;
+        if (a.stream !== "Regular" && b.stream === "Regular") return 1;
+        
+        // If streams are different (and neither is Regular), sort streams alphabetically
         if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+        
+        // If streams are the same, sort by Course Name
         return a.course.localeCompare(b.course);
     });
 
@@ -5182,15 +5187,18 @@ function render_qp_code_list(sessionKey) {
     uniquePairs.forEach(item => {
         // Add Stream Header if it changes
         if (item.stream !== currentStream) {
+            // Add a spacer if it's not the first group
+            const marginTop = currentStream ? "mt-6" : "mt-0";
+            
             htmlChunks.push(`
-                <div class="bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 mt-4 first:mt-0">
+                <div class="${marginTop} mb-2 bg-indigo-50 p-2 font-bold text-indigo-800 border-b border-indigo-200 rounded-t-md">
                     ${item.stream} Stream
                 </div>
             `);
             currentStream = item.stream;
         }
 
-        // Generate Key using NEW Helper
+        // Generate Key using Helper (ensure getQpKey exists in your code)
         const base64Key = getQpKey(item.course, item.stream);
         const savedCode = sessionCodes[base64Key] || "";
 
@@ -7057,6 +7065,7 @@ window.real_disable_all_report_buttons = function(disabled) {
     });
 
 // 3A. Show Single Session Details (Stream-Aware)
+// 3A. Show Single Session Details (Stream-Aware)
 function showStudentDetailsModal(regNo, sessionKey) {
     document.getElementById('search-result-single-view').classList.remove('hidden');
     document.getElementById('search-result-global-view').classList.add('hidden');
@@ -7110,6 +7119,82 @@ function showStudentDetailsModal(regNo, sessionKey) {
     } else {
         document.getElementById('search-result-scribe-block').classList.add('hidden');
     }
+
+    searchResultModal.classList.remove('hidden');
+}
+
+// 3B. Show Global Details (Stream-Aware)
+function showGlobalStudentDetails(regNo) {
+    document.getElementById('search-result-single-view').classList.add('hidden');
+    document.getElementById('search-result-global-view').classList.remove('hidden');
+
+    const exams = allStudentData.filter(s => s['Register Number'] === regNo);
+    if (exams.length === 0) return;
+
+    exams.sort((a, b) => {
+            const d1 = a.Date.split('.').reverse().join('');
+            const d2 = b.Date.split('.').reverse().join('');
+            return d1.localeCompare(d2) || a.Time.localeCompare(b.Time);
+    });
+
+    searchResultName.textContent = exams[0].Name;
+    searchResultRegNo.textContent = regNo;
+
+    const tbody = document.getElementById('global-search-table-body');
+    tbody.innerHTML = '';
+
+    loadQPCodes();
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    
+    exams.forEach(exam => {
+        const sessionKey = `${exam.Date} | ${exam.Time}`;
+        const sessionQPCodes = qpCodeMap[sessionKey] || {};
+        
+        // *** FIX: Use Stream-Aware Key ***
+        const streamDisplay = exam.Stream || "Regular";
+        const courseKey = getQpKey(exam.Course, streamDisplay);
+        const qpCode = sessionQPCodes[courseKey] || "";
+        const qpDisplay = qpCode ? `[QP: ${qpCode}]` : "";
+        // *********************************
+
+        const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
+        const allocatedSession = performOriginalAllocation(sessionStudents);
+        const studentAlloc = allocatedSession.find(s => s['Register Number'] === regNo);
+
+        let roomDisplay = "Not Allotted";
+        let rowClass = "";
+
+        if (studentAlloc && studentAlloc['Room No'] !== "Unallotted") {
+            const roomName = studentAlloc['Room No'];
+            const roomInfo = currentRoomConfig[roomName] || {};
+            const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
+            
+            roomDisplay = `<strong>${roomName}</strong> (Seat: ${studentAlloc.seatNumber})${location}`;
+            
+            const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+            const scribeRoom = sessionScribeMap[regNo];
+            if (scribeRoom) {
+                const sInfo = currentRoomConfig[scribeRoom] || {};
+                const sLoc = sInfo.location ? ` (${sInfo.location})` : "";
+                roomDisplay += `<br><span class="text-orange-600 text-xs font-bold">Scribe: ${scribeRoom}${sLoc}</span>`;
+                rowClass = "bg-orange-50";
+            }
+        }
+
+        const tr = document.createElement('tr');
+        if(rowClass) tr.className = rowClass;
+        tr.innerHTML = `
+            <td class="px-3 py-2 border-b">${exam.Date}</td>
+            <td class="px-3 py-2 border-b">${exam.Time}</td>
+            <td class="px-3 py-2 border-b text-xs">
+                ${exam.Course}<br>
+                <span class="font-bold text-gray-600">${qpDisplay}</span>
+                <span class="text-indigo-600 ml-1">(${streamDisplay})</span>
+            </td>
+            <td class="px-3 py-2 border-b text-sm">${roomDisplay}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 
     searchResultModal.classList.remove('hidden');
 }
