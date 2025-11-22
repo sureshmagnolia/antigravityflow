@@ -1019,9 +1019,7 @@ function chunkString(str, size) {
     return chunks;
 }
 
-// --- Update Dashboard Function ---
-
-// --- Update Dashboard Function (Global + Today + Smart Date Picker) ---
+// --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
@@ -1081,8 +1079,7 @@ function updateDashboard() {
 
     // 3. POPULATE SMART DATE DROPDOWN
     if (dateSelect && specificDateGrid) {
-        // Only repopulate if empty or data changed (simple check: length match)
-        // For simplicity, we repopulate to ensure accuracy after new upload
+        // Only repopulate if empty or data changed
         dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
         
         uniqueDays.forEach(dateStr => {
@@ -1100,10 +1097,6 @@ function updateDashboard() {
         if (uniqueDaysSet.has(tomorrowStr)) {
             dateSelect.value = tomorrowStr;
             updateSpecificDateGrid(tomorrowStr, specificDateGrid);
-        } else if (uniqueDays.length > 0 && !dateSelect.value) {
-             // Optional: Select the very first date if tomorrow has no exams?
-             // dateSelect.value = uniqueDays[0];
-             // updateSpecificDateGrid(uniqueDays[0], specificDateGrid);
         }
 
         // Listener
@@ -1111,6 +1104,41 @@ function updateDashboard() {
             updateSpecificDateGrid(e.target.value, specificDateGrid);
         };
     }
+
+    // 4. UPDATE DATA LOADING TAB STATUS (Moved outside the listener so it runs immediately)
+    const dataTabStatusText = document.getElementById('data-tab-status-text');
+    const btnDownloadCurrentCsv = document.getElementById('btn-download-current-csv');
+
+    if (dataTabStatusText && btnDownloadCurrentCsv) {
+        if (allStudentData && allStudentData.length > 0) {
+            // Determine source context
+            dataTabStatusText.textContent = `Data of ${allStudentData.length} Students Loaded (Cloud/Local)`;
+            btnDownloadCurrentCsv.classList.remove('hidden');
+            
+            // Attach one-time listener
+            btnDownloadCurrentCsv.onclick = () => {
+                if (!allStudentData || allStudentData.length === 0) {
+                    alert("No data available to download.");
+                    return;
+                }
+                const csvContent = convertToCSV(allStudentData);
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `ExamFlow_Full_Data_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+        } else {
+            dataTabStatusText.textContent = "No student data loaded.";
+            btnDownloadCurrentCsv.classList.add('hidden');
+        }
+    }
+
+    // 5. REFRESH CALENDAR (If present)
+    if (typeof renderCalendar === 'function') renderCalendar();
 }
 
 // ==========================================
