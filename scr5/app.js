@@ -8292,94 +8292,101 @@ async function findMyCollege(user) {
         });
     }
 
-// --- Helper: Parse CSV String to JSON (Smart Stream Detection) ---
-    function parseCsvRaw(csvText, streamName = "Regular") {
-        const lines = csvText.trim().split('\n');
-        const headersLine = lines.shift().trim();
-        const headers = headersLine.split(',');
+// --- Helper: Parse CSV String to JSON (Smart Stream & Source) ---
+function parseCsvRaw(csvText, streamName = "Regular") {
+    const lines = csvText.trim().split('\n');
+    const headersLine = lines.shift().trim();
+    const headers = headersLine.split(',');
 
-        const dateIndex = headers.indexOf('Date');
-        const timeIndex = headers.indexOf('Time');
-        const courseIndex = headers.indexOf('Course');
-        const regNumIndex = headers.indexOf('Register Number');
-        const nameIndex = headers.indexOf('Name');
-        // 1. Check if CSV has a Stream column
-        const streamIndex = headers.indexOf('Stream'); 
+    const dateIndex = headers.indexOf('Date');
+    const timeIndex = headers.indexOf('Time');
+    const courseIndex = headers.indexOf('Course');
+    const regNumIndex = headers.indexOf('Register Number');
+    const nameIndex = headers.indexOf('Name');
+    const streamIndex = headers.indexOf('Stream'); 
+    const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
 
-        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-            throw new Error("Missing required headers (Register Number, Name, Course)");
-        }
+    if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+        throw new Error("Missing required headers (Register Number, Name, Course)");
+    }
 
-        const parsedData = [];
+    const parsedData = [];
+    
+    for (const line of lines) {
+        if (!line.trim()) continue; 
         
-        for (const line of lines) {
-            if (!line.trim()) continue; 
+        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+        const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+        
+        if (values.length === headers.length) {
             
-            // Regex for quoted CSV fields
-            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-            
-            if (values.length === headers.length) {
-                
-                // 2. Determine Stream Priority
-                // Priority: CSV Value > Dropdown Selection > Default "Regular"
-                let rowStream = streamName; // Start with dropdown selection
-                
-                if (streamIndex !== -1) {
-                    const csvValue = values[streamIndex];
-                    // Only override if the CSV actually has text in that cell
-                    if (csvValue && csvValue.trim() !== "") {
-                        rowStream = csvValue.trim();
-                    }
+            // 1. Stream Priority
+            let rowStream = streamName;
+            if (streamIndex !== -1) {
+                const csvValue = values[streamIndex];
+                if (csvValue && csvValue.trim() !== "") {
+                    rowStream = csvValue.trim();
                 }
-
-                parsedData.push({
-                    'Date': values[dateIndex],
-                    'Time': values[timeIndex],
-                    'Course': values[courseIndex], 
-                    'Register Number': values[regNumIndex],
-                    'Name': values[nameIndex],
-                    'Stream': rowStream // Use the smart stream
-                });
             }
-        }
-        
-        // Sort the new data
-        try {
-            parsedData.sort((a, b) => {
-                const keyA = getJsSortKey(a);
-                const keyB = getJsSortKey(b);
-                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
-                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
-                return keyA.courseName.localeCompare(keyB.courseName);
+
+            // 2. Source File Priority (Capture or Default)
+            let rowSource = "Manual Upload";
+            if (sourceIndex !== -1) {
+                const sourceVal = values[sourceIndex];
+                if (sourceVal && sourceVal.trim() !== "") {
+                    rowSource = sourceVal.trim();
+                }
+            }
+
+            parsedData.push({
+                'Date': values[dateIndex],
+                'Time': values[timeIndex],
+                'Course': values[courseIndex], 
+                'Register Number': values[regNumIndex],
+                'Name': values[nameIndex],
+                'Stream': rowStream,
+                'Source File': rowSource // <--- NEW Field
             });
-        } catch (e) { console.warn("Sort failed", e); }
-
-        return parsedData;
-    }
-// --- Helper: Convert JSON Data to CSV String ---
-    function convertToCSV(objArray) {
-        const array = typeof objArray != 'object' ? JSON.parse(objArray) : objArray;
-        // CSV Header
-        let str = 'Date,Time,Course,Register Number,Name,Stream\r\n';
-
-        for (let i = 0; i < array.length; i++) {
-            let line = '';
-            // Handle fields and escape commas/quotes if necessary
-            const date = array[i].Date || "";
-            const time = array[i].Time || "";
-            // Remove existing commas in Course to prevent CSV breaking, or wrap in quotes
-            const course = (array[i].Course || "").replace(/"/g, '""'); 
-            const reg = array[i]['Register Number'] || "";
-            const name = (array[i].Name || "").replace(/"/g, '""');
-            const stream = array[i].Stream || "Regular";
-
-            // Wrap strings in quotes
-            line = `${date},${time},"${course}",${reg},"${name}",${stream}`;
-            str += line + '\r\n';
         }
-        return str;
     }
+    
+    // Sort the new data
+    try {
+        parsedData.sort((a, b) => {
+            const keyA = getJsSortKey(a);
+            const keyB = getJsSortKey(b);
+            if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+            if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
+            return keyA.courseName.localeCompare(keyB.courseName);
+        });
+    } catch (e) { console.warn("Sort failed", e); }
+
+    return parsedData;
+}
+// --- Helper: Convert JSON Data to CSV String (With Source File) ---
+function convertToCSV(objArray) {
+    const array = typeof objArray != 'object' ? JSON.parse(objArray) : objArray;
+    
+    // Add 'Source File' to header
+    let str = 'Date,Time,Course,Register Number,Name,Stream,Source File\r\n';
+
+    for (let i = 0; i < array.length; i++) {
+        let line = '';
+        
+        const date = array[i].Date || "";
+        const time = array[i].Time || "";
+        const course = (array[i].Course || "").replace(/"/g, '""'); 
+        const reg = array[i]['Register Number'] || "";
+        const name = (array[i].Name || "").replace(/"/g, '""');
+        const stream = array[i].Stream || "Regular";
+        const source = (array[i]['Source File'] || "Unknown").replace(/"/g, '""'); // <--- NEW
+
+        // Wrap strings in quotes
+        line = `${date},${time},"${course}",${reg},"${name}",${stream},"${source}"`;
+        str += line + '\r\n';
+    }
+    return str;
+}
 
   // --- Helper: Load Data into App & Cloud ---
     function loadStudentData(dataArray) {
