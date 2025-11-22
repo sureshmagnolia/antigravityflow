@@ -1234,6 +1234,8 @@ function chunkString(str, size) {
 }
 
 // --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
+// [In app.js - Replace the existing updateDashboard function]
+
 function updateDashboard() {
     const dashContainer = document.getElementById('data-snapshot');
     const dashStudent = document.getElementById('dash-student-count');
@@ -1249,6 +1251,7 @@ function updateDashboard() {
     const dateSelect = document.getElementById('dashboard-date-select');
     const specificDateGrid = document.getElementById('specific-date-grid');
 
+    // If no data, hide everything
     if (!allStudentData || allStudentData.length === 0) {
         if(dashContainer) dashContainer.classList.add('hidden');
         if(todayContainer) todayContainer.classList.add('hidden');
@@ -1258,7 +1261,6 @@ function updateDashboard() {
     // 1. UPDATE GLOBAL STATS
     const totalStudents = allStudentData.length;
     const uniqueCourses = new Set(allStudentData.map(s => s.Course)).size;
-    
     const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
     const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
         const d1 = a.split('.').reverse().join('');
@@ -1271,6 +1273,7 @@ function updateDashboard() {
     if(dashDay) dashDay.textContent = uniqueDays.length.toLocaleString();
     if(dashContainer) dashContainer.classList.remove('hidden');
 
+    // Ensure scribe list is loaded
     if (globalScribeList.length === 0) {
         globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
     }
@@ -1282,11 +1285,21 @@ function updateDashboard() {
     if(todayDateDisplay) todayDateDisplay.textContent = today.toDateString();
     
     const todayHtml = generateSessionCardsHtml(todayStr);
-    if (todayHtml) {
-        if(todayGrid) todayGrid.innerHTML = todayHtml;
-        if(todayContainer) todayContainer.classList.remove('hidden');
-    } else {
-        if(todayContainer) todayContainer.classList.add('hidden'); 
+    
+    if (todayContainer) {
+        if (todayHtml) {
+            // Show Cards
+            if(todayGrid) todayGrid.innerHTML = todayHtml;
+            todayContainer.classList.remove('hidden');
+        } else {
+            // Show "No Exams" Message (Instead of hiding)
+            if(todayGrid) todayGrid.innerHTML = `
+                <div class="col-span-full bg-gray-50 p-6 rounded-lg border border-gray-200 text-center">
+                    <p class="text-gray-500 font-medium">No exams scheduled for today (${todayStr}).</p>
+                    <p class="text-xs text-gray-400 mt-1">Check the calendar or search for a specific date below.</p>
+                </div>`;
+            todayContainer.classList.remove('hidden'); 
+        }
     }
 
     // 3. POPULATE SMART DATE DROPDOWN
@@ -1300,13 +1313,15 @@ function updateDashboard() {
             dateSelect.appendChild(option);
         });
 
+        // Auto-select tomorrow if applicable (optional feature)
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = formatDateToCSV(tomorrow);
 
         if (uniqueDaysSet.has(tomorrowStr)) {
-            dateSelect.value = tomorrowStr;
-            updateSpecificDateGrid(tomorrowStr, specificDateGrid);
+            // Optional: Pre-select tomorrow if desired
+            // dateSelect.value = tomorrowStr;
+            // updateSpecificDateGrid(tomorrowStr, specificDateGrid);
         }
 
         dateSelect.onchange = (e) => {
@@ -1314,7 +1329,7 @@ function updateDashboard() {
         };
     }
 
-    // 4. UPDATE DATA LOADING TAB STATUS (Fixed Placement)
+    // 4. UPDATE DATA LOADING TAB STATUS
     const dataTabStatusText = document.getElementById('data-tab-status-text');
     const btnDownloadCurrentCsv = document.getElementById('btn-download-current-csv');
 
@@ -1324,10 +1339,6 @@ function updateDashboard() {
             btnDownloadCurrentCsv.classList.remove('hidden');
             
             btnDownloadCurrentCsv.onclick = () => {
-                if (!allStudentData || allStudentData.length === 0) {
-                    alert("No data available to download.");
-                    return;
-                }
                 const csvContent = convertToCSV(allStudentData);
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
@@ -1344,8 +1355,9 @@ function updateDashboard() {
         }
     }
 
-    // 5. REFRESH CALENDAR
+    // 5. REFRESH CALENDAR & SETTINGS
     if (typeof renderCalendar === 'function') renderCalendar();
+    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
 }
 
 // ==========================================
