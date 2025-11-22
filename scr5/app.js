@@ -8625,7 +8625,194 @@ async function findMyCollege(user) {
             syncDataToCloud();
         }
     };
+// --- Event listener for "Generate Room Allotment Summary" ---
+const generateRoomSummaryButton = document.getElementById('generate-room-summary-button');
 
+if (generateRoomSummaryButton) {
+    generateRoomSummaryButton.addEventListener('click', async () => {
+        const sessionKey = reportsSessionSelect.value;
+        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+
+        generateRoomSummaryButton.disabled = true;
+        generateRoomSummaryButton.textContent = "Generating...";
+        reportOutputArea.innerHTML = "";
+        reportControls.classList.add('hidden');
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        try {
+            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            getRoomCapacitiesFromStorage(); // Ensure config is loaded
+
+            // 1. Get Session Data
+            const [date, time] = sessionKey.split(' | ');
+            
+            // 2. Fetch Allotments
+            const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+            const sessionRegularAllotment = allAllotments[sessionKey] || [];
+            
+            const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+
+            // 3. Get Serial Numbers (Unified)
+            const roomSerialMap = getRoomSerialMap(sessionKey);
+
+            // 4. Prepare Data Structure
+            const roomGroups = {}; // { "Regular": [rooms], "Distance": [rooms], "Scribe": [rooms] }
+            
+            // A. Process Regular/Distance Rooms
+            sessionRegularAllotment.forEach(room => {
+                const stream = room.stream || "Regular";
+                if (!roomGroups[stream]) roomGroups[stream] = [];
+                
+                roomGroups[stream].push({
+                    serial: roomSerialMap[room.roomName] || 999,
+                    name: room.roomName,
+                    count: room.students.length,
+                    type: 'normal'
+                });
+            });
+
+            // B. Process Scribe Rooms
+            // Invert map: { roomName: [students] }
+            const scribeRoomsInv = {};
+            Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
+                if (!scribeRoomsInv[roomName]) scribeRoomsInv[roomName] = 0;
+                scribeRoomsInv[roomName]++;
+            });
+
+            if (Object.keys(scribeRoomsInv).length > 0) {
+                roomGroups['Scribe'] = [];
+                Object.entries(scribeRoomsInv).forEach(([roomName, count]) => {
+                    roomGroups['Scribe'].push({
+                        serial: roomSerialMap[roomName] || 999,
+                        name: roomName,
+                        count: count,
+                        type: 'scribe'
+                    });
+                });
+            }
+
+            // 5. Sort Streams (Regular First)
+            const sortedStreams = Object.keys(roomGroups).sort((a, b) => {
+                if (a === "Regular") return -1;
+                if (b === "Regular") return 1;
+                if (a === "Scribe") return 1; // Scribe last
+                if (b === "Scribe") return -1;
+                return a.localeCompare(b);
+            });
+
+            // 6. Generate HTML
+            let tableContent = '';
+            let grandTotalStudents = 0;
+            let grandTotalRooms = 0;
+
+            sortedStreams.forEach(stream => {
+                const rooms = roomGroups[stream];
+                // Sort rooms by Serial Number
+                rooms.sort((a, b) => a.serial - b.serial);
+
+                // Stream Header
+                tableContent += `
+                    <tr class="bg-gray-100 print:bg-gray-100">
+                        <td colspan="3" style="padding: 8px; font-weight: bold; border: 1px solid #000; text-transform: uppercase; font-size: 0.9em;">
+                            ${stream} Stream
+                        </td>
+                    </tr>
+                `;
+
+                let streamTotal = 0;
+                rooms.forEach(room => {
+                    const roomInfo = currentRoomConfig[room.name] || {};
+                    const location = roomInfo.location ? `${room.name} <span class="text-xs text-gray-500">(${roomInfo.location})</span>` : room.name;
+                    
+                    tableContent += `
+                        <tr>
+                            <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 15%; font-weight: bold;">
+                                ${room.serial}
+                            </td>
+                            <td style="padding: 6px; border: 1px solid #000; width: 65%;">
+                                ${location}
+                            </td>
+                            <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 20%; font-weight: bold;">
+                                ${room.count}
+                            </td>
+                        </tr>
+                    `;
+                    streamTotal += room.count;
+                });
+                
+                // Stream Subtotal (Optional, but good for checking)
+                // tableContent += `<tr><td colspan="2" class="text-right pr-2 font-bold border border-black">Total:</td><td class="text-center font-bold border border-black">${streamTotal}</td></tr>`;
+                
+                grandTotalStudents += streamTotal;
+                grandTotalRooms += rooms.length;
+            });
+
+            const reportHtml = `
+                <div class="print-page">
+                    <div class="print-header-group" style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                        <h1>${currentCollegeName}</h1>
+                        <h2>Room Allotment Summary</h2>
+                        <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+                    </div>
+
+                    <table class="w-full border-collapse border border-black text-sm">
+                        <thead>
+                            <tr class="bg-gray-200 print:bg-gray-200">
+                                <th style="padding: 8px; border: 1px solid #000; text-align: center;">Serial No</th>
+                                <th style="padding: 8px; border: 1px solid #000; text-align: left;">Location / Room</th>
+                                <th style="padding: 8px; border: 1px solid #000; text-align: center;">Students Allotted</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableContent}
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-gray-100 print:bg-gray-100">
+                                <td colspan="2" style="padding: 8px; border: 1px solid #000; text-align: right; font-weight: bold;">
+                                    GRAND TOTAL (${grandTotalRooms} Rooms):
+                                </td>
+                                <td style="padding: 8px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 1.1em;">
+                                    ${grandTotalStudents}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    
+                    <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+                        <div class="text-xs text-gray-500">Generated by ExamFlow</div>
+                        <div class="text-center">
+                            <div style="border-top: 1px solid #000; width: 200px; padding-top: 5px; font-weight: bold;">
+                                Chief Superintendent
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            reportOutputArea.innerHTML = reportHtml;
+            reportOutputArea.style.display = 'block';
+            reportStatus.textContent = `Generated summary for ${grandTotalRooms} rooms.`;
+            reportControls.classList.remove('hidden');
+            lastGeneratedReportType = "Room_Summary";
+
+        } catch (e) {
+            console.error(e);
+            alert("Error: " + e.message);
+        } finally {
+            generateRoomSummaryButton.disabled = false;
+            generateRoomSummaryButton.textContent = "Generate Room Allotment Summary";
+        }
+    });
+}
+
+// Also update real_disable_all_report_buttons to include the new button
+const originalDisableFuncV2 = window.real_disable_all_report_buttons;
+window.real_disable_all_report_buttons = function(disabled) {
+    if(originalDisableFuncV2) originalDisableFuncV2(disabled);
+    const btn = document.getElementById('generate-room-summary-button');
+    if(btn) btn.disabled = disabled;
+};
 // --- Run on initial page load ---
 loadInitialData();
     // --- NEW: Restore Last Active Tab ---
