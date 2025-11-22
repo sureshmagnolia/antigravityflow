@@ -8222,7 +8222,80 @@ function showGlobalStudentDetails(regNo) {
     });
 
     // --- END: STUDENT SEARCH FUNCTIONALITY ---
+// ==========================================
+// 🗑️ DELETE COURSE LOGIC
+// ==========================================
 
+const deleteCourseBtn = document.getElementById('delete-course-btn');
+
+// 1. Logic to Show/Hide Button (Hook into existing selection logic)
+// We attach a secondary listener to the dropdown for the delete button visibility
+if (editCourseSelect) {
+    editCourseSelect.addEventListener('change', () => {
+        if (editCourseSelect.value && deleteCourseBtn) {
+            deleteCourseBtn.classList.remove('hidden');
+        } else if (deleteCourseBtn) {
+            deleteCourseBtn.classList.add('hidden');
+        }
+    });
+}
+
+// 2. Handle Delete Click
+if (deleteCourseBtn) {
+    deleteCourseBtn.addEventListener('click', async () => {
+        const targetCourse = editCourseSelect.value;
+        const sessionVal = editSessionSelect.value;
+        
+        if (!targetCourse || !sessionVal) return;
+
+        const [date, time] = sessionVal.split(' | ');
+        
+        // Count students to be deleted
+        const studentsToDelete = allStudentData.filter(s => 
+            s.Date === date && 
+            s.Time === time && 
+            s.Course === targetCourse
+        );
+
+        if (studentsToDelete.length === 0) {
+            alert("No students found in this course to delete.");
+            return;
+        }
+
+        // Warning Confirmation
+        const confirmMsg = `
+🛑 DANGER: DELETE COURSE 🛑
+
+Target: ${targetCourse}
+Session: ${date} | ${time}
+Students: ${studentsToDelete.length} records will be removed.
+
+This action cannot be undone.
+Are you sure you want to delete this ENTIRE course?
+        `;
+
+        if (confirm(confirmMsg)) {
+            // Double Confirmation for safety
+            if(!confirm("Are you absolutely sure?")) return;
+
+            // --- EXECUTE DELETE ---
+            
+            // Filter OUT the students of this course
+            allStudentData = allStudentData.filter(s => 
+                !(s.Date === date && s.Time === time && s.Course === targetCourse)
+            );
+
+            // Save to Storage
+            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+            
+            alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
+            
+            // Sync to Cloud & Reload
+            if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+            window.location.reload();
+        }
+    });
+}
 // ==========================================
 // 🚀 SUPER ADMIN LOGIC
 // ==========================================
