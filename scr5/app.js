@@ -1877,7 +1877,32 @@ generateReportButton.addEventListener('click', async () => {
         `;
         
         let totalPagesGenerated = 0;
-        const sortedSessionKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
+       const sortedSessionKeys = Object.keys(sessions).sort((a, b) => {
+            // Extract Date, Time, Room from the key "Date_Time_Room"
+            // Note: Room might contain underscores, so be careful with split
+            // Safe strategy: Split by first 2 underscores for Date_Time, rest is Room
+            const partsA = a.split('_');
+            const partsB = b.split('_');
+            
+            const dateA = partsA[0]; const timeA = partsA[1];
+            const roomA = partsA.slice(2).join('_');
+            
+            const dateB = partsB[0]; const timeB = partsB[1];
+            const roomB = partsB.slice(2).join('_');
+
+            // 1. Compare Date & Time (Chronologically)
+            const sessionA = `${dateA} | ${timeA}`;
+            const sessionB = `${dateB} | ${timeB}`;
+            const timeDiff = compareSessionStrings(sessionA, sessionB);
+            if (timeDiff !== 0) return timeDiff;
+
+            // 2. Compare Room Serial Number
+            const serialMap = getRoomSerialMap(sessionA); // Compute map for this session
+            const serialA = serialMap[roomA] || 999999;
+            const serialB = serialMap[roomB] || 999999;
+
+            return serialA - serialB;
+        });
 
         function getSmartCourseName(fullName) {
             let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
@@ -4778,9 +4803,29 @@ generateScribeProformaButton.addEventListener('click', async () => {
                 Course: s.Course,
                 OriginalRoom: originalRoomDisplay,
                 ScribeRoom: scribeRoomDisplay,
-                QPCode: sessionQPCodes[courseKey] || 'N/A'
+                QPCode: sessionQPCodes[courseKey] || 'N/A',
+                // We add ScribeSerial here so we can sort by it below
+                ScribeSerial: (rawScribeRoom && roomSerialMap[rawScribeRoom]) ? parseInt(roomSerialMap[rawScribeRoom]) : 999999
             });
         }
+
+        // --- SORTING LOGIC INSERTED HERE ---
+        reportRows.sort((a, b) => {
+            // 1. Chronological Session
+            const sessionA = `${a.Date} | ${a.Time}`;
+            const sessionB = `${b.Date} | ${b.Time}`;
+            const timeDiff = compareSessionStrings(sessionA, sessionB);
+            if (timeDiff !== 0) return timeDiff;
+
+            // 2. Scribe Room Serial
+            if (a.ScribeSerial !== b.ScribeSerial) {
+                return a.ScribeSerial - b.ScribeSerial;
+            }
+
+            // 3. Register Number (Tie-breaker)
+            return a.RegisterNumber.localeCompare(b.RegisterNumber);
+        });
+        // -----------------------------------
         
         let allPagesHtml = '';
         reportRows.forEach(student => {
