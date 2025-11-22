@@ -38,17 +38,26 @@ def find_time_in_text(text):
 
 def find_course_name(text):
     """Scans text for Course Name patterns."""
-    clean_page = text.replace('\n', ' ')
+    # 1. Normalize whitespace (collapse multiple spaces/newlines to single space)
+    clean_page = re.sub(r'\s+', ' ', text.replace('\n', ' ')).strip()
     
-    # Strategy 1: Look for explicit labels like "Paper Details:" or "Course:"
-    match = re.search(r'(?:Paper Details|Course)\s*[:\-]?\s*(.*?)(?=\s*Exam Date|\s*Slot|\s*Date|$)', clean_page, re.IGNORECASE)
+    # 2. Define Stop Markers (Keywords that signal the END of the course name)
+    # Lookahead for: Exam Date, Date of Exam, Slot, Session, Time, Register No, Page
+    stop_markers = r'(?=\s*(?:Exam\s*Date|Date\s*of|Slot|Session|Time|Register|Reg\.|Reg\s*No|Page|$))'
+
+    # Strategy 1: Look for explicit labels (Course, Paper Details, Name of Paper)
+    # Captures everything after the label until a stop marker is found.
+    match = re.search(r'(?:Paper\s*Details|Course(?:\s*Name)?|Name\s*of\s*Paper|Paper)\s*[:\-]?\s*(.*?)' + stop_markers, clean_page, re.IGNORECASE)
+    if match:
+        val = clean_text(match.group(1))
+        if len(val) > 2: return val
+    
+    # Strategy 2: Look for UOC Course Code pattern (e.g., ENG1A02 ...) at start of text
+    # Pattern: 3+ Uppercase letters, 1 Digit, 1 Uppercase Letter, 2+ Digits
+    # Captures the code + following text until a stop marker.
+    match = re.search(r'([A-Z]{3,}\d[A-Z]\d{2,}\s+.*?)' + stop_markers, clean_page)
     if match:
         return clean_text(match.group(1))
-    
-    # Strategy 2: Look for course codes (e.g., ZOO1MN102)
-    match = re.search(r'([A-Z]{3,}\d[A-Z]\d{2,}.*?(\[.*?\]|\(.*\)))', clean_page)
-    if match:
-        return clean_text(match.group(0))
         
     return "Unknown"
 
@@ -128,14 +137,14 @@ async def process_file(file):
                     if reg_idx == -1: 
                         # Check typical column counts for your files
                         sample_row = table[0] if table else []
-                        if len(sample_row) >= 5: # Likely Standard UOC (Col 4 & 5) -> Index 3 & 4? Or 1 & 2?
+                        if len(sample_row) >= 5: 
                             # Let's look for data that LOOKS like a RegNo
                             for i, row in enumerate(table):
                                 clean = [str(c).strip() if c else "" for c in row]
                                 # RegNo usually starts with letters and ends with numbers, length > 5
                                 if len(clean) > 1 and re.search(r'[A-Z]+\d+', clean[1]):
                                     reg_idx = 1; name_idx = 2; break
-                                if len(clean) > 4 and re.search(r'[A-Z]+\d+', clean[4]): # New format?
+                                if len(clean) > 4 and re.search(r'[A-Z]+\d+', clean[4]): 
                                     reg_idx = 4; name_idx = 5; break
 
                     # Phase C: Extraction
