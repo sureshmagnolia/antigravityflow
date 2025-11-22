@@ -1426,7 +1426,7 @@ function initCalendar() {
     }
 }
 
-// --- Calendar Render Logic (V3: Circles & Light Red) ---
+// --- Calendar Render Logic (V4: Big Circles) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1480,17 +1480,16 @@ function renderCalendar() {
     }
 
     let html = "";
-    // Empty cells for days before start of month
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 min-h-[90px] border-r border-b border-gray-100"></div>`;
 
     for (let day = 1; day <= daysInMonth; day++) {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
-        // Base Cell Style: Centered Content
+        // Base Cell Style
         const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
         
-        // Today's Circle Style (Blue)
+        // Today's Circle Style
         const todayClass = isToday 
             ? "bg-blue-600 text-white shadow-md" 
             : "";
@@ -1507,14 +1506,13 @@ function renderCalendar() {
             const hasAN = data.pm.students > 0;
             
             if (hasFN || hasAN) {
-                circleClass = activeColor; // Apply Light Red Circle
+                circleClass = activeColor;
             }
 
             // FN Badge (Top Right)
             if (hasFN) {
-                badgesHtml += `<span class="absolute -top-1 -right-2 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">FN</span>`;
+                badgesHtml += `<span class="absolute -top-1 -right-1 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">FN</span>`;
                 
-                // Tooltip Logic
                 const regHalls = Math.ceil(data.am.regCount / 30);
                 const othHalls = Math.ceil(data.am.othCount / 30);
                 let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
@@ -1530,7 +1528,7 @@ function renderCalendar() {
 
             // AN Badge (Bottom Right)
             if (hasAN) {
-                badgesHtml += `<span class="absolute -bottom-1 -right-2 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">AN</span>`;
+                badgesHtml += `<span class="absolute -bottom-1 -right-1 text-[9px] font-bold bg-white border border-red-200 text-red-600 rounded-full px-1.5 py-0.5 shadow-sm">AN</span>`;
                 
                 const regHalls = Math.ceil(data.pm.regCount / 30);
                 const othHalls = Math.ceil(data.pm.othCount / 30);
@@ -1546,15 +1544,16 @@ function renderCalendar() {
             }
         }
 
+        // Red/White Tooltip Theme
         const tooltip = tooltipHtml ? `
-            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-gray-800 text-white text-xs rounded p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-gray-700">
+            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 bg-white text-gray-800 text-xs rounded-lg p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
-                <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+                <div class="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white"></div>
             </div>
         ` : "";
 
-        // Combine Classes: Today > Exam > Normal
-        let finalCircleClass = `w-10 h-10 rounded-full flex items-center justify-center relative font-bold ${todayClass || circleClass}`;
+        // *** SIZE UPDATE HERE: w-20 h-20 (80px) and text-3xl ***
+        let finalCircleClass = `w-20 h-20 text-3xl rounded-full flex items-center justify-center relative font-bold ${todayClass || circleClass}`;
 
         html += `
             <div class="${baseClass}">
