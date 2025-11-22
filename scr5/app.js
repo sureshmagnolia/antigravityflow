@@ -7081,47 +7081,75 @@ function closeStudentEditModal() {
 // 9. NEW Event Listeners for Modal Buttons
 modalCancelBtn.addEventListener('click', closeStudentEditModal);
 
+// [In app.js]
+
 modalSaveBtn.addEventListener('click', () => {
-    // Raw values from Date/Time pickers
+    // 1. Capture Inputs
     const rawDate = modalDate.value; // YYYY-MM-DD
     const rawTime = modalTime.value; // HH:MM
-
     const newCourse = modalCourse.value.trim();
     const newRegNo = modalRegNo.value.trim();
     const newName = modalName.value.trim();
     const newStream = document.getElementById('modal-edit-stream').value;
 
-    if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
-        alert('All fields must be filled.');
-        return;
-    }
+    let finalDate = "";
+    let finalTime = "";
 
-    // --- CONVERT BACK TO CSV FORMAT ---
+    // 2. Helper: Date/Time Converters
+    const processDate = (dStr) => {
+        if(!dStr) return "";
+        const [y, m, d] = dStr.split('-');
+        return `${d}.${m}.${y}`;
+    };
     
-    // 1. Convert Date: YYYY-MM-DD -> DD.MM.YYYY
-    const [y, m, d] = rawDate.split('-');
-    const formattedDate = `${d}.${m}.${y}`;
+    const processTime = (tStr) => {
+        if(!tStr) return "";
+        const [h, min] = tStr.split(':');
+        let hours = parseInt(h);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; 
+        return `${hours}:${min} ${ampm}`;
+    };
 
-    // 2. Convert Time: HH:MM -> HH:MM AM/PM
-    const [h, min] = rawTime.split(':');
-    let hours = parseInt(h);
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12; // 0 should be 12
-    const formattedTime = `${hours}:${min} ${ampm}`;
+    // 3. MERGE LOGIC (The Fix)
+    let studentObj = {};
 
-    // ----------------------------------
+    if (currentlyEditingIndex !== null) {
+        // --- EDIT MODE: OPTIONAL FIELDS ---
+        const original = currentCourseStudents[currentlyEditingIndex];
+        
+        // If input is empty, keep original. Else, process new input.
+        finalDate = rawDate ? processDate(rawDate) : original.Date;
+        finalTime = rawTime ? processTime(rawTime) : original.Time;
+        
+        studentObj = {
+            Date: finalDate,
+            Time: finalTime,
+            Course: newCourse || original.Course,
+            'Register Number': newRegNo || original['Register Number'],
+            Name: newName || original.Name,
+            Stream: newStream || original.Stream || "Regular" // Dropdown usually has value, but safe fallback
+        };
 
-    if (confirm("Are you sure you want to save these changes?")) {
-        const studentObj = {
-            Date: formattedDate,
-            Time: formattedTime,
+    } else {
+        // --- ADD MODE: STRICT VALIDATION ---
+        if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
+            alert('For a new student, all fields are required.');
+            return;
+        }
+        studentObj = {
+            Date: processDate(rawDate),
+            Time: processTime(rawTime),
             Course: newCourse,
             'Register Number': newRegNo,
             Name: newName,
-            Stream: newStream 
+            Stream: newStream
         };
+    }
 
+    // 4. Save & Close
+    if (confirm("Save changes?")) {
         if (currentlyEditingIndex !== null) {
             currentCourseStudents[currentlyEditingIndex] = studentObj;
         } else {
@@ -7264,11 +7292,16 @@ if (editCourseSelect) {
             // Pre-fill Course Name
             if(bulkNewCourseInput) bulkNewCourseInput.value = editCourseSelect.value;
             
-            // Populate Stream Dropdown
+// Populate Stream Dropdown (UPDATED)
             if (bulkNewStreamSelect) {
-                bulkNewStreamSelect.innerHTML = currentStreamConfig.map(s => 
+                // Add a default "No Change" option first
+                const streamOptions = currentStreamConfig.map(s => 
                     `<option value="${s}">${s}</option>`
                 ).join('');
+                
+                // Insert the "No Change" option at the start
+                bulkNewStreamSelect.innerHTML = `<option value="">-- No Change --</option>` + streamOptions;
+                bulkNewStreamSelect.value = ""; // Default to empty (No Change)
             }
         } else {
             if(bulkUpdateContainer) bulkUpdateContainer.classList.add('hidden');
@@ -7328,31 +7361,41 @@ if (bulkEditModeBtn) {
 }
 
 // 4. Handle Bulk Apply Click
+// [In app.js]
+
 if (btnBulkApply) {
     btnBulkApply.addEventListener('click', async () => {
         const rawDate = bulkNewDateInput.value; // YYYY-MM-DD
         const rawTime = bulkNewTimeInput.value; // HH:MM
-        const newStream = bulkNewStreamSelect.value;
-        const newCourseName = bulkNewCourseInput.value.trim(); // <--- NEW
+        const newStream = bulkNewStreamSelect.value; // Might be "" (No Change)
+        const newCourseName = bulkNewCourseInput.value.trim(); 
         
         const targetCourse = editCourseSelect.value;
         const [oldDate, oldTime] = editSessionSelect.value.split(' | ');
 
-        if (!rawDate || !rawTime || !newCourseName) {
-            alert("Please ensure Date, Time, and Course Name are valid.");
+        // Validation: Allow if AT LEAST ONE field is provided
+        if (!rawDate && !rawTime && !newCourseName && !newStream) {
+            alert("No changes detected. Please edit at least one field (Date, Time, Stream, or Course).");
             return;
         }
 
-        // --- CONVERT BACK TO CSV FORMAT ---
-        const [y, m, d] = rawDate.split('-');
-        const newDate = `${d}.${m}.${y}`;
+        // --- CONVERT ONLY IF PROVIDED ---
+        let newDate = null;
+        let newTime = null;
 
-        const [h, min] = rawTime.split(':');
-        let hours = parseInt(h);
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12; 
-        const newTime = `${hours}:${min} ${ampm}`;
+        if (rawDate) {
+            const [y, m, d] = rawDate.split('-');
+            newDate = `${d}.${m}.${y}`;
+        }
+
+        if (rawTime) {
+            const [h, min] = rawTime.split(':');
+            let hours = parseInt(h);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; 
+            newTime = `${hours}:${min} ${ampm}`;
+        }
         // ----------------------------------
 
         // Check count
@@ -7370,14 +7413,14 @@ if (btnBulkApply) {
         const confirmMsg = `
 ⚠ CONFIRM BULK CHANGE ⚠
 
-Target Course: ${targetCourse}
-Students Affected: ${recordsToUpdate.length}
+Target: ${targetCourse}
+Students: ${recordsToUpdate.length}
 
---- NEW DETAILS ---
-Course: ${newCourseName}
-Date:   ${newDate}
-Time:   ${newTime}
-Stream: ${newStream}
+--- UPDATES ---
+Course: ${newCourseName ? newCourseName : "(No Change)"}
+Date:   ${newDate ? newDate : "(No Change)"}
+Time:   ${newTime ? newTime : "(No Change)"}
+Stream: ${newStream ? newStream : "(No Change)"}
 
 Are you sure you want to update these records?
         `;
@@ -7387,16 +7430,17 @@ Are you sure you want to update these records?
             
             allStudentData.forEach(student => {
                 if (student.Date === oldDate && student.Time === oldTime && student.Course === targetCourse) {
-                    student.Date = newDate;
-                    student.Time = newTime;
-                    student.Stream = newStream;
-                    student.Course = newCourseName; // <--- APPLY NEW NAME
+                    // Only update fields that are NOT null/empty
+                    if (newDate) student.Date = newDate;
+                    if (newTime) student.Time = newTime;
+                    if (newStream) student.Stream = newStream;
+                    if (newCourseName) student.Course = newCourseName;
                     updateCount++;
                 }
             });
 
             localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-            alert(`Successfully updated ${updateCount} students.\nThe page will now reload to refresh the data.`);
+            alert(`Successfully updated ${updateCount} records.\nThe page will now reload.`);
             
             if (typeof syncDataToCloud === 'function') await syncDataToCloud();
             window.location.reload();
