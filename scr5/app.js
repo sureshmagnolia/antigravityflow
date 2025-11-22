@@ -2272,35 +2272,6 @@ function renderNoticePage(col1, col2, streamName, session, numCols) {
     `;
 }
 
-
-// --- Helper: Scribe Rows ---
-function prepareScribeSummaryRows(scribes, session, allotments) {
-    const scribesByRoom = {};
-    scribes.forEach(s => {
-        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-        const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
-        if(!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
-        scribesByRoom[newRoom].push(s);
-    });
-    const rows = [];
-    Object.keys(scribesByRoom).sort().forEach(roomName => {
-        const students = scribesByRoom[roomName];
-        const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
-        const roomInfo = currentRoomConfig[roomName] || {};
-        const location = roomInfo.location ? `(${roomInfo.location})` : "";
-        rows.push({
-            type: 'scribe-room',
-            roomDisplay: `${roomName} ${location}`,
-            content: studentList,
-            studentCount: students.length
-        });
-    });
-    return rows;
-}
-
-
-
-
 // --- Helper: Scribe Rows ---
 function prepareScribeSummaryRows(scribes, session, allotments) {
     const scribesByRoom = {};
