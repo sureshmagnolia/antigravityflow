@@ -1038,6 +1038,10 @@ function renderExamNameSettings() {
     // 3. Load Saved Names
     currentExamNames = JSON.parse(localStorage.getItem(EXAM_NAMES_KEY) || '{}');
 
+    // Icons (SVG Strings)
+    const iconEdit = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>`;
+    const iconSave = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>`;
+
     // 4. Generate UI Cards
     sortedCombos.forEach(key => {
         const [sessionType, stream] = key.split('|');
@@ -1050,10 +1054,11 @@ function renderExamNameSettings() {
         const card = document.createElement('div');
         card.className = "bg-white p-3 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow";
         
+        // Determine State
         const isLocked = savedName.length > 0;
-        const inputClass = isLocked ? "bg-gray-50 text-gray-500" : "bg-white border-gray-300 text-gray-900";
-        const btnText = isLocked ? "Edit" : "Save";
-        const btnClass = isLocked ? "text-blue-600 hover:text-blue-800" : "text-green-600 hover:text-green-800";
+        const inputStateClass = isLocked ? "bg-gray-50 text-gray-500 border-gray-200" : "bg-white text-gray-900 border-blue-300 ring-1 ring-blue-100";
+        const btnHtml = isLocked ? iconEdit : iconSave;
+        const btnClass = isLocked ? "text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-gray-200" : "text-white bg-green-600 hover:bg-green-700 border-transparent shadow-sm";
 
         card.innerHTML = `
             <div class="flex justify-between items-center mb-2">
@@ -1066,14 +1071,15 @@ function renderExamNameSettings() {
             </div>
             <div class="flex gap-2">
                 <input type="text" 
-                       class="exam-name-input block w-full p-1.5 border rounded text-sm ${inputClass} focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                       class="exam-name-input block w-full p-1.5 border rounded text-sm transition-all ${inputStateClass} focus:outline-none" 
                        value="${savedName}" 
                        placeholder="Name (e.g. S1 BA)" 
                        maxlength="15" 
                        ${isLocked ? 'disabled' : ''}
                        data-key="${key}">
-                <button class="text-xs font-bold ${btnClass} px-3 border rounded bg-gray-50 hover:bg-gray-100 transition-colors shrink-0 action-btn">
-                    ${btnText}
+                
+                <button class="w-9 h-9 flex items-center justify-center rounded border transition-all duration-200 ${btnClass}" title="${isLocked ? 'Edit Name' : 'Save Name'}">
+                    ${btnHtml}
                 </button>
             </div>
         `;
@@ -1084,24 +1090,30 @@ function renderExamNameSettings() {
 
         btn.onclick = () => {
             if (input.disabled) {
-                // Unlock
+                // --- UNLOCK (Edit Mode) ---
                 input.disabled = false;
-                input.classList.remove('bg-gray-50', 'text-gray-500');
-                input.classList.add('bg-white', 'border-gray-300', 'text-gray-900');
+                input.classList.remove('bg-gray-50', 'text-gray-500', 'border-gray-200');
+                input.classList.add('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
                 input.focus();
-                btn.textContent = "Save";
-                btn.className = "text-xs font-bold text-green-600 hover:text-green-800 px-3 border rounded bg-gray-50 hover:bg-gray-100 transition-colors shrink-0";
+                
+                // Update Button to "Save" Style
+                btn.innerHTML = iconSave;
+                btn.className = "w-9 h-9 flex items-center justify-center rounded border transition-all duration-200 text-white bg-green-600 hover:bg-green-700 border-transparent shadow-sm";
+                btn.title = "Save Name";
             } else {
-                // Save
+                // --- LOCK (Save Mode) ---
                 const val = input.value.trim();
                 currentExamNames[key] = val;
                 localStorage.setItem(EXAM_NAMES_KEY, JSON.stringify(currentExamNames));
                 
                 input.disabled = true;
-                input.classList.add('bg-gray-50', 'text-gray-500');
-                input.classList.remove('bg-white', 'border-gray-300', 'text-gray-900');
-                btn.textContent = "Edit";
-                btn.className = "text-xs font-bold text-blue-600 hover:text-blue-800 px-3 border rounded bg-gray-50 hover:bg-gray-100 transition-colors shrink-0";
+                input.classList.add('bg-gray-50', 'text-gray-500', 'border-gray-200');
+                input.classList.remove('bg-white', 'text-gray-900', 'border-blue-300', 'ring-1', 'ring-blue-100');
+                
+                // Update Button to "Edit" Style
+                btn.innerHTML = iconEdit;
+                btn.className = "w-9 h-9 flex items-center justify-center rounded border transition-all duration-200 text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-gray-200";
+                btn.title = "Edit Name";
                 
                 if (typeof syncDataToCloud === 'function') syncDataToCloud();
             }
