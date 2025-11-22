@@ -4687,16 +4687,28 @@ navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentee
 navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
 
 function showView(viewToShow, buttonToActivate) {
+    // 1. Hide all views
     allViews.forEach(view => view.classList.add('hidden'));
+    
+    // 2. Deactivate all buttons
     allNavButtons.forEach(btn => {
         btn.classList.add('nav-button-inactive');
         btn.classList.remove('nav-button-active');
     });
+    
+    // 3. Show target view & activate button
     viewToShow.classList.remove('hidden');
     buttonToActivate.classList.remove('nav-button-inactive');
     buttonToActivate.classList.add('nav-button-active');
     
-    clearReport(); // Always clear reports when switching views
+    // 4. Clean up previous reports
+    clearReport(); 
+    
+    // 5. NEW: Save the active tab to LocalStorage
+    if(viewToShow.id && buttonToActivate.id) {
+        localStorage.setItem('lastActiveViewId', viewToShow.id);
+        localStorage.setItem('lastActiveNavId', buttonToActivate.id);
+    }
 }
 
 // --- (V48) Save from dynamic form (in Settings) ---
@@ -8616,4 +8628,21 @@ async function findMyCollege(user) {
 
 // --- Run on initial page load ---
 loadInitialData();
+    // --- NEW: Restore Last Active Tab ---
+    function restoreActiveTab() {
+        const savedViewId = localStorage.getItem('lastActiveViewId');
+        const savedNavId = localStorage.getItem('lastActiveNavId');
+        
+        if (savedViewId && savedNavId) {
+            const view = document.getElementById(savedViewId);
+            const nav = document.getElementById(savedNavId);
+            if (view && nav) {
+                // Programmatically switch to the saved tab
+                showView(view, nav);
+            }
+        }
+    }
+    
+    // Call it after data is loaded
+    restoreActiveTab();
 });
