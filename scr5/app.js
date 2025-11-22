@@ -5160,7 +5160,13 @@ absenteeSearchInput.addEventListener('input', () => {
         matches.forEach(student => {
             const item = document.createElement('div');
             item.className = 'autocomplete-item';
-            item.innerHTML = student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>') + ` (${student.Name})`;
+            const strm = student.Stream || "Regular";
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span>${student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>')} (${student.Name})</span>
+                    <span class="text-xs font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded ml-2">${strm}</span>
+                </div>
+            `;
             item.onclick = () => selectStudent(student);
             autocompleteResults.appendChild(item);
         });
@@ -5192,6 +5198,7 @@ function selectStudent(student) {
     const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
     
     selectedStudentName.textContent = student.Name;
+    selectedStudentCourse.innerHTML = `${student.Course} <span class="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">${student.Stream || "Regular"}</span>`;
     selectedStudentCourse.textContent = student.Course;
     selectedStudentRoom.textContent = `Room: ${roomNo} ${location}`; // Use the correctly allocated room
     if (allocatedStudent && allocatedStudent.isScribe) { // <-- NEW
@@ -5216,13 +5223,14 @@ function updateUniqueStudentList() {
         console.log("No student data to build unique list from.");
         return;
     }
-    for (const student of allStudentData) {
+for (const student of allStudentData) {
         if (!seenRegNos.has(student['Register Number'])) {
             seenRegNos.add(student['Register Number']);
-            // Store just what's needed
+            // Store just what's needed, NOW INCLUDING STREAM
             allUniqueStudentsForScribeSearch.push({ 
                 regNo: student['Register Number'], 
-                name: student.Name 
+                name: student.Name,
+                stream: student.Stream || "Regular" // <--- Added Stream
             });
         }
     }
@@ -5277,25 +5285,35 @@ function renderAbsenteeList() {
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
     const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    // 1. Update Map to include Stream
     const allocatedMap = allocatedSessionData.reduce((map, s) => {
-        map[s['Register Number']] = { room: s['Room No'], isScribe: s.isScribe }; // <-- NEW
+        map[s['Register Number']] = { room: s['Room No'], isScribe: s.isScribe, stream: s.Stream }; // Added Stream
         return map;
     }, {});
 
     currentAbsenteeList.forEach(regNo => {
-        const roomData = allocatedMap[regNo] || { room: 'N/A', isScribe: false };
+        const roomData = allocatedMap[regNo] || { room: 'N/A', isScribe: false, stream: 'Regular' };
         const room = roomData.room;
         const roomInfo = currentRoomConfig[room];
         const location = (roomInfo && roomInfo.location) ? `(${roomInfo.location})` : "";
         let roomDisplay = `${room} ${location}`;
-        if (roomData.isScribe) roomDisplay += ' (Scribe)'; // <-- NEW
+        if (roomData.isScribe) roomDisplay += ' (Scribe)';
         
+        const strm = roomData.stream || "Regular";
+
         const item = document.createElement('div');
         item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        
+        // 2. Updated Item HTML with Stream Badge
         item.innerHTML = `
-            <span class="font-medium">${regNo}</span>
-            <span class="text-sm text-gray-500">${roomDisplay}</span>
-            <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
+            <div class="flex items-center gap-2">
+                <span class="font-medium">${regNo}</span>
+                <span class="text-[10px] uppercase font-bold text-purple-700 bg-purple-50 px-1.5 rounded border border-purple-100">${strm}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-sm text-gray-500">${roomDisplay}</span>
+                <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
+            </div>
         `;
         item.querySelector('button').onclick = () => removeAbsentee(regNo);
         currentAbsenteeListDiv.appendChild(item);
@@ -6111,10 +6129,12 @@ function renderGlobalScribeList() {
     globalScribeList.forEach(student => {
         const item = document.createElement('div');
         item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        const strm = student.stream || "Regular"; // Handle legacy data
         item.innerHTML = `
-            <div>
+            <div class="flex items-center gap-2">
                 <span class="font-medium">${student.regNo}</span>
-                <span class="text-sm text-gray-600 ml-2">${student.name}</span>
+                <span class="text-sm text-gray-600">${student.name}</span>
+                <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">${strm}</span>
             </div>
             <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
         `;
@@ -6163,15 +6183,23 @@ scribeSearchInput.addEventListener('input', () => {
             // Highlight matching parts in both RegNo and Name
             const regDisplay = student.regNo.replace(queryRegex, '<strong>$&</strong>');
             const nameDisplay = student.name.replace(queryRegex, '<strong>$&</strong>');
+            const strm = student.stream || "Regular";
             
-            item.innerHTML = `${regDisplay} (${nameDisplay})`;
+            item.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span>${student.regNo.replace(queryRegex, '<strong>$&</strong>')} (${student.name})</span>
+                    <span class="text-xs font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded ml-2">${strm}</span>
+                </div>
+            `;
             
-            // When clicked, pass the student object to the select function
+            // Pass stream to select function
             item.onclick = () => selectScribeStudent({ 
                 'Register Number': student.regNo, 
-                'Name': student.name 
+                'Name': student.name,
+                'Stream': strm
             });
             scribeAutocompleteResults.appendChild(item);
+            
         });
         scribeAutocompleteResults.classList.remove('hidden');
     } else {
@@ -6183,13 +6211,17 @@ scribeSearchInput.addEventListener('input', () => {
 
 // Select a student from autocomplete
 let selectedScribeStudent = null;
+// Select a student from autocomplete
+let selectedScribeStudent = null;
 function selectScribeStudent(student) {
     selectedScribeStudent = student;
     scribeSearchInput.value = student['Register Number'];
     scribeAutocompleteResults.classList.add('hidden');
     
+    const strm = student.Stream || "Regular";
     scribeSelectedStudentName.textContent = student.Name;
-    scribeSelectedStudentRegno.textContent = student['Register Number'];
+    // Show Stream in the selected details
+    scribeSelectedStudentRegno.innerHTML = `${student['Register Number']} <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${strm}</span>`;
     scribeSelectedStudentDetails.classList.remove('hidden');
 }
 
@@ -6206,8 +6238,12 @@ addScribeStudentButton.addEventListener('click', () => {
         return;
     }
     
-    // Add to list and save
-    globalScribeList.push({ regNo: regNo, name: selectedScribeStudent.Name });
+    // Add to list and save (INCLUDE STREAM)
+    globalScribeList.push({ 
+        regNo: regNo, 
+        name: selectedScribeStudent.Name, 
+        stream: selectedScribeStudent.Stream || "Regular" 
+    });
     localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
     
     renderGlobalScribeList();
@@ -7529,7 +7565,12 @@ window.real_disable_all_report_buttons = function(disabled) {
 
                     const item = document.createElement('div');
                     item.className = 'autocomplete-item';
-                    item.innerHTML = `${regNo} (${name})`;
+                    item.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span>${regNo.replace(new RegExp(query, 'gi'), '<strong>$&</strong>')} (${name})</span>
+                            <span class="text-xs font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded ml-2">${strm}</span>
+                        </div>
+                        `;
                     
                     item.onclick = () => {
                         studentSearchInput.value = regNo;
@@ -7550,7 +7591,6 @@ window.real_disable_all_report_buttons = function(disabled) {
         }, 250);
     });
 
-// 3A. Show Single Session Details (Stream-Aware)
 // 3A. Show Single Session Details (Stream-Aware)
 function showStudentDetailsModal(regNo, sessionKey) {
     document.getElementById('search-result-single-view').classList.remove('hidden');
