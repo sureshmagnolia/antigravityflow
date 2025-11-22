@@ -13,13 +13,9 @@ from datetime import datetime
 # ==========================================
 
 def clean_text(text):
-    """Removes newlines, extra spaces, and broken leading punctuation."""
+    """Removes newlines and extra spaces."""
     if not text: return ""
-    # 1. Collapse whitespace
-    cleaned = re.sub(r'\s+', ' ', str(text).replace('\n', ' ')).strip()
-    # 2. Remove broken start chars (e.g., "] - English" or ") Course")
-    cleaned = re.sub(r'^[\s\-\)\]\.:]+', '', cleaned)
-    return cleaned
+    return str(text).replace('\n', ' ').strip()
 
 def find_date_in_text(text):
     """Scans text for Date patterns (DD.MM.YYYY or DD-MM-YYYY)"""
@@ -40,60 +36,46 @@ def find_time_in_text(text):
 
 def find_course_name(text):
     """
-    Scans text for Course Name patterns, prioritizing the removal of headers.
+    Scans text for Course Name by stripping away known headers.
+    Works for both "ENG1CJ101" and "BHAG I" styles.
     """
     # 1. Normalize whitespace
-    clean_page = re.sub(r'\s+', ' ', text.replace('\n', ' ')).strip()
+    text = re.sub(r'\s+', ' ', text.replace('\n', ' ')).strip()
     
-    # Stop Markers (End of title)
+    # 2. Define Garbage Headers to Strip
+    # The regex will split the text, and we take the last part.
+    garbage_patterns = [
+        r"College\s*:\s*[\w\s,]*?PALAKKAD",  # Removes "College : ... PALAKKAD"
+        r"Nominal\s*Roll",
+        r"Examination\s*[\w\s]*?\d{4}",      # Removes "Examination ... 2025"
+        r"Semester\s*FYUG",
+        r"Course\s*Code\s*:",
+        r"\bCourse\s*[:-]?",                 # The word "Course" itself
+        r"Paper\s*Details\s*[:-]?"
+    ]
+
+    # 3. Strip Garbage
+    for pattern in garbage_patterns:
+        # Split by the garbage pattern and take the last chunk (the text AFTER the header)
+        parts = re.split(pattern, text, flags=re.IGNORECASE)
+        if len(parts) > 1:
+            text = parts[-1].strip()
+
+    # 4. Clean up leading/trailing punctuation
+    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
+
+    # 5. Stop at Metadata (Date, Time, etc.)
+    # This prevents grabbing the next line's info (like Exam Date)
     stop_markers = r'(?=\s*(?:Exam\s*Date|Date\s*of|Slot|Session|Time|Register|Reg\.|Reg\s*No|Page|Maximum|Marks|$))'
-
-    # --- STRATEGY 1: Code-First (Most Reliable) ---
-    # Look for the UOC Code Pattern: 3 Letters + 1 Digit + 2 Letters + Digits... 
-    # Examples: ENG1CJ101, HIN1FA102(1), CHE1MN102
-    # We grab the code AND everything after it until the syllabus tag or stop marker.
     
-    code_pattern = r'\b([A-Z]{3}\d[A-Z]{2}\d+[^\[]*?\[[^\]]*?Syllabus\])'
-    
-    # Try to find the code pattern
-    code_match = re.search(code_pattern, clean_page, re.IGNORECASE)
-    if code_match:
-        return clean_text(code_match.group(1))
-
-    # Fallback Code Search (If syllabus tag is missing or malformed)
-    code_match_simple = re.search(r'\b([A-Z]{3}\d[A-Z]{2}\d+.*?)' + stop_markers, clean_page, re.IGNORECASE)
-    if code_match_simple:
-        candidate = clean_text(code_match_simple.group(1))
-        # Basic validation to ensure it's not just a random string
-        if len(candidate) > 6: 
+    match = re.search(r'(.*?)' + stop_markers, text)
+    if match:
+        candidate = match.group(1).strip()
+        # Validation: Must be decent length
+        if len(candidate) > 3:
             return candidate
 
-    # --- STRATEGY 2: Syllabus Anchor (No Code) ---
-    # If we can't find a code, we look for the [... Syllabus] tag and work backwards.
-    # We aggressively strip known "Header Garbage".
-    
-    syllabus_match = re.search(r'(.*?)(\[[^\]]*?Syllabus\])', clean_page, re.IGNORECASE)
-    if syllabus_match:
-        full_text = syllabus_match.group(0) # The whole match ending in syllabus
-        
-        # List of garbage prefixes to strip
-        garbage_patterns = [
-            r'.*?College\s*:\s*.*?,?\s*PALAKKAD\s*', # Removes "College : ... PALAKKAD"
-            r'.*?Nominal\s*Roll\s*',
-            r'.*?Examination\s*.*?20\d{2}\s*',       # Removes "Examination November 2025"
-            r'.*?Semester\s*FYUG\s*',
-            r'.*?Course\s*[:-]?\s*',                 # Removes "Course" label
-            r'.*?Paper\s*Details\s*[:-]?\s*'
-        ]
-        
-        cleaned_candidate = full_text
-        for pattern in garbage_patterns:
-            # Remove the garbage if found
-            cleaned_candidate = re.sub(pattern, '', cleaned_candidate, flags=re.IGNORECASE)
-            
-        return clean_text(cleaned_candidate)
-
-    return "Unknown"
+    return text if len(text) > 3 else "Unknown"
 
 def detect_columns(header_row):
     """Analyzes a header row to find indices for RegNo and Name."""
