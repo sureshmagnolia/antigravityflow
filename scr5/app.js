@@ -6136,11 +6136,51 @@ window.real_loadGlobalScribeList = function() {
     globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
     renderGlobalScribeList();
 }
+// *** SCRIBE FUNCTIONALITY WITH SAFETY LOCK ***
 
-// Render the global list in "Scribe Settings"
+let isScribeListLocked = true; // Default state: Locked
+
+// 1. Handle Lock Button Click
+const toggleScribeLockBtn = document.getElementById('toggle-scribe-lock-btn');
+if (toggleScribeLockBtn) {
+    toggleScribeLockBtn.addEventListener('click', () => {
+        isScribeListLocked = !isScribeListLocked;
+        
+        if (isScribeListLocked) {
+            // Set to Locked UI
+            toggleScribeLockBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+                <span>List Locked</span>
+            `;
+            toggleScribeLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
+        } else {
+            // Set to Unlocked UI
+            toggleScribeLockBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+                <span>Unlocked</span>
+            `;
+            toggleScribeLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
+        }
+        
+        renderGlobalScribeList(); // Re-render list to enable/disable buttons
+    });
+}
+
+// *** FIX: This is the REAL implementation of the function Python calls ***
+window.real_loadGlobalScribeList = function() {
+    globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+    renderGlobalScribeList();
+}
+
+// 2. Render the global list (Updated with Lock Logic & Stream)
 function renderGlobalScribeList() {
-    if (!currentScribeListDiv) return; // Guard clause
+    if (!currentScribeListDiv) return; 
     currentScribeListDiv.innerHTML = "";
+    
     if (globalScribeList.length === 0) {
         currentScribeListDiv.innerHTML = `<em class="text-gray-500">No students added to the scribe list.</em>`;
         return;
@@ -6149,31 +6189,53 @@ function renderGlobalScribeList() {
     globalScribeList.forEach(student => {
         const item = document.createElement('div');
         item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
-        const strm = student.stream || "Regular"; // Handle legacy data
+        
+        const strm = student.stream || "Regular";
+        
+        // Determine button state based on Lock
+        const btnDisabled = isScribeListLocked ? 'disabled' : '';
+        const btnClass = isScribeListLocked 
+            ? 'text-gray-300 cursor-not-allowed' 
+            : 'text-red-600 hover:text-red-800 cursor-pointer';
+
         item.innerHTML = `
             <div class="flex items-center gap-2">
                 <span class="font-medium">${student.regNo}</span>
                 <span class="text-sm text-gray-600">${student.name}</span>
                 <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">${strm}</span>
             </div>
-            <button class="text-xs text-red-600 hover:text-red-800 font-medium">&times; Remove</button>
+            <button class="text-xs font-medium ${btnClass}" ${btnDisabled}>&times; Remove</button>
         `;
-        item.querySelector('button').onclick = () => removeScribeStudent(student.regNo);
+        
+        // Only attach click event if unlocked
+        if (!isScribeListLocked) {
+            item.querySelector('button').onclick = () => removeScribeStudent(student.regNo, student.name);
+        }
+        
         currentScribeListDiv.appendChild(item);
     });
 }
 
-// Remove a student from the global list
-function removeScribeStudent(regNo) {
-    globalScribeList = globalScribeList.filter(s => s.regNo !== regNo);
-    localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
-    renderGlobalScribeList();
-    // Also re-render allotment list if that view is active
-    if (allotmentSessionSelect.value) { // MODIFIED: Check the main allotment dropdown
-        renderScribeAllotmentList(allotmentSessionSelect.value);
-    syncDataToCloud(); // <--- ADD THIS
+// 3. Remove a student (Updated with Confirmation)
+function removeScribeStudent(regNo, name) {
+    if (isScribeListLocked) return; // Extra safety check
+
+    const confirmMsg = `Are you sure you want to remove ${name} (${regNo}) from the Scribe List?`;
+    
+    if (confirm(confirmMsg)) {
+        globalScribeList = globalScribeList.filter(s => s.regNo !== regNo);
+        localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
+        renderGlobalScribeList();
+        
+        // Also re-render allotment list if that view is active
+        if (allotmentSessionSelect.value) { 
+            renderScribeAllotmentList(allotmentSessionSelect.value);
+        }
+        
+        if(typeof syncDataToCloud === 'function') syncDataToCloud();
     }
 }
+
 
 // Scribe Search Autocomplete
 // --- THIS IS THE REPLACED, CORRECTED FUNCTION ---
