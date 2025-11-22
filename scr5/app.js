@@ -988,7 +988,7 @@ function renderExamNameSettings() {
                        class="exam-name-input block w-full p-1.5 border rounded text-sm transition-all ${inputStateClass} focus:outline-none" 
                        value="${savedName}" 
                        placeholder="Name (e.g. S1 BA)" 
-                       maxlength="15" 
+                       maxlength="49" 
                        ${isLocked ? 'disabled' : ''}
                        data-key="${key}">
                 
