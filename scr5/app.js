@@ -4426,8 +4426,6 @@ generateScribeReportButton.addEventListener('click', async () => {
 // *******************************************************
 
 // --- ROBUST VERSION: Scribe Proforma Report (With Serial Numbers) ---
-
-// --- ROBUST VERSION: Scribe Proforma Report (With Serial Numbers) ---
 generateScribeProformaButton.addEventListener('click', async () => {
     generateScribeProformaButton.disabled = true;
     generateScribeProformaButton.textContent = "Generating...";
@@ -5673,7 +5671,7 @@ filterAllRadio.addEventListener('change', () => {
     }
 
 
-// --- V65: Initial Data Load on Startup ---
+
 
 // --- V65: Initial Data Load on Startup ---
 function loadInitialData() {
