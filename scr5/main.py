@@ -39,32 +39,43 @@ def find_time_in_text(text):
 
 def find_course_name(text):
     """
-    Scans text for Course Name by stripping away known headers.
+    Scans text for Course Name by removing noise and finding start anchors.
+    Fixes issue where line breaks or headers inside the name caused truncation.
     """
-    # 1. Normalize whitespace
+    # 1. Normalize whitespace (Merges multi-line course names)
     text = re.sub(r'\s+', ' ', text.replace('\n', ' ')).strip()
     
-    # 2. Define Garbage Headers to Strip
-    garbage_patterns = [
+    # 2. REMOVE Noise 
+    # (Headers that might appear inside the text stream but should just be deleted)
+    noise_patterns = [
         r"College\s*:\s*[\w\s,]*?PALAKKAD", 
         r"Nominal\s*Roll",
         r"Examination\s*[\w\s]*?\d{4}",
         r"Semester\s*FYUG",
+        r"Page\s*\d+\s*of\s*\d+"
+    ]
+    
+    for pattern in noise_patterns:
+        text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
+
+    # 3. SPLIT on Start Anchors 
+    # (The Course Name definitely starts AFTER these specific labels)
+    start_anchors = [
         r"Course\s*Code\s*:",
-        r"\bCourse\s*[:-]?",
-        r"Paper\s*Details\s*[:-]?"
+        r"Paper\s*Details\s*[:-]?",
+        r"\bCourse\s*[:-]?" 
     ]
 
-    # 3. Strip Garbage
-    for pattern in garbage_patterns:
+    for pattern in start_anchors:
         parts = re.split(pattern, text, flags=re.IGNORECASE)
         if len(parts) > 1:
             text = parts[-1].strip()
 
-    # 4. Clean up punctuation
+    # 4. Clean up punctuation (Start chars like : or -)
     text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
 
-    # 5. Stop at Metadata
+    # 5. Stop at Metadata 
+    # (Don't let the name run into the Exam Date/Reg No/Marks)
     stop_markers = r'(?=\s*(?:Exam\s*Date|Date\s*of|Slot|Session|Time|Register|Reg\.|Reg\s*No|Page|Maximum|Marks|$))'
     match = re.search(r'(.*?)' + stop_markers, text)
     if match:
@@ -150,7 +161,7 @@ async def process_file(file, filename):
                                 "Course": global_course,
                                 "Register Number": val_reg,
                                 "Name": val_name,
-                                "Source File": filename  # <--- NEW: Tag with Filename
+                                "Source File": filename
                             })
         return extracted_data
 
