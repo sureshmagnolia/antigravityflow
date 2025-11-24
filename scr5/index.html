@@ -1309,20 +1309,5 @@
         </div>
     </div>
 </div>    
-
-
-<script>
-    window.addEventListener('load', function() {
-        // Wait 2 seconds, then kill ALL loaders
-        setTimeout(() => {
-            const loaders = document.querySelectorAll('#initial-app-loader');
-            if (loaders.length > 0) {
-                console.log(`Found ${loaders.length} loaders. Removing them forceably.`);
-                loaders.forEach(loader => loader.remove());
-            }
-        }, 2000);
-    });
-</script>
-
 </body>   
 </html>
