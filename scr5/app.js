@@ -2383,7 +2383,6 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 }
 
                 const roomInfo = currentRoomConfig[roomName] || {};
-                // Show Location only; Fallback to Room Name
                 const displayRoom = (roomInfo.location && roomInfo.location.trim() !== "") ? roomInfo.location : roomName;
 
                 return {
@@ -2407,12 +2406,10 @@ generateDaywiseReportButton.addEventListener('click', async () => {
             }
 
             // 3. Build HTML
-            // UPDATED WIDTHS: Loc(22%), Reg(30%), Name(38%), Seat(10%)
             let rowsHtml = '';
             
             processedRows.forEach(row => {
                 if (row.isCourseHeader) {
-                    // FIX: Border Black
                     rowsHtml += `
                         <tr>
                             <td colspan="4" style="background-color: #eee; font-weight: bold; padding: 2px 4px; border: 1px solid #000; font-size: 0.8em;">
@@ -2425,12 +2422,24 @@ generateDaywiseReportButton.addEventListener('click', async () => {
                 
                 if (!row.skipLocation) {
                     const rowspanAttr = row.span > 1 ? `rowspan="${row.span}"` : '';
+                    // Center vertically if merged, Top if single (to save space)
                     const valign = row.span > 1 ? 'vertical-align: middle;' : 'vertical-align: top;';
-                    // FIX: Border Black
-                    rowsHtml += `<td ${rowspanAttr} style="padding: 2px 3px; font-size:0.8em; background-color: #fff; ${valign} line-height: 1.1; border: 1px solid #000;">${row.displayRoom}</td>`;
+                    
+                    // --- NEW: DYNAMIC FONT SIZE LOGIC ---
+                    // Scales font based on how many rows (students) are in the room
+                    let locFontSize = '0.8em'; // Default small (for single/double rows)
+                    
+                    if (row.span > 15) locFontSize = '1.4em';       // Very Large for big halls
+                    else if (row.span > 10) locFontSize = '1.2em';  // Large
+                    else if (row.span > 5) locFontSize = '1.0em';   // Medium
+                    else if (row.span > 2) locFontSize = '0.9em';   // Slightly larger than base
+                    
+                    // Applied styles: Bold, Centered, Dynamic Size
+                    rowsHtml += `<td ${rowspanAttr} style="padding: 2px; font-size:${locFontSize}; font-weight:bold; background-color: #fff; ${valign} text-align: center; line-height: 1.1; border: 1px solid #000;">
+                        ${row.displayRoom}
+                    </td>`;
                 }
 
-                // FIX: Border Black added to all cells below
                 rowsHtml += `
                         <td style="padding: 1px 4px; font-weight: 600; font-size: 0.9em; border: 1px solid #000;">${row.student['Register Number']}</td>
                         
