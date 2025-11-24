@@ -603,7 +603,7 @@ async function syncDataToCloud() {
             if (key === 'examQPCodes') return val === '{}';
             if (key === 'examAbsenteeList') return val === '{}';
             if (key === 'examSessionNames') return val === '{}';
-            if (key === 'examRulesConfig') return val === '[]'; // <--- ADD THIS LINE
+            // if (key === 'examRulesConfig') return val === '[]'; // <--- ADD THIS LINE
             if (key === 'examRoomAllotment' || key === 'examScribeAllotment') return val === '{}' || val.length < 5; 
             return false;
         };
