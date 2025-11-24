@@ -1533,6 +1533,8 @@ function initCalendar() {
 }
 
 // --- Calendar Render Logic (Optimized: Slices + Blue Center + Smart Tooltip) ---
+
+// --- Calendar Render Logic (Optimized: Explicit Requirements in Tooltips) ---
 function renderCalendar() {
     const grid = document.getElementById('calendar-days-grid');
     const title = document.getElementById('cal-month-display');
@@ -1546,7 +1548,6 @@ function renderCalendar() {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
-    // Load Scribes
     if (globalScribeList.length === 0) {
         const stored = localStorage.getItem(SCRIBE_LIST_KEY);
         if (stored) globalScribeList = JSON.parse(stored);
@@ -1592,32 +1593,25 @@ function renderCalendar() {
         const data = monthData[day];
         const isToday = (day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear());
         
-        // --- NEW: Calculate Row Index to flip tooltip ---
         const cellIndex = firstDayIndex + day - 1;
         const rowIndex = Math.floor(cellIndex / 7);
-        const isTopRow = rowIndex === 0; // Check if first row
+        const isTopRow = rowIndex === 0; 
 
-        // Base Cell Style
         const baseClass = "min-h-[90px] bg-white border-r border-b border-gray-200 flex flex-col items-center justify-center relative hover:bg-blue-50 transition group";
-        
-        // Default Circle Style (Gray Text, Transparent)
         let circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-gray-700 bg-transparent border border-transparent overflow-hidden";
         let circleStyle = "";
         let tooltipHtml = "";
 
-        // 1. DATE NUMBER STYLING
         let dateNumberHtml = `<span class="z-10">${day}</span>`;
         if (isToday) {
             dateNumberHtml = `<span class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-md z-20 text-2xl">${day}</span>`;
         }
 
-        // 2. CIRCLE BACKGROUND LOGIC
         if (data) {
             const hasFN = data.am.students > 0;
             const hasAN = data.pm.students > 0;
             
             if (hasFN || hasAN) {
-                // Base Active Color (Light Red)
                 circleClass = "w-20 h-20 text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
                 const cLight = "#fee2e2"; 
                 const cDark = "#fca5a5"; 
@@ -1641,34 +1635,58 @@ function renderCalendar() {
                         ${dateNumberHtml}
                         <span class="absolute bottom-1 text-[9px] text-red-900 font-extrabold leading-none opacity-80">AN</span>
                     `;
-                } else {
-                    circleStyle = `background-color: ${cLight};`;
                 }
             }
 
-            // Tooltip Generation
+            // Tooltip Generation (Explicit Requirements & Total)
             if (hasFN) {
-                const regHalls = Math.ceil(data.am.regCount / 30);
-                const othHalls = Math.ceil(data.am.othCount / 30);
-                let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
-                if (data.am.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.am.scribeCount / 5)}`;
+                const regReq = Math.ceil(data.am.regCount / 30);
+                const othReq = Math.ceil(data.am.othCount / 30);
+                const scribeReq = Math.ceil(data.am.scribeCount / 5);
+                const totalReq = regReq + othReq + scribeReq;
+                
+                let details = `Reg: ${regReq}`;
+                if(othReq > 0) details += ` | Oth: ${othReq}`;
+                if(scribeReq > 0) details += ` | Scr: ${scribeReq}`;
+
                 tooltipHtml += `
                     <div class='mb-2 pb-2 border-b border-gray-200'>
-                        <strong class='text-red-600 uppercase text-[10px]'>Morning (FN)</strong><br>
-                        <span class='text-gray-900 font-bold'>${data.am.students} Students</span><br>
-                        <span class='text-gray-500 text-[10px]'>${details}</span>
+                        <div class="flex justify-between items-center">
+                            <strong class='text-red-600 uppercase text-[10px]'>Morning (FN)</strong>
+                            <span class='text-gray-900 font-bold text-[10px]'>${data.am.students} Students</span>
+                        </div>
+                        <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                                <span>Est. Rooms/Inv:</span>
+                                <span class="text-blue-700 text-[11px]">${totalReq}</span>
+                            </div>
+                            <div class="text-[9px] text-gray-400 text-right font-normal">${details}</div>
+                        </div>
                     </div>`;
             }
             if (hasAN) {
-                const regHalls = Math.ceil(data.pm.regCount / 30);
-                const othHalls = Math.ceil(data.pm.othCount / 30);
-                let details = `Reg: ${regHalls} | Oth: ${othHalls}`;
-                if (data.pm.scribeCount > 0) details += ` | Scribe: ${Math.ceil(data.pm.scribeCount / 5)}`;
+                const regReq = Math.ceil(data.pm.regCount / 30);
+                const othReq = Math.ceil(data.pm.othCount / 30);
+                const scribeReq = Math.ceil(data.pm.scribeCount / 5);
+                const totalReq = regReq + othReq + scribeReq;
+                
+                let details = `Reg: ${regReq}`;
+                if(othReq > 0) details += ` | Oth: ${othReq}`;
+                if(scribeReq > 0) details += ` | Scr: ${scribeReq}`;
+
                 tooltipHtml += `
                     <div>
-                        <strong class='text-red-600 uppercase text-[10px]'>Afternoon (AN)</strong><br>
-                        <span class='text-gray-900 font-bold'>${data.pm.students} Students</span><br>
-                        <span class='text-gray-500 text-[10px]'>${details}</span>
+                        <div class="flex justify-between items-center">
+                            <strong class='text-red-600 uppercase text-[10px]'>Afternoon (AN)</strong>
+                            <span class='text-gray-900 font-bold text-[10px]'>${data.pm.students} Students</span>
+                        </div>
+                        <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                                <span>Est. Rooms/Inv:</span>
+                                <span class="text-blue-700 text-[11px]">${totalReq}</span>
+                            </div>
+                            <div class="text-[9px] text-gray-400 text-right font-normal">${details}</div>
+                        </div>
                     </div>`;
             }
         } else if (isToday) {
@@ -1676,15 +1694,11 @@ function renderCalendar() {
             dateNumberHtml = `<span class="z-10">${day}</span>`;
         }
 
-        // --- NEW: Smart Tooltip Positioning ---
-        // If Top Row: Tooltip Below (top-full) with Arrow Pointing Up (border-b-white)
-        // Else: Tooltip Above (bottom-full) with Arrow Pointing Down (border-t-white)
-        
         const posClass = isTopRow ? "top-full mt-2" : "bottom-full mb-2";
         const arrowClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
 
         const tooltip = tooltipHtml ? `
-            <div class="absolute ${posClass} left-1/2 transform -translate-x-1/2 w-48 bg-white text-gray-800 text-xs rounded-lg p-2 shadow-xl z-50 hidden group-hover:block pointer-events-none text-center border border-red-200 ring-1 ring-red-100">
+            <div class="absolute ${posClass} left-1/2 transform -translate-x-1/2 w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-50 hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
                 <div class="absolute ${arrowClass} left-1/2 transform -translate-x-1/2 border-4 border-transparent"></div>
             </div>
@@ -1701,7 +1715,6 @@ function renderCalendar() {
     }
     grid.innerHTML = html;
 }
-
 // Add initialization call to your existing loadInitialData or updateDashboard
 // For now, we'll trigger it once the DOM is ready in app.js logic
 setTimeout(initCalendar, 1000);
