@@ -591,7 +591,7 @@ async function syncDataToCloud() {
             cloudData = cloudSnap.data();
         }
 
-        // --- STEP 2: Smart Merge Helpers ---
+// --- STEP 2: Smart Merge Helpers ---
         const isEmptyOrDefault = (key, val) => {
             if (!val) return true;
             if (key === 'examCollegeName') return val === "University of Calicut";
@@ -601,6 +601,7 @@ async function syncDataToCloud() {
             if (key === 'examQPCodes') return val === '{}';
             if (key === 'examAbsenteeList') return val === '{}';
             if (key === 'examSessionNames') return val === '{}';
+            if (key === 'examRulesConfig') return val === '[]'; // <--- ADD THIS LINE
             if (key === 'examRoomAllotment' || key === 'examScribeAllotment') return val === '{}' || val.length < 5; 
             return false;
         };
