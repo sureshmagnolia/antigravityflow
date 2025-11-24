@@ -6176,7 +6176,175 @@ filterAllRadio.addEventListener('change', () => {
         });
     }
 
+    // ==========================================
+    // 💍 MASTER CSV DOWNLOAD (ONE RING TO RULE THEM ALL)
+    // ==========================================
+    const masterDownloadBtn = document.getElementById('master-download-csv-btn');
 
+    if (masterDownloadBtn) {
+        masterDownloadBtn.addEventListener('click', async () => {
+            if (!allStudentData || allStudentData.length === 0) {
+                alert("No data available to export.");
+                return;
+            }
+
+            masterDownloadBtn.textContent = "Gathering Data...";
+            masterDownloadBtn.disabled = true;
+
+            // Allow UI to update
+            await new Promise(r => setTimeout(r, 50));
+
+            try {
+                // 1. Load ALL Context Data
+                const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+                const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+                const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+                
+                // Reload Configs to be safe
+                loadQPCodes(); // Refreshes qpCodeMap
+                currentExamNames = JSON.parse(localStorage.getItem(EXAM_NAMES_KEY) || '{}');
+                getRoomCapacitiesFromStorage(); // Refreshes currentRoomConfig
+
+                // 2. Group Students by Session to run Allocation Logic
+                const sessions = {};
+                allStudentData.forEach(s => {
+                    const key = `${s.Date} | ${s.Time}`;
+                    if (!sessions[key]) sessions[key] = [];
+                    sessions[key].push(s);
+                });
+
+                const masterRows = [];
+
+                // 3. Process Each Session
+                for (const [sessionKey, students] of Object.entries(sessions)) {
+                    const [date, time] = sessionKey.split(' | ');
+                    
+                    // Run allocation logic to get Seats & Rooms
+                    // (This ensures we get the exact Seat No even if it wasn't saved in basic data)
+                    const allocatedStudents = performOriginalAllocation(students);
+                    
+                    // Helper: Absentee Set for this session
+                    const sessionAbsentees = new Set(allAbsentees[sessionKey] || []);
+                    
+                    // Helper: Scribe Rooms for this session
+                    const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
+                    
+                    // Helper: QP Codes for this session
+                    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+
+                    for (const s of allocatedStudents) {
+                        // A. Basic Info
+                        const regNo = s['Register Number'];
+                        const stream = s.Stream || "Regular";
+                        const course = s.Course;
+                        
+                        // B. Exam Name
+                        const examName = getExamName(date, time, stream);
+
+                        // C. QP Code
+                        const courseKey = getQpKey(course, stream);
+                        const qpCode = sessionQPCodes[courseKey] || "N/A";
+
+                        // D. Status (Present/Absent)
+                        const status = sessionAbsentees.has(regNo) ? "ABSENT" : "PRESENT";
+
+                        // E. Scribe Info
+                        const isScribe = scribeRegNos.has(regNo) ? "YES" : "NO";
+                        let scribeRoom = "N/A";
+                        if (isScribe === "YES") {
+                            scribeRoom = sessionScribeRooms[regNo] || "Not Allotted";
+                        }
+
+                        // F. Room & Location
+                        let roomNo = s['Room No'];
+                        let seatNo = s.seatNumber;
+                        
+                        const roomInfo = currentRoomConfig[roomNo] || {};
+                        const location = roomInfo.location || "";
+
+                        // G. Location for Scribe Room (if applicable)
+                        let scribeLocation = "";
+                        if (scribeRoom !== "N/A" && scribeRoom !== "Not Allotted") {
+                            const sInfo = currentRoomConfig[scribeRoom] || {};
+                            scribeLocation = sInfo.location || "";
+                        }
+
+                        masterRows.push({
+                            "Exam Name": examName,
+                            "Date": date,
+                            "Time": time,
+                            "Stream": stream,
+                            "Course": course,
+                            "QP Code": qpCode,
+                            "Register Number": regNo,
+                            "Name": s.Name,
+                            "Status": status,
+                            "Allotted Hall": roomNo,
+                            "Hall Location": location,
+                            "Seat No": seatNo,
+                            "Scribe Required": isScribe,
+                            "Scribe Room": scribeRoom,
+                            "Scribe Location": scribeLocation
+                        });
+                    }
+                }
+
+                // 4. Sort Master List (Date > Time > RegNo)
+                masterRows.sort((a, b) => {
+                    const d1 = a.Date.split('.').reverse().join('');
+                    const d2 = b.Date.split('.').reverse().join('');
+                    if (d1 !== d2) return d1.localeCompare(d2);
+                    if (a.Time !== b.Time) return a.Time.localeCompare(b.Time);
+                    return a["Register Number"].localeCompare(b["Register Number"]);
+                });
+
+                // 5. Generate CSV Content
+                const headers = [
+                    "Exam Name", "Date", "Time", "Stream", "Course", "QP Code", 
+                    "Register Number", "Name", "Status", 
+                    "Allotted Hall", "Hall Location", "Seat No", 
+                    "Scribe Required", "Scribe Room", "Scribe Location"
+                ];
+
+                let csvContent = headers.join(",") + "\n";
+
+                masterRows.forEach(row => {
+                    const rowString = headers.map(header => {
+                        let val = row[header] ? row[header].toString() : "";
+                        val = val.replace(/"/g, '""'); // Escape quotes
+                        if (val.includes(',') || val.includes('\n') || val.includes('"')) {
+                            val = `"${val}"`;
+                        }
+                        return val;
+                    }).join(",");
+                    csvContent += rowString + "\n";
+                });
+
+                // 6. Download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Master_Exam_Data_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+            } catch (e) {
+                console.error("Master CSV Error:", e);
+                alert("Failed to generate Master CSV: " + e.message);
+            } finally {
+                masterDownloadBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" />
+                    </svg>
+                    Download MASTER CSV (The One Ring 💍)
+                `;
+                masterDownloadBtn.disabled = false;
+            }
+        });
+    }
 
 
 // --- ROOM ALLOTMENT FUNCTIONALITY ---
