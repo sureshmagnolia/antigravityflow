@@ -165,7 +165,27 @@ function disable_edit_data_tab(disabled) {
 window.disable_edit_data_tab = disable_edit_data_tab;
 
 // --- END FUNCTIONS FOR PYTHON BRIDGE ---
+function dismissLoader() {
+    const loader = document.getElementById('initial-app-loader');
+    const msgInterval = window.loaderMessageInterval; // Get the interval ID if defined
+    
+    if (msgInterval) clearInterval(msgInterval); // Stop the funny message timer
+    
+    if (loader) {
+        loader.style.opacity = '0';
+        // Delay removal for CSS transition
+        setTimeout(() => { loader.remove(); }, 500); 
+    }
+}
 
+// Single function called when data is local, from cloud, or auth fails
+function finalizeAppLoad() {
+    if (typeof updateDashboard === 'function') updateDashboard(); 
+    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList(); 
+    if (typeof restoreActiveTab === 'function') restoreActiveTab(); // Restore last view
+    dismissLoader(); // Safely remove the loader once all is done
+}
 
 // --- MAIN APP LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -270,30 +290,32 @@ if (logoutBtn) {
     });
 }
 
-// Auth Listener
-setTimeout(() => {
-    if (window.firebase && window.firebase.auth) {
-        const { auth, onAuthStateChanged } = window.firebase;
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                loginBtn.classList.add('hidden');
-                logoutBtn.classList.remove('hidden');
-                userInfoDiv.classList.remove('hidden');
-                userNameDisplay.textContent = user.displayName || "User";
-                
-                // START: Find or Create College
-                findMyCollege(user);
-            } else {
-                currentUser = null;
-                loginBtn.classList.remove('hidden');
-                logoutBtn.classList.add('hidden');
-                userInfoDiv.classList.add('hidden');
-                adminBtn.classList.add('hidden'); // Hide admin button
-            }
-        });
-    }
-}, 1000);
+// Auth Listener - REMOVED THE SETTIMEOUT WRAPPER
+if (window.firebase && window.firebase.auth) {
+    const { auth, onAuthStateChanged } = window.firebase;
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            loginBtn.classList.add('hidden');
+            logoutBtn.classList.remove('hidden');
+            userInfoDiv.classList.remove('hidden');
+            userNameDisplay.textContent = user.displayName || "User";
+            
+            // START: Find or Create College
+            findMyCollege(user); // findMyCollege will call finalizeAppLoad on success/fail
+        } else {
+            currentUser = null;
+            loginBtn.classList.remove('hidden');
+            logoutBtn.classList.add('hidden');
+            userInfoDiv.classList.add('hidden');
+            adminBtn.classList.add('hidden'); // Hide admin button
+
+            // CRITICAL: Finalize if user is not authenticated
+            finalizeAppLoad(); 
+        }
+    });
+}
+// ------------------------------------------
 
 
 
@@ -356,11 +378,13 @@ function syncDataFromCloud(collegeId) {
             if (localTime && mainData.lastUpdated) {
                 if (localTime === mainData.lastUpdated) {
                     updateSyncStatus("Synced", "success");
+                    finalizeAppLoad(); // <-- CHANGE 1
                     return; 
                 }
                 if (localTime > mainData.lastUpdated) {
                     console.log("⚠️ Local data is newer than cloud. Skipping auto-download to prevent overwrite.");
                     updateSyncStatus("Unsaved Changes", "neutral"); 
+                    finalizeAppLoad(); // <-- CHANGE 2
                     return;
                 }
             }
@@ -402,7 +426,7 @@ function syncDataFromCloud(collegeId) {
 
             // 3. Refresh UI
             updateSyncStatus("Synced", "success");
-            loadInitialData();
+            finalizeAppLoad(); // <-- CHANGE 3 (Replaces loadInitialData())
             
             // Refresh Allotment View if open
             if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
@@ -411,12 +435,12 @@ function syncDataFromCloud(collegeId) {
 
         } else {
             updateSyncStatus("No Cloud Data", "neutral");
-            loadInitialData();
+            finalizeAppLoad(); // <-- CHANGE 5 (Replaces loadInitialData())
         }
     }, (error) => {
         console.error("Sync Error:", error);
         updateSyncStatus("Net Error", "error");
-        loadInitialData();
+        finalizeAppLoad(); // <-- CHANGE 4 (Replaces loadInitialData())
     });
 }
 
