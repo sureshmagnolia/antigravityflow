@@ -9974,7 +9974,8 @@ if (backupSettingsBtn) {
             ROOM_CONFIG_KEY,     // Room Settings
             STREAM_CONFIG_KEY,   // Stream Settings
             COLLEGE_NAME_KEY,    // College Name
-            SCRIBE_LIST_KEY      // Global Scribe List
+            SCRIBE_LIST_KEY,     // Global Scribe List
+            EXAM_RULES_KEY       // <--- ADD THIS LINE (Exam Schedule)
         ];
 
         settingsKeys.forEach(key => {
@@ -10011,7 +10012,13 @@ if (restoreSettingsBtn && restoreSettingsInput) {
                 let loadedCount = 0;
 
                 // Keys we accept for settings restore
-                const validKeys = [ROOM_CONFIG_KEY, STREAM_CONFIG_KEY, COLLEGE_NAME_KEY, SCRIBE_LIST_KEY];
+                const validKeys = [
+                    ROOM_CONFIG_KEY, 
+                    STREAM_CONFIG_KEY, 
+                    COLLEGE_NAME_KEY, 
+                    SCRIBE_LIST_KEY,
+                    EXAM_RULES_KEY   // <--- ADD THIS LINE
+                ];
 
                 validKeys.forEach(key => {
                     if (settingsData[key]) {
@@ -10021,12 +10028,13 @@ if (restoreSettingsBtn && restoreSettingsInput) {
                 });
 
                 if (loadedCount > 0) {
-                    alert(`Successfully restored ${loadedCount} settings configurations.\n\nSyncing to cloud...`);
+                    alert(`Successfully restored settings configurations.\n\nSyncing to cloud...`);
                     
                     // Update Runtime Variables
-                    loadRoomConfig();
-                    loadStreamConfig();
+                    if (typeof loadRoomConfig === 'function') loadRoomConfig();
+                    if (typeof loadStreamConfig === 'function') loadStreamConfig();
                     if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+                    if (typeof renderExamNameSettings === 'function') renderExamNameSettings(); // Refresh UI
 
                     // Sync
                     if (typeof syncDataToCloud === 'function') await syncDataToCloud();
