@@ -4553,7 +4553,7 @@ function formatRegNoList(regNos) {
     return outputStrings.join('\n'); 
 }
         
-// --- Event listener for "Generate Absentee Statement" (V3: Stream-wise Split) ---
+// --- Event listener for "Generate Absentee Statement" (Clean B&W Style) ---
 if (generateAbsenteeReportButton) {
     generateAbsenteeReportButton.addEventListener('click', async () => {
         const sessionKey = sessionSelect.value;
@@ -4575,7 +4575,7 @@ if (generateAbsenteeReportButton) {
             const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
             loadQPCodes(); 
             
-            // 2. Group by QP CODE + STREAM (This ensures separate reports)
+            // 2. Group by QP CODE + STREAM
             const qpStreamGroups = {};
             
             for (const student of sessionStudents) {
@@ -4587,7 +4587,6 @@ if (generateAbsenteeReportButton) {
                 // Resolve Stream
                 const streamName = student.Stream || "Regular";
                 
-                // Create Unique Key for Grouping (Crucial Change)
                 const groupKey = `${qpCode}|${streamName}`;
                 
                 if (!qpStreamGroups[groupKey]) {
@@ -4618,7 +4617,6 @@ if (generateAbsenteeReportButton) {
             }
             
             // 3. Generate HTML
-            // *** FIX: Add styles to remove border/shadow in Print mode ***
             let allPagesHtml = `
                 <style>
                     @media print {
@@ -4632,18 +4630,16 @@ if (generateAbsenteeReportButton) {
             `;
             let totalPages = 0;
             
-            // Sort Keys: QP Code first, then Stream
             const sortedKeys = Object.keys(qpStreamGroups).sort();
             
             for (const key of sortedKeys) {
                 totalPages++;
                 const data = qpStreamGroups[key];
                 
-                // --- NEW: Get Exam Name ---
-                const examName = getExamName(date, time, data.stream); // date/time come from outer scope
+                const examName = getExamName(date, time, data.stream);
                 const examNameHtml = examName ? `<div style="font-size:14pt; font-weight:bold; margin-top:5px; text-transform:uppercase;">${examName}</div>` : "";
 
-                // Dynamic Font Size Logic
+                // Dynamic Font Size
                 let dynamicFontSize = '12pt';
                 let dynamicLineHeight = '1.5';
                 if (data.grandTotal > 150) { dynamicFontSize = '9pt'; dynamicLineHeight = '1.3'; }
@@ -4655,33 +4651,32 @@ if (generateAbsenteeReportButton) {
                 
                 for (const courseName of sortedCourses) {
                     const courseData = data.courses[courseName];
-                    // Note: We use 'Text' suffix now to indicate plain text with \n
                     const presentListText = formatRegNoList(courseData.present); 
                     const absentListText = formatRegNoList(courseData.absent);   
                     
                     tableRowsHtml += `
-                        <tr style="background-color: #f3f4f6;">
-                            <td colspan="2" style="font-weight: bold; border-bottom: 2px solid #ccc; padding: 8px;">Course: ${courseData.name}</td>
+                        <tr>
+                            <td colspan="2" style="font-weight: bold; border: 1px solid #000; padding: 8px;">Course: ${courseData.name}</td>
                         </tr>
                         <tr>
-                            <td style="vertical-align: top; width: 20%; padding: 8px; border: 1px solid #ccc;">
+                            <td style="vertical-align: top; width: 20%; padding: 8px; border: 1px solid #000;">
                                 <strong>Present (${courseData.present.length})</strong>
                             </td>
-                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; white-space: pre-wrap;">${presentListText}</td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #000; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; white-space: pre-wrap;">${presentListText}</td>
                         </tr>
                         <tr>
-                            <td style="vertical-align: top; padding: 8px; border: 1px solid #ccc;">
+                            <td style="vertical-align: top; padding: 8px; border: 1px solid #000;">
                                 <strong>Absent (${courseData.absent.length})</strong>
                             </td>
-                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #ccc; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; color: red; white-space: pre-wrap;">${absentListText}</td>
+                            <td class="regno-list" style="vertical-align: top; padding: 8px; border: 1px solid #000; font-size: ${dynamicFontSize}; line-height: ${dynamicLineHeight}; white-space: pre-wrap;">${absentListText}</td>
                         </tr>
                     `;
                 }
                 
-                // Summary Row
+                // Summary Row (No Fill, Black Border)
                 tableRowsHtml += `
-                    <tr style="background-color: #eee; border-top: 3px double #000;">
-                        <td colspan="2" style="padding: 12px;">
+                    <tr style="border-top: 2px solid #000;">
+                        <td colspan="2" style="padding: 12px; border: 1px solid #000;">
                             <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em;">
                                 <span>QP CODE: ${data.qpCode}</span>
                                 <span>Total: ${data.grandTotal} &nbsp;|&nbsp; Present: ${data.grandPresent} &nbsp;|&nbsp; Absent: ${data.grandAbsent}</span>
@@ -4694,7 +4689,7 @@ if (generateAbsenteeReportButton) {
                     <div class="print-page">
                         <div class="print-header-group" style="position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
                             
-                            <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 2px solid #000; padding: 4px 10px; background: #fff;">
+                            <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 2px solid #000; padding: 4px 10px;">
                                 ${data.stream}
                             </div>
                             
@@ -4702,11 +4697,11 @@ if (generateAbsenteeReportButton) {
                             ${examNameHtml} <h2>Statement of Answer Scripts</h2>
                             <h3>${date} &nbsp;|&nbsp; ${time}</h3>
                             <div style="margin-top: 10px; font-weight: bold; font-size: 14pt; text-align: center;">
-                                QP Code: <span style="background: #eee; padding: 2px 8px; border: 1px solid #999;">${data.qpCode}</span>
+                                QP Code: <span style="padding: 2px 8px; border: 1px solid #000;">${data.qpCode}</span>
                             </div>
                         </div>
                         
-                        <table class="absentee-report-table" style="width: 100%; border-collapse: collapse;">
+                        <table class="absentee-report-table" style="width: 100%; border-collapse: collapse; border: 1px solid #000;">
                             <tbody>
                                 ${tableRowsHtml}
                             </tbody>
@@ -4726,7 +4721,7 @@ if (generateAbsenteeReportButton) {
 
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated ${totalPages} page(s) (Split by Stream).`;
+            reportStatus.textContent = `Generated ${totalPages} page(s).`;
             reportControls.classList.remove('hidden');
             roomCsvDownloadContainer.innerHTML = ""; 
             lastGeneratedReportType = "Absentee_Statement"; 
