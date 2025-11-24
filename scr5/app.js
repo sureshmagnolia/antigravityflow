@@ -478,7 +478,7 @@ function syncDataFromCloud(collegeId) {
             [
                 'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
                 'examQPCodes', 'examScribeList', 'examScribeAllotment', 
-                'examAbsenteeList', 'examSessionNames', 'lastUpdated'
+                'examAbsenteeList', 'examSessionNames', 'lastUpdated', 'examRulesConfig'
             ].forEach(key => {
                 if (mainData[key]) localStorage.setItem(key, mainData[key]);
             });
