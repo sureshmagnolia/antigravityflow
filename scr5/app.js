@@ -244,7 +244,8 @@ const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
 // *** MOVED HERE TO FIX ERROR ***
 const EXAM_RULES_KEY = 'examRulesConfig'; 
 let currentExamRules = []; 
-let isExamRulesLocked = true; // <--- ADD THIS NEW VARIABLE    
+let isExamRulesLocked = true; // <--- ADD THIS NEW VARIABLE
+let isAllotmentLocked = true; // Default locked state for Room Allotment
 // ******************************
     
 // *** NEW SCRIBE KEYS ***
