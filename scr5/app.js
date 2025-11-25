@@ -10443,13 +10443,14 @@ function loadInitialData() {
 }
 
 // ==========================================
-    // 💰 REMUNERATION LOGIC (UPDATED)
+    // 💰 REMUNERATION LOGIC (FINAL)
     // ==========================================
 
     // 1. Navigation Listener
     if (navRemuneration) {
         navRemuneration.addEventListener('click', () => {
             showView(viewRemuneration, navRemuneration);
+            // Initialize the separate module logic
             if (typeof initRemunerationModule === 'function') {
                 initRemunerationModule();
             }
@@ -10464,7 +10465,7 @@ function loadInitialData() {
         billModeSelect.addEventListener('change', () => {
             if (billModeSelect.value === 'period') {
                 billDateRange.classList.remove('hidden');
-                billDateRange.classList.add('grid'); // Maintain grid layout
+                billDateRange.classList.add('grid');
             } else {
                 billDateRange.classList.add('hidden');
                 billDateRange.classList.remove('grid');
@@ -10474,7 +10475,8 @@ function loadInitialData() {
 
     // 3. Generate Bill Button
     const btnGenerateBill = document.getElementById('btn-generate-bill');
-    
+    const btnPrintBill = document.getElementById('btn-print-bill');
+
     if (btnGenerateBill) {
         btnGenerateBill.addEventListener('click', () => {
             if (!allStudentData || allStudentData.length === 0) {
@@ -10483,49 +10485,57 @@ function loadInitialData() {
             }
 
             // Inputs
-            const stream = document.getElementById('bill-stream-select').value;
+            const selectedStream = document.getElementById('bill-stream-select').value;
             const mode = document.getElementById('bill-mode-select').value;
             
             // A. Filter Data by Stream
             const filteredData = allStudentData.filter(s => {
                 const sStream = s.Stream || "Regular";
-                // If user selects "Regular", match "Regular" or undefined.
-                // If "Other", match anything NOT Regular.
-                if (stream === "Regular") return sStream === "Regular";
-                return sStream !== "Regular";
+                if (selectedStream === "Regular") return sStream === "Regular";
+                return sStream !== "Regular"; // Matches Distance, Supplementary, etc.
             });
 
             if (filteredData.length === 0) {
-                alert(`No students found for stream: ${stream}`);
+                alert(`No students found for stream: ${selectedStream}`);
                 return;
             }
 
             // B. Prepare Groups
             const billGroups = {}; 
-            // Structure: { "Exam Name": [sessions...] }
+            // Structure: { "Exam Name": { "Date|Time": count } }
+
+            // Helper to parse date for comparison
+            const parseDate = (dStr) => {
+                const [d, m, y] = dStr.split('.');
+                return new Date(`${y}-${m}-${d}`);
+            };
+
+            const startDateInput = document.getElementById('bill-start-date').valueAsDate;
+            const endDateInput = document.getElementById('bill-end-date').valueAsDate;
 
             filteredData.forEach(s => {
+                // Date Range Check (for Period Mode)
+                if (mode === 'period' && (startDateInput || endDateInput)) {
+                    const sDate = parseDate(s.Date);
+                    if (startDateInput && sDate < startDateInput) return; // Skip
+                    if (endDateInput && sDate > endDateInput) return; // Skip
+                }
+
                 const sessionKey = `${s.Date} | ${s.Time}`;
-                let groupKey = "General Bill";
+                let groupKey = "Consolidated Bill";
 
                 // Grouping Logic
                 if (mode === 'exam') {
                     // Use the existing helper to find Exam Name
-                    groupKey = getExamName(s.Date, s.Time, s.Stream) || "Unknown Exam";
+                    groupKey = getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
                 } else {
-                    // Period Mode Check
-                    const sDate = new Date(s.Date.split('.').reverse().join('-'));
-                    const startDate = document.getElementById('bill-start-date').valueAsDate;
-                    const endDate = document.getElementById('bill-end-date').valueAsDate;
-                    
-                    if (startDate && sDate < startDate) return; // Skip
-                    if (endDate && sDate > endDate) return; // Skip
-                    
-                    // One big group for Period
-                    groupKey = `Period Bill (${document.getElementById('bill-start-date').value} to ${document.getElementById('bill-end-date').value})`;
+                    const sStr = document.getElementById('bill-start-date').value || "Start";
+                    const eStr = document.getElementById('bill-end-date').value || "End";
+                    groupKey = `Period: ${sStr} to ${eStr}`;
                 }
 
                 if (!billGroups[groupKey]) billGroups[groupKey] = {};
+                
                 // Count students per session within this group
                 if (!billGroups[groupKey][sessionKey]) {
                     billGroups[groupKey][sessionKey] = { date: s.Date, time: s.Time, count: 0 };
@@ -10533,7 +10543,7 @@ function loadInitialData() {
                 billGroups[groupKey][sessionKey].count++;
             });
 
-            // C. Process Each Group -> Calculate Bill
+            // C. Process Groups -> Calculate Bill
             const outputContainer = document.getElementById('remuneration-output');
             outputContainer.innerHTML = '';
             outputContainer.classList.remove('hidden');
@@ -10541,7 +10551,8 @@ function loadInitialData() {
             const groupKeys = Object.keys(billGroups).sort();
             
             if (groupKeys.length === 0) {
-                outputContainer.innerHTML = '<p class="text-red-500">No data found in the selected date range.</p>';
+                outputContainer.innerHTML = '<p class="text-red-500 text-center p-4">No data found for the selected criteria.</p>';
+                if(btnPrintBill) btnPrintBill.classList.add('hidden');
                 return;
             }
 
@@ -10559,16 +10570,32 @@ function loadInitialData() {
                     return d1.localeCompare(d2) || a.time.localeCompare(b.time);
                 });
 
-                // CALL ENGINE
-                const bill = generateBillForSessions(title, sessionArray, stream);
+                // CALL ENGINE (from remuneration.js)
+                // We pass the selectedStream so it picks the right rates
+                const bill = generateBillForSessions(title, sessionArray, selectedStream);
                 
-                // Render
-                renderBillHTML(bill, outputContainer);
+                if (bill) {
+                    renderBillHTML(bill, outputContainer);
+                }
             });
+
+            // Show Print Button
+            if (btnPrintBill) btnPrintBill.classList.remove('hidden');
         });
     }
 
-    // 4. Render Function (Updated with Senior Supdt Display)
+    // 4. Print Button Listener
+    if (btnPrintBill) {
+        btnPrintBill.addEventListener('click', () => {
+            document.body.classList.add('printing-bill');
+            window.print();
+            setTimeout(() => {
+                document.body.classList.remove('printing-bill');
+            }, 500);
+        });
+    }
+
+    // 5. Helper to Render Bill HTML (Updated for Chief/Senior/Office)
     function renderBillHTML(bill, container) {
         const rows = bill.details.map(d => `
             <tr class="border-b hover:bg-gray-50">
@@ -10591,7 +10618,7 @@ function loadInitialData() {
         `).join('');
 
         const html = `
-            <div class="bg-white border-2 border-gray-800 p-6 print-page mb-8">
+            <div class="bg-white border-2 border-gray-800 p-6 print-page mb-8 page-break-avoid">
                 <div class="text-center border-b-2 border-black pb-4 mb-4">
                     <h2 class="text-xl font-bold uppercase">${currentCollegeName}</h2>
                     <h3 class="text-lg font-semibold">Remuneration Bill: ${bill.title}</h3>
@@ -10623,6 +10650,7 @@ function loadInitialData() {
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4">
                     
+                    <!-- Left Column: Supervision Detailed (Updated) -->
                     <div class="bg-gray-50 p-3 rounded border border-gray-200">
                         <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Charges</div>
                         
@@ -10647,6 +10675,7 @@ function loadInitialData() {
                         </div>
                     </div>
 
+                    <!-- Right Column: Other Charges -->
                     <div class="space-y-2">
                         <div class="flex justify-between border-b border-dotted pb-1"><span>2. Invigilation Charges:</span> <span class="font-mono font-bold">₹${bill.invigilation}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>3. Clerk Charges:</span> <span class="font-mono font-bold">₹${bill.clerical}</span></div>
