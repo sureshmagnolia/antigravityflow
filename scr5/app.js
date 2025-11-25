@@ -413,9 +413,13 @@ if (window.firebase && window.firebase.auth) {
 }
 // ------------------------------------------
 
-
-
 async function createNewCollege(user) {
+    // 1. ASK FOR NAME
+    let newName = prompt("Please enter the Official Name of your College/Institution:");
+    if (!newName || newName.trim() === "") {
+        newName = "My College Exam Database"; // Fallback
+    }
+
     const { db, collection, addDoc } = window.firebase;
     
     // Prepare initial data from local storage
@@ -429,28 +433,34 @@ async function createNewCollege(user) {
         'examRoomAllotment', 
         'examScribeList', 
         'examScribeAllotment',
-        'examRulesConfig' // <--- ADD THIS LINE
+        'examRulesConfig' 
     ];
     keysToSync.forEach(key => {
         const val = localStorage.getItem(key);
         if(val) initialData[key] = val;
     });
 
+    // 2. OVERWRITE NAME TO CLOUD DATA
+    initialData.examCollegeName = newName; 
+    localStorage.setItem('examCollegeName', newName); 
+
     // Metadata
     initialData.admins = [user.email];
-    initialData.allowedUsers = [user.email]; // CRITICAL for security rules
+    initialData.allowedUsers = [user.email]; 
     initialData.lastUpdated = new Date().toISOString();
 
     try {
         const docRef = await window.firebase.addDoc(window.firebase.collection(db, "colleges"), initialData);
         currentCollegeId = docRef.id;
-        alert("✅ New College Database Created! You are the Admin.");
-        syncDataFromCloud(currentCollegeId); // Reload to confirm
+        alert(`✅ Database Created for "${newName}"!\nYou are the Admin.`);
+        syncDataFromCloud(currentCollegeId); 
     } catch (e) {
         console.error("Creation failed:", e);
         alert("Failed to create database. " + e.message);
     }
 }
+
+
 // ==========================================
 // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
 // ==========================================
@@ -1545,6 +1555,17 @@ function chunkString(str, size) {
     return chunks;
 }
 
+function updateHeaderCollegeName() {
+    const headerNameEl = document.getElementById('header-college-name');
+    // Read from local storage which is kept in sync
+    const storedName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+    
+    if (headerNameEl) {
+        headerNameEl.textContent = storedName;
+    }
+    // Also update global variable if needed
+    currentCollegeName = storedName;
+}
 // --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
 // [In app.js - Replace the existing updateDashboard function]
 
