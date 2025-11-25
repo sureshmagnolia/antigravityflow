@@ -1313,7 +1313,9 @@
         <div class="mb-4">
             <h4 class="text-sm font-semibold text-gray-600 mb-2">Set Storage Limit:</h4>
             <div class="flex flex-col gap-2">
-                <input type="text" id="admin-college-id" class="p-2 border rounded text-sm" placeholder="Enter College ID (from Firestore)">
+                <select id="admin-college-select" class="flex-1 p-2 border rounded text-sm bg-white">
+    <option value="">-- Loading Colleges... --</option>
+</select>
                 <div class="flex gap-2">
                     <input type="number" id="admin-storage-limit" class="flex-1 p-2 border rounded text-sm" placeholder="Limit in MB (e.g., 20)">
                     <button id="set-limit-btn" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">Set Limit</button>
