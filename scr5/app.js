@@ -1095,6 +1095,14 @@ if (toggleButton && sidebar) {
         }
     });
 }
+// --- NEW: Close Sidebar Button Logic ---
+const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+if (closeSidebarBtn) {
+    closeSidebarBtn.addEventListener('click', () => {
+        // Always hide sidebar when X is clicked
+        sidebar.classList.add('-translate-x-full');
+    });
+}
 // --- END: Sidebar Toggle Logic ---
 
 // [In app.js - Replace the previous Exam Name logic with this]
