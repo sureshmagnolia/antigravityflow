@@ -10403,7 +10403,7 @@ function loadInitialData() {
         // *** MOVED HERE: Always render Exam Settings, even if no student data exists ***
         if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
         // ******************************************************************************
-
+        if (typeof initRemunerationModule === 'function') initRemunerationModule();
         // 2. Check for base student data persistence
         const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
         if (savedDataJson) {
