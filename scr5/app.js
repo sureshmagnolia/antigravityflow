@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (White QP Box) ---
+// --- Event listener for "Generate QP Distribution Report" (Final Ergonomic Tweaks) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4747,7 +4747,6 @@ if (generateQpDistributionReportButton) {
                         html += `<div class="font-bold text-sm uppercase border-b-2 border-black mt-4 mb-2 pb-1">${title}</div>`;
                         
                         for (const paper of papers) {
-                            // --- UPDATED QP BADGE STYLE (White Box, Black Text) ---
                             const qpBadge = paper.qpCode !== 'N/A' 
                                 ? `<span class="bg-white text-black px-1.5 rounded text-xs font-bold border border-black shadow-sm">${paper.qpCode}</span>` 
                                 : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
@@ -4781,24 +4780,31 @@ if (generateQpDistributionReportButton) {
                                 const roomInfo = currentRoomConfig[roomName] || {};
                                 let loc = roomInfo.location || "";
                                 
-                                if (loc.length > 10) loc = loc.substring(0, 8) + "..";
-                                const displayLoc = loc ? `<span class='text-gray-500 text-[10px] font-normal ml-1 truncate'>(${loc})</span>` : "";
+                                // Truncate Location (Keep it concise)
+                                if (loc.length > 15) loc = loc.substring(0, 13) + "..";
+                                const displayLoc = loc ? `(${loc})` : "";
                                 const serialNo = roomSerialMap[roomName] || '-';
                                 
-                                // --- BOX LAYOUT ---
+                                // --- NEW BOX LAYOUT ---
                                 html += `
-                                    <div class="border border-gray-400 rounded p-1 bg-white h-[36px] flex items-center justify-between relative shadow-sm px-2">
+                                    <div class="border border-gray-400 rounded p-1 bg-white h-[42px] flex flex-col justify-center relative shadow-sm px-2">
                                         
-                                        <div class="flex items-center gap-2 overflow-hidden">
-                                            <span class="text-xl font-black text-black leading-none">${count}</span>
-                                            
-                                            <div class="flex items-baseline min-w-0">
-                                                <span class="bg-black text-white font-bold text-xs px-1.5 py-0.5 rounded leading-none shrink-0">#${serialNo}</span>
-                                                ${displayLoc}
+                                        <div class="flex items-baseline justify-between mb-0.5 leading-none">
+                                            <div class="flex items-baseline gap-1.5 whitespace-nowrap">
+                                                <span>
+                                                    <span class="text-lg font-black text-black">${count}</span>
+                                                    <span class="text-[10px] font-bold text-gray-600">Nos</span>
+                                                </span>
+                                                
+                                                <span class="text-lg font-black text-black">Room #${serialNo}</span>
                                             </div>
+                                            
+                                            <span class="w-4 h-4 border-2 border-black bg-white rounded-sm shrink-0 ml-1"></span>
                                         </div>
                                         
-                                        <span class="w-4 h-4 border-2 border-black bg-white rounded-sm shrink-0"></span>
+                                        <div class="text-[10px] leading-none font-bold text-gray-800 truncate">
+                                            ${displayLoc}
+                                        </div>
                                     </div>
                                 `;
                             });
@@ -4822,7 +4828,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Final Styling).`;
+            reportStatus.textContent = `Generated QP Distribution Report.`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
