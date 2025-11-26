@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Compact 2-Line Boxes) ---
+// --- Event listener for "Generate QP Distribution Report" (Ergonomic Layout) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4671,7 +4671,7 @@ if (generateQpDistributionReportButton) {
             const processed_rows_with_rooms = performOriginalAllocation(data);
             const sessions = {};
             
-            // 1. Grouping Logic (Course Key Based)
+            // 1. Grouping Logic
             for (const student of processed_rows_with_rooms) {
                 const sessionKey = `${student.Date}_${student.Time}`;
                 const roomName = student['Room No'];
@@ -4731,7 +4731,7 @@ if (generateQpDistributionReportButton) {
                 
                 const paperArray = Object.values(session.papers);
 
-                // SORTING
+                // SORTING: Regular First, then Others
                 paperArray.sort((a, b) => {
                     const isRegA = a.stream === "Regular";
                     const isRegB = b.stream === "Regular";
@@ -4742,16 +4742,25 @@ if (generateQpDistributionReportButton) {
                 });
 
                 for (const paper of paperArray) {
+                    const isRegular = (paper.stream === "Regular");
+                    
+                    // --- STREAM VISUALS ---
+                    // Regular: Solid Border, White BG
+                    // Other: Dashed Border, Yellowish BG
+                    const containerStyle = isRegular 
+                        ? "border: 1px solid #000; background: #fff;" 
+                        : "border: 2px dashed #666; background: #fffbeb;"; // Amber-50
+                    
                     const qpBadge = paper.qpCode !== 'N/A' 
                         ? `<span class="bg-gray-800 text-white px-1.5 rounded text-xs font-bold border border-black">${paper.qpCode}</span>` 
                         : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
                     
-                    const streamBadgeClass = paper.stream === "Regular" ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
+                    const streamBadgeClass = isRegular ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
                     const streamBadge = `<span class="${streamBadgeClass} px-1 rounded border border-gray-200 text-[9px] font-bold uppercase">${paper.stream}</span>`;
 
                     allPagesHtml += `
-                        <div style="margin-top: 8px; border: 1px solid #000; padding: 4px; page-break-inside: avoid;">
-                            <div class="flex justify-between items-start border-b border-dotted border-gray-300 pb-1 mb-1.5">
+                        <div style="margin-top: 8px; padding: 4px; page-break-inside: avoid; border-radius: 4px; ${containerStyle}">
+                            <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-1.5">
                                 <div class="w-[90%]">
                                     <div class="font-bold text-xs leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
                                     <div class="flex items-center gap-2">
@@ -4778,25 +4787,24 @@ if (generateQpDistributionReportButton) {
                         const roomInfo = currentRoomConfig[roomName] || {};
                         let loc = roomInfo.location || "";
                         
-                        if (loc.length > 8) loc = loc.substring(0, 7) + "..";
-                        const displayLoc = loc ? `<span class='text-gray-500 text-[9px] font-normal'>(${loc})</span>` : "";
+                        // Truncate Location
+                        if (loc.length > 10) loc = loc.substring(0, 8) + "..";
+                        const displayLoc = loc ? `<span class='text-gray-500 font-normal'>(${loc})</span>` : "";
                         const serialNo = roomSerialMap[roomName] || '-';
                         
-                        // --- ULTRA COMPACT 2-LINE BOX ---
+                        // --- NEW LAYOUT: Qty 1st -> Serial+Loc -> Checkbox ---
                         allPagesHtml += `
-                            <div class="border border-gray-400 rounded p-1 flex flex-col justify-between bg-white h-[34px]">
-                                <div class="truncate text-[9px] leading-none mb-0.5">
-                                    <strong class="text-black">${roomName}</strong> ${displayLoc}
-                                </div>
+                            <div class="border border-gray-400 rounded p-1 flex items-center justify-between bg-white h-[34px]">
                                 
-                                <div class="flex items-end justify-between leading-none">
-                                    <span class="bg-black text-white font-bold text-[10px] px-1 rounded-sm leading-tight">#${serialNo}</span>
+                                <div class="flex flex-col justify-center h-full">
+                                    <span class="text-lg font-black text-black leading-none mb-0.5">${count}</span>
                                     
-                                    <div class="flex items-center gap-1">
-                                        <span class="text-lg font-black text-black leading-none">${count}</span>
-                                        <span class="w-3.5 h-3.5 border border-black bg-white rounded-sm"></span>
+                                    <div class="text-[9px] leading-none font-bold text-gray-800 whitespace-nowrap">
+                                        #${serialNo} ${displayLoc}
                                     </div>
                                 </div>
+                                
+                                <span class="w-4 h-4 border-2 border-black bg-white rounded-sm shrink-0"></span>
                             </div>
                         `;
                     });
@@ -4810,7 +4818,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Compact Mode).`;
+            reportStatus.textContent = `Generated QP Distribution Report (Ergonomic).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
