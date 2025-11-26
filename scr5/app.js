@@ -10588,54 +10588,43 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Updated to show Scribe Invigilators)
+    // 5. Helper to Render Bill HTML (Updated Layout)
     function renderBillHTML(bill, container) {
-        const rows = bill.details.map(d => {
-            // Create tooltip-like text for counts
-            let studentDetail = `${d.normal_students}`;
-            if (d.scribe_students > 0) studentDetail += ` + <span class="text-orange-600 font-bold">${d.scribe_students} Scribe</span>`;
-            
-            let invigDetail = `${d.invig_count_normal}`;
-            if (d.invig_count_scribe > 0) invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
-            
-            return `
-                <tr class="border-b hover:bg-gray-50">
-                    <td class="p-2 border">${d.date} <br><span class="text-xs text-gray-500">${d.time}</span></td>
-                    <td class="p-2 border text-center text-sm">${studentDetail}</td>
-                    <td class="p-2 border text-center text-xs">
-                        ${invigDetail} Invig<br>
-                        <span class="font-mono font-bold">₹${d.invig_cost}</span>
-                    </td>
-                    <td class="p-2 border text-center text-xs">
-                        <span class="font-mono font-bold">₹${d.clerk_cost}</span>
-                    </td>
-                    <td class="p-2 border text-center text-xs">
-                        <span class="font-mono font-bold">₹${d.sweeper_cost}</span>
-                    </td>
-                    <td class="p-2 border text-center text-xs bg-gray-50">
-                        <span class="font-mono font-bold">₹${d.supervision_cost}</span>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        // Table Rows
+        const rows = bill.details.map(d => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-2 border text-left">${d.date} <br><span class="text-xs text-gray-500">${d.time}</span></td>
+                <td class="p-2 border text-center font-bold">${d.students}</td>
+                <td class="p-2 border text-center text-xs">
+                    ${d.invig_count}<br><span class="text-gray-500">(₹${d.invig_cost})</span>
+                </td>
+                <td class="p-2 border text-right text-xs">₹${d.clerk_cost}</td>
+                <td class="p-2 border text-right text-xs">₹${d.sweeper_cost}</td>
+                <td class="p-2 border text-right text-xs bg-gray-50">₹${d.supervision_cost}</td>
+            </tr>
+        `).join('');
 
+        // Full Bill HTML
         const html = `
-            <div class="bg-white border-2 border-gray-800 p-6 print-page mb-8 page-break-avoid">
+            <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative">
+                
                 <div class="text-center border-b-2 border-black pb-4 mb-4">
-                    <h2 class="text-xl font-bold uppercase">${currentCollegeName}</h2>
-                    <h3 class="text-lg font-semibold">Remuneration Bill: ${bill.title}</h3>
-                    <p class="text-sm text-gray-600">Stream: ${bill.stream} | Generated on ${new Date().toLocaleDateString()}</p>
+                    <h2 class="text-xl font-bold uppercase leading-tight">${currentCollegeName}</h2>
+                    <h3 class="text-lg font-semibold mt-1">Remuneration Bill: ${bill.title}</h3>
+                    <p class="text-sm text-gray-600 mt-1">Stream: ${bill.stream} | Generated on ${new Date().toLocaleDateString()}</p>
                 </div>
 
                 <table class="w-full border-collapse border border-black text-sm mb-4">
+                    <colgroup>
+                        <col style="width: 25%;"> <col style="width: 15%;"> <col style="width: 15%;"> <col style="width: 15%;"> <col style="width: 15%;"> <col style="width: 15%;"> </colgroup>
                     <thead class="bg-gray-100">
                         <tr>
-                            <th class="p-2 border border-black">Date/Session</th>
+                            <th class="p-2 border border-black text-left">Session</th>
                             <th class="p-2 border border-black">Candidates</th>
-                            <th class="p-2 border border-black">Invigilators</th>
-                            <th class="p-2 border border-black">Clerk</th>
-                            <th class="p-2 border border-black">Sweeper</th>
-                            <th class="p-2 border border-black">Supervision</th>
+                            <th class="p-2 border border-black">Invig</th>
+                            <th class="p-2 border border-black text-right">Clerk</th>
+                            <th class="p-2 border border-black text-right">Sweeper</th>
+                            <th class="p-2 border border-black text-right">Sup.</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -10643,32 +10632,31 @@ function loadInitialData() {
                         <tr>
                             <td colspan="2" class="p-2 border border-black text-right">Subtotals:</td>
                             <td class="p-2 border border-black text-center">₹${bill.invigilation}</td>
-                            <td class="p-2 border border-black text-center">₹${bill.clerical}</td>
-                            <td class="p-2 border border-black text-center">₹${bill.sweeping}</td>
-                            <td class="p-2 border border-black text-center">₹${bill.supervision}</td>
+                            <td class="p-2 border border-black text-right">₹${bill.clerical}</td>
+                            <td class="p-2 border border-black text-right">₹${bill.sweeping}</td>
+                            <td class="p-2 border border-black text-right">₹${bill.supervision}</td>
                         </tr>
                     </tfoot>
                 </table>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4">
+                <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid">
                     
-                    <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                    <div class="bg-gray-50 p-3 rounded border border-gray-200 print:border-0 print:bg-transparent print:p-0">
                         <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Charges</div>
                         <div class="flex justify-between mb-1">
-                            <span>Chief Supdt (${bill.supervision_breakdown.chief.count} x ${bill.supervision_breakdown.chief.rate}):</span>
+                            <span>Chief (${bill.supervision_breakdown.chief.count} x ${bill.supervision_breakdown.chief.rate}):</span>
                             <span class="font-mono font-bold">₹${bill.supervision_breakdown.chief.total}</span>
                         </div>
                         <div class="flex justify-between mb-1">
-                            <span>Senior Supdt (${bill.supervision_breakdown.senior.count} x ${bill.supervision_breakdown.senior.rate}):</span>
+                            <span>Senior (${bill.supervision_breakdown.senior.count} x ${bill.supervision_breakdown.senior.rate}):</span>
                             <span class="font-mono font-bold">₹${bill.supervision_breakdown.senior.total}</span>
                         </div>
                         <div class="flex justify-between mb-1">
-                            <span>Office Supdt (${bill.supervision_breakdown.office.count} x ${bill.supervision_breakdown.office.rate}):</span>
+                            <span>Office (${bill.supervision_breakdown.office.count} x ${bill.supervision_breakdown.office.rate}):</span>
                             <span class="font-mono font-bold">₹${bill.supervision_breakdown.office.total}</span>
                         </div>
-                        <div class="flex justify-between border-t border-gray-300 pt-1 mt-1 font-bold text-blue-800">
-                            <span>Total Supervision:</span>
-                            <span class="font-mono">₹${bill.supervision}</span>
+                        <div class="flex justify-between border-t border-gray-300 pt-1 mt-1 font-bold">
+                            <span>Total:</span> <span class="font-mono">₹${bill.supervision}</span>
                         </div>
                     </div>
 
@@ -10676,17 +10664,17 @@ function loadInitialData() {
                         <div class="flex justify-between border-b border-dotted pb-1"><span>2. Invigilation Charges:</span> <span class="font-mono font-bold">₹${bill.invigilation}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>3. Clerk Charges:</span> <span class="font-mono font-bold">₹${bill.clerical}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>4. Sweeper Charges:</span> <span class="font-mono font-bold">₹${bill.sweeping}</span></div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>5. Contingency (${(bill.contingency/0.4).toFixed(0)} @ 0.40):</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
-                        <div class="flex justify-between"><span>6. Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1"><span>5. Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
+                        <div class="flex justify-between"><span>6. Data Entry:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
                     </div>
                 </div>
 
-                <div class="mt-6 p-3 bg-gray-100 border border-black flex justify-between items-center">
+                <div class="summary-box mt-6 p-3 bg-gray-100 border border-black flex justify-between items-center break-inside-avoid print:bg-transparent">
                     <span class="text-lg font-bold uppercase">Grand Total Claim</span>
                     <span class="text-2xl font-bold font-mono">₹${bill.grand_total.toFixed(2)}</span>
                 </div>
 
-                <div class="mt-12 flex justify-between text-sm font-bold">
+                <div class="summary-box mt-12 flex justify-between text-sm font-bold break-inside-avoid">
                     <div class="border-t border-black w-1/3 text-center pt-2">Assistant</div>
                     <div class="border-t border-black w-1/3 text-center pt-2">Chief Superintendent</div>
                 </div>
