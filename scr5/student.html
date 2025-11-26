@@ -30,7 +30,7 @@
         let allAllotments = {};
         let collegeName = "Exam Centre";
 
-        // --- 3. FETCH DATA ---
+       // --- 3. FETCH DATA (SECURE) ---
         async function loadData() {
             const statusEl = document.getElementById('status');
             if (!collegeId) {
@@ -41,35 +41,34 @@
             statusEl.textContent = "Loading Exam Data...";
             
             try {
-                const docRef = doc(db, "colleges", collegeId);
+                // CHANGED: Now pointing to 'public_seating' collection
+                const docRef = doc(db, "public_seating", collegeId);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    collegeName = data.examCollegeName || "Exam Centre";
+                    collegeName = data.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
                     
-                    // Parse Allotment Data
-                    const allotmentJson = data.examRoomAllotment;
+                    // CHANGED: Reading 'seatingData' field
+                    const allotmentJson = data.seatingData;
+                    
                     if (allotmentJson) {
                         allAllotments = JSON.parse(allotmentJson);
                         statusEl.textContent = "";
                         document.getElementById('search-section').classList.remove('hidden');
 
-                        // --- NEW: AUTO-FILL & SEARCH ---
+                        // Auto-Fill
                         const savedRegNo = localStorage.getItem('myExamRegNo');
                         if (savedRegNo) {
                             document.getElementById('reg-input').value = savedRegNo;
-                            // Add a small delay to make it feel natural
                             setTimeout(() => window.searchStudent(), 300); 
                         }
-                        // -------------------------------
-
                     } else {
-                        statusEl.textContent = "No seating data uploaded yet.";
+                        statusEl.textContent = "No seating data available yet.";
                     }
                 } else {
-                    statusEl.textContent = "College data not found.";
+                    statusEl.textContent = "Seating data not found.";
                 }
             } catch (error) {
                 console.error(error);
