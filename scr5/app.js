@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Course-Key Based) ---
+// --- Event listener for "Generate QP Distribution Report" (Prominent Qty + Checkbox) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4671,17 +4671,13 @@ if (generateQpDistributionReportButton) {
             const processed_rows_with_rooms = performOriginalAllocation(data);
             const sessions = {};
             
-            // 1. Grouping Logic (Changed from QP Code -> Course Key)
+            // 1. Grouping Logic (Course Key Based)
             for (const student of processed_rows_with_rooms) {
                 const sessionKey = `${student.Date}_${student.Time}`;
                 const roomName = student['Room No'];
                 const streamName = student.Stream || "Regular";
-                
-                // KEY CHANGE: Use Course+Stream as the unique grouping ID
-                // This ensures we get a report even if QP Code is missing
                 const paperKey = getQpKey(student.Course, streamName); 
                 
-                // Lookup QP for display purposes only
                 const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                 const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                 const qpCodeDisplay = sessionQPCodes[paperKey] || 'N/A'; 
@@ -4690,7 +4686,7 @@ if (generateQpDistributionReportButton) {
                     sessions[sessionKey] = { 
                         Date: student.Date, 
                         Time: student.Time, 
-                        papers: {} // Renamed from 'qpCodes' to 'papers'
+                        papers: {} 
                     };
                 }
                 
@@ -4725,7 +4721,7 @@ if (generateQpDistributionReportButton) {
                 const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
 
                 allPagesHtml += `
-                    <div class="print-page" style="padding: 10mm !important;">
+                    <div class="print-page" style="padding: 8mm !important;">
                         <div class="print-header-group text-center mb-4 border-b-2 border-black pb-2">
                             <h1 class="text-xl font-bold uppercase">${currentCollegeName}</h1>
                             <h2 class="text-lg font-semibold">QP Distribution Summary</h2>
@@ -4733,38 +4729,29 @@ if (generateQpDistributionReportButton) {
                         </div>
                 `;
                 
-                // Convert Papers Object to Array for Sorting
                 const paperArray = Object.values(session.papers);
 
-                // SORTING: Regular Stream First, then Stream Alphabetical, then Course Name
+                // SORTING
                 paperArray.sort((a, b) => {
-                    // 1. Regular First
                     const isRegA = a.stream === "Regular";
                     const isRegB = b.stream === "Regular";
                     if (isRegA && !isRegB) return -1;
                     if (!isRegA && isRegB) return 1;
-
-                    // 2. Other Streams Alphabetically
                     if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
-
-                    // 3. Course Name Alphabetically
                     return a.courseName.localeCompare(b.courseName);
                 });
 
                 for (const paper of paperArray) {
-                    
-                    // Header Logic
                     const qpBadge = paper.qpCode !== 'N/A' 
                         ? `<span class="bg-gray-200 px-2 rounded text-sm font-bold border border-gray-400">${paper.qpCode}</span>` 
                         : `<span class="text-gray-400 text-xs italic">(QP Not Entered)</span>`;
                     
-                    // Stream Badge
                     const streamBadgeClass = paper.stream === "Regular" ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
                     const streamBadge = `<span class="${streamBadgeClass} px-1.5 rounded border border-gray-200 text-[10px] font-bold uppercase">${paper.stream}</span>`;
 
                     allPagesHtml += `
-                        <div style="margin-top: 8px; border: 1px solid #000; padding: 4px; page-break-inside: avoid;">
-                            <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-1">
+                        <div style="margin-top: 12px; border: 1px solid #000; padding: 6px; page-break-inside: avoid;">
+                            <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-2">
                                 <div class="w-[85%]">
                                     <div class="font-bold text-sm leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
                                     <div class="flex items-center gap-2">
@@ -4773,37 +4760,40 @@ if (generateQpDistributionReportButton) {
                                     </div>
                                 </div>
                                 <div class="w-[15%] text-right">
-                                    <span class="text-sm font-bold border border-black px-2 py-0.5 bg-gray-100">Total: ${paper.total}</span>
+                                    <span class="text-sm font-black border border-black px-2 py-0.5 bg-gray-100">Total: ${paper.total}</span>
                                 </div>
                             </div>
                             
-                            <div class="grid grid-cols-3 gap-x-4 gap-y-1">
+                            <div class="grid grid-cols-3 gap-x-6 gap-y-2">
                     `;
                     
-                    // Sort Rooms: Serial No > Name
                     const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
                         const sA = roomSerialMap[a] || 999;
                         const sB = roomSerialMap[b] || 999;
                         return sA - sB;
                     });
 
-                    // Generate Compact Room Blocks
                     sortedRoomKeys.forEach(roomName => {
                         const count = paper.rooms[roomName];
                         const roomInfo = currentRoomConfig[roomName] || {};
                         let loc = roomInfo.location || "";
                         
-                        // Truncate Location
                         if (loc.length > 12) loc = loc.substring(0, 10) + "..";
                         const displayLoc = loc ? `<span class='text-gray-500 text-[9px]'>(${loc})</span>` : "";
                         const serialNo = roomSerialMap[roomName] || '-';
                         
+                        // --- CHANGED: Prominent Number & Checkbox ---
                         allPagesHtml += `
-                            <div class="flex justify-between items-center border-b border-gray-200 pb-0.5 text-[10px]">
-                                <div class="truncate pr-1">
-                                    <span class="font-bold mr-1">${serialNo}</span> ${roomName} ${displayLoc}
+                            <div class="flex justify-between items-center border-b border-gray-300 pb-1">
+                                <div class="truncate w-[60%] text-[10px] leading-tight">
+                                    <span class="font-bold mr-1 text-gray-800 bg-gray-100 px-1 rounded">${serialNo}</span> 
+                                    <span class="font-semibold">${roomName}</span> 
+                                    ${displayLoc}
                                 </div>
-                                <div class="font-bold">${count}</div>
+                                <div class="flex items-center justify-end gap-2 w-[40%]">
+                                    <span class="text-lg font-black text-black leading-none">${count}</span>
+                                    <span class="w-4 h-4 border-2 border-black inline-block bg-white rounded-sm"></span>
+                                </div>
                             </div>
                         `;
                     });
@@ -4817,7 +4807,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Grouped by Course).`;
+            reportStatus.textContent = `Generated QP Distribution Report.`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
