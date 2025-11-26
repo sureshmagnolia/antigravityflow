@@ -744,17 +744,15 @@ async function syncDataToCloud() {
             batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
         });
         
-       // --- NEW: SECURE PUBLIC SYNC (Names + Specific Papers) ---
-        const publicRef = doc(db, "public_seating", currentCollegeId);
-        
+       // --- NEW: SECURE PUBLIC SYNC (Split into 3 Docs to fix Size Limit) ---
+        const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
         const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
         const roomConfigData = localStorage.getItem('examRoomConfig') || '{}';
-        const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
-
-        // 1. Generate Name & Paper Maps
+        
+        // 1. Prepare Data Maps
         const baseDataStr = localStorage.getItem('examBaseData');
         let nameMap = {};
-        let paperMap = {}; // <--- New Map for Specific Papers
+        let paperMap = {}; 
         
         if (baseDataStr) {
              try {
@@ -769,8 +767,6 @@ async function syncDataToCloud() {
                      if (r) {
                          const cleanReg = r.toString().trim().toUpperCase();
                          if (n) nameMap[cleanReg] = n.toString().trim();
-                         
-                         // Store Paper Name with a Unique Key (RegNo + Date + Time)
                          if (c && d && t) {
                              const paperKey = `${cleanReg}_${d}_${t}`;
                              paperMap[paperKey] = c.toString().trim();
@@ -780,15 +776,30 @@ async function syncDataToCloud() {
              } catch (e) { console.error("Error parsing base data for public sync", e); }
         }
 
+        // 2. Define Document References (Split Strategy)
+        const publicRef = doc(db, "public_seating", currentCollegeId);
+        const namesRef = doc(db, "public_seating", currentCollegeId + "_names");
+        const coursesRef = doc(db, "public_seating", currentCollegeId + "_courses");
+
+        // 3. Queue Batch Writes
+        // Doc A: Main Seating & Rooms
         batch.set(publicRef, {
             collegeName: collegeName,
             seatingData: allotmentData,
             roomData: roomConfigData,
-            studentNames: JSON.stringify(nameMap),
-            examPapers: JSON.stringify(paperMap), // <--- Sending Specific Papers
             lastUpdated: new Date().toISOString()
         });
-        // -------------------------------
+
+        // Doc B: Student Names (Separate Doc)
+        batch.set(namesRef, {
+            json: JSON.stringify(nameMap)
+        });
+
+        // Doc C: Exam Papers (Separate Doc - This is the heavy one)
+        batch.set(coursesRef, {
+            json: JSON.stringify(paperMap)
+        });
+        // -------------------------------------------------------------------
         
         await batch.commit();
         
