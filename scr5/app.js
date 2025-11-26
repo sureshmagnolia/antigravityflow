@@ -10808,7 +10808,7 @@ function loadInitialData() {
         });
     }
 
-   // 5. Render Function (Updated: Amount in Words & Removed Assistant)
+   // 5. Render Function (Updated: All Text Black)
     function renderBillHTML(bill, container) {
         
         // --- Helper: Number to Words (Indian Format) ---
@@ -10830,7 +10830,16 @@ function loadInitialData() {
             return str.trim();
         }
 
-        const amountInWords = numToWords(Math.round(bill.grand_total));
+        // Decimal Logic
+        const totalAmount = bill.grand_total.toFixed(2);
+        const [rupeesPart, paisePart] = totalAmount.split('.');
+        
+        let amountInWords = numToWords(Number(rupeesPart));
+        
+        if (Number(paisePart) > 0) {
+            const paiseWords = numToWords(Number(paisePart));
+            amountInWords += ` and ${paiseWords} Paise`;
+        }
 
         // Table Logic
         const isRegular = bill.stream === "Regular";
@@ -10845,44 +10854,46 @@ function loadInitialData() {
         }
 
         // Headers
-        const osHeader = isRegular ? '<th class="p-1 border border-black text-center">OS</th>' : '';
-        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center">Peon</th>' : '';
+        const osHeader = isRegular ? '<th class="p-1 border border-black text-center text-black">OS</th>' : '';
+        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center text-black">Peon</th>' : '';
 
         // Rows
         const rows = bill.details.map(d => {
             let studentDetail = `${d.total_students}`;
             if (d.scribe_students > 0) {
-                studentDetail += ` <span class="text-orange-600 font-bold text-[10px]" style="white-space:nowrap;">(Incl ${d.scribe_students} Scr)</span>`;
+                // BLACK TEXT
+                studentDetail += ` <span class="text-black font-bold text-[10px]" style="white-space:nowrap;">(Incl ${d.scribe_students} Scr)</span>`;
             }
             
             let invigDetail = `${d.invig_count_normal}`;
             if (d.invig_count_scribe > 0) {
-                invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
+                // BLACK TEXT
+                invigDetail += ` + <span class="text-black font-bold">${d.invig_count_scribe}</span>`;
             }
 
             const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + (d.peon_cost||0) + d.supervision_cost;
-            const osCell = isRegular ? `<td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>` : '';
-            const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs">₹${d.peon_cost}</td>` : '';
+            const osCell = isRegular ? `<td class="p-1 border align-middle text-xs text-black">₹${d.os_cost}</td>` : '';
+            const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs text-black">₹${d.peon_cost}</td>` : '';
 
             return `
                 <tr class="border-b hover:bg-gray-50 text-center">
-                    <td class="p-1 border text-left align-middle">${d.date} <br><span class="text-[10px] text-gray-500">${d.time}</span></td>
-                    <td class="p-1 border align-middle font-bold text-xs">${studentDetail}</td>
-                    <td class="p-1 border align-middle text-xs">${invigDetail}<br><span class="text-gray-500 text-[10px]">(₹${d.invig_cost})</span></td>
-                    <td class="p-1 border align-middle text-xs">₹${d.clerk_cost}</td>
+                    <td class="p-1 border text-left align-middle text-black">${d.date} <br><span class="text-[10px] text-black">${d.time}</span></td>
+                    <td class="p-1 border align-middle font-bold text-xs text-black">${studentDetail}</td>
+                    <td class="p-1 border align-middle text-xs text-black">${invigDetail}<br><span class="text-black text-[10px]">(₹${d.invig_cost})</span></td>
+                    <td class="p-1 border align-middle text-xs text-black">₹${d.clerk_cost}</td>
                     ${peonCell}
-                    <td class="p-1 border align-middle text-xs">₹${d.sweeper_cost}</td>
-                    <td class="p-1 border align-middle text-xs text-gray-700">₹${d.cs_cost}</td>
-                    <td class="p-1 border align-middle text-xs text-gray-700">₹${d.sas_cost}</td>
+                    <td class="p-1 border align-middle text-xs text-black">₹${d.sweeper_cost}</td>
+                    <td class="p-1 border align-middle text-xs text-black">₹${d.cs_cost}</td>
+                    <td class="p-1 border align-middle text-xs text-black">₹${d.sas_cost}</td>
                     ${osCell}
-                    <td class="p-1 border align-middle text-xs font-bold bg-gray-100">₹${lineTotal}</td>
+                    <td class="p-1 border align-middle text-xs font-bold bg-gray-100 text-black">₹${lineTotal}</td>
                 </tr>
             `;
         }).join('');
 
         // Footers
-        const osFooter = isRegular ? `<td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
-        const peonFooter = hasPeon ? `<td class="p-2 border border-black">₹${bill.peon}</td>` : '';
+        const osFooter = isRegular ? `<td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
+        const peonFooter = hasPeon ? `<td class="p-2 border border-black text-black">₹${bill.peon}</td>` : '';
         const tableTotal = bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.supervision;
 
         // Supervision Summary
@@ -10894,70 +10905,70 @@ function loadInitialData() {
         }
 
         const html = `
-            <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative">
+            <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative text-black">
                 
                 <div class="text-center border-b-2 border-black pb-4 mb-4">
-                    <h2 class="text-xl font-bold uppercase leading-tight">${currentCollegeName}</h2>
-                    <h3 class="text-lg font-semibold mt-1">Remuneration Bill: ${bill.title}</h3>
-                    <p class="text-sm text-gray-600 mt-1">Stream: ${bill.stream} | Generated on ${new Date().toLocaleDateString()}</p>
+                    <h2 class="text-xl font-bold uppercase leading-tight text-black">${currentCollegeName}</h2>
+                    <h3 class="text-lg font-semibold mt-1 text-black">Remuneration Bill: ${bill.title}</h3>
+                    <p class="text-sm text-black mt-1">Stream: ${bill.stream} | Generated on ${new Date().toLocaleDateString()}</p>
                 </div>
 
-                <table class="w-full border-collapse border border-black text-sm mb-4 table-fixed">
+                <table class="w-full border-collapse border border-black text-sm mb-4 table-fixed text-black">
                     <colgroup>${colGroup}</colgroup>
                     <thead class="bg-gray-100 text-xs uppercase">
                         <tr>
-                            <th class="p-1 border border-black text-left">Session</th>
-                            <th class="p-1 border border-black text-center">Candidates</th>
-                            <th class="p-1 border border-black text-center">Invig</th>
-                            <th class="p-1 border border-black text-center">Clerk</th>
+                            <th class="p-1 border border-black text-left text-black">Session</th>
+                            <th class="p-1 border border-black text-center text-black">Candidates</th>
+                            <th class="p-1 border border-black text-center text-black">Invig</th>
+                            <th class="p-1 border border-black text-center text-black">Clerk</th>
                             ${peonHeader}
-                            <th class="p-1 border border-black text-center">Swpr</th>
-                            <th class="p-1 border border-black text-center">CS</th>
-                            <th class="p-1 border border-black text-center">SAS</th>
+                            <th class="p-1 border border-black text-center text-black">Swpr</th>
+                            <th class="p-1 border border-black text-center text-black">CS</th>
+                            <th class="p-1 border border-black text-center text-black">SAS</th>
                             ${osHeader}
-                            <th class="p-1 border border-black text-center font-bold">Total</th>
+                            <th class="p-1 border border-black text-center font-bold text-black">Total</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                     <tfoot class="bg-gray-100 font-bold text-xs text-center">
                         <tr>
-                            <td colspan="2" class="p-2 border border-black text-right">Subtotals:</td>
-                            <td class="p-2 border border-black">₹${bill.invigilation}</td>
-                            <td class="p-2 border border-black">₹${bill.clerical}</td>
+                            <td colspan="2" class="p-2 border border-black text-right text-black">Subtotals:</td>
+                            <td class="p-2 border border-black text-black">₹${bill.invigilation}</td>
+                            <td class="p-2 border border-black text-black">₹${bill.clerical}</td>
                             ${peonFooter}
-                            <td class="p-2 border border-black">₹${bill.sweeping}</td>
-                            <td class="p-2 border border-black">₹${bill.supervision_breakdown.chief.total}</td>
-                            <td class="p-2 border border-black">₹${bill.supervision_breakdown.senior.total}</td>
+                            <td class="p-2 border border-black text-black">₹${bill.sweeping}</td>
+                            <td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.chief.total}</td>
+                            <td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.senior.total}</td>
                             ${osFooter}
-                            <td class="p-2 border border-black text-lg">₹${tableTotal}</td>
+                            <td class="p-2 border border-black text-lg text-black">₹${tableTotal}</td>
                         </tr>
                     </tfoot>
                 </table>
 
-                <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid">
+                <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid text-black">
                     <div class="bg-gray-50 p-3 rounded border border-gray-200 print:border-0 print:bg-transparent print:p-0">
-                        <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Breakdown</div>
-                        <div class="text-xs text-gray-600 leading-relaxed">${supSummaryHTML}</div>
+                        <div class="font-bold text-black border-b border-gray-300 mb-2 pb-1">1. Supervision Breakdown</div>
+                        <div class="text-xs text-black leading-relaxed">${supSummaryHTML}</div>
                     </div>
                     <div class="space-y-2">
-                        <div class="flex justify-between border-b border-dotted pb-1 font-bold text-gray-700">2. Other Allowances</div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${(allRates[bill.stream] ? allRates[bill.stream].accountant : 0)}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1 font-bold text-black">2. Other Allowances</div>
+                        <div class="flex justify-between border-b border-dotted pb-1 text-black"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1 text-black"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1 text-black"><span>Accountant:</span> <span class="font-mono font-bold">₹${(allRates[bill.stream] ? allRates[bill.stream].accountant : 0)}</span></div>
                     </div>
                 </div>
 
-                <div class="summary-box mt-6 p-3 bg-gray-100 border border-black flex flex-col items-end break-inside-avoid print:bg-transparent">
+                <div class="summary-box mt-6 p-3 bg-gray-100 border border-black flex flex-col items-end break-inside-avoid print:bg-transparent text-black">
                     <div class="flex justify-between w-full items-center">
                         <span class="text-lg font-bold uppercase">Grand Total Claim</span>
                         <span class="text-2xl font-bold font-mono">₹${bill.grand_total.toFixed(2)}</span>
                     </div>
                     <div class="w-full text-right mt-1 border-t border-gray-300 pt-1">
-                        <span class="text-sm font-bold italic text-gray-800">(Rupees ${amountInWords} Only)</span>
+                        <span class="text-sm font-bold italic text-black">(Rupees ${amountInWords} Only)</span>
                     </div>
                 </div>
 
-                <div class="summary-box mt-12 flex justify-end text-sm font-bold break-inside-avoid">
+                <div class="summary-box mt-12 flex justify-end text-sm font-bold break-inside-avoid text-black">
                     <div class="border-t border-black w-1/3 text-center pt-2">Chief Superintendent</div>
                 </div>
             </div>
