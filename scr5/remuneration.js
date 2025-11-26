@@ -1,7 +1,7 @@
 // remuneration.js
 
-// --- 1. DEFAULT RATE CARDS ---
-const DEFAULT_RATES = {
+// --- 1. DEFAULT TEMPLATES ---
+const RATE_TEMPLATES = {
     "Regular": {
         // Supervision
         chief_supdt: 113, senior_supdt: 105, office_supdt: 90,
@@ -10,14 +10,13 @@ const DEFAULT_RATES = {
         // Support
         clerk_full_slab: 113, clerk_slab_1: 38, clerk_slab_2: 75,
         sweeper_rate: 25, sweeper_min: 35,
-        peon_rate: 0, 
         // Fixed
         data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40,
         // Flags
-        has_peon: false, has_double_session_rates: false
+        is_sde_mode: false, has_peon: false
     },
-    "Other": {
-        // SDE Rates
+    "SDE_Default": {
+        // SDE / Other Stream Rates
         chief_supdt_single: 500, chief_supdt_double: 800,
         senior_supdt_single: 400, senior_supdt_double: 700,
         office_supdt: 0, 
@@ -31,45 +30,82 @@ const DEFAULT_RATES = {
 
         data_entry_operator: 0, accountant: 0, contingent_charge: 2.00,
 
-        has_peon: true, has_double_session_rates: true
+        // Flags
+        is_sde_mode: true, has_peon: true
     }
 };
 
 const REMUNERATION_CONFIG_KEY = 'examRemunerationConfig';
+const STREAM_CONFIG_KEY = 'examStreamsConfig'; // Read-only here
 let allRates = {};
 let isRatesLocked = true;
 
 // --- 2. INITIALIZATION ---
 function initRemunerationModule() {
     loadRates();
+    // Attempt to sync dropdowns if app.js hasn't already
+    if (typeof populateRemunerationDropdowns === 'function') {
+        populateRemunerationDropdowns();
+    }
     renderRateConfigForm();
 }
 
 function loadRates() {
-    const saved = localStorage.getItem(REMUNERATION_CONFIG_KEY);
-    if (saved) {
-        allRates = JSON.parse(saved);
-        if (!allRates["Other"] || !allRates["Other"].chief_supdt_double) {
-            allRates["Other"] = JSON.parse(JSON.stringify(DEFAULT_RATES["Other"]));
+    // 1. Get Configured Streams (or default to Regular)
+    const streamJson = localStorage.getItem(STREAM_CONFIG_KEY);
+    const streams = streamJson ? JSON.parse(streamJson) : ["Regular"];
+
+    // 2. Get Saved Rates
+    const savedRatesJson = localStorage.getItem(REMUNERATION_CONFIG_KEY);
+    let savedRates = savedRatesJson ? JSON.parse(savedRatesJson) : {};
+
+    // 3. Sync: Ensure every stream has a rate card
+    allRates = {};
+    
+    streams.forEach(streamName => {
+        if (savedRates[streamName]) {
+            // Use saved rates
+            allRates[streamName] = savedRates[streamName];
+        } else {
+            // Create NEW rates based on template
+            if (streamName === "Regular") {
+                allRates[streamName] = JSON.parse(JSON.stringify(RATE_TEMPLATES["Regular"]));
+            } else {
+                // Any other stream gets SDE defaults
+                allRates[streamName] = JSON.parse(JSON.stringify(RATE_TEMPLATES["SDE_Default"]));
+            }
         }
-    } else {
-        allRates = JSON.parse(JSON.stringify(DEFAULT_RATES));
-        localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
-    }
+    });
+
+    // Save back to ensure integrity
+    localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
 }
 
 // --- 3. UI: RATE SETTINGS FORM ---
 function renderRateConfigForm() {
     const container = document.getElementById('rate-config-container');
     const selector = document.getElementById('rate-stream-selector');
+    
     if (!container || !selector) return;
     
-    const currentStream = selector.value || "Regular";
+    // Get value from selector (populated by app.js or init)
+    let currentStream = selector.value;
+    
+    // Fallback if selector is empty/loading
+    if (!currentStream || !allRates[currentStream]) {
+        currentStream = "Regular"; 
+        if(!allRates["Regular"]) loadRates(); // Emergency reload
+    }
+
     const rates = allRates[currentStream];
+    if (!rates) return; // Safety
+
     const disabledAttr = isRatesLocked ? 'disabled' : '';
     const bgClass = isRatesLocked ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-900 border-blue-400 ring-1 ring-blue-200';
 
-    if (currentStream === "Regular") {
+    // Render correct form based on Mode
+    if (!rates.is_sde_mode) {
+        // --- REGULAR MODE FORM ---
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -98,6 +134,7 @@ function renderRateConfigForm() {
             </div>
         `;
     } else {
+        // --- SDE / OTHER MODE FORM ---
         container.innerHTML = `
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
@@ -111,7 +148,7 @@ function renderRateConfigForm() {
                 </div>
                 <div class="space-y-3">
                     <h4 class="font-semibold text-xs text-orange-600 uppercase border-b pb-1">Duty Staff (Single / Double)</h4>
-                    ${createRateInput('Invigilator (Session)', 'invigilator', rates.invigilator, disabledAttr, bgClass)}
+                    ${createRateInput('Invig (Session)', 'invigilator', rates.invigilator, disabledAttr, bgClass)}
                     <div class="grid grid-cols-2 gap-2">
                         ${createRateInput('Clerk (1)', 'clerk_single', rates.clerk_single, disabledAttr, bgClass)}
                         ${createRateInput('Clerk (2)', 'clerk_double', rates.clerk_double, disabledAttr, bgClass)}
@@ -178,8 +215,11 @@ window.toggleRemunerationLock = function() {
 function generateBillForSessions(billTitle, sessionData, streamType) {
     if (Object.keys(allRates).length === 0) loadRates();
     
-    const rates = allRates[streamType] || allRates["Regular"];
-    if (!rates) return null;
+    const rates = allRates[streamType];
+    if (!rates) {
+        alert(`Error: No rate configuration found for stream '${streamType}'. Please check Settings.`);
+        return null;
+    }
 
     let bill = {
         title: billTitle,
@@ -190,8 +230,8 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         has_peon: rates.has_peon
     };
 
-    // --- LOGIC FOR OTHER (SDE) STREAMS ---
-    if (streamType !== "Regular") {
+    // --- LOGIC FOR SDE / OTHER STREAMS ---
+    if (rates.is_sde_mode) {
         const sessionsByDate = {};
         sessionData.forEach(s => {
             const dateKey = s.date;
@@ -216,25 +256,22 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 bill.supervision_breakdown.senior.total += seniorCost;
                 const supTotal = chiefCost + seniorCost;
 
-                // B. Invigilators (Updated: Correctly Split Normal vs Scribe)
+                // B. Invigilators
                 let normalInvigs = 0;
                 if (count > 0) {
                     normalInvigs = Math.floor(count / rates.invigilator_ratio);
                     if ((count % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
                     if (normalInvigs === 0) normalInvigs = 1;
                 }
-                
                 let scribeInvigs = 0;
                 if (session.scribeCount > 0) {
                     scribeInvigs = Math.ceil(session.scribeCount / rates.scribe_invigilator_ratio);
                 }
-                
                 const totalInvigs = normalInvigs + scribeInvigs;
                 const invigCost = totalInvigs * rates.invigilator;
 
                 // C. Support Staff (Daily Rate Split)
                 const staffCount = Math.ceil(count / rates.clerk_ratio);
-                
                 const clerkRate = isDouble ? rates.clerk_double : rates.clerk_single;
                 const peonRate = isDouble ? rates.peon_double : rates.peon_single;
                 const sweeperRate = isDouble ? rates.sweeper_double : rates.sweeper_single;
@@ -250,21 +287,11 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 bill.sweeping += sweeperCost;
 
                 bill.details.push({
-                    date: session.date,
-                    time: session.time,
-                    total_students: count,
-                    scribe_students: session.scribeCount,
-                    // FIX: Explicitly set these for the UI
-                    invig_count_normal: normalInvigs,
-                    invig_count_scribe: scribeInvigs,
-                    invig_cost: invigCost,
-                    clerk_cost: clerkCost,
-                    peon_cost: peonCost,
-                    sweeper_cost: sweeperCost,
-                    cs_cost: chiefCost,
-                    sas_cost: seniorCost,
-                    os_cost: 0,
-                    supervision_cost: supTotal
+                    date: session.date, time: session.time,
+                    total_students: count, scribe_students: session.scribeCount,
+                    invig_count_normal: normalInvigs, invig_count_scribe: scribeInvigs,
+                    invig_cost: invigCost, clerk_cost: clerkCost, peon_cost: peonCost, sweeper_cost: sweeperCost,
+                    cs_cost: chiefCost, sas_cost: seniorCost, os_cost: 0, supervision_cost: supTotal
                 });
             });
         });
@@ -313,20 +340,11 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             bill.sweeping += sweeperCost;
 
             bill.details.push({
-                date: session.date,
-                time: session.time,
-                total_students: totalStudents,
-                scribe_students: scribeStudents,
-                invig_count_normal: normalInvigs,
-                invig_count_scribe: scribeInvigs,
-                invig_cost: invigCost,
-                clerk_cost: clerkCost,
-                peon_cost: 0,
-                sweeper_cost: sweeperCost,
-                cs_cost: rates.chief_supdt,
-                sas_cost: rates.senior_supdt,
-                os_cost: rates.office_supdt,
-                supervision_cost: supervisionCost
+                date: session.date, time: session.time,
+                total_students: totalStudents, scribe_students: scribeStudents,
+                invig_count_normal: normalInvigs, invig_count_scribe: scribeInvigs,
+                invig_cost: invigCost, clerk_cost: clerkCost, peon_cost: 0, sweeper_cost: sweeperCost,
+                cs_cost: rates.chief_supdt, sas_cost: rates.senior_supdt, os_cost: rates.office_supdt, supervision_cost: supervisionCost
             });
         });
     }
@@ -344,4 +362,5 @@ window.initRemunerationModule = initRemunerationModule;
 window.renderRateConfigForm = renderRateConfigForm;
 window.generateBillForSessions = generateBillForSessions;
 
+// Auto-Init
 loadRates();
