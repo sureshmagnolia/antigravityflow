@@ -748,11 +748,13 @@ async function syncDataToCloud() {
         // This pushes only the seating data to the public collection
         const publicRef = doc(db, "public_seating", currentCollegeId);
         const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
+        const roomConfigData = localStorage.getItem('examRoomConfig') || '{}'; // <--- NEW
         const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
         
         batch.set(publicRef, {
             collegeName: collegeName,
             seatingData: allotmentData,
+            roomData: roomConfigData, // <--- Sending Location Info
             lastUpdated: new Date().toISOString()
         });
         // -------------------------------
