@@ -717,7 +717,6 @@ async function syncDataToCloud() {
         const scribeData = localStorage.getItem('examScribeAllotment') || '{}'; // <--- NEW: Scribe Data
 
         // 1. Prepare Data Maps (Filtered for Today/Future)
-        const localBaseData = localStorage.getItem('examBaseData');
         const todayMidnight = new Date();
         todayMidnight.setHours(0,0,0,0);
         
@@ -757,9 +756,9 @@ async function syncDataToCloud() {
         let nameMap = {};
         let paperMap = {}; 
         
-        if (localBaseData) {
+        if () {
              try {
-                 const baseData = JSON.parse(localBaseData);
+                 const baseData = JSON.parse();
                  baseData.forEach(s => {
                      const r = s['Register Number'];
                      if (r && activeRegNos.has(r)) {
