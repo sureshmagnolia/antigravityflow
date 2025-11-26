@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Single-Line Compact) ---
+// --- Event listener for "Generate QP Distribution Report" (White QP Box) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4747,8 +4747,9 @@ if (generateQpDistributionReportButton) {
                         html += `<div class="font-bold text-sm uppercase border-b-2 border-black mt-4 mb-2 pb-1">${title}</div>`;
                         
                         for (const paper of papers) {
+                            // --- UPDATED QP BADGE STYLE (White Box, Black Text) ---
                             const qpBadge = paper.qpCode !== 'N/A' 
-                                ? `<span class="bg-gray-800 text-white px-1.5 rounded text-xs font-bold border border-black">${paper.qpCode}</span>` 
+                                ? `<span class="bg-white text-black px-1.5 rounded text-xs font-bold border border-black shadow-sm">${paper.qpCode}</span>` 
                                 : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
                             
                             html += `
@@ -4780,14 +4781,11 @@ if (generateQpDistributionReportButton) {
                                 const roomInfo = currentRoomConfig[roomName] || {};
                                 let loc = roomInfo.location || "";
                                 
-                                // Truncate Location
                                 if (loc.length > 10) loc = loc.substring(0, 8) + "..";
-                                // Format: (Loc)
                                 const displayLoc = loc ? `<span class='text-gray-500 text-[10px] font-normal ml-1 truncate'>(${loc})</span>` : "";
                                 const serialNo = roomSerialMap[roomName] || '-';
                                 
-                                // --- UPDATED SINGLE-LINE BOX LAYOUT ---
-                                // Order: [Count] [Serial (Loc)] [Checkbox]
+                                // --- BOX LAYOUT ---
                                 html += `
                                     <div class="border border-gray-400 rounded p-1 bg-white h-[36px] flex items-center justify-between relative shadow-sm px-2">
                                         
@@ -4824,7 +4822,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Final Layout).`;
+            reportStatus.textContent = `Generated QP Distribution Report (Final Styling).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
