@@ -9903,7 +9903,7 @@ window.handlePythonExtraction = function(jsonString) {
         });
     }
 
-// Populate Dropdowns (Smart Visibility)
+// Populate Dropdowns (Updated to include Remuneration tabs)
     function populateStreamDropdowns() {
         const streamsToRender = (currentStreamConfig && currentStreamConfig.length > 0) 
                                 ? currentStreamConfig 
@@ -9911,27 +9911,20 @@ window.handlePythonExtraction = function(jsonString) {
 
         const optionsHtml = streamsToRender.map(s => `<option value="${s}">${s}</option>`).join('');
         
-        // Logic: Only show if more than 1 stream exists
         const shouldShow = streamsToRender.length > 1;
 
         // 1. CSV Dropdown
         if (csvStreamSelect) {
             csvStreamSelect.innerHTML = optionsHtml;
             const wrapper = document.getElementById('csv-stream-wrapper');
-            if (wrapper) {
-                if (shouldShow) wrapper.classList.remove('hidden');
-                else wrapper.classList.add('hidden');
-            }
+            if (wrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
         }
 
         // 2. PDF Dropdown
         if (pdfStreamSelect) {
             pdfStreamSelect.innerHTML = optionsHtml;
             const wrapper = document.getElementById('pdf-stream-wrapper');
-            if (wrapper) {
-                if (shouldShow) wrapper.classList.remove('hidden');
-                else wrapper.classList.add('hidden');
-            }
+            if (wrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
         }
         
         // 3. Report Filter
@@ -9939,12 +9932,24 @@ window.handlePythonExtraction = function(jsonString) {
         const reportWrapper = document.getElementById('reports-stream-dropdown-container');
         if (reportStreamSelect) {
              reportStreamSelect.innerHTML = `<option value="all">All Streams (Combined)</option>` + optionsHtml;
-             if (reportWrapper) {
-                 if (shouldShow) reportWrapper.classList.remove('hidden');
-                 else reportWrapper.classList.add('hidden');
-             }
+             if (reportWrapper) shouldShow ? wrapper.classList.remove('hidden') : wrapper.classList.add('hidden');
+        }
+
+        // 4. Remuneration: Bill Stream Select (NEW)
+        const billStreamSelect = document.getElementById('bill-stream-select');
+        if (billStreamSelect) {
+            billStreamSelect.innerHTML = optionsHtml;
+        }
+
+        // 5. Remuneration: Rate Card Selector (NEW)
+        const rateStreamSelect = document.getElementById('rate-stream-selector');
+        if (rateStreamSelect) {
+            rateStreamSelect.innerHTML = optionsHtml;
         }
     }
+    
+    // Also expose this function globally if needed by remuneration.js init
+    window.populateRemunerationDropdowns = populateStreamDropdowns;
 
     // Add Stream
     if (addStreamBtn) {
@@ -10443,14 +10448,17 @@ function loadInitialData() {
 }
 
     // ==========================================
-    // 💰 REMUNERATION LOGIC (FINAL - SCRIBE COMPATIBLE)
+    // 💰 REMUNERATION LOGIC (FINAL - DYNAMIC STREAMS)
     // ==========================================
 
     // 1. Navigation Listener
     if (navRemuneration) {
         navRemuneration.addEventListener('click', () => {
             showView(viewRemuneration, navRemuneration);
-            if (typeof initRemunerationModule === 'function') initRemunerationModule();
+            // Initialize the separate module logic
+            if (typeof initRemunerationModule === 'function') {
+                initRemunerationModule();
+            }
         });
     }
 
@@ -10481,26 +10489,27 @@ function loadInitialData() {
                 return;
             }
 
+            // Inputs
             const selectedStream = document.getElementById('bill-stream-select').value;
             const mode = document.getElementById('bill-mode-select').value;
             
-            // 1. Load Scribe List to identify scribes
-            const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-            const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-
-            // 2. Filter Data by Stream
-            const filteredData = allStudentData.filter(s => {
-                const sStream = s.Stream || "Regular";
-                if (selectedStream === "Regular") return sStream === "Regular";
-                return sStream !== "Regular";
-            });
-
-            if (filteredData.length === 0) {
-                alert(`No students found for stream: ${selectedStream}`);
+            if (!selectedStream) {
+                alert("Please select a stream.");
                 return;
             }
 
-            // 3. Prepare Groups (Separating Scribes)
+            // A. Filter Data by Exact Stream Name
+            const filteredData = allStudentData.filter(s => {
+                const sStream = s.Stream || "Regular";
+                return sStream === selectedStream;
+            });
+
+            if (filteredData.length === 0) {
+                alert(`No students found for stream: "${selectedStream}"`);
+                return;
+            }
+
+            // B. Prepare Groups
             const billGroups = {}; 
 
             const parseDate = (dStr) => {
@@ -10512,15 +10521,17 @@ function loadInitialData() {
             const endDateInput = document.getElementById('bill-end-date').valueAsDate;
 
             filteredData.forEach(s => {
+                // Date Range Check (for Period Mode)
                 if (mode === 'period' && (startDateInput || endDateInput)) {
                     const sDate = parseDate(s.Date);
-                    if (startDateInput && sDate < startDateInput) return;
-                    if (endDateInput && sDate > endDateInput) return;
+                    if (startDateInput && sDate < startDateInput) return; // Skip
+                    if (endDateInput && sDate > endDateInput) return; // Skip
                 }
 
                 const sessionKey = `${s.Date} | ${s.Time}`;
                 let groupKey = "Consolidated Bill";
 
+                // Grouping Logic
                 if (mode === 'exam') {
                     groupKey = getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
                 } else {
@@ -10541,7 +10552,10 @@ function loadInitialData() {
                     };
                 }
 
-                // Increment Correct Counter
+                // Load Scribe List for accurate counting
+                const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+                const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+
                 if (scribeRegNos.has(s['Register Number'])) {
                     billGroups[groupKey][sessionKey].scribeCount++;
                 } else {
@@ -10549,7 +10563,7 @@ function loadInitialData() {
                 }
             });
 
-            // 4. Calculate & Render
+            // C. Process Groups -> Calculate Bill
             const outputContainer = document.getElementById('remuneration-output');
             outputContainer.innerHTML = '';
             outputContainer.classList.remove('hidden');
@@ -10563,6 +10577,7 @@ function loadInitialData() {
             }
 
             groupKeys.forEach(title => {
+                // Convert session map to array for the calculator
                 const sessionMap = billGroups[title];
                 const sessionArray = Object.values(sessionMap).sort((a,b) => {
                     const d1 = a.date.split('.').reverse().join('');
@@ -10570,7 +10585,7 @@ function loadInitialData() {
                     return d1.localeCompare(d2) || a.time.localeCompare(b.time);
                 });
 
-                // Calls the engine in remuneration.js
+                // CALL ENGINE (from remuneration.js)
                 const bill = generateBillForSessions(title, sessionArray, selectedStream);
                 
                 if (bill) {
@@ -10578,10 +10593,12 @@ function loadInitialData() {
                 }
             });
 
+            // Show Print Button
             if (btnPrintBill) btnPrintBill.classList.remove('hidden');
         });
     }
 
+    // 4. Print Button Listener
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
             document.body.classList.add('printing-bill');
@@ -10592,20 +10609,30 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Updated: Hides OS for Non-Regular Streams)
+    // 5. Render Function (Smart Columns: Regular vs Other)
     function renderBillHTML(bill, container) {
-        const isRegular = bill.stream === "Regular";
-
-        // 1. Calculate Totals
-        const totalTableCost = bill.invigilation + bill.clerical + bill.sweeping + bill.supervision;
         
-        // 2. Define Column Widths based on Stream
-        // If Regular: 9 Cols. If Other: 8 Cols (No OS, wider others)
-        const colGroup = isRegular 
-            ? `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`
-            : `<col style="width: 18%;"><col style="width: 14%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;"><col style="width: 12%;"><col style="width: 12%;">`;
+        // Determine Table Structure based on Stream Type (Regular vs SDE)
+        // Regular: Has Office Supdt (OS), No Peon
+        // Other: Has Peon, No OS
+        const isRegular = (bill.stream === "Regular");
+        const hasPeon = bill.has_peon; // Driven by remuneration.js config
 
-        // 3. Generate Rows
+        // Define Column Widths
+        let colGroup = "";
+        if (isRegular) {
+            // 9 Columns
+            colGroup = `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
+        } else {
+            // 9 Columns (Swapping OS for Peon)
+            colGroup = `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
+        }
+
+        // Headers
+        const osHeader = isRegular ? '<th class="p-1 border border-black text-center">OS</th>' : '';
+        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center">Peon</th>' : '';
+
+        // Rows
         const rows = bill.details.map(d => {
             let studentDetail = `${d.total_students}`;
             if (d.scribe_students > 0) {
@@ -10617,10 +10644,12 @@ function loadInitialData() {
                 invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
             }
 
-            const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + d.supervision_cost;
+            // Calculate Line Total (Row specific)
+            const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + (d.peon_cost||0) + d.supervision_cost;
             
-            // Conditionally render OS Cell
+            // Conditional Cells
             const osCell = isRegular ? `<td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>` : '';
+            const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs">₹${d.peon_cost}</td>` : '';
 
             return `
                 <tr class="border-b hover:bg-gray-50 text-center">
@@ -10628,6 +10657,7 @@ function loadInitialData() {
                     <td class="p-1 border align-middle font-bold text-xs">${studentDetail}</td>
                     <td class="p-1 border align-middle text-xs">${invigDetail}<br><span class="text-gray-500 text-[10px]">(₹${d.invig_cost})</span></td>
                     <td class="p-1 border align-middle text-xs">₹${d.clerk_cost}</td>
+                    ${peonCell}
                     <td class="p-1 border align-middle text-xs">₹${d.sweeper_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.cs_cost}</td>
                     <td class="p-1 border align-middle text-xs text-gray-700">₹${d.sas_cost}</td>
@@ -10637,12 +10667,29 @@ function loadInitialData() {
             `;
         }).join('');
 
-        // 4. Generate Headers & Footers (Conditional OS)
-        const osHeader = isRegular ? `<th class="p-1 border border-black text-center">OS</th>` : '';
+        // Footers
         const osFooter = isRegular ? `<td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
-        const osSummaryLine = isRegular 
-            ? `<div class="flex justify-between mb-1"><span>Office Supdt (${bill.supervision_breakdown.office.count} x ${bill.supervision_breakdown.office.rate}):</span> <span class="font-mono font-bold">₹${bill.supervision_breakdown.office.total}</span></div>` 
-            : '';
+        const peonFooter = hasPeon ? `<td class="p-2 border border-black">₹${bill.peon}</td>` : '';
+        
+        // Calculate Net Total for Footer (Exclude allowances to match line totals)
+        const tableTotal = bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.supervision;
+
+        // Supervision Summary Block (Split Line)
+        let supSummaryHTML = '';
+        if (isRegular) {
+            supSummaryHTML = `
+                CS: ₹${bill.supervision_breakdown.chief.total}, 
+                SAS: ₹${bill.supervision_breakdown.senior.total}, 
+                OS: ₹${bill.supervision_breakdown.office.total}, 
+                <strong class="text-black">Total: ₹${bill.supervision}</strong>
+            `;
+        } else {
+            supSummaryHTML = `
+                Chief Supdt: ₹${bill.supervision_breakdown.chief.total}, 
+                Senior Supdt: ₹${bill.supervision_breakdown.senior.total}, 
+                <strong class="text-black">Total: ₹${bill.supervision}</strong>
+            `;
+        }
 
         const html = `
             <div class="bg-white border-2 border-gray-800 shadow-xl p-8 print-page mb-8 relative">
@@ -10661,6 +10708,7 @@ function loadInitialData() {
                             <th class="p-1 border border-black text-center">Candidates</th>
                             <th class="p-1 border border-black text-center">Invig</th>
                             <th class="p-1 border border-black text-center">Clerk</th>
+                            ${peonHeader}
                             <th class="p-1 border border-black text-center">Swpr</th>
                             <th class="p-1 border border-black text-center">CS</th>
                             <th class="p-1 border border-black text-center">SAS</th>
@@ -10674,11 +10722,12 @@ function loadInitialData() {
                             <td colspan="2" class="p-2 border border-black text-right">Subtotals:</td>
                             <td class="p-2 border border-black">₹${bill.invigilation}</td>
                             <td class="p-2 border border-black">₹${bill.clerical}</td>
+                            ${peonFooter}
                             <td class="p-2 border border-black">₹${bill.sweeping}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.chief.total}</td>
                             <td class="p-2 border border-black">₹${bill.supervision_breakdown.senior.total}</td>
                             ${osFooter}
-                            <td class="p-2 border border-black text-lg">₹${totalTableCost}</td>
+                            <td class="p-2 border border-black text-lg">₹${tableTotal}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -10686,27 +10735,17 @@ function loadInitialData() {
                 <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid">
                     
                     <div class="bg-gray-50 p-3 rounded border border-gray-200 print:border-0 print:bg-transparent print:p-0">
-                        <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Charges</div>
-                        <div class="flex justify-between mb-1">
-                            <span>Chief Supdt (${bill.supervision_breakdown.chief.count} x ${bill.supervision_breakdown.chief.rate}):</span>
-                            <span class="font-mono font-bold">₹${bill.supervision_breakdown.chief.total}</span>
-                        </div>
-                        <div class="flex justify-between mb-1">
-                            <span>Senior Asst Supdt (${bill.supervision_breakdown.senior.count} x ${bill.supervision_breakdown.senior.rate}):</span>
-                            <span class="font-mono font-bold">₹${bill.supervision_breakdown.senior.total}</span>
-                        </div>
-                        ${osSummaryLine}
-                        <div class="flex justify-between border-t border-gray-300 pt-1 mt-1 font-bold text-blue-800">
-                            <span>Total Supervision:</span>
-                            <span class="font-mono">₹${bill.supervision}</span>
+                        <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Breakdown</div>
+                        <div class="text-xs text-gray-600 leading-relaxed">
+                            ${supSummaryHTML}
                         </div>
                     </div>
 
                     <div class="space-y-2">
                         <div class="flex justify-between border-b border-dotted pb-1 font-bold text-gray-700">2. Other Allowances</div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency (@ ${allRates[bill.stream].contingent_charge}/student):</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
-                        <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${allRates[bill.stream].accountant}</span></div>
+                        <div class="flex justify-between border-b border-dotted pb-1"><span>Accountant:</span> <span class="font-mono font-bold">₹${(allRates[bill.stream] ? allRates[bill.stream].accountant : 0)}</span></div>
                     </div>
                 </div>
 
