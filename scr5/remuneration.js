@@ -9,14 +9,14 @@ const DEFAULT_RATES = {
         office_supdt: 90,       
         
         // Execution
-        invigilator: 90,        // Rate per Duty
-        invigilator_ratio: 30,  // 1 Invigilator per 30 (Applied to TOTAL students)
-        invigilator_min_fraction: 0, // Fraction > 0 adds 1 invigilator
+        invigilator: 90,        
+        invigilator_ratio: 30,  // 1 per 30
+        invigilator_min_fraction: 0,
         
         // Scribe Logic
-        scribe_invigilator_ratio: 1, // 1 Separate Invigilator per Scribe
+        scribe_invigilator_ratio: 1,
 
-        // Clerk (Sliding Scale)
+        // Clerk
         clerk_full_slab: 113, 
         clerk_slab_1: 38, 
         clerk_slab_2: 75,
@@ -31,7 +31,6 @@ const DEFAULT_RATES = {
         contingent_charge: 0.40
     },
     "Other": {
-        // Default values for other streams
         chief_supdt: 113, senior_supdt: 105, office_supdt: 90,
         invigilator: 90, invigilator_ratio: 30, invigilator_min_fraction: 0,
         scribe_invigilator_ratio: 1,
@@ -55,7 +54,6 @@ function loadRates() {
     const saved = localStorage.getItem(REMUNERATION_CONFIG_KEY);
     if (saved) {
         allRates = JSON.parse(saved);
-        // Auto-update logic to ensure new defaults (30 ratio) are applied
         if(allRates["Regular"]) {
             if(allRates["Regular"].invigilator_ratio === 25) {
                 allRates["Regular"].invigilator_ratio = 30;
@@ -86,9 +84,9 @@ function renderRateConfigForm() {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
             <div class="space-y-3">
                 <h4 class="font-semibold text-xs text-blue-600 uppercase border-b pb-1">Supervision (Per Session)</h4>
-                ${createRateInput('Chief Supdt', 'chief_supdt', rates.chief_supdt, disabledAttr, bgClass)}
-                ${createRateInput('Senior Supdt', 'senior_supdt', rates.senior_supdt, disabledAttr, bgClass)}
-                ${createRateInput('Office Supdt', 'office_supdt', rates.office_supdt, disabledAttr, bgClass)}
+                ${createRateInput('Chief Supdt (CS)', 'chief_supdt', rates.chief_supdt, disabledAttr, bgClass)}
+                ${createRateInput('Senior Asst (SAS)', 'senior_supdt', rates.senior_supdt, disabledAttr, bgClass)}
+                ${createRateInput('Office Supdt (OS)', 'office_supdt', rates.office_supdt, disabledAttr, bgClass)}
             </div>
             <div class="space-y-3">
                 <h4 class="font-semibold text-xs text-blue-600 uppercase border-b pb-1">Duty Staff</h4>
@@ -153,7 +151,7 @@ window.toggleRemunerationLock = function() {
     renderRateConfigForm();
 };
 
-// --- 4. CORE ENGINE: CALCULATE BILL (Scribes Included in Main Count) ---
+// --- 4. CORE ENGINE: CALCULATE BILL ---
 function generateBillForSessions(billTitle, sessionData, streamType) {
     if (Object.keys(allRates).length === 0) loadRates();
 
@@ -183,21 +181,16 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
     sessionData.forEach(session => {
         const normalStudents = session.normalCount || 0;
         const scribeStudents = session.scribeCount || 0;
+        const totalStudents = normalStudents + scribeStudents;
         
-        // CRITICAL: Combine counts for General Invigilation calculation
-        // Scribes ARE counted here because they occupy the hall.
-        const totalStudentsForGeneral = normalStudents + scribeStudents;
-        
-        // 1. General Invigilators (Calculated on TOTAL Students)
+        // 1. Invigilators
         let normalInvigs = 0;
-        if (totalStudentsForGeneral > 0) {
-            normalInvigs = Math.floor(totalStudentsForGeneral / rates.invigilator_ratio);
-            // If any fraction remains, add 1
-            if ((totalStudentsForGeneral % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
+        if (normalStudents > 0) {
+            normalInvigs = Math.floor(normalStudents / rates.invigilator_ratio);
+            if ((normalStudents % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
             if (normalInvigs === 0) normalInvigs = 1; 
         }
 
-        // 2. Scribe Invigilators (Separate 1:1 Requirement)
         let scribeInvigs = 0;
         if (scribeStudents > 0) {
             scribeInvigs = Math.ceil(scribeStudents / scribeRatio);
@@ -206,10 +199,10 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         const totalInvigs = normalInvigs + scribeInvigs;
         const invigCost = totalInvigs * rates.invigilator;
 
-        // 3. Clerk (Based on TOTAL students)
+        // 2. Clerk
         let clerkCost = 0;
-        const clerkFullBatches = Math.floor(totalStudentsForGeneral / 100);
-        const clerkRemainder = totalStudentsForGeneral % 100;
+        const clerkFullBatches = Math.floor(totalStudents / 100);
+        const clerkRemainder = totalStudents % 100;
         clerkCost += clerkFullBatches * rates.clerk_full_slab;
         if (clerkRemainder > 0) {
             if (clerkRemainder <= 30) clerkCost += rates.clerk_slab_1;
@@ -217,27 +210,23 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             else clerkCost += rates.clerk_full_slab;
         }
 
-        // 4. Sweeper (Based on TOTAL students)
-        let sweeperCost = Math.ceil(totalStudentsForGeneral / 100) * rates.sweeper_rate;
+        // 3. Sweeper
+        let sweeperCost = Math.ceil(totalStudents / 100) * rates.sweeper_rate;
         if (sweeperCost < rates.sweeper_min) sweeperCost = rates.sweeper_min;
 
-        // 5. Supervision
+        // 4. Supervision
         const chiefCost = rates.chief_supdt;
         const seniorCost = rates.senior_supdt;
         const officeCost = rates.office_supdt;
         const supervisionCost = chiefCost + seniorCost + officeCost;
 
-        // Update Breakdowns
         bill.supervision_breakdown.chief.count++;
         bill.supervision_breakdown.chief.total += chiefCost;
-        
         bill.supervision_breakdown.senior.count++;
         bill.supervision_breakdown.senior.total += seniorCost;
-        
         bill.supervision_breakdown.office.count++;
         bill.supervision_breakdown.office.total += officeCost;
 
-        // Accumulate
         bill.supervision += supervisionCost;
         bill.invigilation += invigCost;
         bill.clerical += clerkCost;
@@ -248,12 +237,17 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             time: session.time,
             normal_students: normalStudents,
             scribe_students: scribeStudents,
-            total_students: totalStudentsForGeneral,
+            total_students: totalStudents,
             invig_count_normal: normalInvigs,
             invig_count_scribe: scribeInvigs,
             invig_cost: invigCost,
             clerk_cost: clerkCost,
             sweeper_cost: sweeperCost,
+            
+            // --- NEW: Individual Supervision Costs ---
+            cs_cost: chiefCost,
+            sas_cost: seniorCost,
+            os_cost: officeCost,
             supervision_cost: supervisionCost
         });
     });
