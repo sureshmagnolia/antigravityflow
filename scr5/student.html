@@ -104,7 +104,7 @@
             const now = new Date();
 
             // Get Student Name
-            const myName = studentNames[regNo] || "";
+            const myName = studentNames[regNo] || studentNames[regInput.value.trim()] || "Student";
 
             for (const [sessionKey, rooms] of Object.entries(allAllotments)) {
                 const [dateStr, timeStr] = sessionKey.split(' | ');
