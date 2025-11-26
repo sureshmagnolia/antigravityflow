@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Stream-Sorted & Concise) ---
+// --- Event listener for "Generate QP Distribution Report" (Course-Key Based) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4671,54 +4671,51 @@ if (generateQpDistributionReportButton) {
             const processed_rows_with_rooms = performOriginalAllocation(data);
             const sessions = {};
             
+            // 1. Grouping Logic (Changed from QP Code -> Course Key)
             for (const student of processed_rows_with_rooms) {
                 const sessionKey = `${student.Date}_${student.Time}`;
                 const roomName = student['Room No'];
-                const courseName = student.Course;
-                const streamName = student.Stream || "Regular"; 
-
-                const courseKey = getQpKey(courseName, streamName);
+                const streamName = student.Stream || "Regular";
+                
+                // KEY CHANGE: Use Course+Stream as the unique grouping ID
+                // This ensures we get a report even if QP Code is missing
+                const paperKey = getQpKey(student.Course, streamName); 
+                
+                // Lookup QP for display purposes only
                 const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                 const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
-                const qpCode = sessionQPCodes[courseKey] || 'N/A'; 
+                const qpCodeDisplay = sessionQPCodes[paperKey] || 'N/A'; 
 
                 if (!sessions[sessionKey]) {
-                    sessions[sessionKey] = { Date: student.Date, Time: student.Time, qpCodes: {} };
-                }
-                
-                if (!sessions[sessionKey].qpCodes[qpCode]) {
-                    sessions[sessionKey].qpCodes[qpCode] = {
-                        courseNames: new Set(),
-                        rooms: {},
-                        total: 0,
-                        streamTotals: {},
-                        // Tracking for Sorting
-                        isRegular: false,
-                        primaryStream: streamName 
+                    sessions[sessionKey] = { 
+                        Date: student.Date, 
+                        Time: student.Time, 
+                        papers: {} // Renamed from 'qpCodes' to 'papers'
                     };
                 }
                 
-                const qpEntry = sessions[sessionKey].qpCodes[qpCode];
-                qpEntry.courseNames.add(courseName);
-                qpEntry.total++;
+                let paperEntry = sessions[sessionKey].papers[paperKey];
                 
-                // Tag as Regular if ANY student in this QP is Regular
-                if (streamName === "Regular") qpEntry.isRegular = true;
-                
-                if (!qpEntry.streamTotals[streamName]) qpEntry.streamTotals[streamName] = 0;
-                qpEntry.streamTotals[streamName]++;
-
-                if (!qpEntry.rooms[roomName]) {
-                    qpEntry.rooms[roomName] = { total: 0, streams: {} };
+                if (!paperEntry) {
+                    paperEntry = {
+                        courseName: student.Course,
+                        stream: streamName,
+                        qpCode: qpCodeDisplay,
+                        total: 0,
+                        rooms: {}
+                    };
+                    sessions[sessionKey].papers[paperKey] = paperEntry;
                 }
                 
-                qpEntry.rooms[roomName].total++;
-                if (!qpEntry.rooms[roomName].streams[streamName]) {
-                    qpEntry.rooms[roomName].streams[streamName] = 0;
+                paperEntry.total++;
+                
+                if (!paperEntry.rooms[roomName]) {
+                    paperEntry.rooms[roomName] = 0;
                 }
-                qpEntry.rooms[roomName].streams[streamName]++;
+                paperEntry.rooms[roomName]++;
             }
             
+            // 2. Rendering Logic
             let allPagesHtml = '';
             const sortedSessionKeys = Object.keys(sessions).sort(compareSessionStrings);
             
@@ -4736,106 +4733,83 @@ if (generateQpDistributionReportButton) {
                         </div>
                 `;
                 
-                // --- NEW SORTING LOGIC ---
-                const sortedQPCodes = Object.keys(session.qpCodes).sort((a, b) => {
-                    const qpA = session.qpCodes[a];
-                    const qpB = session.qpCodes[b];
+                // Convert Papers Object to Array for Sorting
+                const paperArray = Object.values(session.papers);
 
+                // SORTING: Regular Stream First, then Stream Alphabetical, then Course Name
+                paperArray.sort((a, b) => {
                     // 1. Regular First
-                    if (qpA.isRegular && !qpB.isRegular) return -1;
-                    if (!qpA.isRegular && qpB.isRegular) return 1;
+                    const isRegA = a.stream === "Regular";
+                    const isRegB = b.stream === "Regular";
+                    if (isRegA && !isRegB) return -1;
+                    if (!isRegA && isRegB) return 1;
 
                     // 2. Other Streams Alphabetically
-                    if (!qpA.isRegular && !qpB.isRegular) {
-                        if (qpA.primaryStream !== qpB.primaryStream) {
-                            return qpA.primaryStream.localeCompare(qpB.primaryStream);
-                        }
-                    }
+                    if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
 
-                    // 3. QP Code Alphabetically
-                    return a.localeCompare(b);
+                    // 3. Course Name Alphabetically
+                    return a.courseName.localeCompare(b.courseName);
                 });
 
-                for (const qpCode of sortedQPCodes) {
-                    const qpData = session.qpCodes[qpCode];
+                for (const paper of paperArray) {
                     
-                    // Truncate Course List
-                    const courseArray = Array.from(qpData.courseNames).sort();
-                    let courseList = courseArray.join(', ');
-                    if (courseList.length > 80) courseList = courseList.substring(0, 80) + "...";
-
-                    // Sort Stream Totals (Regular First)
-                    const grandStreamParts = [];
-                    const sortedGrandStreams = Object.keys(qpData.streamTotals).sort((a, b) => {
-                        if (a === "Regular") return -1;
-                        if (b === "Regular") return 1;
-                        return a.localeCompare(b);
-                    });
+                    // Header Logic
+                    const qpBadge = paper.qpCode !== 'N/A' 
+                        ? `<span class="bg-gray-200 px-2 rounded text-sm font-bold border border-gray-400">${paper.qpCode}</span>` 
+                        : `<span class="text-gray-400 text-xs italic">(QP Not Entered)</span>`;
                     
-                    sortedGrandStreams.forEach(strm => {
-                        grandStreamParts.push(`${strm}: ${qpData.streamTotals[strm]}`);
-                    });
+                    // Stream Badge
+                    const streamBadgeClass = paper.stream === "Regular" ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
+                    const streamBadge = `<span class="${streamBadgeClass} px-1.5 rounded border border-gray-200 text-[10px] font-bold uppercase">${paper.stream}</span>`;
 
                     allPagesHtml += `
-                        <div style="margin-top: 10px; border: 1px solid #000; padding: 5px; page-break-inside: avoid;">
-                            <div class="flex justify-between items-center border-b border-dotted border-gray-400 pb-1 mb-1">
-                                <h4 class="font-bold text-sm">QP: <span class="bg-gray-200 px-2 rounded">${qpCode}</span></h4>
-                                <span class="text-xs font-bold text-gray-700">${grandStreamParts.join(' | ')}</span>
-                                <span class="text-xs font-bold border border-black px-1">Total: ${qpData.total}</span>
+                        <div style="margin-top: 8px; border: 1px solid #000; padding: 4px; page-break-inside: avoid;">
+                            <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-1">
+                                <div class="w-[85%]">
+                                    <div class="font-bold text-sm leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
+                                    <div class="flex items-center gap-2">
+                                        ${streamBadge}
+                                        <span class="text-xs font-semibold text-gray-600">QP: ${qpBadge}</span>
+                                    </div>
+                                </div>
+                                <div class="w-[15%] text-right">
+                                    <span class="text-sm font-bold border border-black px-2 py-0.5 bg-gray-100">Total: ${paper.total}</span>
+                                </div>
                             </div>
-                            <div class="text-[10px] italic text-gray-600 mb-2 truncate">${courseList}</div>
                             
-                            <table class="w-full border-collapse border border-black text-[10px]">
-                                <thead class="bg-gray-100">
-                                    <tr>
-                                        <th class="border border-black px-1 py-0.5 text-left w-[40%]">Room / Location</th>
-                                        <th class="border border-black px-1 py-0.5 text-left w-[45%]">Stream Split</th>
-                                        <th class="border border-black px-1 py-0.5 text-center w-[15%]">Qty</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
+                            <div class="grid grid-cols-3 gap-x-4 gap-y-1">
+                    `;
                     
-                    const sortedRoomKeys = Object.keys(qpData.rooms).sort((a, b) => {
+                    // Sort Rooms: Serial No > Name
+                    const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
                         const sA = roomSerialMap[a] || 999;
                         const sB = roomSerialMap[b] || 999;
                         return sA - sB;
                     });
 
-                    for (const roomName of sortedRoomKeys) {
-                        const rData = qpData.rooms[roomName];
+                    // Generate Compact Room Blocks
+                    sortedRoomKeys.forEach(roomName => {
+                        const count = paper.rooms[roomName];
                         const roomInfo = currentRoomConfig[roomName] || {};
+                        let loc = roomInfo.location || "";
                         
                         // Truncate Location
-                        let loc = roomInfo.location || "";
-                        if (loc.length > 15) loc = loc.substring(0, 13) + "..";
-                        const displayLoc = loc ? `${roomName} <span class='text-gray-500'>(${loc})</span>` : roomName;
+                        if (loc.length > 12) loc = loc.substring(0, 10) + "..";
+                        const displayLoc = loc ? `<span class='text-gray-500 text-[9px]'>(${loc})</span>` : "";
                         const serialNo = roomSerialMap[roomName] || '-';
                         
-                        // Sort Streams in Row
-                        const streamParts = [];
-                        const rowStreams = Object.keys(rData.streams).sort((a, b) => {
-                            if (a === "Regular") return -1;
-                            if (b === "Regular") return 1;
-                            return a.localeCompare(b);
-                        });
-
-                        rowStreams.forEach(strm => {
-                            streamParts.push(`<b>${strm}:</b> ${rData.streams[strm]}`);
-                        });
-                        
                         allPagesHtml += `
-                            <tr>
-                                <td class="border border-black px-1 py-0.5 font-medium">
-                                    <span class="inline-block w-6 text-center bg-gray-50 border-r border-gray-200 mr-1 text-[9px] font-bold">${serialNo}</span>
-                                    ${displayLoc}
-                                </td>
-                                <td class="border border-black px-1 py-0.5 text-gray-700">${streamParts.join(', ')}</td>
-                                <td class="border border-black px-1 py-0.5 text-center font-bold text-[11px]">${rData.total}</td>
-                            </tr>`;
-                    }
+                            <div class="flex justify-between items-center border-b border-gray-200 pb-0.5 text-[10px]">
+                                <div class="truncate pr-1">
+                                    <span class="font-bold mr-1">${serialNo}</span> ${roomName} ${displayLoc}
+                                </div>
+                                <div class="font-bold">${count}</div>
+                            </div>
+                        `;
+                    });
+
                     allPagesHtml += `
-                                </tbody>
-                            </table>
+                            </div>
                         </div>`;
                 }
                 allPagesHtml += `</div>`; 
@@ -4843,7 +4817,7 @@ if (generateQpDistributionReportButton) {
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Stream Sorted).`;
+            reportStatus.textContent = `Generated QP Distribution Report (Grouped by Course).`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
