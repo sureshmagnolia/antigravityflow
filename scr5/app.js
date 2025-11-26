@@ -4648,7 +4648,7 @@ generateQPaperReportButton.addEventListener('click', async () => {
     }
 });
 
-// --- Event listener for "Generate QP Distribution Report" (Prominent Serial & QP Count) ---
+// --- Event listener for "Generate QP Distribution Report" (Sectioned & Styled) ---
 if (generateQpDistributionReportButton) {
     generateQpDistributionReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value; 
@@ -4731,94 +4731,97 @@ if (generateQpDistributionReportButton) {
                 
                 const paperArray = Object.values(session.papers);
 
-                // SORTING: Regular First
-                paperArray.sort((a, b) => {
-                    const isRegA = a.stream === "Regular";
-                    const isRegB = b.stream === "Regular";
-                    if (isRegA && !isRegB) return -1;
-                    if (!isRegA && isRegB) return 1;
-                    if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
-                    return a.courseName.localeCompare(b.courseName);
-                });
+                // Split into Regular and Other
+                const regularPapers = paperArray.filter(p => p.stream === "Regular");
+                const otherPapers = paperArray.filter(p => p.stream !== "Regular");
 
-                for (const paper of paperArray) {
-                    const isRegular = (paper.stream === "Regular");
-                    
-                    // Distinct Visuals for Other Streams
-                    const containerStyle = isRegular 
-                        ? "border: 1px solid #000;" 
-                        : "border: 2px dashed #000; background: #fffbeb;"; // Dashed + Light Yellow
-                    
-                    const qpBadge = paper.qpCode !== 'N/A' 
-                        ? `<span class="bg-gray-800 text-white px-1.5 rounded text-xs font-bold border border-black">${paper.qpCode}</span>` 
-                        : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
-                    
-                    const streamBadgeClass = isRegular ? "text-blue-800 bg-blue-50" : "text-purple-800 bg-purple-50";
-                    const streamBadge = `<span class="${streamBadgeClass} px-1 rounded border border-gray-200 text-[9px] font-bold uppercase">${paper.stream}</span>`;
+                // Sort Helper
+                const sortPapers = (arr) => arr.sort((a, b) => a.courseName.localeCompare(b.courseName));
+                
+                sortPapers(regularPapers);
+                sortPapers(otherPapers);
 
-                    allPagesHtml += `
-                        <div style="margin-top: 8px; padding: 4px; page-break-inside: avoid; border-radius: 4px; ${containerStyle}">
-                            <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-1.5">
-                                <div class="w-[90%]">
-                                    <div class="font-bold text-xs leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
-                                    <div class="flex items-center gap-2">
-                                        ${streamBadge}
-                                        <span class="text-[10px] font-semibold text-gray-600">QP: ${qpBadge}</span>
-                                    </div>
-                                </div>
-                                <div class="w-[10%] text-right">
-                                    <span class="text-xs font-black border border-black px-1.5 py-0.5 bg-gray-200 block text-center">${paper.total}</span>
-                                </div>
-                            </div>
+                // --- SECTION RENDERER ---
+                const renderSection = (papers, title, bgClass) => {
+                    let html = '';
+                    if (papers.length > 0) {
+                        html += `<div class="font-bold text-sm uppercase border-b-2 border-black mt-4 mb-2 pb-1">${title}</div>`;
+                        
+                        for (const paper of papers) {
+                            const qpBadge = paper.qpCode !== 'N/A' 
+                                ? `<span class="bg-gray-800 text-white px-1.5 rounded text-xs font-bold border border-black">${paper.qpCode}</span>` 
+                                : `<span class="text-gray-400 text-[10px] italic">(QP Missing)</span>`;
                             
-                            <div class="grid grid-cols-4 gap-2">
-                    `;
-                    
-                    const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
-                        const sA = roomSerialMap[a] || 999;
-                        const sB = roomSerialMap[b] || 999;
-                        return sA - sB;
-                    });
-
-                    sortedRoomKeys.forEach(roomName => {
-                        const count = paper.rooms[roomName];
-                        const roomInfo = currentRoomConfig[roomName] || {};
-                        let loc = roomInfo.location || "";
-                        
-                        // Truncate Location
-                        if (loc.length > 12) loc = loc.substring(0, 10) + "..";
-                        // Location in Parenthesis (Small)
-                        const displayLoc = loc ? `<span class='text-gray-500 font-normal'>(${loc})</span>` : "";
-                        const serialNo = roomSerialMap[roomName] || '-';
-                        
-                        // --- UPDATED BOX LAYOUT ---
-                        allPagesHtml += `
-                            <div class="border border-gray-400 rounded p-1 flex flex-col justify-center bg-white h-[38px] relative shadow-sm">
-                                <div class="flex items-center justify-between mb-0.5 leading-none">
-                                    <div class="flex items-baseline gap-1.5">
-                                        <span class="bg-black text-white font-black text-sm px-1.5 rounded leading-tight">#${serialNo}</span>
-                                        <span class="text-xl font-black text-black leading-none">${count}</span>
+                            html += `
+                                <div style="margin-top: 8px; padding: 4px; page-break-inside: avoid; border-radius: 4px; border: 1px solid #000; background: ${bgClass};">
+                                    <div class="flex justify-between items-start border-b border-dotted border-gray-400 pb-1 mb-1.5">
+                                        <div class="w-[90%]">
+                                            <div class="font-bold text-xs leading-tight text-gray-900 mb-0.5">${paper.courseName}</div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-semibold text-gray-600">QP: ${qpBadge}</span>
+                                                ${title === 'Other Streams' ? `<span class="text-[9px] font-bold text-purple-700">(${paper.stream})</span>` : ''}
+                                            </div>
+                                        </div>
+                                        <div class="w-[10%] text-right">
+                                            <span class="text-xs font-black border border-black px-1.5 py-0.5 bg-white block text-center">${paper.total}</span>
+                                        </div>
                                     </div>
-                                    <span class="w-3.5 h-3.5 border-2 border-black bg-white rounded-sm"></span>
-                                </div>
-                                
-                                <div class="text-[9px] leading-none text-gray-600 pl-0.5 truncate">
-                                    ${displayLoc}
-                                </div>
-                            </div>
-                        `;
-                    });
+                                    
+                                    <div class="grid grid-cols-4 gap-2">
+                            `;
+                            
+                            const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
+                                const sA = roomSerialMap[a] || 999;
+                                const sB = roomSerialMap[b] || 999;
+                                return sA - sB;
+                            });
 
-                    allPagesHtml += `
-                            </div>
-                        </div>`;
-                }
+                            sortedRoomKeys.forEach(roomName => {
+                                const count = paper.rooms[roomName];
+                                const roomInfo = currentRoomConfig[roomName] || {};
+                                let loc = roomInfo.location || "";
+                                
+                                if (loc.length > 15) loc = loc.substring(0, 13) + "..";
+                                const displayLoc = loc ? `<div class='text-gray-600 text-[9px] mt-0.5 truncate'>${loc}</div>` : "";
+                                const serialNo = roomSerialMap[roomName] || '-';
+                                
+                                // --- UPDATED BOX LAYOUT (Count - Serial) ---
+                                html += `
+                                    <div class="border border-gray-400 rounded p-1 bg-white h-[38px] relative shadow-sm">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex items-baseline">
+                                                <span class="text-lg font-black text-black leading-none mr-1">${count}</span>
+                                                <span class="text-gray-400 font-light mr-1">-</span>
+                                                <span class="text-sm font-bold text-black leading-none">#${serialNo}</span>
+                                            </div>
+                                            
+                                            <span class="w-3.5 h-3.5 border-2 border-black bg-white rounded-sm"></span>
+                                        </div>
+                                        ${displayLoc}
+                                    </div>
+                                `;
+                            });
+
+                            html += `
+                                    </div>
+                                </div>`;
+                        }
+                    }
+                    return html;
+                };
+
+                // Render Regular Section
+                allPagesHtml += renderSection(regularPapers, "Regular Stream", "#fff");
+                
+                // Render Other Streams Section (Different BG)
+                allPagesHtml += renderSection(otherPapers, "Other Streams", "#fffbeb"); // Amber-50
+
                 allPagesHtml += `</div>`; 
             }
             
             reportOutputArea.innerHTML = allPagesHtml;
             reportOutputArea.style.display = 'block'; 
-            reportStatus.textContent = `Generated QP Distribution Report (Compact).`;
+            reportStatus.textContent = `Generated QP Distribution Report.`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "QP_Distribution_Report";
 
