@@ -10,11 +10,11 @@ const DEFAULT_RATES = {
         
         // Execution
         invigilator: 90,        // Rate per Duty
-        invigilator_ratio: 30,  // <--- UPDATED: 1 per 30 Students
-        invigilator_min_fraction: 0, // <--- UPDATED: 0 means any fraction > 0 adds 1 invigilator (Math.ceil)
+        invigilator_ratio: 30,  // 1 per 30 Students (Includes Scribes in count)
+        invigilator_min_fraction: 0, // Any fraction > 0 adds 1 invigilator
         
         // Scribe Logic
-        scribe_invigilator_ratio: 1, // 1 Invigilator per 1 Scribe
+        scribe_invigilator_ratio: 1, // 1 Additional Invigilator per Scribe
 
         // Clerk (Sliding Scale)
         clerk_full_slab: 113, 
@@ -31,7 +31,7 @@ const DEFAULT_RATES = {
         contingent_charge: 0.40
     },
     "Other": {
-        // Default values for other streams (can be edited in UI)
+        // Default values for other streams
         chief_supdt: 113, senior_supdt: 105, office_supdt: 90,
         invigilator: 90, invigilator_ratio: 30, invigilator_min_fraction: 0,
         scribe_invigilator_ratio: 1,
@@ -55,13 +55,12 @@ function loadRates() {
     const saved = localStorage.getItem(REMUNERATION_CONFIG_KEY);
     if (saved) {
         allRates = JSON.parse(saved);
-        // Auto-update logic for existing users who might have old defaults
+        // Auto-update logic for existing users
         if(allRates["Regular"]) {
             if(allRates["Regular"].invigilator_ratio === 25) {
                 allRates["Regular"].invigilator_ratio = 30;
                 allRates["Regular"].invigilator_min_fraction = 0;
             }
-            // Ensure Senior Supdt exists
             if(!allRates["Regular"].senior_supdt) allRates["Regular"].senior_supdt = 105;
         }
     } else {
@@ -154,7 +153,7 @@ window.toggleRemunerationLock = function() {
     renderRateConfigForm();
 };
 
-// --- 4. CORE ENGINE: CALCULATE BILL (Updated for 1:30) ---
+// --- 4. CORE ENGINE: CALCULATE BILL (Updated Logic) ---
 function generateBillForSessions(billTitle, sessionData, streamType) {
     if (Object.keys(allRates).length === 0) loadRates();
 
@@ -187,14 +186,17 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         const totalStudents = normalStudents + scribeStudents;
         
         // 1. Invigilators
+        
+        // A. General Invigilators (Calculated on TOTAL Students)
+        // Scribes are physically assigned to the hall initially, so they count here.
         let normalInvigs = 0;
-        if (normalStudents > 0) {
-            normalInvigs = Math.floor(normalStudents / rates.invigilator_ratio);
-            // With min_fraction 0, this behaves like Math.ceil if min_fraction logic is followed
-            if ((normalStudents % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
+        if (totalStudents > 0) {
+            normalInvigs = Math.floor(totalStudents / rates.invigilator_ratio);
+            if ((totalStudents % rates.invigilator_ratio) > rates.invigilator_min_fraction) normalInvigs++;
             if (normalInvigs === 0) normalInvigs = 1; 
         }
 
+        // B. Scribe Invigilators (Additional Special Duty)
         let scribeInvigs = 0;
         if (scribeStudents > 0) {
             scribeInvigs = Math.ceil(scribeStudents / scribeRatio);
@@ -203,7 +205,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
         const totalInvigs = normalInvigs + scribeInvigs;
         const invigCost = totalInvigs * rates.invigilator;
 
-        // 2. Clerk
+        // 2. Clerk (Based on TOTAL students)
         let clerkCost = 0;
         const clerkFullBatches = Math.floor(totalStudents / 100);
         const clerkRemainder = totalStudents % 100;
@@ -214,7 +216,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             else clerkCost += rates.clerk_full_slab;
         }
 
-        // 3. Sweeper
+        // 3. Sweeper (Based on TOTAL students)
         let sweeperCost = Math.ceil(totalStudents / 100) * rates.sweeper_rate;
         if (sweeperCost < rates.sweeper_min) sweeperCost = rates.sweeper_min;
 
