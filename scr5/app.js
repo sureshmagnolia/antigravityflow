@@ -10808,22 +10808,39 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Smart Columns: Regular vs Other)
+   // 5. Render Function (Updated: Amount in Words & Removed Assistant)
     function renderBillHTML(bill, container) {
         
-        // Determine Table Structure based on Stream Type (Regular vs SDE)
-        // Regular: Has Office Supdt (OS), No Peon
-        // Other: Has Peon, No OS
-        const isRegular = (bill.stream === "Regular");
-        const hasPeon = bill.has_peon; // Driven by remuneration.js config
+        // --- Helper: Number to Words (Indian Format) ---
+        function numToWords(n) {
+            const a = ['','One ','Two ','Three ','Four ','Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
+            const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+            
+            if ((n = n.toString()).length > 9) return 'Overflow';
+            const n_array = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+            if (!n_array) return; 
+            
+            let str = '';
+            str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
+            str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
+            str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
+            str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
+            str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
+            
+            return str.trim();
+        }
+
+        const amountInWords = numToWords(Math.round(bill.grand_total));
+
+        // Table Logic
+        const isRegular = bill.stream === "Regular";
+        const hasPeon = bill.has_peon;
 
         // Define Column Widths
         let colGroup = "";
         if (isRegular) {
-            // 9 Columns
             colGroup = `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
         } else {
-            // 9 Columns (Swapping OS for Peon)
             colGroup = `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
         }
 
@@ -10843,10 +10860,7 @@ function loadInitialData() {
                 invigDetail += ` + <span class="text-orange-600 font-bold">${d.invig_count_scribe}</span>`;
             }
 
-            // Calculate Line Total (Row specific)
             const lineTotal = d.invig_cost + d.clerk_cost + d.sweeper_cost + (d.peon_cost||0) + d.supervision_cost;
-            
-            // Conditional Cells
             const osCell = isRegular ? `<td class="p-1 border align-middle text-xs text-gray-700">₹${d.os_cost}</td>` : '';
             const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs">₹${d.peon_cost}</td>` : '';
 
@@ -10869,25 +10883,14 @@ function loadInitialData() {
         // Footers
         const osFooter = isRegular ? `<td class="p-2 border border-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
         const peonFooter = hasPeon ? `<td class="p-2 border border-black">₹${bill.peon}</td>` : '';
-        
-        // Calculate Net Total for Footer (Exclude allowances to match line totals)
         const tableTotal = bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.supervision;
 
-        // Supervision Summary Block (Split Line)
+        // Supervision Summary
         let supSummaryHTML = '';
         if (isRegular) {
-            supSummaryHTML = `
-                CS: ₹${bill.supervision_breakdown.chief.total}, 
-                SAS: ₹${bill.supervision_breakdown.senior.total}, 
-                OS: ₹${bill.supervision_breakdown.office.total}, 
-                <strong class="text-black">Total: ₹${bill.supervision}</strong>
-            `;
+            supSummaryHTML = `CS: ₹${bill.supervision_breakdown.chief.total}, SAS: ₹${bill.supervision_breakdown.senior.total}, OS: ₹${bill.supervision_breakdown.office.total}, <strong class="text-black">Total: ₹${bill.supervision}</strong>`;
         } else {
-            supSummaryHTML = `
-                Chief Supdt: ₹${bill.supervision_breakdown.chief.total}, 
-                Senior Supdt: ₹${bill.supervision_breakdown.senior.total}, 
-                <strong class="text-black">Total: ₹${bill.supervision}</strong>
-            `;
+            supSummaryHTML = `Chief Supdt: ₹${bill.supervision_breakdown.chief.total}, Senior Supdt: ₹${bill.supervision_breakdown.senior.total}, <strong class="text-black">Total: ₹${bill.supervision}</strong>`;
         }
 
         const html = `
@@ -10932,14 +10935,10 @@ function loadInitialData() {
                 </table>
 
                 <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid">
-                    
                     <div class="bg-gray-50 p-3 rounded border border-gray-200 print:border-0 print:bg-transparent print:p-0">
                         <div class="font-bold text-gray-700 border-b border-gray-300 mb-2 pb-1">1. Supervision Breakdown</div>
-                        <div class="text-xs text-gray-600 leading-relaxed">
-                            ${supSummaryHTML}
-                        </div>
+                        <div class="text-xs text-gray-600 leading-relaxed">${supSummaryHTML}</div>
                     </div>
-
                     <div class="space-y-2">
                         <div class="flex justify-between border-b border-dotted pb-1 font-bold text-gray-700">2. Other Allowances</div>
                         <div class="flex justify-between border-b border-dotted pb-1"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
@@ -10948,13 +10947,17 @@ function loadInitialData() {
                     </div>
                 </div>
 
-                <div class="summary-box mt-6 p-3 bg-gray-100 border border-black flex justify-between items-center break-inside-avoid print:bg-transparent">
-                    <span class="text-lg font-bold uppercase">Grand Total Claim</span>
-                    <span class="text-2xl font-bold font-mono">₹${bill.grand_total.toFixed(2)}</span>
+                <div class="summary-box mt-6 p-3 bg-gray-100 border border-black flex flex-col items-end break-inside-avoid print:bg-transparent">
+                    <div class="flex justify-between w-full items-center">
+                        <span class="text-lg font-bold uppercase">Grand Total Claim</span>
+                        <span class="text-2xl font-bold font-mono">₹${bill.grand_total.toFixed(2)}</span>
+                    </div>
+                    <div class="w-full text-right mt-1 border-t border-gray-300 pt-1">
+                        <span class="text-sm font-bold italic text-gray-800">(Rupees ${amountInWords} Only)</span>
+                    </div>
                 </div>
 
-                <div class="summary-box mt-12 flex justify-between text-sm font-bold break-inside-avoid">
-                    <div class="border-t border-black w-1/3 text-center pt-2">Assistant</div>
+                <div class="summary-box mt-12 flex justify-end text-sm font-bold break-inside-avoid">
                     <div class="border-t border-black w-1/3 text-center pt-2">Chief Superintendent</div>
                 </div>
             </div>
