@@ -63,11 +63,13 @@ async function handleLogin(user) {
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
+        // ADMIN LOGIN
         const docSnap = querySnapshot.docs[0];
         currentCollegeId = docSnap.id;
         isAdmin = true; 
         setupLiveSync(currentCollegeId, 'admin'); 
     } else {
+        // STAFF LOGIN
         const urlParams = new URLSearchParams(window.location.search);
         const urlId = urlParams.get('id');
         if (urlId) {
@@ -80,16 +82,9 @@ async function handleLogin(user) {
                     currentCollegeId = urlId;
                     isAdmin = false;
                     setupLiveSync(currentCollegeId, 'staff'); 
-                } else {
-                    alert("Access Denied: Email not in staff list."); signOut(auth);
-                }
-            } else {
-                alert("Invalid Link."); signOut(auth);
-            }
-        } else { 
-            alert("Access Denied. Invigilators need a specific college link."); 
-            signOut(auth); 
-        }
+                } else { alert("Access Denied: Email not in staff list."); signOut(auth); }
+            } else { alert("Invalid Link."); signOut(auth); }
+        } else { alert("Access Denied. Invigilators need a specific college link."); signOut(auth); }
     }
 }
 
@@ -115,18 +110,14 @@ function setupLiveSync(collegeId, mode) {
                     renderSlotsGridAdmin();
                     if (!document.getElementById('view-staff').classList.contains('hidden')) {
                          const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                         if(me) {
-                             renderStaffCalendar(me.email);
-                             renderStaffRankList(me.email);
-                         }
+                         if(me) { renderStaffCalendar(me.email); renderStaffRankList(me.email); }
                     }
                 }
             } else {
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
-                    if (document.getElementById('view-staff').classList.contains('hidden')) {
-                        initStaffDashboard(me);
-                    } else {
+                    if (document.getElementById('view-staff').classList.contains('hidden')) initStaffDashboard(me);
+                    else {
                         renderStaffCalendar(me.email);
                         renderStaffRankList(me.email);
                         const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
@@ -157,7 +148,6 @@ function initStaffDashboard(me) {
     ui.userName.textContent = me.name;
     ui.userRole.textContent = isAdmin ? "ADMIN (View as Staff)" : "INVIGILATOR";
     document.getElementById('auth-section').classList.remove('hidden');
-    
     document.getElementById('staff-view-name').textContent = me.name;
     const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
     document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
@@ -171,20 +161,6 @@ function initStaffDashboard(me) {
     document.getElementById('cal-next').onclick = () => { currentCalDate.setMonth(currentCalDate.getMonth()+1); renderStaffCalendar(me.email); };
 }
 
-// --- HELPERS FOR STATUS CHECKS ---
-function isUserUnavailable(slot, email) {
-    if (!slot.unavailable) return false;
-    return slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
-}
-
-function getUnavailableReason(slot, email) {
-    if (!slot.unavailable) return null;
-    const entry = slot.unavailable.find(u => (typeof u === 'string' ? u === email : u.email === email));
-    if (!entry) return null;
-    if (typeof entry === 'string') return { reason: 'N/A', details: '' }; 
-    return entry;
-}
-
 // --- UI UPDATERS ---
 
 function updateAdminUI() {
@@ -196,7 +172,6 @@ function updateAdminUI() {
     renderStaffTable(); 
 }
 
-// --- ADMIN SLOT GRID (Updated with View Details Button) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -205,7 +180,7 @@ function renderSlotsGridAdmin() {
         const filled = slot.assigned.length;
         const statusColor = filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50";
         
-        // Unavailable Button
+        // Build Unavailable List
         let unavButton = "";
         if (slot.unavailable && slot.unavailable.length > 0) {
             unavButton = `
@@ -239,47 +214,6 @@ function renderSlotsGridAdmin() {
             </div>
         `;
     });
-}
-
-// --- NEW: OPEN INCONVENIENCE MODAL ---
-window.openInconvenienceModal = function(key) {
-    const slot = invigilationSlots[key];
-    if (!slot || !slot.unavailable) return;
-    
-    document.getElementById('inconvenience-modal-subtitle').textContent = key;
-    const list = document.getElementById('inconvenience-list');
-    list.innerHTML = '';
-    
-    slot.unavailable.forEach(u => {
-        const email = (typeof u === 'string') ? u : u.email;
-        const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
-        const details = (typeof u === 'object' && u.details) ? u.details : "No details provided.";
-        
-        // Find Staff Info
-        const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
-        
-        list.innerHTML += `
-            <div class="bg-red-50 border border-red-100 p-3 rounded-lg">
-                <div class="flex justify-between items-start mb-1">
-                    <div>
-                        <div class="font-bold text-gray-800 text-sm">${s.name}</div>
-                        <div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div>
-                    </div>
-                    <span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">
-                        ${reason}
-                    </span>
-                </div>
-                <div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">
-                    "${details}"
-                </div>
-                <div class="text-right">
-                    ${s.phone ? `<a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Contact</a>` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    window.openModal('inconvenience-modal');
 }
 
 function renderStaffTable() {
@@ -328,6 +262,7 @@ function renderStaffRankList(myEmail) {
     }).join('');
 }
 
+// --- CALENDAR LOGIC ---
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -344,7 +279,6 @@ function renderStaffCalendar(myEmail) {
         if (parseInt(mm) === month + 1 && parseInt(yyyy) === year) {
             const dayNum = parseInt(dd);
             if (!slotsByDate[dayNum]) slotsByDate[dayNum] = [];
-            
             let sessionType = "FN";
             const t = tStr.toUpperCase();
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) sessionType = "AN";
@@ -353,20 +287,21 @@ function renderStaffCalendar(myEmail) {
     });
 
     const upcomingList = document.getElementById('staff-upcoming-list');
-    upcomingList.innerHTML = '';
-    let upcomingCount = 0;
-
-    Object.keys(invigilationSlots).sort().forEach(key => {
-        const slot = invigilationSlots[key];
-        if(slot.assigned.includes(myEmail)) {
-            upcomingCount++;
-            const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
-            const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
-            const clickAction = `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`
-            upcomingList.innerHTML += `<div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group"><div><div class="font-bold text-sm text-gray-800">${key}</div><div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div></div><button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">${btnText}</button></div>`;
-        }
-    });
-    if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties assigned.</p>`;
+    if(upcomingList) {
+        upcomingList.innerHTML = '';
+        let upcomingCount = 0;
+        Object.keys(invigilationSlots).sort().forEach(key => {
+            const slot = invigilationSlots[key];
+            if(slot.assigned.includes(myEmail)) {
+                upcomingCount++;
+                const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
+                const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
+                const clickAction = `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`
+                upcomingList.innerHTML += `<div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group"><div><div class="font-bold text-sm text-gray-800">${key}</div><div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div></div><button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">${btnText}</button></div>`;
+            }
+        });
+        if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties.</p>`;
+    }
 
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 border border-gray-100 h-24"></div>`;
@@ -452,6 +387,37 @@ window.openDayModal = function(dateStr, email) {
     window.openModal('day-detail-modal');
 }
 
+// --- MODAL OPENERS ---
+window.openInconvenienceModal = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot || !slot.unavailable) return;
+    document.getElementById('inconvenience-modal-subtitle').textContent = key;
+    const list = document.getElementById('inconvenience-list');
+    list.innerHTML = '';
+    
+    slot.unavailable.forEach(u => {
+        const email = (typeof u === 'string') ? u : u.email;
+        const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
+        const details = (typeof u === 'object' && u.details) ? u.details : "No details provided.";
+        
+        const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
+        
+        list.innerHTML += `
+            <div class="bg-red-50 border border-red-100 p-3 rounded-lg">
+                <div class="flex justify-between items-start mb-1">
+                    <div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div>
+                    <span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span>
+                </div>
+                <div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div>
+                <div class="text-right">
+                    ${s.phone ? `<a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Contact</a>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    window.openModal('inconvenience-modal');
+}
+
 // --- HELPERS ---
 function updateHeaderButtons(currentView) {
     const container = document.getElementById('auth-section');
@@ -497,6 +463,13 @@ async function addUserToWhitelist(email) {
     } catch(e) { console.error(e); }
 }
 
+// --- STATUS HELPERS ---
+function isUserUnavailable(slot, email) {
+    if (!slot.unavailable) return false;
+    return slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
+}
+
+// --- ACTION FUNCTIONS ---
 window.toggleLock = async function(key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
     await syncSlotsToCloud();
@@ -650,15 +623,91 @@ function calculateStaffTarget(staff) {
     return roleTarget * 5; 
 }
 
-// --- STANDARD EXPORTS ---
+// --- STAFF & ROLE MANAGEMENT EXPORTS ---
+window.saveNewStaff = async function() {
+    const name = document.getElementById('stf-name').value;
+    const email = document.getElementById('stf-email').value;
+    const phone = document.getElementById('stf-phone').value;
+    const dept = document.getElementById('stf-dept').value;
+    const designation = document.getElementById('stf-designation').value;
+    const date = document.getElementById('stf-join').value;
+
+    if(!name || !email) return alert("Fill all fields");
+    
+    const days = [];
+    document.querySelectorAll('.day-chk:checked').forEach(chk => days.push(parseInt(chk.value)));
+
+    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [], preferredDays: days };
+    staffData.push(newObj);
+    await syncStaffToCloud();
+    await addUserToWhitelist(email);
+    window.closeModal('add-staff-modal');
+    
+    if(!isAdmin) window.location.reload();
+    else renderStaffTable();
+}
+
+window.deleteStaff = async function(index) {
+    if(confirm("Delete staff?")) {
+        staffData.splice(index, 1);
+        await syncStaffToCloud();
+        renderStaffTable();
+    }
+}
+
+window.openRoleAssignmentModal = function(index) {
+    const staff = staffData[index];
+    const modal = document.getElementById('role-assignment-modal');
+    document.getElementById('role-assign-name').textContent = staff.name;
+    document.getElementById('role-assign-index').value = index;
+    const select = document.getElementById('assign-role-select');
+    select.innerHTML = Object.keys(rolesConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+    const hist = document.getElementById('role-history-list');
+    hist.innerHTML = (staff.roleHistory || []).map((h, i) => `<div class="flex justify-between text-xs p-1 bg-gray-50 mb-1"><span>${h.role}</span> <button onclick="removeRoleFromStaff(${index},${i})" class="text-red-500">&times;</button></div>`).join('');
+    modal.classList.remove('hidden');
+}
+
+window.saveRoleAssignment = async function() {
+    const idx = document.getElementById('role-assign-index').value;
+    const role = document.getElementById('assign-role-select').value;
+    const start = document.getElementById('assign-start-date').value;
+    const end = document.getElementById('assign-end-date').value;
+    if(!start) return alert("Dates required");
+    if(!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
+    staffData[idx].roleHistory.push({ role, start, end });
+    await syncStaffToCloud();
+    window.closeModal('role-assignment-modal');
+    renderStaffTable();
+}
+
+window.removeRoleFromStaff = async function(sIdx, rIdx) {
+    staffData[sIdx].roleHistory.splice(rIdx, 1);
+    await syncStaffToCloud();
+    window.closeModal('role-assignment-modal');
+    renderStaffTable();
+}
+
+window.filterStaffTable = renderStaffTable;
+window.switchAdminTab = function(tabName) {
+    document.getElementById('tab-content-staff').classList.add('hidden');
+    document.getElementById('tab-content-slots').classList.add('hidden');
+    document.getElementById('tab-btn-staff').classList.replace('border-indigo-600', 'border-transparent');
+    document.getElementById('tab-btn-slots').classList.replace('border-indigo-600', 'border-transparent');
+    document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
+    document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
+}
+
 window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-window.filterStaffTable = renderStaffTable;
-window.saveNewStaff = saveNewStaff;
-window.deleteStaff = deleteStaff;
-window.openRoleAssignmentModal = openRoleAssignmentModal;
-window.saveRoleAssignment = saveRoleAssignment;
-window.removeRoleFromStaff = removeRoleFromStaff;
+window.switchToStaffView = switchToStaffView;
+window.initAdminDashboard = initAdminDashboard;
+
+function showView(viewName) {
+    Object.values(views).forEach(el => el.classList.add('hidden'));
+    views[viewName].classList.remove('hidden');
+}
+
+// --- EXPORT TO WINDOW ---
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
 window.volunteer = volunteer;
@@ -667,13 +716,6 @@ window.setAvailability = setAvailability;
 window.openDayModal = openDayModal;
 window.confirmUnavailable = confirmUnavailable;
 window.toggleUnavDetails = toggleUnavDetails;
-window.switchToStaffView = switchToStaffView;
-window.initAdminDashboard = initAdminDashboard;
 window.calculateSlotsFromSchedule = calculateSlotsFromSchedule;
 window.runAutoAllocation = runAutoAllocation;
-window.openInconvenienceModal = openInconvenienceModal; // Exported
-
-function showView(viewName) {
-    Object.values(views).forEach(el => el.classList.add('hidden'));
-    views[viewName].classList.remove('hidden');
-}
+window.openInconvenienceModal = openInconvenienceModal;
