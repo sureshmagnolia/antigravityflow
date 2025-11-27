@@ -565,56 +565,68 @@ async function removeStaffAccess(email) {
 }
 // --- NEW: MANUAL SLOT ADDITION ---
 
+// --- NEW: MANUAL SLOT ADDITION (Time Based) ---
+
 function openAddSlotModal() {
     document.getElementById('manual-slot-date').valueAsDate = new Date();
-    document.getElementById('manual-slot-req').value = 5; // Default suggestion
+    // Set default time to 09:30
+    const timeInput = document.getElementById('manual-slot-time');
+    if(timeInput) timeInput.value = "09:30"; 
+    
+    document.getElementById('manual-slot-req').value = 5; 
     window.openModal('add-slot-modal');
 }
 
 async function saveManualSlot() {
     const dateInput = document.getElementById('manual-slot-date').value;
-    const sessionInput = document.getElementById('manual-slot-session').value;
+    // CHANGED: Get value from Time Input instead of Select
+    const timeInput = document.getElementById('manual-slot-time').value; 
     const reqInput = parseInt(document.getElementById('manual-slot-req').value);
 
-    if (!dateInput || isNaN(reqInput) || reqInput < 1) {
-        alert("Please enter a valid date and required count.");
+    if (!dateInput || !timeInput || isNaN(reqInput) || reqInput < 1) {
+        alert("Please enter a valid date, time, and required count.");
         return;
     }
 
-    // Format Date: YYYY-MM-DD -> DD.MM.YYYY
+    // 1. Format Date: YYYY-MM-DD -> DD.MM.YYYY
     const [y, m, d] = dateInput.split('-');
     const formattedDate = `${d}.${m}.${y}`;
 
-    // Format Time: Standardize for sorting
-    const formattedTime = (sessionInput === "FN") ? "9:30 AM" : "1:30 PM";
+    // 2. Format Time: HH:MM -> hh:mm AM/PM
+    let [hours, minutes] = timeInput.split(':');
+    hours = parseInt(hours);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
 
-    // Generate Key
+    // 3. Generate Key
     const key = `${formattedDate} | ${formattedTime}`;
 
+    // 4. Check for existing
     if (invigilationSlots[key]) {
-        if (!confirm(`Slot for ${key} already exists (Req: ${invigilationSlots[key].required}).\n\nOverwrite with ${reqInput}?`)) {
+        if (!confirm(`A slot for ${key} already exists (Req: ${invigilationSlots[key].required}).\n\nOverwrite with ${reqInput}?`)) {
             return;
         }
     }
 
-    // Create/Update Slot
-    // We preserve existing assignments if overwriting, else init empty
-    const existing = invigilationSlots[key] || { assigned: [], unavailable: [], isLocked: false };
+    // 5. Create/Update Slot
+    const existing = invigilationSlots[key] || { assigned: [], unavailable: [], isLocked: true };
     
     invigilationSlots[key] = {
         ...existing,
         required: reqInput,
-        // Ensure these arrays exist if creating new
         assigned: existing.assigned || [],
         unavailable: existing.unavailable || [],
-        isLocked: existing.isLocked || false 
+        isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
 
     await syncSlotsToCloud();
     window.closeModal('add-slot-modal');
     renderSlotsGridAdmin();
-    // alert(`Slot added for ${key}`);
 }
+
+
 // --- STANDARD EXPORTS ---
 window.toggleLock = async function(key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
