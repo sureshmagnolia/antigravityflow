@@ -90,6 +90,9 @@
                     <button onclick="openModal('add-staff-modal')" class="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-sm hover:bg-indigo-700 font-medium text-sm flex justify-center gap-2">
                         <span>+</span> Add Staff
                     </button>
+                    <button onclick="openRoleConfigModal()" class="w-full mt-2 bg-white text-gray-700 border border-gray-300 px-4 py-3 rounded-lg shadow-sm hover:bg-gray-50 font-medium text-sm flex justify-center gap-2 transition">
+                        <span>⚙️</span> Settings & Roles
+                    </button>
                 </div>
                 <div class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
                     <div class="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
@@ -440,7 +443,36 @@
             </div>
         </div>
     </div>
-    
-    <script type="module" src="invigilation.js"></script>
+    <div id="role-config-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4">
+        <h3 class="text-lg font-bold text-gray-800 mb-1">Invigilation Settings</h3>
+        <p class="text-xs text-gray-500 mb-4">Configure roles and duty loads for the Academic Year.</p>
+        
+        <div class="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+            <label class="block text-xs font-bold text-blue-800 mb-1">Global Default Duty (Per Month)</label>
+            <div class="flex items-center gap-2">
+                <input type="number" id="global-duty-target" class="w-20 p-1.5 border border-blue-300 rounded text-sm text-center font-bold" min="0">
+                <span class="text-xs text-blue-600">for staff without specific roles.</span>
+            </div>
+        </div>
+
+        <h4 class="text-xs font-bold text-indigo-600 uppercase border-b pb-1 mb-2">Role Configuration</h4>
+        <div id="roles-list-container" class="space-y-2 max-h-48 overflow-y-auto mb-4 custom-scroll border border-gray-100 rounded p-2 bg-gray-50">
+            </div>
+
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="new-role-name" placeholder="New Role Name (e.g. Warden)" class="flex-1 p-2 border rounded text-xs">
+            <input type="number" id="new-role-target" placeholder="Target" class="w-16 p-2 border rounded text-xs">
+            <button onclick="addNewRoleConfig()" class="bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700">+</button>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t pt-4">
+            <button onclick="closeModal('role-config-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm font-medium hover:bg-gray-200">Close</button>
+            <button onclick="saveRoleConfig()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700">Save Changes</button>
+        </div>
+    </div>
+</div>
+    <script type="module" src="invigilation.js">
+    </script>
 </body>
 </html>
