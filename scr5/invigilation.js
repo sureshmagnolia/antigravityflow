@@ -63,13 +63,11 @@ async function handleLogin(user) {
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-        // ADMIN LOGIN
         const docSnap = querySnapshot.docs[0];
         currentCollegeId = docSnap.id;
         isAdmin = true; 
         setupLiveSync(currentCollegeId, 'admin'); 
     } else {
-        // STAFF LOGIN
         const urlParams = new URLSearchParams(window.location.search);
         const urlId = urlParams.get('id');
         if (urlId) {
@@ -198,6 +196,7 @@ function updateAdminUI() {
     renderStaffTable(); 
 }
 
+// --- ADMIN SLOT GRID (Updated with View Details Button) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -206,22 +205,14 @@ function renderSlotsGridAdmin() {
         const filled = slot.assigned.length;
         const statusColor = filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50";
         
-        // Build Unavailable List
-        let unavHtml = "";
+        // Unavailable Button
+        let unavButton = "";
         if (slot.unavailable && slot.unavailable.length > 0) {
-            const unavItems = slot.unavailable.map(u => {
-                const email = (typeof u === 'string') ? u : u.email;
-                const name = getNameFromEmail(email);
-                const reason = (typeof u === 'object' && u.reason) ? u.reason : "";
-                const details = (typeof u === 'object' && u.details) ? ` - ${u.details}` : "";
-                return `<div class="truncate">• ${name} <span class="text-gray-500">(${reason}${details})</span></div>`;
-            }).join('');
-            
-            unavHtml = `
-                <div class="mt-2 pt-2 border-t border-gray-200">
-                    <div class="text-[10px] font-bold text-red-500 uppercase">Unavailable:</div>
-                    <div class="text-[10px] text-red-700 max-h-16 overflow-y-auto leading-tight">${unavItems}</div>
-                </div>
+            unavButton = `
+                <button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-2 bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded text-xs font-bold hover:bg-red-100 transition shadow-sm">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    View ${slot.unavailable.length} Inconvenience(s)
+                </button>
             `;
         }
 
@@ -235,7 +226,7 @@ function renderSlotsGridAdmin() {
                     <div class="text-xs text-gray-600 mb-2">
                         <strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
-                    ${unavHtml}
+                    ${unavButton}
                 </div>
                 <div class="flex gap-2 mt-3">
                     <button onclick="toggleLock('${key}')" class="flex-1 text-xs border border-gray-300 rounded py-1 hover:bg-gray-50 text-gray-700 font-medium">
@@ -248,6 +239,47 @@ function renderSlotsGridAdmin() {
             </div>
         `;
     });
+}
+
+// --- NEW: OPEN INCONVENIENCE MODAL ---
+window.openInconvenienceModal = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot || !slot.unavailable) return;
+    
+    document.getElementById('inconvenience-modal-subtitle').textContent = key;
+    const list = document.getElementById('inconvenience-list');
+    list.innerHTML = '';
+    
+    slot.unavailable.forEach(u => {
+        const email = (typeof u === 'string') ? u : u.email;
+        const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
+        const details = (typeof u === 'object' && u.details) ? u.details : "No details provided.";
+        
+        // Find Staff Info
+        const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
+        
+        list.innerHTML += `
+            <div class="bg-red-50 border border-red-100 p-3 rounded-lg">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <div class="font-bold text-gray-800 text-sm">${s.name}</div>
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div>
+                    </div>
+                    <span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">
+                        ${reason}
+                    </span>
+                </div>
+                <div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">
+                    "${details}"
+                </div>
+                <div class="text-right">
+                    ${s.phone ? `<a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg> Contact</a>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    window.openModal('inconvenience-modal');
 }
 
 function renderStaffTable() {
@@ -296,7 +328,6 @@ function renderStaffRankList(myEmail) {
     }).join('');
 }
 
-// --- CALENDAR LOGIC ---
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -332,17 +363,7 @@ function renderStaffCalendar(myEmail) {
             const btnColor = slot.isLocked ? "bg-gray-100 text-gray-600" : "bg-white text-red-600 border border-red-200 hover:bg-red-50";
             const btnText = slot.isLocked ? "Locked" : "Cancel Duty";
             const clickAction = `onclick="cancelDuty('${key}', '${myEmail}', ${slot.isLocked})"`
-            upcomingList.innerHTML += `
-                <div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group">
-                    <div>
-                        <div class="font-bold text-sm text-gray-800">${key}</div>
-                        <div class="text-xs text-blue-600 font-semibold mt-1">You are assigned</div>
-                    </div>
-                    <button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">
-                        ${btnText}
-                    </button>
-                </div>
-            `;
+            upcomingList.innerHTML += `<div class="bg-blue-50 p-3 rounded-md border-l-4 border-blue-500 flex justify-between items-center group"><div><div class="font-bold text-sm text-gray-800">${key}</div><div class="text-xs text-blue-600 font-semibold mt-1">Assigned</div></div><button ${clickAction} class="${btnColor} text-[10px] font-bold px-2 py-1 rounded transition shadow-sm opacity-0 group-hover:opacity-100">${btnText}</button></div>`;
         }
     });
     if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties assigned.</p>`;
@@ -359,7 +380,6 @@ function renderStaffCalendar(myEmail) {
         if (slots.length > 0) {
             dayContent += `<div class="flex flex-col gap-1 px-1 mt-1">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
-
             slots.forEach(slot => {
                 const filled = slot.assigned.length;
                 const needed = slot.required;
@@ -370,37 +390,28 @@ function renderStaffCalendar(myEmail) {
                 
                 let badgeColor = "bg-green-100 text-green-700 border-green-200"; 
                 let statusText = `${available}/${needed}`; 
-
                 if (isAssigned) { badgeColor = "bg-blue-600 text-white border-blue-600"; statusText = "Assigned"; }
                 else if (isUnavailable) { badgeColor = "bg-red-50 text-red-600 border-red-200"; statusText = "Unavail"; }
                 else if (isFull) { badgeColor = "bg-gray-100 text-gray-400 border-gray-200"; statusText = `0/${needed}`; }
 
-                dayContent += `
-                    <div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center">
-                        <span>${slot.sessionType}</span>
-                        <span>${statusText}</span>
-                    </div>`;
+                dayContent += `<div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center"><span>${slot.sessionType}</span><span>${statusText}</span></div>`;
             });
             dayContent += `</div>`;
             bgClass = "bg-white hover:bg-gray-50 cursor-pointer";
         }
-
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
         const clickAction = slots.length > 0 ? `onclick="openDayModal('${dateStr}', '${myEmail}')"` : "";
-
         html += `<div class="border h-28 ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
     ui.calGrid.innerHTML = html;
 }
 
-// --- DAY DETAIL MODAL ---
 window.openDayModal = function(dateStr, email) {
     document.getElementById('modal-day-title').textContent = dateStr;
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
     
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
-    
     sessions.forEach(key => {
         const slot = invigilationSlots[key];
         const filled = slot.assigned.length;
@@ -408,28 +419,15 @@ window.openDayModal = function(dateStr, email) {
         const isAssigned = slot.assigned.includes(email);
         const isUnavailable = isUserUnavailable(slot, email);
         const isLocked = slot.isLocked;
-
         const t = key.split(' | ')[1].toUpperCase();
         const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
-        // --- ASSIGNED STAFF LIST ---
         let staffListHtml = '';
         if (slot.assigned.length > 0) {
             const listItems = slot.assigned.map(staffEmail => {
                 const s = staffData.find(st => st.email === staffEmail);
                 if (!s) return ''; 
-                return `
-                    <div class="flex justify-between items-center text-xs bg-white p-2 rounded border border-gray-100 mb-1 shadow-sm">
-                        <div>
-                            <div class="font-bold text-gray-700">${s.name}</div>
-                            <div class="text-[10px] text-gray-500">${s.dept}</div>
-                        </div>
-                        <a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 font-medium flex items-center gap-1">
-                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-                            ${s.phone}
-                        </a>
-                    </div>
-                `;
+                return `<div class="flex justify-between items-center text-xs bg-white p-2 rounded border border-gray-100 mb-1 shadow-sm"><div><div class="font-bold text-gray-700">${s.name}</div><div class="text-[10px] text-gray-500">${s.dept}</div></div><a href="https://wa.me/${s.phone}" target="_blank" class="text-green-600 hover:text-green-800 font-medium flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>${s.phone}</a></div>`;
             }).join('');
             staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="text-[10px] font-bold text-gray-400 uppercase mb-1.5 tracking-wider">Assigned Invigilators</div><div class="space-y-1 max-h-32 overflow-y-auto pr-1 custom-scroll">${listItems}</div></div>`;
         }
@@ -454,8 +452,7 @@ window.openDayModal = function(dateStr, email) {
     window.openModal('day-detail-modal');
 }
 
-// --- HELPERS & ACTIONS ---
-
+// --- HELPERS ---
 function updateHeaderButtons(currentView) {
     const container = document.getElementById('auth-section');
     const existingBtn = document.getElementById('switch-view-btn');
@@ -475,7 +472,7 @@ function switchToStaffView() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (me) initStaffDashboard(me);
     else {
-        if(confirm("You are not listed as a staff member yet. Create a profile?")) {
+        if(confirm("No staff profile found. Create one?")) {
             openModal('add-staff-modal');
             document.getElementById('stf-email').value = currentUser.email;
             document.getElementById('stf-email').disabled = true;
@@ -502,8 +499,7 @@ async function addUserToWhitelist(email) {
 
 window.toggleLock = async function(key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
-    // Live sync handles UI update
-    syncSlotsToCloud();
+    await syncSlotsToCloud();
 }
 
 window.volunteer = async function(key, email) {
@@ -579,13 +575,13 @@ window.confirmUnavailable = async function() {
 
 window.waNotify = function(key) {
     const slot = invigilationSlots[key];
-    if(slot.assigned.length === 0) return alert("No staff.");
+    if(slot.assigned.length === 0) return alert("No staff assigned.");
     const phones = slot.assigned.map(email => {
         const s = staffData.find(st => st.email === email);
         return s ? s.phone : "";
     }).filter(p => p);
-    if(phones.length === 0) return alert("No phones.");
-    const msg = encodeURIComponent(`Exam Duty: ${key}.`);
+    if(phones.length === 0) return alert("No phones found.");
+    const msg = encodeURIComponent(`Exam Duty: You are assigned for ${key}.`);
     window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
 }
 
@@ -675,6 +671,7 @@ window.switchToStaffView = switchToStaffView;
 window.initAdminDashboard = initAdminDashboard;
 window.calculateSlotsFromSchedule = calculateSlotsFromSchedule;
 window.runAutoAllocation = runAutoAllocation;
+window.openInconvenienceModal = openInconvenienceModal; // Exported
 
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.add('hidden'));
