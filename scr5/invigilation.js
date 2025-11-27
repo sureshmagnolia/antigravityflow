@@ -166,13 +166,14 @@ function initAdminDashboard() {
     updateHeaderButtons('admin');
     updateAdminUI();
     renderSlotsGridAdmin();
+    populateAttendanceSessions(); // <--- ADD THIS LINE
     showView('admin');
 }
-// NEW: Calculate Duties Done based on ATTENDANCE MARKING
+// NEW: Calculate Duties Done based on actual attendance
 function getDutiesDoneCount(email) {
     let count = 0;
+    // Iterate through all slots to find confirmed attendance
     Object.values(invigilationSlots).forEach(slot => {
-        // If attendance is marked, count it
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
         }
@@ -242,7 +243,7 @@ function initStaffDashboard(me) {
     document.getElementById('auth-section').classList.remove('hidden');
     
     document.getElementById('staff-view-name').textContent = me.name;
-    const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
+    const pending = calculateStaffTarget(me) - getDutiesDoneCount(me.email);
     document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
     
     updateHeaderButtons('staff');
@@ -366,7 +367,7 @@ function renderStaffTable() {
     staffData.forEach((staff, index) => {
         if (filter && !staff.name.toLowerCase().includes(filter)) return;
         const target = calculateStaffTarget(staff);
-        const done = staff.dutiesDone || 0; 
+        const done = getDutiesDoneCount(staff.email); // Calculated dynamically
         const pending = target - done;
         let activeRoleLabel = "";
         const today = new Date();
@@ -391,7 +392,10 @@ function renderStaffTable() {
 function renderStaffRankList(myEmail) {
     const list = document.getElementById('staff-rank-list');
     if (!list) return;
-    const rankedStaff = staffData.map(s => ({ ...s, pending: calculateStaffTarget(s) - (s.dutiesDone || 0) })).sort((a, b) => {
+    const rankedStaff = staffData.map(s => ({ 
+        ...s, 
+        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email) 
+    })).sort((a, b) => {
         if (b.pending !== a.pending) return b.pending - a.pending;
         return a.name.localeCompare(b.name);
     });
@@ -1333,6 +1337,124 @@ window.openDutyNormsModal = function() {
     window.openModal('norms-modal');
 }
 
+// --- ATTENDANCE MARKING LOGIC ---
+
+function populateAttendanceSessions() {
+    if(!ui.attSessionSelect) return;
+    
+    // Sort Sessions (Newest First)
+    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
+        // Simple string sort is usually enough if format is consistent, 
+        // but for robustness we rely on your existing compare logic or just simple sort for now.
+        return b.localeCompare(a); 
+    });
+
+    ui.attSessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
+    sortedKeys.forEach(key => {
+        const slot = invigilationSlots[key];
+        // Add checkmark if attendance was already saved
+        const mark = slot.attendance ? "✅ " : "";
+        
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = `${mark}${key}`;
+        ui.attSessionSelect.appendChild(opt);
+    });
+}
+
+window.loadSessionAttendance = function() {
+    const key = ui.attSessionSelect.value;
+    if (!key) {
+        ui.attArea.classList.add('hidden');
+        ui.attPlaceholder.classList.remove('hidden');
+        return;
+    }
+    
+    const slot = invigilationSlots[key];
+    ui.attArea.classList.remove('hidden');
+    ui.attPlaceholder.classList.add('hidden');
+    ui.attList.innerHTML = '';
+    
+    // 1. Decide list source: 'attendance' (Saved) OR 'assigned' (Planned)
+    const presentList = slot.attendance || slot.assigned || [];
+    
+    // 2. Render Rows
+    presentList.forEach(email => {
+        addAttendanceRow(email);
+    });
+
+    // 3. Populate Substitute Dropdown (Exclude those already present)
+    ui.attSubSelect.innerHTML = '<option value="">Select Staff...</option>';
+    staffData.forEach(s => {
+        if (!presentList.includes(s.email)) {
+            ui.attSubSelect.innerHTML += `<option value="${s.email}">${s.name}</option>`;
+        }
+    });
+    
+    updateAttCount();
+}
+
+function addAttendanceRow(email) {
+    const s = staffData.find(st => st.email === email);
+    if(!s) return;
+    
+    const div = document.createElement('div');
+    div.className = "flex justify-between items-center bg-white p-2 rounded border border-gray-200";
+    div.innerHTML = `
+        <div class="flex items-center gap-3">
+            <input type="checkbox" class="att-chk w-5 h-5 text-green-600 rounded focus:ring-green-500" value="${email}" checked onchange="window.updateAttCount()">
+            <div>
+                <div class="font-bold text-gray-800 text-sm">${s.name}</div>
+                <div class="text-xs text-gray-500">${s.dept}</div>
+            </div>
+        </div>
+        <button class="text-red-400 hover:text-red-600 text-xs font-bold" onclick="this.parentElement.remove(); window.updateAttCount();">Remove</button>
+    `;
+    ui.attList.appendChild(div);
+}
+
+window.addSubstituteToAttendance = function() {
+    const email = ui.attSubSelect.value;
+    if(!email) return;
+    
+    // Check duplicates
+    const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+    if(existing.includes(email)) return alert("Already in list");
+    
+    addAttendanceRow(email);
+    
+    // Remove from dropdown to prevent double adding
+    ui.attSubSelect.querySelector(`option[value="${email}"]`).remove();
+    ui.attSubSelect.value = "";
+    
+    updateAttCount();
+}
+
+window.updateAttCount = function() {
+    const count = document.querySelectorAll('.att-chk:checked').length;
+    document.getElementById('att-count-display').textContent = `${count} Present`;
+}
+
+window.saveAttendance = async function() {
+    const key = ui.attSessionSelect.value;
+    if (!key) return;
+    
+    if(!confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
+    
+    const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
+    
+    // Update Cloud Data
+    invigilationSlots[key].attendance = presentEmails;
+    
+    await syncSlotsToCloud();
+    
+    // Refresh UI to show updated counts
+    populateAttendanceSessions(); 
+    renderStaffTable(); 
+    alert("Attendance Saved & Counts Updated!");
+}
+
+
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
@@ -1373,12 +1495,23 @@ window.lockAllSessions = lockAllSessions;
 window.changeSlotReq = changeSlotReq;
 window.openAddSlotModal = openAddSlotModal;
 window.saveManualSlot = saveManualSlot;
+window.loadSessionAttendance = loadSessionAttendance;
+window.addSubstituteToAttendance = addSubstituteToAttendance;
+window.updateAttCount = updateAttCount;
+window.saveAttendance = saveAttendance;
 window.openDutyNormsModal = openDutyNormsModal;
 window.switchAdminTab = function(tabName) {
+    // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
     document.getElementById('tab-content-slots').classList.add('hidden');
+    document.getElementById('tab-content-attendance').classList.add('hidden'); // <--- NEW
+    
+    // Reset Buttons
     document.getElementById('tab-btn-staff').classList.replace('border-indigo-600', 'border-transparent');
     document.getElementById('tab-btn-slots').classList.replace('border-indigo-600', 'border-transparent');
+    document.getElementById('tab-btn-attendance').classList.replace('border-indigo-600', 'border-transparent'); // <--- NEW
+    
+    // Show Target
     document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
     document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
 }
