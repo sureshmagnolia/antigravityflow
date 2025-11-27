@@ -20,7 +20,7 @@ let invigilationSlots = {};
 let designationsConfig = {};
 let rolesConfig = {};
 let currentCalDate = new Date(); // For Staff Calendar
-let isAdmin = false; // <--- NEW: Track Admin Status
+let isAdmin = false; 
 
 // --- DOM ELEMENTS ---
 const views = { login: document.getElementById('view-login'), admin: document.getElementById('view-admin'), staff: document.getElementById('view-staff') };
@@ -55,8 +55,7 @@ async function fetchFullCollegeData(collegeId) {
     const mainRef = doc(db, "colleges", collegeId);
     const mainSnap = await getDoc(mainRef);
     if (!mainSnap.exists()) return null;
-    let fullData = mainSnap.data();
-    return fullData;
+    return mainSnap.data();
 }
 
 async function handleLogin(user) {
@@ -71,7 +70,7 @@ async function handleLogin(user) {
         const docSnap = querySnapshot.docs[0];
         currentCollegeId = docSnap.id;
         collegeData = await fetchFullCollegeData(currentCollegeId);
-        isAdmin = true; // <--- Set Admin Flag
+        isAdmin = true; 
         initAdminDashboard();
     } else {
         // STAFF LOGIN
@@ -99,10 +98,8 @@ async function checkStaffAccess(collegeId, email) {
 }
 
 // --- HEADER BUTTON MANAGER ---
-// Dynamically adds "Switch View" buttons based on role
 function updateHeaderButtons(currentView) {
     const container = document.getElementById('auth-section');
-    // Remove existing switch button if any
     const existingBtn = document.getElementById('switch-view-btn');
     if(existingBtn) existingBtn.remove();
 
@@ -119,7 +116,6 @@ function updateHeaderButtons(currentView) {
             btn.onclick = initAdminDashboard;
         }
         
-        // Insert before logout button
         const logoutBtn = document.getElementById('logout-btn');
         container.insertBefore(btn, logoutBtn);
     }
@@ -139,7 +135,7 @@ function initAdminDashboard() {
 
     updateAdminUI();
     renderSlotsGridAdmin();
-    updateHeaderButtons('admin'); // <--- Show "Switch to Staff"
+    updateHeaderButtons('admin'); 
     showView('admin');
 }
 
@@ -182,7 +178,7 @@ function renderStaffTable() {
     });
 }
 
-// --- STAFF DASHBOARD & CALENDAR ---
+// --- STAFF DASHBOARD ---
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
@@ -196,37 +192,29 @@ function initStaffDashboard(me) {
     invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
     
     renderStaffCalendar(me.email);
-    updateHeaderButtons('staff'); // <--- Show "Back to Admin" if applicable
+    updateHeaderButtons('staff'); 
     showView('staff');
     
-    // Bind Calendar Nav Buttons
     document.getElementById('cal-prev').onclick = () => { currentCalDate.setMonth(currentCalDate.getMonth()-1); renderStaffCalendar(me.email); };
     document.getElementById('cal-next').onclick = () => { currentCalDate.setMonth(currentCalDate.getMonth()+1); renderStaffCalendar(me.email); };
 }
 
-// --- NEW: ADMIN SWITCH TO STAFF LOGIC ---
 function switchToStaffView() {
-    // 1. Check if Admin exists in Staff List
     const myEmail = currentUser.email.toLowerCase();
     const me = staffData.find(s => s.email.toLowerCase() === myEmail);
-    
     if (me) {
-        // Found! Switch to Staff View
         initStaffDashboard(me);
     } else {
-        // Not found. Prompt to create profile.
-        if(confirm("You are not listed as a staff member yet.\n\nTo manage your own duties, you must create a staff profile for yourself.\n\nDo you want to create one now?")) {
+        if(confirm("You are not listed as a staff member yet. Create a profile?")) {
             openModal('add-staff-modal');
-            // Pre-fill details
             document.getElementById('stf-email').value = currentUser.email;
             document.getElementById('stf-name').value = currentUser.displayName || "Admin";
-            document.getElementById('stf-email').disabled = true; // Lock email field
+            document.getElementById('stf-email').disabled = true; 
         }
     }
 }
 
-
-// *** CORE CALENDAR LOGIC ***
+// *** CALENDAR LOGIC (SESSION WISE BADGES) ***
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -236,21 +224,32 @@ function renderStaffCalendar(myEmail) {
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     
+    // Group Slots by Date
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
-        const [dStr] = key.split(' | ');
+        const [dStr, tStr] = key.split(' | ');
         const [dd, mm, yyyy] = dStr.split('.');
         if (parseInt(mm) === month + 1 && parseInt(yyyy) === year) {
             const dayNum = parseInt(dd);
             if (!slotsByDate[dayNum]) slotsByDate[dayNum] = [];
-            slotsByDate[dayNum].push({ key, ...invigilationSlots[key] });
+            
+            // Determine Session Type (FN/AN)
+            let sessionType = "FN";
+            const t = tStr.toUpperCase();
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) sessionType = "AN";
+
+            slotsByDate[dayNum].push({ 
+                key, 
+                sessionType, 
+                ...invigilationSlots[key] 
+            });
         }
     });
 
+    // Update Upcoming List
     const upcomingList = document.getElementById('staff-upcoming-list');
     upcomingList.innerHTML = '';
     let upcomingCount = 0;
-
     Object.keys(invigilationSlots).sort().forEach(key => {
         const slot = invigilationSlots[key];
         if(slot.assigned.includes(myEmail)) {
@@ -265,47 +264,60 @@ function renderStaffCalendar(myEmail) {
     });
     if(upcomingCount === 0) upcomingList.innerHTML = `<p class="text-gray-400 text-sm italic">No upcoming duties assigned.</p>`;
 
+    // Generate Grid
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) html += `<div class="bg-gray-50 border border-gray-100 h-24"></div>`;
 
     for (let day = 1; day <= daysInMonth; day++) {
         const slots = slotsByDate[day] || [];
+        
+        // Base Day Content
         let dayContent = `<div class="text-right font-bold text-sm p-1 text-gray-400">${day}</div>`;
-        let bgClass = "bg-white";
-        let borderClass = "border-gray-200";
-
+        let bgClass = "bg-white"; 
+        
+        // Session Badges
         if (slots.length > 0) {
-            let hasOpen = false;
-            let isAssigned = false;
-            let isUnavailable = false;
-            let openCount = 0;
+            dayContent += `<div class="flex flex-col gap-1 px-1 mt-1">`;
+            
+            // Sort FN first
+            slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
-            slots.forEach(s => {
-                const filled = s.assigned.length;
-                if (filled < s.required) { hasOpen = true; openCount += (s.required - filled); }
-                if (s.assigned.includes(myEmail)) isAssigned = true;
-                if (s.unavailable.includes(myEmail)) isUnavailable = true;
+            slots.forEach(slot => {
+                const filled = slot.assigned.length;
+                const isFull = filled >= slot.required;
+                const isAssigned = slot.assigned.includes(myEmail);
+                const isUnavailable = slot.unavailable.includes(myEmail);
+                
+                let badgeColor = "bg-green-100 text-green-700 border-green-200"; // Open
+                let statusIcon = "";
+
+                if (isAssigned) {
+                    badgeColor = "bg-blue-600 text-white border-blue-600";
+                    statusIcon = "✅";
+                } else if (isUnavailable) {
+                    badgeColor = "bg-red-50 text-red-600 border-red-200";
+                    statusIcon = "⛔";
+                } else if (isFull) {
+                    badgeColor = "bg-gray-100 text-gray-400 border-gray-200";
+                    statusIcon = "🔒";
+                }
+
+                dayContent += `
+                    <div class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor} flex justify-between items-center">
+                        <span>${slot.sessionType}</span>
+                        <span>${statusIcon}</span>
+                    </div>
+                `;
             });
-
-            if (isAssigned) {
-                bgClass = "bg-blue-50";
-                dayContent += `<div class="mx-1 mt-1 text-xs bg-blue-600 text-white px-2 py-1 rounded text-center font-bold shadow-sm">Assigned</div>`;
-            } else if (isUnavailable) {
-                bgClass = "bg-red-50";
-                dayContent += `<div class="mx-1 mt-1 text-xs bg-red-100 text-red-600 px-2 py-1 rounded text-center font-bold border border-red-200">Unavailable</div>`;
-            } else if (hasOpen) {
-                bgClass = "bg-green-50 hover:bg-green-100 cursor-pointer";
-                dayContent += `<div class="mx-1 mt-1 text-xs text-green-700 px-1 text-center"><strong>${openCount}</strong> Open Slots</div>`;
-            } else {
-                bgClass = "bg-gray-100"; 
-                dayContent += `<div class="mx-1 mt-1 text-xs text-gray-500 text-center">Full</div>`;
-            }
+            
+            dayContent += `</div>`;
+            bgClass = "bg-white hover:bg-gray-50 cursor-pointer";
         }
 
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
         const clickAction = slots.length > 0 ? `onclick="openDayModal('${dateStr}', '${myEmail}')"` : "";
 
-        html += `<div class="border h-24 ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
+        html += `<div class="border h-28 border-gray-200 ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
     ui.calGrid.innerHTML = html;
 }
@@ -326,10 +338,14 @@ window.openDayModal = function(dateStr, email) {
         const isUnavailable = slot.unavailable.includes(email);
         const isLocked = slot.isLocked;
 
+        // Identify Session Type for label
+        const t = key.split(' | ')[1].toUpperCase();
+        const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
+
         let actionHtml = "";
         
         if (isAssigned) {
-            actionHtml = `<span class="text-green-600 font-bold text-sm flex items-center gap-1">✅ Assigned</span>`;
+            actionHtml = `<span class="text-green-600 font-bold text-sm flex items-center gap-1">✅ Assigned to You</span>`;
         } else if (isLocked) {
             actionHtml = `<span class="text-gray-400 text-xs font-bold">🔒 Locked by Admin</span>`;
         } else if (isUnavailable) {
@@ -339,6 +355,7 @@ window.openDayModal = function(dateStr, email) {
                 </button>`;
         } else {
             if (needed > 0) {
+                // TRIGGER VOLUNTEER (WITH FUNNY ALERT CHECK)
                 actionHtml = `
                     <div class="flex gap-2 w-full">
                         <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold hover:bg-indigo-700 shadow-sm transition">
@@ -362,7 +379,10 @@ window.openDayModal = function(dateStr, email) {
         container.innerHTML += `
             <div class="bg-gray-50 p-3 rounded border border-gray-200">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="font-bold text-gray-800">${key.split('|')[1]}</span>
+                    <div>
+                        <span class="font-bold text-gray-800 block text-sm">${sessLabel}</span>
+                        <span class="text-[10px] text-gray-500">${key.split('|')[1]}</span>
+                    </div>
                     <span class="text-xs bg-white border px-2 py-0.5 rounded ${needed > 0 ? 'text-green-600 border-green-200' : 'text-gray-400'}">${filled}/${slot.required} Filled</span>
                 </div>
                 <div class="flex items-center justify-between mt-2">
@@ -375,34 +395,25 @@ window.openDayModal = function(dateStr, email) {
     window.openModal('day-detail-modal');
 }
 
-// --- DATA SYNC ---
-async function syncSlotsToCloud() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
-}
+// --- HELPERS & ACTIONS ---
 
-async function syncStaffToCloud() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
-}
-
-async function addUserToWhitelist(email) {
-    try {
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { allowedUsers: arrayUnion(email) });
-    } catch(e) { console.error(e); }
-}
-
-// --- ACTIONS ---
-window.toggleLock = async function(key) {
-    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-}
-
+// *** FUNNY ALERT LOGIC HERE ***
 window.volunteer = async function(key, email) {
-    if(!confirm("Confirm duty for this session?")) return;
+    const [datePart] = key.split(' | ');
+    
+    // Check if user has ANY other duty on this same date
+    const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
+    const alreadyAssigned = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
+
+    if (alreadyAssigned) {
+        const funnyMsg = "Whoa there, Superhero! 🦸‍♂️\n\nYou are already on duty for the other session today.\n\nAre you sure you want to pull a double shift? (We admire the dedication!)";
+        if (!confirm(funnyMsg)) return;
+    } else {
+        if(!confirm("Confirm duty for this session?")) return;
+    }
+
     invigilationSlots[key].assigned.push(email);
+    
     // Update Staff Stats
     const me = staffData.find(s => s.email === email);
     if(me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
@@ -411,8 +422,11 @@ window.volunteer = async function(key, email) {
     await syncStaffToCloud(); 
     window.closeModal('day-detail-modal');
     renderStaffCalendar(email);
-    const pending = calculateStaffTarget(me) - (me.dutiesDone || 0); 
-    document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
+    
+    if(me) {
+        const pending = calculateStaffTarget(me) - (me.dutiesDone || 0); 
+        document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
+    }
 }
 
 window.setAvailability = async function(key, email, isAvailable) {
@@ -428,6 +442,7 @@ window.setAvailability = async function(key, email, isAvailable) {
     renderStaffCalendar(email);
 }
 
+// --- STANDARD HELPERS ---
 window.waNotify = function(key) {
     const slot = invigilationSlots[key];
     if(slot.assigned.length === 0) return alert("No staff assigned.");
@@ -442,6 +457,7 @@ window.waNotify = function(key) {
 
 window.calculateSlotsFromSchedule = async function() {
     alert("Slots are automatically calculated from the Main App. Go to Main App > Room Allotment > Save to update.");
+    // Refresh data
     const docRef = doc(db, "colleges", currentCollegeId);
     const snap = await getDoc(docRef);
     if(snap.exists()) {
@@ -532,8 +548,29 @@ function getNameFromEmail(email) {
     return s ? s.name.split(' ')[0] : email.split('@')[0];
 }
 
-window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
-window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+async function syncSlotsToCloud() {
+    const ref = doc(db, "colleges", currentCollegeId);
+    await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
+}
+
+async function syncStaffToCloud() {
+    const ref = doc(db, "colleges", currentCollegeId);
+    await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
+}
+
+async function addUserToWhitelist(email) {
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { allowedUsers: arrayUnion(email) });
+    } catch(e) { console.error(e); }
+}
+
+// --- EXPORTED ACTIONS ---
+window.toggleLock = async function(key) {
+    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
+    await syncSlotsToCloud();
+    renderSlotsGridAdmin();
+}
 
 window.saveNewStaff = async function() {
     const name = document.getElementById('stf-name').value;
@@ -544,23 +581,15 @@ window.saveNewStaff = async function() {
     const date = document.getElementById('stf-join').value;
 
     if(!name || !email) return alert("Fill all fields");
-    
-    const days = [];
-    document.querySelectorAll('.day-chk:checked').forEach(chk => days.push(parseInt(chk.value)));
 
-    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [], preferredDays: days };
+    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [] };
     staffData.push(newObj);
     await syncStaffToCloud();
     await addUserToWhitelist(email);
     window.closeModal('add-staff-modal');
     
-    // If in Staff View (Admin self-add), switch automatically
-    if (!isAdmin) {
-        // Reload page to trigger login flow again which will now find the staff record
-        window.location.reload();
-    } else {
-        renderStaffTable();
-    }
+    if(!isAdmin) window.location.reload();
+    else renderStaffTable();
 }
 
 window.deleteStaff = async function(index) {
@@ -613,11 +642,13 @@ window.switchAdminTab = function(tabName) {
     document.getElementById(`tab-btn-${tabName}`).classList.replace('border-transparent', 'border-indigo-600');
 }
 
+// --- HELPERS ---
+window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+window.switchToStaffView = switchToStaffView;
+window.initAdminDashboard = initAdminDashboard;
+
 function showView(viewName) {
     Object.values(views).forEach(el => el.classList.add('hidden'));
     views[viewName].classList.remove('hidden');
 }
-
-// Expose global functions
-window.switchToStaffView = switchToStaffView;
-window.initAdminDashboard = initAdminDashboard;
