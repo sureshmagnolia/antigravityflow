@@ -613,7 +613,7 @@ function syncDataFromCloud(collegeId) {
     });
 }
 
-// 4. CLOUD UPLOAD FUNCTION (Network Aware + Smart Filtering)
+// 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
 async function syncDataToCloud() {
     if (!currentUser || !currentCollegeId) return;
     if (isSyncing) return;
@@ -637,7 +637,7 @@ async function syncDataToCloud() {
         let cloudData = {};
         if (cloudSnap.exists()) cloudData = cloudSnap.data();
 
-        // --- STEP 2: Merge Settings ---
+        // --- STEP 2: Smart Merge Settings ---
         const isEmptyOrDefault = (key, val) => {
             if (!val) return true;
             if (key === 'examCollegeName') return val === "University of Calicut";
@@ -671,7 +671,7 @@ async function syncDataToCloud() {
             'examCollegeName', 'examStreamsConfig', 'examRoomConfig', 
             'examQPCodes', 'examScribeList', 'examScribeAllotment', 
             'examAbsenteeList', 'examSessionNames', 'examRulesConfig',
-            'examRemunerationConfig'
+            'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles' // Persist Staff/Roles
         ];
 
         const finalMainData = { lastUpdated: timestamp };
@@ -681,8 +681,46 @@ async function syncDataToCloud() {
             if (bestVal) finalMainData[key] = bestVal;
         });
 
-        // --- STEP 3: Bulk Data Handling ---
+        // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE) ---
+        // Calculates requirements locally but preserves cloud assignments
         const localBaseData = localStorage.getItem('examBaseData');
+        if (localBaseData) {
+            const students = JSON.parse(localBaseData);
+            const sessionCounts = {};
+            
+            // 1. Count Students per Session
+            students.forEach(s => {
+                const key = `${s.Date} | ${s.Time}`;
+                sessionCounts[key] = (sessionCounts[key] || 0) + 1;
+            });
+
+            // 2. Get Existing Cloud Slots (to preserve assignments)
+            const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
+            const mergedSlots = { ...cloudSlots };
+
+            // 3. Update Requirements
+            Object.keys(sessionCounts).forEach(key => {
+                const count = sessionCounts[key];
+                // Logic: 1 per 30 + 10% Reserve
+                const base = Math.ceil(count / 30);
+                const reserve = Math.ceil(base * 0.10);
+                const totalRequired = base + reserve;
+
+                if (!mergedSlots[key]) {
+                    // New Session
+                    mergedSlots[key] = { required: totalRequired, assigned: [], unavailable: [], isLocked: false };
+                } else {
+                    // Existing: Update ONLY the requirement, keep assignments
+                    mergedSlots[key].required = totalRequired;
+                }
+            });
+
+            // 4. Add to Update Payload
+            finalMainData['examInvigilationSlots'] = JSON.stringify(mergedSlots);
+        }
+        // -------------------------------------------------------
+
+        // --- STEP 3: Bulk Data Handling ---
         let localAllotment = localStorage.getItem('examRoomAllotment');
         const bulkDataObj = {};
         if (localBaseData) bulkDataObj['examBaseData'] = localBaseData;
@@ -705,96 +743,64 @@ async function syncDataToCloud() {
             batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
         });
 
-        
-        // --- NEW: SECURE PUBLIC SYNC (Seating + Names + Courses + Scribes) ---
+        // --- STEP 4: PUBLIC SYNC (Student Link) ---
         const publicRef = doc(db, "public_seating", currentCollegeId);
         const namesRef = doc(db, "public_seating", currentCollegeId + "_names");
         const coursesRef = doc(db, "public_seating", currentCollegeId + "_courses");
         
-        const collegeName = localStorage.getItem('examCollegeName') || "Exam Centre";
-        const allotmentData = localStorage.getItem('examRoomAllotment') || '{}';
         const roomConfigData = localStorage.getItem('examRoomConfig') || '{}';
-        const scribeData = localStorage.getItem('examScribeAllotment') || '{}'; // <--- NEW: Scribe Data
-
-        // 1. Prepare Data Maps (Filtered for Today/Future)
-        const todayMidnight = new Date();
-        todayMidnight.setHours(0,0,0,0);
+        const scribeData = localStorage.getItem('examScribeAllotment') || '{}';
         
-        const parseDateKey = (dStr) => {
-            if (!dStr) return new Date(0);
-            const [d, m, y] = dStr.split('.');
-            return new Date(`${y}-${m}-${d}`);
+        // Filter Logic
+        const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
+        const parseDateKey = (d) => {
+            if(!d) return new Date(0);
+            const [dd, mm, yy] = d.split('.');
+            return new Date(`${yy}-${mm}-${dd}`);
         };
 
-        // 2. Filter Allotment & Scribes
         let publicAllotment = {};
-        let publicScribes = {}; // <--- Filtered Scribe Data
-        
-        const rawAllotment = JSON.parse(allotmentData);
+        let publicScribes = {};
+        const rawAllotment = JSON.parse(localAllotment || '{}');
         const rawScribes = JSON.parse(scribeData);
         const activeRegNos = new Set();
 
         Object.keys(rawAllotment).forEach(sessionKey => {
-            const [dateStr] = sessionKey.split(' | ');
-            const examDate = parseDateKey(dateStr);
-            
-            if (examDate >= todayMidnight) {
+            const [dStr] = sessionKey.split(' | ');
+            if (parseDateKey(dStr) >= todayMidnight) {
                 publicAllotment[sessionKey] = rawAllotment[sessionKey];
-                // Keep Scribe Data for this session
-                if (rawScribes[sessionKey]) {
-                    publicScribes[sessionKey] = rawScribes[sessionKey];
-                }
-                
-                // Collect active students
-                rawAllotment[sessionKey].forEach(room => {
-                    room.students.forEach(regNo => activeRegNos.add(regNo));
-                });
+                if(rawScribes[sessionKey]) publicScribes[sessionKey] = rawScribes[sessionKey];
+                rawAllotment[sessionKey].forEach(r => r.students.forEach(s => activeRegNos.add(s)));
             }
         });
 
-// 3. Filter Names & Papers
-        let nameMap = {};
-        let paperMap = {}; 
-        
-        // FIX: Added 'localBaseData' back into the condition and parse function
+        let nameMap = {}; let paperMap = {};
         if (localBaseData) {
              try {
                  const baseData = JSON.parse(localBaseData);
                  baseData.forEach(s => {
                      const r = s['Register Number'];
                      if (r && activeRegNos.has(r)) {
-                         const n = s.Name;
-                         const c = s.Course;
-                         const d = s.Date;
-                         const t = s.Time;
                          const cleanReg = r.toString().trim().toUpperCase();
-
-                         if (n) nameMap[cleanReg] = n.toString().trim();
-                         if (c && d && t) {
-                             const examDate = parseDateKey(d);
-                             if (examDate >= todayMidnight) {
-                                 const paperKey = `${cleanReg}_${d}_${t}`;
-                                 paperMap[paperKey] = c.toString().trim();
-                             }
+                         nameMap[cleanReg] = (s.Name || "").toString().trim();
+                         const d = s.Date; const t = s.Time;
+                         if (s.Course && d && t && parseDateKey(d) >= todayMidnight) {
+                             paperMap[`${cleanReg}_${d}_${t}`] = s.Course.toString().trim();
                          }
                      }
                  });
-             } catch (e) { console.error("Error filtering public data", e); }
+             } catch (e) {}
         }
 
-        // 4. Upload Split Docs
         batch.set(publicRef, {
-            collegeName: collegeName,
+            collegeName: localStorage.getItem('examCollegeName') || "Exam Centre",
             seatingData: JSON.stringify(publicAllotment),
-            scribeData: JSON.stringify(publicScribes), // <--- Uploading Scribes
+            scribeData: JSON.stringify(publicScribes),
             roomData: roomConfigData,
             lastUpdated: new Date().toISOString()
         });
-
         batch.set(namesRef, { json: JSON.stringify(nameMap) });
         batch.set(coursesRef, { json: JSON.stringify(paperMap) });
-        // -------------------------------
-        // ============================================================
 
         await batch.commit();
         
@@ -804,10 +810,7 @@ async function syncDataToCloud() {
 
     } catch (e) {
         console.error("Sync Up Error:", e);
-        if (e.code === 'not-found') {
-             try { await window.firebase.setDoc(window.firebase.doc(db, "colleges", currentCollegeId), { lastUpdated: new Date().toISOString() }); } catch (retryErr) {}
-        }
-        updateSyncStatus(navigator.onLine ? "Save Fail" : "Offline - Saved Locally", "error");
+        updateSyncStatus(navigator.onLine ? "Save Fail" : "Offline", "error");
     } finally {
         isSyncing = false;
     }
