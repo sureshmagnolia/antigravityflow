@@ -161,7 +161,18 @@ function initAdminDashboard() {
     renderSlotsGridAdmin();
     showView('admin');
 }
-
+function calculateStaffTarget(staff) {
+    const roleTarget = designationsConfig[staff.designation] || 2;
+    if (staff.roleHistory) {
+        const today = new Date();
+        // Check if currently active in a specific role
+        const active = staff.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
+        if(active && rolesConfig[active.role] !== undefined) {
+            return rolesConfig[active.role] * 5; // 5 months per semester approx
+        }
+    }
+    return roleTarget * 5; 
+}
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
@@ -186,7 +197,18 @@ function isUserUnavailable(slot, email) {
     if (!slot.unavailable) return false;
     return slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
 }
-
+function getCurrentAcademicYear() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); 
+    // Academic Year: June (Month 5) to May (Month 4)
+    let startYear = (month < 5) ? year - 1 : year;
+    return { 
+        label: `${startYear}-${startYear+1}`, 
+        start: new Date(startYear, 5, 1), 
+        end: new Date(startYear+1, 4, 31) 
+    };
+}
 function updateAdminUI() {
     document.getElementById('stat-total-staff').textContent = staffData.length;
     const acYear = getCurrentAcademicYear();
@@ -489,7 +511,18 @@ window.cancelDuty = async function(key, email, isLocked) {
         window.closeModal('day-detail-modal');
     }
 }
-
+function toggleUnavDetails() {
+    const reasonEl = document.getElementById('unav-reason');
+    const container = document.getElementById('unav-details-container');
+    if (!reasonEl || !container) return;
+    
+    const reason = reasonEl.value;
+    if (['OD', 'DL', 'Medical'].includes(reason)) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
 window.setAvailability = async function(key, email, isAvailable) {
     if (isAvailable) {
         if(confirm("Mark available?")) {
