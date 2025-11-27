@@ -120,6 +120,7 @@ function setupLiveSync(collegeId, mode) {
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             collegeData = docSnap.data();
+            // Parse all configs
             designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
             rolesConfig = JSON.parse(collegeData.invigRoles || JSON.stringify(DEFAULT_ROLES));
             globalDutyTarget = parseInt(collegeData.invigGlobalTarget || 2);
@@ -135,18 +136,29 @@ function setupLiveSync(collegeId, mode) {
                     renderSlotsGridAdmin();
                     if (!document.getElementById('view-staff').classList.contains('hidden')) {
                          const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                         if(me) { renderStaffCalendar(me.email); renderStaffRankList(me.email); }
+                         if(me) { 
+                             renderStaffCalendar(me.email); 
+                             renderStaffRankList(me.email);
+                             // ADDED: Keep Admin's "View as Staff" market in sync too
+                             if(typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
+                         }
                     }
                 }
             } else {
+                // STAFF MODE
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
                     if (document.getElementById('view-staff').classList.contains('hidden')) {
                         initStaffDashboard(me);
                     } else {
+                        // LIVE REFRESH: Update all parts of the dashboard
                         renderStaffCalendar(me.email);
                         renderStaffRankList(me.email);
-                        const pending = calculateStaffTarget(me) - (me.dutiesDone || 0);
+                        
+                        // --- FIX: Update Market Widget on Cloud Change ---
+                        if(typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
+                        
+                        const pending = calculateStaffTarget(me) - getDutiesDoneCount(me.email);
                         document.getElementById('staff-view-pending').textContent = pending > 0 ? pending : "0 (Done)";
                     }
                 } else {
@@ -1863,40 +1875,37 @@ window.postForExchange = async function(key, email) {
         // 1. Update Local Data
         slot.exchangeRequests.push(email);
         
-        // 2. Sync to Cloud (Async)
-        await syncSlotsToCloud();
-        
-        // 3. Refresh Calendar (Updates background to Orange)
+        // 2. INSTANT UI UPDATE (Optimistic)
+        // Update Calendar Color
         renderStaffCalendar(email);
-
-        // 4. Refresh Market Widget (Updates sidebar)
+        // Update Sidebar Market
         if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-
-        // 5. Refresh Modal Immediately (Updates button to Withdraw)
+        // Update Modal Button (Immediate)
         const dateStr = key.split(' | ')[0];
         openDayModal(dateStr, email); 
+
+        // 3. Save to Cloud (Happens in background)
+        await syncSlotsToCloud();
     }
 }
 
 window.withdrawExchange = async function(key, email) {
-    // Optional: Add a confirm if you want, or just do it.
-    // if (!confirm("Withdraw your exchange request?")) return; 
-
     const slot = invigilationSlots[key];
     if (slot.exchangeRequests) {
+        // 1. Update Local Data
         slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
-        await syncSlotsToCloud();
         
-        // 1. Notification Alert
+        // 2. INSTANT UI UPDATE
         alert("✅ Request withdrawn. You have reclaimed this duty.");
-
-        // 2. Refresh Calendar (Updates background back to Blue)
+        
         renderStaffCalendar(email);
         if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-
-        // 3. Refresh Modal Immediately (Updates button back to Post)
+        
         const dateStr = key.split(' | ')[0];
         openDayModal(dateStr, email);
+
+        // 3. Save to Cloud
+        await syncSlotsToCloud();
     }
 }
 
