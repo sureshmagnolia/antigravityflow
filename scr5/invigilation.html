@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExamFlow Invigilation Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
+            authDomain: "examflow-de08f.firebaseapp.com",
+            projectId: "examflow-de08f",
+            storageBucket: "examflow-de08f.firebasestorage.app",
+            messagingSenderId: "1094663914110",
+            appId: "1:1094663914110:web:50c4f206f2053a873f0e2f",
+            measurementId: "G-8S6GE8Q7NR"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.firebase = { 
+            auth: getAuth(app), 
+            db: getFirestore(app), 
+            provider: new GoogleAuthProvider(),
+            signInWithPopup, signOut, onAuthStateChanged,
+            doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot 
+        };
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex flex-col overflow-hidden">
+
+    <header class="bg-white border-b border-gray-200 p-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-gray-900 leading-none">Invigilation Portal</h1>
+                <p id="header-college-name" class="text-xs text-gray-500 font-medium">Connecting...</p>
+            </div>
+        </div>
+        
+        <div id="auth-section" class="hidden flex items-center gap-4">
+            <div class="text-right hidden md:block">
+                <div id="user-name" class="text-sm font-bold text-gray-800">User</div>
+                <div id="user-role" class="text-xs text-indigo-600 font-bold uppercase tracking-wider">Role</div>
+            </div>
+            <button id="logout-btn" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-2 rounded text-sm font-medium transition">
+                Logout
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6 relative">
+        
+        <div id="view-login" class="absolute inset-0 flex items-center justify-center bg-gray-50 z-50">
+            <div class="bg-white p-8 rounded-xl shadow-xl text-center max-w-md w-full border border-gray-200">
+                <div class="mx-auto bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mb-4 text-indigo-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Staff Login</h2>
+                <p class="text-sm text-gray-500 mb-6">Please sign in with your Google Account to access the invigilation dashboard.</p>
+                <button id="login-btn" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700 transition flex justify-center items-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/></svg>
+                    Sign in with Google
+                </button>
+                <p id="login-status" class="mt-4 text-xs text-red-500 font-medium min-h-[20px]"></p>
+            </div>
+        </div>
+
+        <div id="view-admin" class="hidden max-w-7xl mx-auto fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Overview</h3>
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Total Staff</span>
+                                <span id="stat-total-staff" class="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">0</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-600">Active Roles</span>
+                                <span id="stat-active-roles" class="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <button onclick="openModal('add-staff-modal')" class="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-sm hover:bg-indigo-700 transition font-medium text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                            Add Invigilator
+                        </button>
+                        <button onclick="openModal('roles-modal')" class="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg shadow-sm hover:bg-gray-50 transition font-medium text-sm">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            Configure Roles
+                        </button>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <h2 class="font-bold text-gray-800">Staff Directory & Duty Status</h2>
+                        <div class="relative">
+                            <input type="text" id="staff-search" placeholder="Search staff..." class="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                            <svg class="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto flex-1">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Invigilator</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Role & Dept</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Target</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Done</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Pending</th>
+                                    <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-table-body" class="bg-white divide-y divide-gray-200">
+                                </tbody>
+                        </table>
+                    </div>
+                    <div id="staff-loading" class="text-center py-10 text-gray-400 text-sm hidden">Loading staff details...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-staff" class="hidden max-w-4xl mx-auto fade-in">
+            <div class="bg-white p-8 rounded-lg shadow text-center">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Welcome, <span id="staff-view-name">Invigilator</span></h2>
+                <p class="text-gray-600 mb-6">Your dashboard is being set up. In Phase 2, you will see your duty calendar here.</p>
+                <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg inline-block text-left text-sm text-yellow-800">
+                    <strong>Current Status:</strong> <br>
+                    Department: <span id="staff-view-dept">-</span><br>
+                    Designation: <span id="staff-view-role">-</span><br>
+                    Duties Pending: <span id="staff-view-pending" class="font-bold">-</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="add-staff-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4 transform transition-all">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-lg font-bold text-gray-800">Add New Invigilator</h3>
+                <button onclick="closeModal('add-staff-modal')" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Full Name</label>
+                        <input type="text" id="stf-name" class="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Department</label>
+                        <input type="text" id="stf-dept" class="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Gmail ID (For Login)</label>
+                    <input type="email" id="stf-email" class="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="example@gmail.com">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">WhatsApp Number</label>
+                    <input type="text" id="stf-phone" class="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="919876543210">
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Role / Designation</label>
+                        <select id="stf-role" class="w-full p-2 border border-gray-300 rounded-md text-sm bg-white">
+                            </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Joining Date</label>
+                        <input type="date" id="stf-join" class="w-full p-2 border border-gray-300 rounded-md text-sm cursor-pointer">
+                    </div>
+                </div>
+
+                <div id="guest-availability-section" class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-xs font-bold text-gray-600 mb-2">Availability (Select Days Present)</label>
+                    <div class="flex flex-wrap gap-3 text-sm">
+                        <label class="flex items-center gap-1"><input type="checkbox" class="day-chk" value="1" checked> Mon</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" class="day-chk" value="2" checked> Tue</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" class="day-chk" value="3" checked> Wed</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" class="day-chk" value="4" checked> Thu</label>
+                        <label class="flex items-center gap-1"><input type="checkbox" class="day-chk" value="5" checked> Fri</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closeModal('add-staff-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md font-medium text-sm transition">Cancel</button>
+                <button onclick="saveNewStaff()" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-bold text-sm shadow-md transition">Save Invigilator</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="invigilation.js"></script>
+</body>
+</html>
