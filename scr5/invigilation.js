@@ -1848,19 +1848,19 @@ window.loadSessionAttendance = function() {
     }
     
     const slot = invigilationSlots[key];
+    const isLocked = slot.attendanceLocked || false; // Check Lock Status
+
     ui.attArea.classList.remove('hidden');
     ui.attPlaceholder.classList.add('hidden');
     ui.attList.innerHTML = '';
     
-    // 1. Decide list source: 'attendance' (Saved) OR 'assigned' (Planned)
+    // 1. Render Rows (Pass Lock State)
     const presentList = slot.attendance || slot.assigned || [];
-    
-    // 2. Render Rows
     presentList.forEach(email => {
-        addAttendanceRow(email);
+        addAttendanceRow(email, isLocked);
     });
 
-    // 3. Populate Substitute Dropdown (Exclude those already present)
+    // 2. Populate Substitute Dropdown
     ui.attSubSelect.innerHTML = '<option value="">Select Staff...</option>';
     staffData.forEach(s => {
         if (!presentList.includes(s.email)) {
@@ -1868,24 +1868,73 @@ window.loadSessionAttendance = function() {
         }
     });
     
+    // 3. UI STATE MANAGEMENT (Lock Logic)
+    const addBtn = document.getElementById('btn-att-add');
+    const saveBtn = document.getElementById('btn-att-save');
+    const lockBtn = document.getElementById('btn-att-lock');
+    const subSelect = document.getElementById('att-substitute-select');
+    const statusText = document.getElementById('att-lock-status');
+
+    if (isLocked) {
+        // LOCKED STATE: Disable everything
+        subSelect.disabled = true;
+        if(addBtn) { addBtn.disabled = true; addBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
+        
+        if(saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            saveBtn.innerHTML = `<span>✅ Saved & Locked</span>`;
+        }
+
+        if(lockBtn) {
+            lockBtn.innerHTML = `<span>🔓</span> Unlock Register`;
+            lockBtn.className = "bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded shadow-sm hover:bg-red-100 font-bold text-sm flex items-center gap-2 transition";
+            lockBtn.onclick = () => window.toggleAttendanceLock(key, false);
+        }
+        if(statusText) statusText.textContent = "Attendance is finalized and locked.";
+
+    } else {
+        // UNLOCKED STATE: Enable everything
+        subSelect.disabled = false;
+        if(addBtn) { addBtn.disabled = false; addBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
+
+        if(saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            saveBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Confirm & Update Counts`;
+        }
+
+        if(lockBtn) {
+            lockBtn.innerHTML = `<span>🔒</span> Lock Register`;
+            lockBtn.className = "bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-sm flex items-center gap-2 transition";
+            lockBtn.onclick = () => window.toggleAttendanceLock(key, true);
+        }
+        if(statusText) statusText.textContent = "Editing allowed.";
+    }
+    
     updateAttCount();
 }
 
-function addAttendanceRow(email) {
+function addAttendanceRow(email, isLocked) {
     const s = staffData.find(st => st.email === email);
     if(!s) return;
     
     const div = document.createElement('div');
-    div.className = "flex justify-between items-center bg-white p-2 rounded border border-gray-200";
+    div.className = `flex justify-between items-center bg-white p-2 rounded border ${isLocked ? 'border-green-100 bg-green-50' : 'border-gray-200'}`;
+    
+    // Disable inputs if locked
+    const chkState = isLocked ? "disabled" : "onchange='window.updateAttCount()'";
+    const removeBtn = isLocked ? "" : `<button class="text-red-400 hover:text-red-600 text-xs font-bold px-2" onclick="this.parentElement.remove(); window.updateAttCount();">&times; Remove</button>`;
+
     div.innerHTML = `
         <div class="flex items-center gap-3">
-            <input type="checkbox" class="att-chk w-5 h-5 text-green-600 rounded focus:ring-green-500" value="${email}" checked onchange="window.updateAttCount()">
+            <input type="checkbox" class="att-chk w-5 h-5 text-green-600 rounded focus:ring-green-500" value="${email}" checked ${chkState}>
             <div>
                 <div class="font-bold text-gray-800 text-sm">${s.name}</div>
                 <div class="text-xs text-gray-500">${s.dept}</div>
             </div>
         </div>
-        <button class="text-red-400 hover:text-red-600 text-xs font-bold" onclick="this.parentElement.remove(); window.updateAttCount();">Remove</button>
+        ${removeBtn}
     `;
     ui.attList.appendChild(div);
 }
@@ -1930,7 +1979,23 @@ window.saveAttendance = async function() {
     renderStaffTable(); 
     alert("Attendance Saved & Counts Updated!");
 }
+window.toggleAttendanceLock = async function(key, lockState) {
+    if (lockState && !confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
+    
+    if (!invigilationSlots[key]) return;
+    
+    // Save state
+    invigilationSlots[key].attendanceLocked = lockState;
+    
+    // If locking, ensure we save the current list too, just in case
+    if (lockState) {
+        const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
+        invigilationSlots[key].attendance = presentEmails;
+    }
 
+    await syncSlotsToCloud();
+    loadSessionAttendance(); // Refresh UI
+}
 
 // 3. Updated Volunteer (Handles Picking Up Exchange)
 async function volunteer(key, email) {
@@ -2198,6 +2263,7 @@ window.toggleAdvance = toggleAdvance;
 window.toggleWholeDay = toggleWholeDay;
 window.addNewDepartment = addNewDepartment;
 window.deleteDepartment = deleteDepartment;
+window.toggleAttendanceLock = toggleAttendanceLock;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
