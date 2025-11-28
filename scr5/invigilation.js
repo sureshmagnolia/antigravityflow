@@ -359,13 +359,12 @@ function updateAdminUI() {
     renderStaffTable(); 
 }
 // --- RENDER ADMIN SLOTS (With Weekly Controls) ---
-// --- RENDER ADMIN SLOTS (Grouped by Month & Week, Slots Ascending) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
     
     // 1. Group Data
-    const groups = {}; // Key: "MonthStr-WeekNum" -> { monthStr, weekNum, slots: [], maxDate: 0 }
+    const groups = {}; 
 
     Object.keys(invigilationSlots).forEach(key => {
         const date = parseDate(key);
@@ -378,19 +377,14 @@ function renderSlotsGridAdmin() {
                 monthStr,
                 weekNum,
                 slots: [],
-                maxDate: new Date(0) // Used to sort groups (weeks) by latest date
+                maxDate: new Date(0)
             };
         }
 
         groups[groupKey].slots.push({ key, date, slot: invigilationSlots[key] });
-        
-        // Track the latest date in this group for sorting
-        if (date > groups[groupKey].maxDate) {
-            groups[groupKey].maxDate = date;
-        }
+        if (date > groups[groupKey].maxDate) groups[groupKey].maxDate = date;
     });
 
-    // 2. Sort Groups (Weeks) DESCENDING (Newest Week First)
     const sortedGroups = Object.values(groups).sort((a, b) => b.maxDate - a.maxDate);
 
     if (sortedGroups.length === 0) {
@@ -401,96 +395,60 @@ function renderSlotsGridAdmin() {
     let lastMonth = "";
 
     sortedGroups.forEach(group => {
-        // 3. Sort Slots within Group ASCENDING (Oldest Day First: Mon -> Fri)
         group.slots.sort((a, b) => a.date - b.date);
 
-        // Render Month Header (Only if changed)
         if (group.monthStr !== lastMonth) {
             ui.adminSlotsGrid.innerHTML += `
                 <div class="col-span-full mt-6 mb-1 border-b border-gray-300 pb-2">
-                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">
-                        📅 ${group.monthStr}
-                    </h3>
+                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">📅 ${group.monthStr}</h3>
                 </div>`;
             lastMonth = group.monthStr;
         }
 
-        // Render Week Header
         ui.adminSlotsGrid.innerHTML += `
             <div class="col-span-full mt-3 mb-2 flex justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm">
                 <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                     <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.weekNum}</span>
                 </span>
                 <div class="flex gap-2">
-                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, true)" 
-                        class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">
-                        🔒 Lock Week
-                    </button>
-                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, false)" 
-                        class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">
-                        🔓 Unlock Week
-                    </button>
+                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, true)" class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">🔒 Lock Week</button>
+                    <button onclick="toggleWeekLock('${group.monthStr}', ${group.weekNum}, false)" class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">🔓 Unlock Week</button>
                 </div>
             </div>`;
 
-        // Render Slots
         group.slots.forEach(item => {
             const { key, slot } = item;
             const filled = slot.assigned.length;
             
-            // --- Color Logic ---
-            let statusColor = "";
-            let statusIcon = "";
-            
-            if (slot.isLocked) {
-                statusColor = "border-red-500 bg-red-50"; 
-                statusIcon = "🔒";
-            } else if (filled >= slot.required) {
-                statusColor = "border-green-400 bg-green-50"; 
-                statusIcon = "✅";
-            } else {
-                statusColor = "border-orange-300 bg-orange-50"; 
-                statusIcon = "🔓";
-            }
+            let statusColor = slot.isLocked ? "border-red-500 bg-red-50" : (filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50");
+            let statusIcon = slot.isLocked ? "🔒" : (filled >= slot.required ? "✅" : "🔓");
 
-            // --- Unavailability Button ---
             let unavButton = "";
             if (slot.unavailable && slot.unavailable.length > 0) {
-                unavButton = `
-                    <button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-2 bg-white text-red-700 border border-red-200 px-2 py-1.5 rounded text-xs font-bold hover:bg-red-50 transition shadow-sm">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                        View ${slot.unavailable.length} Inconvenience(s)
-                    </button>`;
+                unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-2 bg-white text-red-700 border border-red-200 px-2 py-1.5 rounded text-xs font-bold hover:bg-red-50 transition shadow-sm"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> View ${slot.unavailable.length} Inconvenience(s)</button>`;
             }
 
             ui.adminSlotsGrid.innerHTML += `
                 <div class="border-l-4 ${statusColor} bg-white p-4 rounded shadow-sm slot-card flex flex-col justify-between transition-all">
                     <div>
                         <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-bold text-gray-800 text-sm w-1/2 break-words flex items-center gap-1">
-                                ${statusIcon} ${key}
-                            </h4>
-                            
+                            <h4 class="font-bold text-gray-800 text-sm w-1/2 break-words flex items-center gap-1">${statusIcon} ${key}</h4>
                             <div class="flex items-center bg-white border border-gray-300 rounded text-xs shadow-sm">
                                 <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r text-gray-600 font-bold">-</button>
                                 <span class="px-2 font-bold text-gray-800" title="Filled / Required">${filled} / ${slot.required}</span>
                                 <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l text-gray-600 font-bold">+</button>
                             </div>
                         </div>
-                        
-                        <div class="text-xs text-gray-600 mb-2">
-                            <strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
-                        </div>
+                        <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
                         ${unavButton}
                     </div>
                     
                     <div class="flex gap-2 mt-3">
-                        <button onclick="openManualAllocationModal('${key}')" class="flex-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">
-                            Manual Assign
+                        <button onclick="printSessionReport('${key}')" class="w-20 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report">
+                            <span>🖨️</span> Print
                         </button>
-                        <button onclick="toggleLock('${key}')" class="w-24 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">
-                            ${slot.isLocked ? 'Unlock' : 'Lock'}
-                        </button>
+                        <button onclick="openManualAllocationModal('${key}')" class="flex-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual Assign</button>
+                        <button onclick="toggleLock('${key}')" class="w-16 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
                     </div>
                 </div>
             `;
@@ -1279,7 +1237,7 @@ window.calculateSlotsFromSchedule = async function() {
     if(btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
 
     try {
-        // 1. Fetch Latest Exam Data (Source of Truth)
+        // 1. Fetch Latest Exam Data
         const mainRef = doc(db, "colleges", currentCollegeId);
         const mainSnap = await getDoc(mainRef);
         
@@ -1287,7 +1245,7 @@ window.calculateSlotsFromSchedule = async function() {
         
         let fullData = mainSnap.data();
         
-        // Fetch Chunks (Student Data)
+        // Fetch Chunks
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
@@ -1301,39 +1259,54 @@ window.calculateSlotsFromSchedule = async function() {
         const students = JSON.parse(fullData.examBaseData || '[]');
         if(students.length === 0) throw new Error("No exam data found in cloud.");
 
-        // 2. Calculate New Requirements
+        // 2. Calculate Requirements & Courses
         const sessions = {};
         students.forEach(s => {
             const key = `${s.Date} | ${s.Time}`;
-            if(!sessions[key]) sessions[key] = 0;
-            sessions[key]++;
+            if(!sessions[key]) sessions[key] = { count: 0, courses: new Set() };
+            sessions[key].count++;
+            if(s.Course) sessions[key].courses.add(s.Course);
         });
 
         let changesLog = [];
-        let removalLog = []; // Stores { session, name, phone }
-        let newSlots = { ...invigilationSlots }; // Start with current state
+        let removalLog = []; 
+        let newSlots = { ...invigilationSlots }; 
         let hasChanges = false;
 
         Object.keys(sessions).forEach(key => {
-            const count = sessions[key];
+            const count = sessions[key].count;
+            const courseList = Array.from(sessions[key].courses); // Convert Set to Array
+            
             const base = Math.ceil(count / 30);
             const reserve = Math.ceil(base * 0.10);
             const newReq = base + reserve;
             
             if (!newSlots[key]) {
                 // NEW SESSION
-                newSlots[key] = { required: newReq, assigned: [], unavailable: [], isLocked: true };
+                newSlots[key] = { 
+                    required: newReq, 
+                    assigned: [], 
+                    unavailable: [], 
+                    isLocked: true,
+                    courses: courseList // Store Exam Names
+                };
                 changesLog.push(`🆕 ${key}: Added (Req: ${newReq})`);
                 hasChanges = true;
             } else {
                 // EXISTING SESSION
                 const currentReq = newSlots[key].required;
+                
+                // Update courses if missing
+                if (!newSlots[key].courses || newSlots[key].courses.length === 0) {
+                    newSlots[key].courses = courseList;
+                    hasChanges = true; // Implicit update
+                }
+
                 if (currentReq !== newReq) {
                     changesLog.push(`🔄 ${key}: ${currentReq} ➝ ${newReq}`);
                     hasChanges = true;
                     newSlots[key].required = newReq;
 
-                    // CHECK FOR REDUCTION & OVER-BOOKING
                     if (newReq < newSlots[key].assigned.length) {
                         const excessCount = newSlots[key].assigned.length - newReq;
                         const removed = pruneAssignments(newSlots[key], excessCount);
@@ -1349,7 +1322,7 @@ window.calculateSlotsFromSchedule = async function() {
         } else {
             let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
             if (removalLog.length > 0) {
-                msg += `\n\n🚨 SLOT REDUCTION ALERT: ${removalLog.length} staff will be removed from duty based on lowest pending rank.`;
+                msg += `\n\n🚨 SLOT REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
             }
             msg += "\n\nProceed with update?";
 
@@ -1357,13 +1330,8 @@ window.calculateSlotsFromSchedule = async function() {
                 invigilationSlots = newSlots;
                 await syncSlotsToCloud();
                 renderSlotsGridAdmin();
-                
-                // 4. Post-Update Notification
-                if (removalLog.length > 0) {
-                    showRemovalNotification(removalLog);
-                } else {
-                    alert("Slots updated successfully!");
-                }
+                if (removalLog.length > 0) showRemovalNotification(removalLog);
+                else alert("Slots updated successfully!");
             }
         }
 
@@ -2314,7 +2282,111 @@ window.toggleWeekLock = async function(monthStr, weekNum, lockState) {
     }
 }
 
-// --- EXPORT TO WINDOW (Final Fix) ---
+window.printSessionReport = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot) return alert("Error: Slot not found.");
+
+    const [datePart, timePart] = key.split(' | ');
+    const collegeName = collegeData.examCollegeName || "College Name";
+    const sessionName = (timePart.includes("AM")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
+    
+    // Use stored courses or fallback
+    let examName = "University Examinations";
+    if (slot.courses && slot.courses.length > 0) {
+        // Limit to first 3 to prevent overflow, or join them
+        examName = slot.courses.join(', ');
+    }
+
+    // Prepare Staff Rows
+    let rowsHtml = "";
+    slot.assigned.forEach((email, index) => {
+        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "" };
+        rowsHtml += `
+            <tr>
+                <td style="text-align:center;">${index + 1}</td>
+                <td>${staff.name}</td>
+                <td>${staff.dept}</td>
+                <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
+        `;
+    });
+
+    // Fill remaining rows to ensure page looks full (optional, e.g. up to 10 rows)
+    for (let i = slot.assigned.length; i < 15; i++) {
+        rowsHtml += `
+            <tr>
+                <td style="text-align:center;">${i + 1}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+        `;
+    }
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Invigilation Report - ${datePart}</title>
+            <style>
+                @page { size: A4 portrait; margin: 15mm; }
+                body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; font-size: 18px; text-transform: uppercase; }
+                .header h2 { margin: 5px 0; font-size: 14px; font-weight: normal; }
+                .meta { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 15px; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                th, td { border: 1px solid black; padding: 8px 4px; }
+                th { background-color: #f0f0f0; }
+                .footer { margin-top: 50px; display: flex; justify-content: space-between; font-size: 14px; }
+                .footer div { text-align: center; width: 40%; border-top: 1px solid black; padding-top: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>${collegeName}</h1>
+                <h2>Invigilation Duty List</h2>
+                <h2>${examName}</h2>
+            </div>
+            
+            <div class="meta">
+                <span>Date: ${datePart}</span>
+                <span>Session: ${sessionName} (${timePart})</span>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px;">Sl</th>
+                        <th style="width: 150px;">Name of Invigilator</th>
+                        <th style="width: 80px;">Dept</th>
+                        <th style="width: 60px;">RNBB</th>
+                        <th style="width: 60px;">Assigned<br>Script</th>
+                        <th style="width: 60px;">Used<br>Script</th>
+                        <th style="width: 60px;">Returned<br>Script</th>
+                        <th>Remarks</th>
+                        <th style="width: 80px;">Signature</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div class="footer">
+                <div>Senior Assistant Superintendent</div>
+                <div>Chief Superintendent</div>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -2363,6 +2435,7 @@ window.addNewDepartment = addNewDepartment;
 window.deleteDepartment = deleteDepartment;
 window.toggleAttendanceLock = toggleAttendanceLock;
 window.toggleWeekLock = toggleWeekLock;
+window.printSessionReport = printSessionReport;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
