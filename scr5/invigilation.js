@@ -149,6 +149,7 @@ function setupLiveSync(collegeId, mode) {
                 } else {
                     updateAdminUI();
                     renderSlotsGridAdmin();
+                    renderAdminTodayStats();
                     if (!document.getElementById('view-staff').classList.contains('hidden')) {
                          const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                          if(me) { 
@@ -189,7 +190,11 @@ function initAdminDashboard() {
     updateHeaderButtons('admin');
     updateAdminUI();
     renderSlotsGridAdmin();
-    populateAttendanceSessions(); // <--- ADD THIS LINE
+    populateAttendanceSessions(); 
+    
+    // NEW CALL
+    renderAdminTodayStats(); 
+    
     showView('admin');
 }
 // NEW: Calculate Duties Done based on actual attendance
@@ -2419,7 +2424,61 @@ window.printSessionReport = function(key) {
     printWindow.document.close();
     printWindow.print();
 }
+function renderAdminTodayStats() {
+    const container = document.getElementById('admin-today-container');
+    if (!container) return;
 
+    // 1. Get Today's Date in DD.MM.YYYY format
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const todayStr = `${dd}.${mm}.${yyyy}`;
+
+    // 2. Find Sessions for Today
+    const todaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(todayStr));
+
+    // 3. Hide if no exams
+    if (todaySessions.length === 0) {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+    }
+
+    // 4. Render Banner
+    container.classList.remove('hidden');
+    let buttonsHtml = '';
+
+    // Sort by Time (AM first)
+    todaySessions.sort();
+
+    todaySessions.forEach(key => {
+        const timePart = key.split(' | ')[1];
+        buttonsHtml += `
+            <button onclick="printSessionReport('${key}')" class="bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-4 rounded shadow-sm text-sm flex items-center gap-2 transition border border-indigo-100">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                Print ${timePart} Report
+            </button>
+        `;
+    });
+
+    container.innerHTML = `
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-md p-4 text-white flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold leading-tight">Exam Scheduled Today</h2>
+                    <p class="text-indigo-100 text-xs font-medium">${todayStr} &nbsp;|&nbsp; ${todaySessions.length} Session(s)</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                ${buttonsHtml}
+            </div>
+        </div>
+    `;
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -2469,6 +2528,7 @@ window.deleteDepartment = deleteDepartment;
 window.toggleAttendanceLock = toggleAttendanceLock;
 window.toggleWeekLock = toggleWeekLock;
 window.printSessionReport = printSessionReport;
+window.renderAdminTodayStats = renderAdminTodayStats;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
