@@ -591,7 +591,29 @@
             </div>
         </div>
     </div>
-    
+    <div id="notification-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl m-4 flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="notif-modal-title">Notification Center</h3>
+                    <p class="text-xs text-gray-500" id="notif-modal-subtitle">Select faculty to notify.</p>
+                </div>
+                <button onclick="closeModal('notification-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="bg-green-50 p-3 rounded border border-green-100 mb-4 shrink-0">
+                <p class="text-[10px] font-bold text-green-800 uppercase mb-1">Message Preview Format:</p>
+                <div id="notif-message-preview" class="text-xs text-gray-600 italic font-mono whitespace-pre-wrap max-h-20 overflow-y-auto custom-scroll"></div>
+            </div>
+
+            <div id="notif-list-container" class="flex-1 overflow-y-auto custom-scroll space-y-2 p-1">
+                </div>
+
+            <div class="mt-4 pt-3 border-t border-gray-200 flex justify-end shrink-0">
+                <button onclick="closeModal('notification-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">Close</button>
+            </div>
+        </div>
+    </div>
     <script type="module" src="invigilation.js">
     </script>
 </body>
