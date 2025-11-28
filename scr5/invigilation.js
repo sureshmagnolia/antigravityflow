@@ -1897,37 +1897,7 @@ window.postForExchange = async function(key, email) {
     }
 }
 
-window.postForExchange = async function(key, email) {
-    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
-    
-    const slot = invigilationSlots[key];
-    if (!slot.exchangeRequests) slot.exchangeRequests = [];
-    
-    if (!slot.exchangeRequests.includes(email)) {
-        // 1. Update Local Data
-        slot.exchangeRequests.push(email);
-        
-        // 2. SAFE UI UPDATES (Wrapped in try-catch to prevent freezing)
-        try {
-            // Update Calendar (Turns Orange)
-            renderStaffCalendar(email);
-        } catch(e) { console.error("Cal Error:", e); }
 
-        try {
-            // Update Sidebar Market
-            if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-        } catch(e) { console.error("Market Error:", e); }
-
-        // 3. CRITICAL: Refresh Modal Immediately (Forces button change)
-        try {
-            const dateStr = key.split('|')[0].trim(); // Safer split
-            openDayModal(dateStr, email); 
-        } catch(e) { console.error("Modal Error:", e); }
-
-        // 4. Save to Cloud (Background)
-        await syncSlotsToCloud();
-    }
-}
 
 
 // --- EXPORT TO WINDOW (Final Fix) ---
