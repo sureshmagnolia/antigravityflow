@@ -1237,35 +1237,28 @@ window.calculateSlotsFromSchedule = async function() {
     if(btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
 
     try {
-        // 1. Fetch Latest Exam Data
+        // 1. Fetch Latest Data
         const mainRef = doc(db, "colleges", currentCollegeId);
         const mainSnap = await getDoc(mainRef);
-        
         if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
         
         let fullData = mainSnap.data();
-        
-        // Fetch Chunks
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
         let fullPayload = "";
         querySnapshot.forEach(doc => { if (doc.data().payload) fullPayload += doc.data().payload; });
-        if (fullPayload) {
-            const bulkData = JSON.parse(fullPayload);
-            fullData = { ...fullData, ...bulkData };
-        }
+        if (fullPayload) fullData = { ...fullData, ...JSON.parse(fullPayload) };
 
         const students = JSON.parse(fullData.examBaseData || '[]');
-        if(students.length === 0) throw new Error("No exam data found in cloud.");
+        if(students.length === 0) throw new Error("No exam data found.");
 
-        // 2. Calculate Requirements & Courses
+        // 2. Process Sessions
         const sessions = {};
         students.forEach(s => {
             const key = `${s.Date} | ${s.Time}`;
-            if(!sessions[key]) sessions[key] = { count: 0, courses: new Set() };
+            if(!sessions[key]) sessions[key] = { count: 0 };
             sessions[key].count++;
-            if(s.Course) sessions[key].courses.add(s.Course);
         });
 
         let changesLog = [];
@@ -1275,8 +1268,21 @@ window.calculateSlotsFromSchedule = async function() {
 
         Object.keys(sessions).forEach(key => {
             const count = sessions[key].count;
-            const courseList = Array.from(sessions[key].courses); // Convert Set to Array
+            const [datePart, timePart] = key.split(' | ');
             
+            // --- FIX: Fetch Official Exam Name from Scheduler ---
+            let officialExamName = "";
+            if (typeof window.getExamName === "function") {
+                // Try Regular stream first, as it usually defines the main exam name
+                officialExamName = window.getExamName(datePart, timePart, "Regular");
+                if (!officialExamName) {
+                    // Fallback: Try generic
+                    officialExamName = window.getExamName(datePart, timePart, "All Streams");
+                }
+            }
+            // --------------------------------------------------
+
+            // Calculate Requirements
             const base = Math.ceil(count / 30);
             const reserve = Math.ceil(base * 0.10);
             const newReq = base + reserve;
@@ -1288,7 +1294,7 @@ window.calculateSlotsFromSchedule = async function() {
                     assigned: [], 
                     unavailable: [], 
                     isLocked: true,
-                    courses: courseList // Store Exam Names
+                    examName: officialExamName // <--- Store the Correct Name
                 };
                 changesLog.push(`🆕 ${key}: Added (Req: ${newReq})`);
                 hasChanges = true;
@@ -1296,10 +1302,10 @@ window.calculateSlotsFromSchedule = async function() {
                 // EXISTING SESSION
                 const currentReq = newSlots[key].required;
                 
-                // Update courses if missing
-                if (!newSlots[key].courses || newSlots[key].courses.length === 0) {
-                    newSlots[key].courses = courseList;
-                    hasChanges = true; // Implicit update
+                // Update Exam Name if missing or changed
+                if (officialExamName && newSlots[key].examName !== officialExamName) {
+                    newSlots[key].examName = officialExamName;
+                    hasChanges = true;
                 }
 
                 if (currentReq !== newReq) {
@@ -1318,12 +1324,10 @@ window.calculateSlotsFromSchedule = async function() {
 
         // 3. Confirm & Apply
         if (!hasChanges) {
-            alert("✅ Cloud data checked. No changes in slot requirements.");
+            alert("✅ Cloud data checked. No changes.");
         } else {
             let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
-            if (removalLog.length > 0) {
-                msg += `\n\n🚨 SLOT REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
-            }
+            if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
             msg += "\n\nProceed with update?";
 
             if (confirm(msg)) {
@@ -1339,7 +1343,7 @@ window.calculateSlotsFromSchedule = async function() {
         console.error(e);
         alert("Error: " + e.message);
     } finally {
-        if(btn) { btn.disabled = false; btn.innerText = "1. Generate Slots"; }
+        if(btn) { btn.disabled = false; btn.innerText = "Sync Cloud / Generate Slots"; }
     }
 }
 
@@ -2281,21 +2285,24 @@ window.toggleWeekLock = async function(monthStr, weekNum, lockState) {
         alert("No slots needed updating in this week.");
     }
 }
-
 window.printSessionReport = function(key) {
     const slot = invigilationSlots[key];
     if (!slot) return alert("Error: Slot not found.");
 
     const [datePart, timePart] = key.split(' | ');
     const collegeName = collegeData.examCollegeName || "College Name";
-    const sessionName = (timePart.includes("AM")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
+    const sessionName = (timePart.includes("AM") || timePart.startsWith("09") || timePart.startsWith("10")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
     
-    // Use stored courses or fallback
-    let examName = "University Examinations";
-    if (slot.courses && slot.courses.length > 0) {
-        // Limit to first 3 to prevent overflow, or join them
-        examName = slot.courses.join(', ');
+    // --- USE CORRECT EXAM NAME ---
+    // 1. Try stored name from slot
+    // 2. Try fetching live from Scheduler
+    // 3. Fallback to generic
+    let examName = slot.examName;
+    if (!examName && typeof window.getExamName === "function") {
+        examName = window.getExamName(datePart, timePart, "Regular");
     }
+    if (!examName) examName = "University Examinations";
+    // -----------------------------
 
     // Prepare Staff Rows
     let rowsHtml = "";
@@ -2310,7 +2317,7 @@ window.printSessionReport = function(key) {
         `;
     });
 
-    // Fill remaining rows to ensure page looks full (optional, e.g. up to 10 rows)
+    // Fill remaining rows (up to 15)
     for (let i = slot.assigned.length; i < 15; i++) {
         rowsHtml += `
             <tr>
@@ -2337,7 +2344,7 @@ window.printSessionReport = function(key) {
                 body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; }
                 .header { text-align: center; margin-bottom: 20px; }
                 .header h1 { margin: 0; font-size: 18px; text-transform: uppercase; }
-                .header h2 { margin: 5px 0; font-size: 14px; font-weight: normal; }
+                .header h2 { margin: 5px 0; font-size: 14px; font-weight: bold; }
                 .meta { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 15px; font-weight: bold; }
                 table { width: 100%; border-collapse: collapse; font-size: 12px; }
                 th, td { border: 1px solid black; padding: 8px 4px; }
@@ -2350,7 +2357,7 @@ window.printSessionReport = function(key) {
             <div class="header">
                 <h1>${collegeName}</h1>
                 <h2>Invigilation Duty List</h2>
-                <h2>${examName}</h2>
+                <h2 style="text-transform: uppercase; margin-top:5px;">${examName}</h2>
             </div>
             
             <div class="meta">
@@ -2364,10 +2371,10 @@ window.printSessionReport = function(key) {
                         <th style="width: 30px;">Sl</th>
                         <th style="width: 150px;">Name of Invigilator</th>
                         <th style="width: 80px;">Dept</th>
-                        <th style="width: 60px;">RNBB</th>
-                        <th style="width: 60px;">Assigned<br>Script</th>
-                        <th style="width: 60px;">Used<br>Script</th>
-                        <th style="width: 60px;">Returned<br>Script</th>
+                        <th style="width: 50px;">RNBB</th>
+                        <th style="width: 50px;">Asgd<br>Script</th>
+                        <th style="width: 50px;">Used<br>Script</th>
+                        <th style="width: 50px;">Retd<br>Script</th>
                         <th>Remarks</th>
                         <th style="width: 80px;">Signature</th>
                     </tr>
@@ -2387,6 +2394,7 @@ window.printSessionReport = function(key) {
     printWindow.document.close();
     printWindow.print();
 }
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
