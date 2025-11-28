@@ -1669,8 +1669,15 @@ async function saveManualAllocation() {
 // --- ROLE EDITOR FUNCTIONS ---
 
 window.openRoleConfigModal = function() {
-    document.getElementById('global-duty-target').value = globalDutyTarget;
+    // 1. Load Global Target
+    const targetInput = document.getElementById('global-duty-target');
+    if(targetInput) targetInput.value = globalDutyTarget;
+
+    // 2. Render Lists
     renderRolesList();
+    if(typeof renderDepartmentsList === "function") renderDepartmentsList();
+
+    // 3. Show Modal
     window.openModal('role-config-modal');
 }
 
