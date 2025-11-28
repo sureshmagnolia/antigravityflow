@@ -1534,13 +1534,19 @@ window.openManualAllocationModal = function(key) {
 
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
-    document.getElementById('manual-modal-req').textContent = slot.required;
+    // Default to 0 if undefined to prevent layout issues
+    document.getElementById('manual-modal-req').textContent = slot.required || 0;
     
-    // 1. Sort Staff
-    const rankedStaff = staffData.map(s => ({
-        ...s,
-        pending: calculateStaffTarget(s) - (s.dutiesDone || 0)
-    })).sort((a, b) => b.pending - a.pending);
+    // 1. Sort Staff (Calculate Pending Duties Dynamically)
+    // We use getDutiesDoneCount(s.email) to ensure accuracy
+    const rankedStaff = staffData.map(s => {
+        const done = getDutiesDoneCount(s.email);
+        const target = calculateStaffTarget(s);
+        return {
+            ...s,
+            pending: target - done
+        };
+    }).sort((a, b) => b.pending - a.pending); // Highest pending first
 
     // 2. Render Available List
     const availList = document.getElementById('manual-available-list');
@@ -1556,6 +1562,8 @@ window.openManualAllocationModal = function(key) {
         if (isAssigned) selectedCount++;
         const checkState = isAssigned ? 'checked' : '';
         const rowClass = isAssigned ? 'bg-indigo-50' : 'hover:bg-gray-50';
+        
+        // Color code for pending count
         const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
 
         availList.innerHTML += `
@@ -1565,7 +1573,7 @@ window.openManualAllocationModal = function(key) {
                 </td>
                 <td class="px-3 py-2">
                     <div class="font-bold text-gray-800">${s.name}</div>
-                    <div class="text-[10px] text-gray-500">${s.dept}</div>
+                    <div class="text-[10px] text-gray-500">${s.dept} | ${s.designation}</div>
                 </td>
                 <td class="px-3 py-2 text-center font-mono font-bold ${pendingColor} w-16">
                     ${s.pending}
@@ -1573,7 +1581,11 @@ window.openManualAllocationModal = function(key) {
             </tr>`;
     });
 
-    // 3. Render Unavailable List (MERGED)
+    if (rankedStaff.length === 0) {
+        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No staff available. Add staff in Settings.</td></tr>`;
+    }
+
+    // 3. Render Unavailable List (Merged Logic)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     
@@ -1583,15 +1595,15 @@ window.openManualAllocationModal = function(key) {
     // A. Slot Specific
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
     
-    // B. Advance
+    // B. Advance (Safe Check)
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
     if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
     
-    if (advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+    if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-            // Avoid duplicates
+            // Avoid duplicates by checking email
             if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
                 allUnavailable.push(u);
             }
@@ -1603,6 +1615,7 @@ window.openManualAllocationModal = function(key) {
             const email = (typeof u === 'string') ? u : u.email;
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
             const s = staffData.find(st => st.email === email) || { name: email };
+            
             unavList.innerHTML += `
                 <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
                     <div class="font-bold text-red-700">${s.name}</div>
@@ -1614,6 +1627,8 @@ window.openManualAllocationModal = function(key) {
     }
 
     document.getElementById('manual-sel-count').textContent = selectedCount;
+    document.getElementById('manual-req-count').textContent = slot.required || 0;
+    
     window.openModal('manual-allocation-modal');
 }
 
