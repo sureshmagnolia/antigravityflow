@@ -3312,6 +3312,138 @@ window.downloadAttendanceCSV = function() {
     link.click();
     document.body.removeChild(link);
 };
+// ==========================================
+// 📤 BULK STAFF UPLOAD LOGIC
+// ==========================================
+
+// 1. Download Template
+window.downloadStaffTemplate = function() {
+    const headers = ["Name", "Email", "Phone", "Department", "Designation", "Joining Date (YYYY-MM-DD)"];
+    const sample = ["John Doe,john@example.com,9876543210,Physics,Assistant Professor,2023-06-01"];
+    
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "Staff_Upload_Template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 2. Global Vars for Upload State
+let tempStaffData = [];
+let tempUniqueStaff = [];
+
+// 3. Handle File Selection
+window.handleStaffCSVUpload = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        processStaffCSV(text);
+        // Reset input so same file can be selected again if needed
+        input.value = ''; 
+    };
+    reader.readAsText(file);
+}
+
+// 4. Parse & Analyze CSV
+function processStaffCSV(csvText) {
+    const lines = csvText.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    // Validate Headers
+    const required = ['name', 'email', 'department', 'designation'];
+    const missing = required.filter(r => !headers.includes(r));
+    
+    if (missing.length > 0) {
+        alert(`Error: Missing required columns: ${missing.join(', ')}.\nPlease use the template.`);
+        return;
+    }
+
+    const parsedData = [];
+    
+    // Parse Rows
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Handle commas inside quotes logic (Simple split for now, assuming standard template)
+        const row = line.split(','); 
+        
+        // Extract values based on header index
+        const staffObj = {
+            name: row[headers.indexOf('name')].trim(),
+            email: row[headers.indexOf('email')].trim(),
+            phone: headers.includes('phone') ? row[headers.indexOf('phone')].trim() : "",
+            dept: row[headers.indexOf('department')].trim(),
+            designation: row[headers.indexOf('designation')].trim(),
+            joiningDate: headers.includes('joining date (yyyy-mm-dd)') ? row[headers.indexOf('joining date (yyyy-mm-dd)')].trim() : new Date().toISOString().split('T')[0],
+            // Defaults
+            dutiesDone: 0,
+            roleHistory: [],
+            preferredDays: []
+        };
+
+        if (staffObj.email && staffObj.name) {
+            parsedData.push(staffObj);
+        }
+    }
+
+    if (parsedData.length === 0) {
+        alert("No valid data found in CSV.");
+        return;
+    }
+
+    // Analyze Conflicts
+    tempStaffData = parsedData;
+    const existingEmails = new Set(staffData.map(s => s.email.toLowerCase()));
+    
+    tempUniqueStaff = parsedData.filter(s => !existingEmails.has(s.email.toLowerCase()));
+
+    // Show Modal
+    document.getElementById('staff-existing-count').textContent = staffData.length;
+    document.getElementById('staff-new-count').textContent = parsedData.length;
+    document.getElementById('staff-unique-count').textContent = tempUniqueStaff.length;
+    
+    window.openModal('staff-conflict-modal');
+}
+
+// 5. Action Listeners
+document.getElementById('btn-staff-merge').addEventListener('click', async () => {
+    if (tempUniqueStaff.length === 0) {
+        alert("No new unique staff to add.");
+        window.closeModal('staff-conflict-modal');
+        return;
+    }
+
+    staffData = [...staffData, ...tempUniqueStaff];
+    await syncStaffToCloud();
+    
+    // Grant access to new emails (Optional, if using staff login system)
+    // tempUniqueStaff.forEach(s => addStaffAccess(s.email)); 
+
+    alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
+    window.closeModal('staff-conflict-modal');
+    renderStaffTable();
+    updateAdminUI();
+});
+
+document.getElementById('btn-staff-replace').addEventListener('click', async () => {
+    if (confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
+        staffData = tempStaffData;
+        await syncStaffToCloud();
+        
+        alert("✅ Database replaced successfully.");
+        window.closeModal('staff-conflict-modal');
+        renderStaffTable();
+        updateAdminUI();
+    }
+});
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -3371,6 +3503,8 @@ window.openSlotReminderModal = openSlotReminderModal;
 window.markAsSent = markAsSent;
 window.sendSessionSMS = sendSessionSMS;
 window.downloadAttendanceCSV = downloadAttendanceCSV;
+window.downloadStaffTemplate = downloadStaffTemplate;
+window.handleStaffCSVUpload = handleStaffCSVUpload;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
