@@ -1864,35 +1864,32 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     renderExchangeMarket(buyerEmail);
     initStaffDashboard(buyer); // Full Refresh to update counts
 }
-// --- EXCHANGE MARKET FUNCTIONS ---
 window.postForExchange = async function(key, email) {
+    // 1. Confirmation
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
     
     const slot = invigilationSlots[key];
     if (!slot.exchangeRequests) slot.exchangeRequests = [];
     
     if (!slot.exchangeRequests.includes(email)) {
-        // 1. Update Local Data
+        // 2. Update Local Data (Optimistic)
         slot.exchangeRequests.push(email);
         
-        // 2. SAFE UI UPDATES (Wrapped in try-catch to prevent freezing)
+        // 3. FORCE UI UPDATE (Immediate)
         try {
-            // Update Calendar (Turns Orange)
+            // Update Calendar Background
             renderStaffCalendar(email);
-        } catch(e) { console.error("Cal Error:", e); }
-
-        try {
-            // Update Sidebar Market
+            
+            // Update Sidebar Market Widget
             if(typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-        } catch(e) { console.error("Market Error:", e); }
 
-        // 3. CRITICAL: Refresh Modal Immediately (Forces button change)
-        try {
-            const dateStr = key.split('|')[0].trim(); // Safer split
+            // CRITICAL: Refresh the Modal Button Instantly
+            const dateStr = key.split('|')[0].trim(); 
             openDayModal(dateStr, email); 
-        } catch(e) { console.error("Modal Error:", e); }
+            
+        } catch(e) { console.error("UI Update Error:", e); }
 
-        // 4. Save to Cloud (Background)
+        // 4. Save to Cloud (Background Process)
         await syncSlotsToCloud();
     }
 }
