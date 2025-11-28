@@ -3549,6 +3549,7 @@ window.sendSessionSMS = sendSessionSMS;
 window.downloadAttendanceCSV = downloadAttendanceCSV;
 window.downloadStaffTemplate = downloadStaffTemplate;
 window.handleStaffCSVUpload = handleStaffCSVUpload;
+window.clearOldData = clearOldData;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
