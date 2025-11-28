@@ -502,17 +502,19 @@ function renderStaffCalendar(myEmail) {
     let html = "";
     // Empty cells for days before the 1st
     for (let i = 0; i < firstDayIndex; i++) {
-        html += `<div class="bg-gray-50 border border-gray-100 min-h-[6rem] md:min-h-[7rem]"></div>`;
+        html += `<div class="bg-gray-50 border border-gray-100 min-h-[5rem] md:min-h-[7rem]"></div>`;
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
         const slots = slotsByDate[day] || [];
-        let dayContent = `<div class="text-right font-bold text-sm p-1 text-gray-400">${day}</div>`;
+        // COMPACT DATE HEADER: Reduced padding (p-0.5)
+        let dayContent = `<div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400">${day}</div>`;
         let bgClass = "bg-white"; 
         let borderClass = "border-gray-200";
 
         if (slots.length > 0) {
-            dayContent += `<div class="flex flex-col gap-1 px-1 mt-1 pb-1">`;
+            // COMPACT WRAPPER: Reduced gap and margin
+            dayContent += `<div class="flex flex-col gap-0.5 px-0.5 pb-0.5">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
             
             slots.forEach(slot => {
@@ -520,14 +522,12 @@ function renderStaffCalendar(myEmail) {
                 const needed = slot.required;
                 const available = Math.max(0, needed - filled);
                 
-                // --- DEFINITIONS ---
                 const isAssigned = slot.assigned.includes(myEmail);
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
                 const isUnavailable = isUserUnavailable(slot, myEmail);
                 
-                // --- COLOR CODING ---
                 let badgeColor = "";
                 let statusText = "";
 
@@ -564,11 +564,11 @@ function renderStaffCalendar(myEmail) {
                     statusText = `${available}/${needed}`;
                 }
 
-                // FIXED BADGE: Uses flex-col on mobile to stack text, flex-row on desktop
+                // COMPACT BADGE: Smaller text (text-[8px]), tighter padding (p-0.5), leading-none
                 dayContent += `
-                    <div class="text-[9px] md:text-[10px] font-bold px-1 py-1 rounded border ${badgeColor} flex flex-col md:flex-row justify-between items-center text-center md:text-left h-auto gap-0.5 shadow-sm">
+                    <div class="text-[8px] md:text-[10px] font-bold p-0.5 rounded border ${badgeColor} flex flex-col md:flex-row justify-between items-center text-center md:text-left h-auto gap-0.5 shadow-sm leading-none">
                         <span>${slot.sessionType}</span>
-                        <span class="whitespace-normal leading-tight">${statusText}</span>
+                        <span class="whitespace-nowrap">${statusText}</span>
                     </div>`;
             });
             
@@ -579,8 +579,8 @@ function renderStaffCalendar(myEmail) {
         const dateStr = `${String(day).padStart(2,'0')}.${String(month+1).padStart(2,'0')}.${year}`;
         const clickAction = slots.length > 0 ? `onclick="openDayModal('${dateStr}', '${myEmail}')"` : "";
         
-        // FIXED CELL: Uses min-h and h-auto to expand vertically
-        html += `<div class="border min-h-[6rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
+        // CONTAINER: Ensures cell grows with content (h-auto)
+        html += `<div class="border min-h-[5rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
     if(ui.calGrid) ui.calGrid.innerHTML = html;
 }
