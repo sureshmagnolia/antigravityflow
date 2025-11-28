@@ -1535,24 +1535,69 @@ window.runAutoAllocation = async function() {
 }
 
 window.saveNewStaff = async function() {
-    const name = document.getElementById('stf-name').value;
-    const email = document.getElementById('stf-email').value;
-    const phone = document.getElementById('stf-phone').value;
+    const indexStr = document.getElementById('stf-edit-index').value;
+    const isEditMode = (indexStr !== "");
+    const index = isEditMode ? parseInt(indexStr) : -1;
+
+    const name = document.getElementById('stf-name').value.trim();
+    const email = document.getElementById('stf-email').value.trim();
+    const phone = document.getElementById('stf-phone').value.trim();
     const dept = document.getElementById('stf-dept').value;
     const designation = document.getElementById('stf-designation').value;
     const date = document.getElementById('stf-join').value;
-    if(!name || !email) return alert("Fill all fields");
-    const days = [];
-    document.querySelectorAll('.day-chk:checked').forEach(chk => days.push(parseInt(chk.value)));
-    const newObj = { name, email, phone, dept, designation, joiningDate: date, dutiesDone: 0, roleHistory: [], preferredDays: days };
-    staffData.push(newObj);
-    await syncStaffToCloud();
-    
-    // Use New Access Function
-    await addStaffAccess(email);
 
+    if (!name || !email) return alert("Name and Email are required.");
+
+    if (isEditMode) {
+        // --- UPDATE EXISTING STAFF ---
+        const oldData = staffData[index];
+        const oldEmail = oldData.email;
+
+        if (oldEmail !== email) {
+            // Email Changed: Check for duplicates
+            if (staffData.some(s => s.email === email && s !== oldData)) {
+                return alert("This email is already used by another staff member.");
+            }
+            
+            if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access.`)) return;
+
+            // Swap Permissions in Cloud
+            await removeStaffAccess(oldEmail);
+            await addStaffAccess(email);
+        }
+
+        // Update Array
+        staffData[index] = {
+            ...oldData,
+            name, email, phone, dept, designation, joiningDate: date
+        };
+
+        alert("Staff profile updated successfully.");
+
+    } else {
+        // --- ADD NEW STAFF ---
+        if (staffData.some(s => s.email === email)) {
+            return alert("Staff with this email already exists.");
+        }
+
+        const newObj = { 
+            name, email, phone, dept, designation, joiningDate: date, 
+            dutiesDone: 0, roleHistory: [], preferredDays: [] 
+        };
+        
+        staffData.push(newObj);
+        await addStaffAccess(email);
+        alert("New staff added successfully.");
+    }
+
+    await syncStaffToCloud();
     window.closeModal('add-staff-modal');
-    if(!isAdmin) window.location.reload(); else renderStaffTable();
+    
+    if (!isAdmin) window.location.reload(); 
+    else {
+        renderStaffTable();
+        updateAdminUI();
+    }
 }
 
 window.deleteStaff = async function(index) {
@@ -3492,6 +3537,41 @@ window.clearOldData = async function() {
         alert("No old data found to clear.");
     }
 }
+
+// --- STAFF MANAGEMENT: ADD & EDIT ---
+
+window.openAddStaffModal = function() {
+    // Clear Form
+    document.getElementById('stf-edit-index').value = ""; // Empty = New Mode
+    document.getElementById('stf-name').value = "";
+    document.getElementById('stf-email').value = "";
+    document.getElementById('stf-email').disabled = false; // Enable email
+    document.getElementById('stf-phone').value = "";
+    document.getElementById('stf-dept').value = "";
+    document.getElementById('stf-designation').value = "";
+    document.getElementById('stf-join').value = "";
+    
+    document.getElementById('staff-modal-title').textContent = "Add New Invigilator";
+    window.openModal('add-staff-modal');
+}
+
+window.editStaff = function(index) {
+    const staff = staffData[index];
+    if (!staff) return;
+
+    // Populate Form
+    document.getElementById('stf-edit-index').value = index; // Set Index = Edit Mode
+    document.getElementById('stf-name').value = staff.name;
+    document.getElementById('stf-email').value = staff.email;
+    document.getElementById('stf-email').disabled = false; // Allow email change
+    document.getElementById('stf-phone').value = staff.phone || "";
+    document.getElementById('stf-dept').value = staff.dept;
+    document.getElementById('stf-designation').value = staff.designation;
+    document.getElementById('stf-join').value = staff.joiningDate || "";
+
+    document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
+    window.openModal('add-staff-modal');
+}
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -3554,6 +3634,8 @@ window.downloadAttendanceCSV = downloadAttendanceCSV;
 window.downloadStaffTemplate = downloadStaffTemplate;
 window.handleStaffCSVUpload = handleStaffCSVUpload;
 window.clearOldData = clearOldData;
+window.openAddStaffModal = openAddStaffModal;
+window.editStaff = editStaff;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
