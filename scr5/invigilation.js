@@ -691,18 +691,17 @@ window.openDayModal = function(dateStr, email) {
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
     
-    // 1. Existing Sessions
+    // 1. RENDER EXISTING EXAM SESSIONS (IF ANY)
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
     
     if (sessions.length > 0) {
-        // --- SCENARIO A: EXAMS EXIST (Hide Advance Section) ---
         sessions.forEach(key => {
             const slot = invigilationSlots[key];
             const filled = slot.assigned.length;
             const needed = slot.required - filled;
             
             // Status Checks
-            const isUnavailable = isUserUnavailable(slot, email, key); // Check Slot Specific
+            const isUnavailable = isUserUnavailable(slot, email, key);
             const isAssigned = slot.assigned.includes(email);
             const isLocked = slot.isLocked;
             const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
@@ -711,8 +710,8 @@ window.openDayModal = function(dateStr, email) {
             const t = key.split(' | ')[1].toUpperCase();
             const sessLabel = (t.includes("PM") || t.startsWith("12")) ? "AFTERNOON (AN)" : "FORENOON (FN)";
 
+            // --- Action Buttons ---
             let actionHtml = "";
-
             if (isAssigned) {
                 if (isPostedByMe) {
                     actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
@@ -721,21 +720,19 @@ window.openDayModal = function(dateStr, email) {
                 } else {
                     actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
                 }
-            } 
-            else if (marketOffers.length > 0) {
+            } else if (marketOffers.length > 0) {
                  let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
                  actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
-            } 
-            else if (isUnavailable) {
+            } else if (isUnavailable) {
                  actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
-            } 
-            else {
+            } else {
                  const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
                  if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
                  else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
                  else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
             }
 
+            // Staff List
             let staffListHtml = '';
             if (slot.assigned.length > 0) {
                 const listItems = slot.assigned.map(st => {
@@ -750,43 +747,49 @@ window.openDayModal = function(dateStr, email) {
 
             container.innerHTML += `<div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${staffListHtml}</div>`;
         });
-
     } else {
-        // --- SCENARIO B: NO EXAMS (Show Advance Unavailability) ---
-        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled yet.</p>`;
-        
-        const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
-        
-        // Check using .some() since it's now an array of objects
-        const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
-        const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
-
-        container.innerHTML += `
-            <div class="mt-2 pt-4 border-t border-gray-200">
-                <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
-                    <span>🗓️</span> Advance Unavailability
-                </h4>
-                <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                    <p class="text-[10px] text-gray-600 mb-3">
-                        Mark unavailability for future sessions on this date (OD, DL, etc.).
-                    </p>
-                    <div class="flex gap-3">
-                        <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" 
-                            class="flex-1 py-2.5 text-xs font-bold rounded shadow-sm border transition flex items-center justify-center gap-2
-                            ${fnUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
-                            ${fnUnavail ? '🚫 FN Unavailable' : 'Mark FN Unavailable'}
-                        </button>
-                        
-                        <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" 
-                            class="flex-1 py-2.5 text-xs font-bold rounded shadow-sm border transition flex items-center justify-center gap-2
-                            ${anUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
-                            ${anUnavail ? '🚫 AN Unavailable' : 'Mark AN Unavailable'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
+        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
+
+    // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (Always Visible now)
+    const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
+    
+    // Status Checks
+    const fnUnavail = adv.FN && adv.FN.some(u => u.email === email);
+    const anUnavail = adv.AN && adv.AN.some(u => u.email === email);
+    const bothUnavail = fnUnavail && anUnavail;
+
+    container.innerHTML += `
+        <div class="mt-4 pt-4 border-t border-gray-200">
+            <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
+                <span>🗓️</span> General Unavailability (OD/DL/Leave)
+            </h4>
+            <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                <p class="text-[10px] text-gray-600 mb-3">
+                    Mark leave for sessions or the whole day. This applies even if slots are added later.
+                </p>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'FN')" 
+                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1
+                        ${fnUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
+                        ${fnUnavail ? '🚫 FN Unavailable' : 'Mark FN'}
+                    </button>
+                    
+                    <button onclick="toggleAdvance('${dateStr}', '${email}', 'AN')" 
+                        class="py-2 text-[10px] font-bold rounded border transition flex items-center justify-center gap-1
+                        ${anUnavail ? 'bg-red-600 text-white border-red-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">
+                        ${anUnavail ? '🚫 AN Unavailable' : 'Mark AN'}
+                    </button>
+                </div>
+                
+                <button onclick="toggleWholeDay('${dateStr}', '${email}')" 
+                    class="w-full py-2 text-xs font-bold rounded border transition flex items-center justify-center gap-2
+                    ${bothUnavail ? 'bg-red-800 text-white border-red-900' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-100'}">
+                    ${bothUnavail ? '🚫 Clear Whole Day Unavailability' : '📅 Mark Whole Day Unavailable'}
+                </button>
+            </div>
+        </div>
+    `;
 
     window.openModal('day-detail-modal');
 }
@@ -944,7 +947,36 @@ async function saveAdvanceUnavailability() {
     const ref = doc(db, "colleges", currentCollegeId);
     await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
 }
+window.toggleWholeDay = async function(dateStr, email) {
+    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+    
+    // Check if ALREADY marked for both
+    const fnList = advanceUnavailability[dateStr].FN || [];
+    const anList = advanceUnavailability[dateStr].AN || [];
+    const isFullDay = fnList.some(u => u.email === email) && anList.some(u => u.email === email);
 
+    if (isFullDay) {
+        // CLEAR BOTH
+        if(confirm("Clear unavailability for the WHOLE DAY?")) {
+            advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
+            advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
+            await saveAdvanceUnavailability();
+            renderStaffCalendar(email);
+            openDayModal(dateStr, email);
+        }
+    } else {
+        // MARK BOTH (Open Modal with Special Key)
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`; 
+        document.getElementById('unav-email').value = email;
+        
+        document.getElementById('unav-reason').value = "";
+        document.getElementById('unav-details').value = "";
+        document.getElementById('unav-details-container').classList.add('hidden');
+        
+        window.closeModal('day-detail-modal');
+        window.openModal('unavailable-modal');
+    }
+}
 // --- STANDARD EXPORTS ---
 window.toggleLock = async function(key) {
     invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
@@ -1058,38 +1090,45 @@ window.confirmUnavailable = async function() {
     const entry = { email, reason, details: details || "" };
 
     if (key.startsWith('ADVANCE|')) {
-        // --- CASE A: ADVANCE UNAVAILABILITY ---
+        // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
         const [_, dateStr, session] = key.split('|');
         
-        // Ensure structure exists
+        // Ensure structure
         if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-        if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+        if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
+        if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
         
-        // Add entry
-        advanceUnavailability[dateStr][session].push(entry);
+        if (session === 'WHOLE') {
+            // Remove existing to avoid duplicates, then add new
+            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
+            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
+            
+            advanceUnavailability[dateStr].FN.push(entry);
+            advanceUnavailability[dateStr].AN.push(entry);
+        } else {
+            // Single Session (FN or AN)
+            if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+            // Remove existing
+            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
+            // Add new
+            advanceUnavailability[dateStr][session].push(entry);
+        }
         
         await saveAdvanceUnavailability();
         
         window.closeModal('unavailable-modal');
-        
-        // Re-open Day Modal to show updated status
         openDayModal(dateStr, email);
         renderStaffCalendar(email);
 
     } else {
-        // --- CASE B: SLOT SPECIFIC (Existing Logic) ---
+        // --- CASE B: SLOT SPECIFIC (No Change) ---
         if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
         invigilationSlots[key].unavailable.push(entry);
         
         await syncSlotsToCloud();
         window.closeModal('unavailable-modal');
         
-        // Refresh views
-        // Try to parse date from key to refresh modal if needed
-        try {
-            const [datePart] = key.split(' | ');
-            openDayModal(datePart, email);
-        } catch(e) {}
+        try { const [datePart] = key.split(' | '); openDayModal(datePart, email); } catch(e) {}
         renderStaffCalendar(email);
     }
 }
@@ -1995,6 +2034,7 @@ window.saveAttendance = saveAttendance;
 window.openDutyNormsModal = openDutyNormsModal;
 window.acceptExchange = acceptExchange;
 window.toggleAdvance = toggleAdvance;
+window.toggleWholeDay = toggleWholeDay;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
