@@ -1237,12 +1237,13 @@ window.calculateSlotsFromSchedule = async function() {
     if(btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
 
     try {
-        // 1. Fetch Latest Data
+        // 1. Fetch Data
         const mainRef = doc(db, "colleges", currentCollegeId);
         const mainSnap = await getDoc(mainRef);
         if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
         
         let fullData = mainSnap.data();
+        // Fetch Chunks if needed
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
@@ -1251,14 +1252,33 @@ window.calculateSlotsFromSchedule = async function() {
         if (fullPayload) fullData = { ...fullData, ...JSON.parse(fullPayload) };
 
         const students = JSON.parse(fullData.examBaseData || '[]');
+        const scribeList = JSON.parse(fullData.examScribeList || '[]');
+        const scribeRegNos = new Set(scribeList.map(s => s.regNo));
+
         if(students.length === 0) throw new Error("No exam data found.");
 
-        // 2. Process Sessions
+        // 2. Advanced Calculation (Streams + Scribes)
         const sessions = {};
+        
         students.forEach(s => {
             const key = `${s.Date} | ${s.Time}`;
-            if(!sessions[key]) sessions[key] = { count: 0 };
-            sessions[key].count++;
+            if(!sessions[key]) {
+                sessions[key] = { 
+                    streams: {}, 
+                    scribeCount: 0,
+                    totalStudents: 0
+                };
+            }
+            
+            sessions[key].totalStudents++;
+
+            if (scribeRegNos.has(s['Register Number'])) {
+                sessions[key].scribeCount++;
+            } else {
+                const strm = s.Stream || "Regular";
+                if (!sessions[key].streams[strm]) sessions[key].streams[strm] = 0;
+                sessions[key].streams[strm]++;
+            }
         });
 
         let changesLog = [];
@@ -1267,54 +1287,62 @@ window.calculateSlotsFromSchedule = async function() {
         let hasChanges = false;
 
         Object.keys(sessions).forEach(key => {
-            const count = sessions[key].count;
+            const data = sessions[key];
             const [datePart, timePart] = key.split(' | ');
+
+            // A. Calculate Requirements
+            let calculatedReq = 0;
             
-            // --- FIX: Fetch Official Exam Name from Scheduler ---
+            // 1. Streams (1:30)
+            Object.values(data.streams).forEach(count => {
+                calculatedReq += Math.ceil(count / 30);
+            });
+            
+            // 2. Scribes (1:5)
+            if (data.scribeCount > 0) {
+                calculatedReq += Math.ceil(data.scribeCount / 5);
+            }
+
+            // 3. Reserve (10% of base)
+            const reserve = Math.ceil(calculatedReq * 0.10);
+            const finalReq = calculatedReq + reserve;
+
+            // B. Fetch Exam Name
             let officialExamName = "";
             if (typeof window.getExamName === "function") {
-                // Try Regular stream first, as it usually defines the main exam name
                 officialExamName = window.getExamName(datePart, timePart, "Regular");
-                if (!officialExamName) {
-                    // Fallback: Try generic
-                    officialExamName = window.getExamName(datePart, timePart, "All Streams");
-                }
+                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
             }
-            // --------------------------------------------------
 
-            // Calculate Requirements
-            const base = Math.ceil(count / 30);
-            const reserve = Math.ceil(base * 0.10);
-            const newReq = base + reserve;
-            
+            // C. Update/Create Slot
             if (!newSlots[key]) {
-                // NEW SESSION
                 newSlots[key] = { 
-                    required: newReq, 
+                    required: finalReq, 
                     assigned: [], 
                     unavailable: [], 
                     isLocked: true,
-                    examName: officialExamName // <--- Store the Correct Name
+                    examName: officialExamName
                 };
-                changesLog.push(`🆕 ${key}: Added (Req: ${newReq})`);
+                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq} [${data.totalStudents} students])`);
                 hasChanges = true;
             } else {
-                // EXISTING SESSION
                 const currentReq = newSlots[key].required;
                 
-                // Update Exam Name if missing or changed
+                // Update Name
                 if (officialExamName && newSlots[key].examName !== officialExamName) {
                     newSlots[key].examName = officialExamName;
                     hasChanges = true;
                 }
 
-                if (currentReq !== newReq) {
-                    changesLog.push(`🔄 ${key}: ${currentReq} ➝ ${newReq}`);
+                // Update Requirement
+                if (currentReq !== finalReq) {
+                    changesLog.push(`🔄 ${key}: ${currentReq} ➝ ${finalReq} (Students: ${data.totalStudents})`);
                     hasChanges = true;
-                    newSlots[key].required = newReq;
+                    newSlots[key].required = finalReq;
 
-                    if (newReq < newSlots[key].assigned.length) {
-                        const excessCount = newSlots[key].assigned.length - newReq;
+                    // Handle Reduction
+                    if (finalReq < newSlots[key].assigned.length) {
+                        const excessCount = newSlots[key].assigned.length - finalReq;
                         const removed = pruneAssignments(newSlots[key], excessCount);
                         removed.forEach(r => removalLog.push({ session: key, ...r }));
                     }
@@ -1322,9 +1350,9 @@ window.calculateSlotsFromSchedule = async function() {
             }
         });
 
-        // 3. Confirm & Apply
+        // 3. Confirm
         if (!hasChanges) {
-            alert("✅ Cloud data checked. No changes.");
+            alert("✅ Cloud data checked. No changes in requirements.");
         } else {
             let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
             if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
