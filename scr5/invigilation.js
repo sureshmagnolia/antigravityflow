@@ -1231,7 +1231,6 @@ window.waNotify = function(key) {
     window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
 }
 
-// --- INTELLIGENT SLOT MANAGER ---
 window.calculateSlotsFromSchedule = async function() {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
     if(btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
@@ -1243,7 +1242,6 @@ window.calculateSlotsFromSchedule = async function() {
         if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
         
         let fullData = mainSnap.data();
-        // Fetch Chunks if needed
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
@@ -1257,17 +1255,12 @@ window.calculateSlotsFromSchedule = async function() {
 
         if(students.length === 0) throw new Error("No exam data found.");
 
-        // 2. Advanced Calculation (Streams + Scribes)
+        // 2. Process Sessions
         const sessions = {};
-        
         students.forEach(s => {
             const key = `${s.Date} | ${s.Time}`;
             if(!sessions[key]) {
-                sessions[key] = { 
-                    streams: {}, 
-                    scribeCount: 0,
-                    totalStudents: 0
-                };
+                sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
             }
             
             sessions[key].totalStudents++;
@@ -1290,57 +1283,55 @@ window.calculateSlotsFromSchedule = async function() {
             const data = sessions[key];
             const [datePart, timePart] = key.split(' | ');
 
-            // A. Calculate Requirements
+            // --- A. SLOT CALCULATION (Keep 1:5 for Digital System) ---
             let calculatedReq = 0;
-            
-            // 1. Streams (1:30)
             Object.values(data.streams).forEach(count => {
                 calculatedReq += Math.ceil(count / 30);
             });
-            
-            // 2. Scribes (1:5)
             if (data.scribeCount > 0) {
-                calculatedReq += Math.ceil(data.scribeCount / 5);
+                calculatedReq += Math.ceil(data.scribeCount / 5); 
             }
-
-            // 3. Reserve (10% of base)
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve;
 
-            // B. Fetch Exam Name
+            // --- B. Fetch Exam Name ---
             let officialExamName = "";
             if (typeof window.getExamName === "function") {
                 officialExamName = window.getExamName(datePart, timePart, "Regular");
                 if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
             }
 
-            // C. Update/Create Slot
+            // --- C. Update Slot ---
             if (!newSlots[key]) {
                 newSlots[key] = { 
                     required: finalReq, 
                     assigned: [], 
                     unavailable: [], 
                     isLocked: true,
-                    examName: officialExamName
+                    examName: officialExamName,
+                    scribeCount: data.scribeCount,   // <--- STORED FOR REPORT
+                    studentCount: data.totalStudents // <--- STORED FOR REPORT
                 };
-                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq} [${data.totalStudents} students])`);
+                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
                 hasChanges = true;
             } else {
-                const currentReq = newSlots[key].required;
+                // Update Metadata
+                if (newSlots[key].scribeCount !== data.scribeCount || newSlots[key].studentCount !== data.totalStudents) {
+                    newSlots[key].scribeCount = data.scribeCount;
+                    newSlots[key].studentCount = data.totalStudents;
+                    hasChanges = true; // Silent update
+                }
                 
-                // Update Name
                 if (officialExamName && newSlots[key].examName !== officialExamName) {
                     newSlots[key].examName = officialExamName;
                     hasChanges = true;
                 }
 
-                // Update Requirement
-                if (currentReq !== finalReq) {
-                    changesLog.push(`🔄 ${key}: ${currentReq} ➝ ${finalReq} (Students: ${data.totalStudents})`);
+                if (newSlots[key].required !== finalReq) {
+                    changesLog.push(`🔄 ${key}: ${newSlots[key].required} ➝ ${finalReq}`);
                     hasChanges = true;
                     newSlots[key].required = finalReq;
 
-                    // Handle Reduction
                     if (finalReq < newSlots[key].assigned.length) {
                         const excessCount = newSlots[key].assigned.length - finalReq;
                         const removed = pruneAssignments(newSlots[key], excessCount);
@@ -1350,20 +1341,17 @@ window.calculateSlotsFromSchedule = async function() {
             }
         });
 
-        // 3. Confirm
         if (!hasChanges) {
-            alert("✅ Cloud data checked. No changes in requirements.");
+            alert("✅ Data checked. Metadata updated.");
         } else {
             let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
-            if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
-            msg += "\n\nProceed with update?";
-
-            if (confirm(msg)) {
+            if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION: ${removalLog.length} staff removed.`;
+            if (confirm(msg + "\n\nProceed?")) {
                 invigilationSlots = newSlots;
                 await syncSlotsToCloud();
                 renderSlotsGridAdmin();
                 if (removalLog.length > 0) showRemovalNotification(removalLog);
-                else alert("Slots updated successfully!");
+                else alert("Updated successfully!");
             }
         }
 
@@ -2321,19 +2309,33 @@ window.printSessionReport = function(key) {
     const collegeName = collegeData.examCollegeName || "College Name";
     const sessionName = (timePart.includes("AM") || timePart.startsWith("09") || timePart.startsWith("10")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
     
-    // --- USE CORRECT EXAM NAME ---
-    // 1. Try stored name from slot
-    // 2. Try fetching live from Scheduler
-    // 3. Fallback to generic
+    // 1. Exam Name
     let examName = slot.examName;
     if (!examName && typeof window.getExamName === "function") {
         examName = window.getExamName(datePart, timePart, "Regular");
     }
     if (!examName) examName = "University Examinations";
-    // -----------------------------
 
-    // Prepare Staff Rows
+    // 2. CALCULATE ROWS (The 1:1 Math)
+    // Candidates need 1:30, Scribes need 1:1
+    const scribes = slot.scribeCount || 0;
+    const totalStudents = slot.studentCount || 0;
+    const regularStudents = Math.max(0, totalStudents - scribes);
+    
+    const regularInvigs = Math.ceil(regularStudents / 30);
+    const scribeInvigs = scribes; // 1:1 Ratio
+    const theoreticalNeed = regularInvigs + scribeInvigs;
+    
+    // Ensure we have enough rows for:
+    // A. Already assigned staff
+    // B. The theoretical 1:1 requirement
+    // C. Minimum of 20 (for standard A4)
+    const totalRowsToPrint = Math.max(slot.assigned.length + 3, theoreticalNeed + 2, 20);
+
+    // 3. Generate Rows
     let rowsHtml = "";
+    
+    // A. Assigned Staff
     slot.assigned.forEach((email, index) => {
         const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "" };
         rowsHtml += `
@@ -2341,27 +2343,22 @@ window.printSessionReport = function(key) {
                 <td style="text-align:center;">${index + 1}</td>
                 <td>${staff.name}</td>
                 <td>${staff.dept}</td>
-                <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> </tr>
+                <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
+            </tr>
         `;
     });
 
-    // Fill remaining rows (up to 15)
-    for (let i = slot.assigned.length; i < 15; i++) {
+    // B. Blank Rows
+    for (let i = slot.assigned.length; i < totalRowsToPrint; i++) {
         rowsHtml += `
             <tr>
                 <td style="text-align:center;">${i + 1}</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
             </tr>
         `;
     }
 
+    // 4. Print
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
         <html>
