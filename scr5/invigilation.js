@@ -10,6 +10,11 @@ const provider = window.firebase.provider;
 // --- CONFIG ---
 const DEFAULT_DESIGNATIONS = { "Assistant Professor": 2, "Associate Professor": 1, "Guest Lecturer": 4, "Professor": 0 };
 const DEFAULT_ROLES = { "Vice Principal": 0, "HOD": 1, "NSS Officer": 1, "Warden": 0, "Exam Chief": 0 };
+// Add with other defaults
+const DEFAULT_DEPARTMENTS = ["English", "Malayalam", "Commerce", "Mathematics", "Physics", "Computer Science", "Botany", "Zoology", "History", "Economics"];
+
+// Add with other state variables
+let departmentsConfig = [];
 
 // --- STATE ---
 let currentUser = null;
@@ -125,6 +130,7 @@ function setupLiveSync(collegeId, mode) {
             // CONFIGS
             designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
             rolesConfig = JSON.parse(collegeData.invigRoles || JSON.stringify(DEFAULT_ROLES));
+            departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
             globalDutyTarget = parseInt(collegeData.invigGlobalTarget || 2);
             
             // DATA
@@ -319,11 +325,16 @@ function updateAdminUI() {
     document.getElementById('stat-total-staff').textContent = staffData.length;
     const acYear = getCurrentAcademicYear();
     document.getElementById('lbl-academic-year').textContent = `AY: ${acYear.label}`;
+    
+    // Populate Designation Dropdown (Existing)
     const desigSelect = document.getElementById('stf-designation');
     if(desigSelect) desigSelect.innerHTML = Object.keys(designationsConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+    
+    // NEW: Populate Department Dropdown
+    populateDepartmentSelect();
+    
     renderStaffTable(); 
 }
-
 // --- RENDER ADMIN SLOTS (Sorted Newest to Oldest) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
@@ -1726,11 +1737,12 @@ window.saveRoleConfig = async function() {
     const ref = doc(db, "colleges", currentCollegeId);
     await updateDoc(ref, {
         invigRoles: JSON.stringify(rolesConfig),
+        invigDepartments: JSON.stringify(departmentsConfig), // <--- ADDED THIS
         invigGlobalTarget: globalDutyTarget
     });
     
     window.closeModal('role-config-modal');
-    updateAdminUI(); // Refresh table with new calculations
+    updateAdminUI(); 
 }
 
 // --- NEW: Open Norms Modal (Shows Roles & Global Target) ---
@@ -2032,7 +2044,57 @@ window.withdrawExchange = async function(key, email) {
         await syncSlotsToCloud();
     }
 }
+// --- DEPARTMENT MANAGEMENT FUNCTIONS ---
 
+function populateDepartmentSelect() {
+    const select = document.getElementById('stf-dept');
+    if (!select) return;
+    
+    // Sort alphabetically
+    departmentsConfig.sort();
+    
+    select.innerHTML = `<option value="">Select Department...</option>` + 
+        departmentsConfig.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+function renderDepartmentsList() {
+    const container = document.getElementById('dept-list-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    departmentsConfig.sort().forEach(dept => {
+        container.innerHTML += `
+            <div class="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-xs border border-gray-200">
+                <span class="font-bold text-gray-700">${dept}</span>
+                <button onclick="deleteDepartment('${dept}')" class="text-red-400 hover:text-red-600 font-bold ml-1">&times;</button>
+            </div>`;
+    });
+}
+
+window.addNewDepartment = function() {
+    const name = document.getElementById('new-dept-name').value.trim();
+    if (!name) return alert("Enter department name");
+    if (departmentsConfig.includes(name)) return alert("Department already exists");
+    
+    departmentsConfig.push(name);
+    renderDepartmentsList();
+    document.getElementById('new-dept-name').value = '';
+}
+
+window.deleteDepartment = function(name) {
+    if (confirm(`Delete department "${name}"?`)) {
+        departmentsConfig = departmentsConfig.filter(d => d !== name);
+        renderDepartmentsList();
+    }
+}
+
+// Update openRoleConfigModal to render the list when opened
+const originalOpenConfig = window.openRoleConfigModal;
+window.openRoleConfigModal = function() {
+    originalOpenConfig(); // Call existing logic
+    renderDepartmentsList(); // Render departments
+}
 
 // --- EXPORT TO WINDOW (Final Fix) ---
 // This makes functions available to HTML onclick="" events
@@ -2079,6 +2141,8 @@ window.openDutyNormsModal = openDutyNormsModal;
 window.acceptExchange = acceptExchange;
 window.toggleAdvance = toggleAdvance;
 window.toggleWholeDay = toggleWholeDay;
+window.addNewDepartment = addNewDepartment;
+window.deleteDepartment = deleteDepartment;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
