@@ -3325,123 +3325,120 @@ async function logActivity(action, details) {
     }
 }
 
-// --- ENHANCED ACTIVITY LOG VIEWER (With Search/Filter) ---
-window.viewActivityLogs = async function() {
-    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-    const snap = await getDoc(logRef);
-    
-    if (!snap.exists() || !snap.data().entries || snap.data().entries.length === 0) {
-        return alert("No activity logs found.");
-    }
-    
-    // 1. Get Data & Reverse (Newest First)
-    const entries = snap.data().entries.reverse();
-    
-    // 2. Setup Modal Elements
+// --- LIVE ACTIVITY LOG LOGIC ---
+let activityLogUnsubscribe = null;
+let currentLogData = [];
+
+window.viewActivityLogs = function() {
     const list = document.getElementById('inconvenience-list');
     const titleEl = document.querySelector('#inconvenience-modal h3');
     const subtitleEl = document.getElementById('inconvenience-modal-subtitle');
     
-    titleEl.textContent = "🕒 User Activity Log";
-    
-    // 3. Inject Search Bar into Subtitle Area
+    // 1. Setup Modal UI
+    titleEl.textContent = "🕒 Live Activity Feed";
     subtitleEl.innerHTML = `
-        <input type="text" id="activity-log-search" 
-               placeholder="🔍 Search User, Action, or Details..." 
-               class="w-full mt-2 p-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-indigo-500 shadow-inner">
+        <div class="flex gap-2 mt-2">
+            <input type="text" id="act-search" placeholder="Search logs..." class="flex-1 p-2 border border-gray-300 rounded text-xs shadow-inner focus:outline-none focus:border-indigo-500">
+            <div class="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2 rounded border border-green-100">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                LIVE
+            </div>
+        </div>
     `;
     
-    // 4. Render Function
-    const renderLogs = (filterText = "") => {
-        const search = filterText.toLowerCase();
-        
-        // Filter Logic
-        const filtered = entries.filter(e => 
-            (e.u && e.u.toLowerCase().includes(search)) || 
-            (e.a && e.a.toLowerCase().includes(search)) || 
-            (e.d && e.d.toLowerCase().includes(search))
-        );
-        
-        if (filtered.length === 0) {
-            list.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">No matching records found.</div>`;
-            return;
-        }
-
-        list.innerHTML = filtered.map(e => {
-            const dateObj = new Date(e.t);
-            const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
-            
-            let colorClass = "border-l-4 border-gray-400";
-            let bgClass = "bg-white";
-            
-            if (e.a.includes("Assigned")) { colorClass = "border-l-4 border-green-500"; bgClass = "bg-green-50"; }
-            if (e.a.includes("Removed") || e.a.includes("Withdraw")) { colorClass = "border-l-4 border-red-500"; bgClass = "bg-red-50"; }
-            if (e.a.includes("Unavailable")) { colorClass = "border-l-4 border-orange-500"; bgClass = "bg-orange-50"; }
-            if (e.a.includes("Exchange")) { colorClass = "border-l-4 border-purple-500"; bgClass = "bg-purple-50"; }
-            if (e.a.includes("Auto")) { colorClass = "border-l-4 border-blue-500"; bgClass = "bg-blue-50"; }
-
-            return `
-                <div class="${bgClass} p-3 rounded shadow-sm mb-2 border border-gray-200 ${colorClass} text-xs transition hover:shadow-md">
-                    <div class="flex justify-between text-gray-500 mb-1 border-b border-gray-200/50 pb-1">
-                        <span class="font-mono text-[10px]">${dateStr}</span>
-                        <span class="font-bold text-gray-700 truncate max-w-[150px]" title="${e.u}">${e.u}</span>
-                    </div>
-                    <div class="font-bold text-gray-800 mt-1 text-sm">${e.a}</div>
-                    <div class="text-gray-600 mt-0.5 leading-relaxed font-medium">${e.d}</div>
-                </div>
-            `;
-        }).join('');
-    };
-
-    // 5. Attach Real-time Search Listener
-    document.getElementById('activity-log-search').addEventListener('input', (e) => {
-        renderLogs(e.target.value);
-    });
-    
-    // 6. Initial Render & Open
-    renderLogs();
-    window.openModal('inconvenience-modal');
-}
-
-window.viewActivityLogs = async function() {
-    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-    const snap = await getDoc(logRef);
-    
-    if (!snap.exists() || !snap.data().entries || snap.data().entries.length === 0) {
-        return alert("No activity logs found.");
+    // 2. Attach Search Listener
+    const searchInput = document.getElementById('act-search');
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => renderLiveLogs(e.target.value));
     }
     
-    const entries = snap.data().entries.reverse(); // Show newest first
+    // 3. Open Modal & Show Loading
+    window.openModal('inconvenience-modal');
+    list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Connecting to live feed...</div>';
+
+    // 4. Start Real-Time Listener
+    if (activityLogUnsubscribe) activityLogUnsubscribe(); // Clean up old listener
+
+    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
     
+    activityLogUnsubscribe = onSnapshot(logRef, (snap) => {
+        if (snap.exists() && snap.data().entries) {
+            currentLogData = snap.data().entries.reverse(); // Newest first
+            
+            // Render with current search term (preserves filter updates)
+            const currentQuery = document.getElementById('act-search') ? document.getElementById('act-search').value : "";
+            renderLiveLogs(currentQuery);
+        } else {
+            currentLogData = [];
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No activity logs found.</div>';
+        }
+    }, (error) => {
+        console.error("Log Sync Error:", error);
+        list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Connection lost. Logs will reappear when online.</div>';
+    });
+};
+
+// Helper to Render Logs
+function renderLiveLogs(query = "") {
     const list = document.getElementById('inconvenience-list');
-    const title = document.getElementById('inconvenience-modal-subtitle');
-    document.querySelector('#inconvenience-modal h3').textContent = "🕒 User Activity Log";
-    title.textContent = "History of user actions (Filling, Removal, Unavailability).";
+    if(!list) return;
     
-    list.innerHTML = entries.map(e => {
+    const q = query.toLowerCase();
+    const filtered = currentLogData.filter(e => 
+        (e.u && e.u.toLowerCase().includes(q)) || 
+        (e.a && e.a.toLowerCase().includes(q)) || 
+        (e.d && e.d.toLowerCase().includes(q))
+    );
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No matching records found.</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(e => {
         const dateObj = new Date(e.t);
-        const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString();
+        const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const dateStr = dateObj.toLocaleDateString();
+
+        let borderClass = "border-l-4 border-gray-300";
+        let bgClass = "bg-white";
         
-        let colorClass = "border-l-4 border-gray-400";
-        if (e.a.includes("Assigned")) colorClass = "border-l-4 border-green-500";
-        if (e.a.includes("Removed") || e.a.includes("Withdraw")) colorClass = "border-l-4 border-red-500";
-        if (e.a.includes("Unavailable")) colorClass = "border-l-4 border-orange-500";
-        if (e.a.includes("Exchange")) colorClass = "border-l-4 border-purple-500";
+        // Dynamic Coloring
+        if (e.a.includes("Assigned") || e.a.includes("Booked") || e.a.includes("Available")) { 
+            borderClass = "border-l-4 border-green-500"; 
+            bgClass = "bg-green-50"; 
+        }
+        if (e.a.includes("Removed") || e.a.includes("Cancelled") || e.a.includes("Withdraw")) { 
+            borderClass = "border-l-4 border-red-500"; 
+            bgClass = "bg-red-50"; 
+        }
+        if (e.a.includes("Unavailable") || e.a.includes("Exchange")) { 
+            borderClass = "border-l-4 border-orange-500"; 
+            bgClass = "bg-orange-50"; 
+        }
+        if (e.a.includes("Auto")) { 
+            borderClass = "border-l-4 border-blue-500"; 
+            bgClass = "bg-blue-50"; 
+        }
+        
+        const userDisplay = e.u.includes('@') ? e.u.split('@')[0] : e.u;
 
         return `
-            <div class="bg-white p-2 rounded shadow-sm mb-2 border border-gray-200 ${colorClass} text-xs">
-                <div class="flex justify-between text-gray-500 mb-1">
-                    <span class="font-mono">${dateStr}</span>
-                    <span class="font-bold text-gray-700">${e.u}</span>
+            <div class="p-3 mb-2 rounded shadow-sm border border-gray-200 ${borderClass} ${bgClass} text-xs transition-all hover:shadow-md">
+                <div class="flex justify-between text-gray-500 mb-1 border-b border-gray-200/50 pb-1">
+                    <span class="font-bold text-gray-700 truncate" title="${e.u}">${userDisplay}</span>
+                    <span class="font-mono text-[10px]">${dateStr} ${timeStr}</span>
                 </div>
-                <div class="font-bold text-gray-800">${e.a}</div>
-                <div class="text-gray-600 mt-0.5">${e.d}</div>
+                <div class="font-bold text-gray-900 mt-1">${e.a}</div>
+                <div class="text-gray-600 mt-0.5 leading-relaxed">${e.d}</div>
             </div>
         `;
     }).join('');
-    
-    window.openModal('inconvenience-modal');
 }
+
 
 // ==========================================
 // 📢 MESSAGING & ALERTS SYSTEM
