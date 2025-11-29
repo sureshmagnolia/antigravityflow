@@ -70,6 +70,7 @@ let isGlobalTargetLocked = true; // <--- NEW
 let currentAdminDate = new Date(); // Tracks the currently viewed month in Admin
 let tempAttendanceBatch = {}; // Stores parsed CSV data grouped by session key
 let isBulkSendingCancelled = false; // <--- NEW FLAG
+let lastManualRanking = []; // Stores the scoring snapshot for the open modal
 let currentEmailQueue = []; // Stores the list for bulk sending
 
 // --- DOM ELEMENTS ---
@@ -491,7 +492,6 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
         btn.classList.add('bg-red-600');
     });
 }
-// --- RENDER ADMIN SLOTS (Grouped by Month & Week, Slots Ascending) ---
 // --- RENDER ADMIN SLOTS (Monthly View) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
@@ -571,29 +571,25 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
         
-        // Week Header
-        ui.adminSlotsGrid.innerHTML += `
-            <div class="col-span-full mt-4 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
-                <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">Week ${group.week}</span>
-                </span>
-                <div class="flex gap-2">
-                    <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" 
-                        class="text-[10px] bg-green-600 text-white border border-green-700 px-3 py-1 rounded hover:bg-green-700 font-bold transition shadow-sm flex items-center gap-1">
-                        📢 Notify
-                    </button>
+        const hasLog = slot.allocationLog ? "" : "hidden"; // Check if log exists
 
-                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
-                        class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
-                        ⚡ Auto-Assign
-                    </button>
-                    
-                    <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold transition border-r-0">🔒</button>
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold transition">🔓</button>
+            ui.adminSlotsGrid.innerHTML += `
+                <div class="border-l-4 ${statusColor} bg-white p-4 rounded shadow-sm slot-card flex flex-col justify-between transition-all">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                             </div>
+                        <div class="text-xs text-gray-600 mb-2"><strong>Assigned:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}</div>
+                        ${unavButton}
                     </div>
-                </div>
-            </div>`;
+                    
+                    <div class="grid grid-cols-4 gap-1 mt-3">
+                         <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-[10px] bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Daily Reminder">🔔</button>
+                         <button onclick="printSessionReport('${key}')" class="col-span-1 text-[10px] bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold transition" title="Print">🖨️</button>
+                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition" title="Manual Edit">Edit</button>
+                         <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded py-1.5 hover:bg-orange-100 font-bold transition ${hasLog}" title="View Logic">📜</button>
+                    </div>
+                     <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
+                </div>`;
 
         // Render Slots (Ascending Date)
         group.items.sort((a, b) => a.date - b.date);
@@ -4585,8 +4581,7 @@ window.filterManualStaff = function() {
         else noResults.classList.remove('hidden');
     }
 }
-// --- MANUAL ALLOCATION (Consolidated & Fixed) ---
-
+// --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
 window.openManualAllocationModal = function(key) {
     const slot = invigilationSlots[key];
     
@@ -4602,13 +4597,13 @@ window.openManualAllocationModal = function(key) {
     const noResults = document.getElementById('manual-no-results');
     if(noResults) noResults.classList.add('hidden');
 
-    // 3. Setup Modal Header & Counts (FIXED: Updates BOTH counters immediately)
+    // 3. Setup Modal Header
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
     
+    // Force Integer for Requirement
     const requiredCount = parseInt(slot.required) || 0; 
-    document.getElementById('manual-modal-req').textContent = requiredCount; // Header
-    document.getElementById('manual-req-count').textContent = requiredCount; // Big Box
+    document.getElementById('manual-modal-req').textContent = requiredCount;
 
     // --- 4. SMART SORTING & SCORING ---
     const targetDate = parseDate(key);
@@ -4654,13 +4649,17 @@ window.openManualAllocationModal = function(key) {
             let score = pending * 100; 
             let badges = [];
 
-            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Limit (3/wk)"); }
+            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
             
             return { ...s, pending, score, badges };
         })
         .sort((a, b) => b.score - a.score); 
+
+    // *** CAPTURE SNAPSHOT FOR LOGGING ***
+    lastManualRanking = rankedStaff;
+    // ************************************
 
     // --- 5. RENDER & AUTO-SELECT ---
     const availList = document.getElementById('manual-available-list');
@@ -4755,9 +4754,7 @@ window.openManualAllocationModal = function(key) {
         unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
     }
 
-    // 7. Final UI Update
     document.getElementById('manual-sel-count').textContent = currentSelectionCount;
-    
     window.openModal('manual-allocation-modal');
 }
 
@@ -4765,22 +4762,59 @@ window.updateManualCounts = function() {
     const count = document.querySelectorAll('.manual-chk:checked').length;
     document.getElementById('manual-sel-count').textContent = count;
 }
-
 window.saveManualAllocation = async function() {
     const key = document.getElementById('manual-session-key').value;
     const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
     
     if (invigilationSlots[key]) {
-        // LOGGING
+        // --- GENERATE LOGIC REPORT ---
+        const timestamp = new Date().toLocaleString();
+        const adminName = currentUser ? currentUser.email : "Admin";
+        
+        let logHtml = `
+            <div class="mb-3 pb-2 border-b border-gray-200">
+                <div class="font-bold text-gray-800">Assignment Report</div>
+                <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
+            </div>
+            <div class="mb-3">
+                <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>
+        `;
+
+        // 1. Details of Assigned
+        selectedEmails.forEach((email, i) => {
+            const rankData = lastManualRanking.find(s => s.email === email);
+            if (rankData) {
+                const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
+                logHtml += `<div class="text-xs mb-1">${i+1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
+            }
+        });
+
+        // 2. Details of Top Skipped (Why were they ignored?)
+        // Find highest scoring people who were NOT selected
+        const skipped = lastManualRanking.filter(s => !selectedEmails.includes(s.email)).slice(0, 3); // Top 3 skipped
+        
+        if (skipped.length > 0) {
+            logHtml += `</div><div class="mb-2"><div class="text-xs font-bold text-orange-700 uppercase mb-1">Top Candidates Skipped</div>`;
+            skipped.forEach(s => {
+                const warnings = s.badges.length > 0 ? `[${s.badges.join(', ')}]` : "[No Conflicts]";
+                logHtml += `<div class="text-xs mb-1 text-gray-600"><b>${s.name}</b> (Score: ${s.score}) - ${warnings}</div>`;
+            });
+        }
+
+        logHtml += `</div><div class="text-[10px] text-gray-400 italic mt-2 border-t pt-1">Score = Pending Duty * 100 - Penalties (Limit: -5000, Day: -2000, Adj: -1000).</div>`;
+
+        invigilationSlots[key].allocationLog = logHtml;
+        invigilationSlots[key].assigned = selectedEmails;
+
         const addedCount = selectedEmails.length;
         if(typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${addedCount} staff to session ${key}`);
-        
-        invigilationSlots[key].assigned = selectedEmails;
+
         await syncSlotsToCloud();
         window.closeModal('manual-allocation-modal');
         renderSlotsGridAdmin();
     }
 }
+
 window.switchAdminTab = function(tabName) {
     const tabs = ['staff', 'slots', 'attendance'];
     
@@ -4902,7 +4936,19 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
         }
     });
 }
-
+window.viewSlotHistory = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot || !slot.allocationLog) return alert("No history log available for this slot.");
+    
+    const list = document.getElementById('inconvenience-list');
+    const title = document.getElementById('inconvenience-modal-subtitle');
+    
+    document.querySelector('#inconvenience-modal h3').textContent = "📜 Allocation Logic";
+    title.textContent = `Justification for ${key}`;
+    
+    list.innerHTML = slot.allocationLog;
+    window.openModal('inconvenience-modal');
+}
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
@@ -4984,6 +5030,7 @@ window.handleAttendanceCSVUpload = handleAttendanceCSVUpload;
 window.filterManualStaff = filterManualStaff;
 window.changeAdminMonth = changeAdminMonth;
 window.cancelBulkSending = cancelBulkSending;
+window.viewSlotHistory = viewSlotHistory;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
