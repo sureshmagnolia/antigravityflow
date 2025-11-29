@@ -3721,45 +3721,75 @@ window.handleStaffCSVUpload = function(input) {
 }
 
 // 4. Parse & Analyze CSV
+// 4. Parse & Analyze CSV (Improved Date Handling)
 function processStaffCSV(csvText) {
     const lines = csvText.split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    if (lines.length < 2) return alert("CSV is empty or invalid.");
+
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
     
-    // Validate Headers
-    const required = ['name', 'email', 'department', 'designation'];
-    const missing = required.filter(r => !headers.includes(r));
-    
-    if (missing.length > 0) {
-        alert(`Error: Missing required columns: ${missing.join(', ')}.\nPlease use the template.`);
+    // Robust Column Mapping
+    const getIndex = (possibleNames) => headers.findIndex(h => possibleNames.some(name => h.includes(name)));
+
+    const nameIdx = getIndex(['name', 'staff name', 'faculty']);
+    const emailIdx = getIndex(['email', 'gmail', 'mail']);
+    const phoneIdx = getIndex(['phone', 'mobile', 'whatsapp']);
+    const deptIdx = getIndex(['dept', 'department']);
+    const desigIdx = getIndex(['designation', 'role']);
+    // Look for various date headers
+    const joinIdx = getIndex(['joining date', 'join date', 'doj', 'date of joining']);
+
+    if (nameIdx === -1 || emailIdx === -1 || deptIdx === -1) {
+        alert(`Error: Missing required columns (Name, Email, Department).\nFound headers: ${headers.join(', ')}`);
         return;
     }
 
     const parsedData = [];
+    
+    // Helper to format date to YYYY-MM-DD
+    const formatDate = (dateStr) => {
+        if (!dateStr) return new Date().toISOString().split('T')[0]; // Default to Today
+        try {
+            // Handle DD-MM-YYYY or DD/MM/YYYY
+            if (dateStr.includes('-') || dateStr.includes('/')) {
+                const parts = dateStr.replace(/\//g, '-').split('-');
+                // If starts with Year (YYYY-MM-DD)
+                if (parts[0].length === 4) return dateStr;
+                // If ends with Year (DD-MM-YYYY)
+                if (parts[2].length === 4) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+            return new Date(dateStr).toISOString().split('T')[0];
+        } catch (e) {
+            return new Date().toISOString().split('T')[0];
+        }
+    };
     
     // Parse Rows
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        // Handle commas inside quotes logic (Simple split for now, assuming standard template)
-        const row = line.split(','); 
+        // Handle quoted values logic
+        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+        const row = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); 
         
-        // Extract values based on header index
-        const staffObj = {
-            name: row[headers.indexOf('name')].trim(),
-            email: row[headers.indexOf('email')].trim(),
-            phone: headers.includes('phone') ? row[headers.indexOf('phone')].trim() : "",
-            dept: row[headers.indexOf('department')].trim(),
-            designation: row[headers.indexOf('designation')].trim(),
-            joiningDate: headers.includes('joining date (yyyy-mm-dd)') ? row[headers.indexOf('joining date (yyyy-mm-dd)')].trim() : new Date().toISOString().split('T')[0],
-            // Defaults
-            dutiesDone: 0,
-            roleHistory: [],
-            preferredDays: []
-        };
-
-        if (staffObj.email && staffObj.name) {
-            parsedData.push(staffObj);
+        // Extract
+        const name = row[nameIdx];
+        const email = row[emailIdx];
+        
+        if (name && email) {
+            parsedData.push({
+                name: name,
+                email: email,
+                phone: phoneIdx !== -1 ? row[phoneIdx] : "",
+                dept: deptIdx !== -1 ? row[deptIdx] : "",
+                designation: desigIdx !== -1 ? row[desigIdx] : "Assistant Professor",
+                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : new Date().toISOString().split('T')[0],
+                // Defaults
+                dutiesDone: 0,
+                roleHistory: [],
+                preferredDays: []
+            });
         }
     }
 
