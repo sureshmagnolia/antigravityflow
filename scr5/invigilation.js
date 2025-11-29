@@ -492,7 +492,6 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
         btn.classList.add('bg-red-600');
     });
 }
-// --- RENDER ADMIN SLOTS (Monthly View) ---
 // --- RENDER ADMIN SLOTS (Monthly View with Logic Button) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
@@ -599,7 +598,7 @@ function renderSlotsGridAdmin() {
         // Render Slots (Ascending Date)
         group.items.sort((a, b) => a.date - b.date);
         
-        // *** CRITICAL FIX: Ensure 'slot' is destructured correctly ***
+        // *** FIX: Destructure the item correctly ***
         group.items.forEach(({ key, slot }) => {
             const filled = slot.assigned.length;
             let statusColor = slot.isLocked ? "border-red-500 bg-red-50" : (filled >= slot.required ? "border-green-400 bg-green-50" : "border-orange-300 bg-orange-50");
@@ -611,8 +610,8 @@ function renderSlotsGridAdmin() {
                 unavButton = `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full flex items-center justify-center gap-2 bg-white text-red-700 border border-red-200 px-2 py-1.5 rounded text-xs font-bold hover:bg-red-50 transition shadow-sm"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> View ${slot.unavailable.length} Inconvenience(s)</button>`;
             }
             
-            // Logic Log Check
-            const hasLog = slot.allocationLog ? "" : "hidden"; 
+            // Check for Logic Log
+            const hasLog = slot.allocationLog ? "" : "opacity-50 cursor-not-allowed";
 
             ui.adminSlotsGrid.innerHTML += `
                 <div class="border-l-4 ${statusColor} bg-white p-4 rounded shadow-sm slot-card flex flex-col justify-between transition-all">
@@ -4593,7 +4592,7 @@ window.filterManualStaff = function() {
         else noResults.classList.remove('hidden');
     }
 }
-// --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
+// --- MANUAL ALLOCATION (Auto-Select Top N Candidates + Logic Capture) ---
 window.openManualAllocationModal = function(key) {
     const slot = invigilationSlots[key];
     
@@ -4603,7 +4602,7 @@ window.openManualAllocationModal = function(key) {
         return;
     }
 
-    // 2. Reset Search
+    // 2. Reset Search & UI
     const searchInput = document.getElementById('manual-staff-search');
     if(searchInput) searchInput.value = "";
     const noResults = document.getElementById('manual-no-results');
@@ -4627,14 +4626,16 @@ window.openManualAllocationModal = function(key) {
     const prevDateStr = prevDate.toDateString();
     const nextDateStr = nextDate.toDateString();
 
+    // Context: What is everyone else doing?
     const staffContext = {}; 
     staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
 
     Object.keys(invigilationSlots).forEach(k => {
-        if (k === key) return; 
+        if (k === key) return; // Skip current slot
         const sSlot = invigilationSlots[k];
         const sDate = parseDate(k);
         const sDateString = sDate.toDateString();
+        
         const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
         const sWeek = getWeekOfMonth(sDate);
         const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
@@ -4650,28 +4651,32 @@ window.openManualAllocationModal = function(key) {
         });
     });
 
+    // Score Staff
     const rankedStaff = staffData
         .filter(s => s.status !== 'archived')
         .map(s => {
             const done = getDutiesDoneCount(s.email);
             const target = calculateStaffTarget(s);
             const pending = Math.max(0, target - done);
+            
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
             
+            // Base Score: Pending Duty Priority (e.g. 5 pending = 500 pts)
             let score = pending * 100; 
             let badges = [];
 
+            // Penalties (Push conflicts to bottom)
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
             
             return { ...s, pending, score, badges };
         })
-        .sort((a, b) => b.score - a.score); 
+        .sort((a, b) => b.score - a.score); // Sort Highest Score First
 
-    // *** CAPTURE SNAPSHOT FOR LOGGING ***
-    lastManualRanking = rankedStaff;
-    // ************************************
+    // *** CAPTURE SNAPSHOT FOR LOGIC REPORT ***
+    lastManualRanking = rankedStaff; 
+    // *****************************************
 
     // --- 5. RENDER & AUTO-SELECT ---
     const availList = document.getElementById('manual-available-list');
@@ -4683,16 +4688,19 @@ window.openManualAllocationModal = function(key) {
     let currentSelectionCount = 0;
 
     rankedStaff.forEach(s => {
+        // 1. Check Availability (If unavailable, skip)
         if (isUserUnavailable(slot, s.email, key)) return; 
         
         let isChecked = false;
         
         if (isFreshAllocation) {
+            // Auto-select top candidates
             if (slotsToFill > 0) {
                 isChecked = true;
                 slotsToFill--;
             }
         } else {
+            // Keep existing assignments
             if (assignedList.includes(s.email)) {
                 isChecked = true;
             }
@@ -4730,7 +4738,7 @@ window.openManualAllocationModal = function(key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 6. Render Unavailable List
+    // 6. Render Unavailable List (Merged)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     
@@ -4766,9 +4774,13 @@ window.openManualAllocationModal = function(key) {
         unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
     }
 
+    // 7. Update Counters & Open
     document.getElementById('manual-sel-count').textContent = currentSelectionCount;
+    document.getElementById('manual-req-count').textContent = requiredCount;
+    
     window.openModal('manual-allocation-modal');
 }
+
 
 window.updateManualCounts = function() {
     const count = document.querySelectorAll('.manual-chk:checked').length;
@@ -4779,47 +4791,57 @@ window.saveManualAllocation = async function() {
     const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
     
     if (invigilationSlots[key]) {
-        // --- GENERATE LOGIC REPORT ---
+        // --- 1. GENERATE LOGIC REPORT ---
         const timestamp = new Date().toLocaleString();
         const adminName = currentUser ? currentUser.email : "Admin";
         
-        let logHtml = `
-            <div class="mb-3 pb-2 border-b border-gray-200">
-                <div class="font-bold text-gray-800">Assignment Report</div>
-                <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
-            </div>
-            <div class="mb-3">
-                <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>
-        `;
-
-        // 1. Details of Assigned
-        selectedEmails.forEach((email, i) => {
-            const rankData = lastManualRanking.find(s => s.email === email);
-            if (rankData) {
-                const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
-                logHtml += `<div class="text-xs mb-1">${i+1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
-            }
-        });
-
-        // 2. Details of Top Skipped (Why were they ignored?)
-        // Find highest scoring people who were NOT selected
-        const skipped = lastManualRanking.filter(s => !selectedEmails.includes(s.email)).slice(0, 3); // Top 3 skipped
+        // We use the 'lastManualRanking' global variable we captured when opening the modal
+        // If it's empty (e.g. page reload), we can't generate a detailed log, so we skip.
+        let logHtml = "";
         
-        if (skipped.length > 0) {
-            logHtml += `</div><div class="mb-2"><div class="text-xs font-bold text-orange-700 uppercase mb-1">Top Candidates Skipped</div>`;
-            skipped.forEach(s => {
-                const warnings = s.badges.length > 0 ? `[${s.badges.join(', ')}]` : "[No Conflicts]";
-                logHtml += `<div class="text-xs mb-1 text-gray-600"><b>${s.name}</b> (Score: ${s.score}) - ${warnings}</div>`;
+        if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
+            logHtml = `
+                <div class="mb-3 pb-2 border-b border-gray-200">
+                    <div class="font-bold text-gray-800">Assignment Logic Report</div>
+                    <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>
+            `;
+
+            // Details of Assigned
+            selectedEmails.forEach((email, i) => {
+                const rankData = lastManualRanking.find(s => s.email === email);
+                if (rankData) {
+                    const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
+                    logHtml += `<div class="text-xs mb-1">${i+1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
+                } else {
+                    logHtml += `<div class="text-xs mb-1">${i+1}. ${getNameFromEmail(email)} (Manually Added)</div>`;
+                }
             });
+
+            // Details of Top Skipped (Why were they ignored?)
+            const skipped = lastManualRanking.filter(s => !selectedEmails.includes(s.email)).slice(0, 3); // Top 3 skipped
+            
+            if (skipped.length > 0) {
+                logHtml += `</div><div class="mb-2"><div class="text-xs font-bold text-orange-700 uppercase mb-1">Top Candidates Skipped</div>`;
+                skipped.forEach(s => {
+                    const warnings = s.badges.length > 0 ? `[${s.badges.join(', ')}]` : "[No Conflicts]";
+                    logHtml += `<div class="text-xs mb-1 text-gray-600"><b>${s.name}</b> (Score: ${s.score}) - ${warnings}</div>`;
+                });
+            }
+            
+            logHtml += `</div><div class="text-[10px] text-gray-400 italic mt-2 border-t pt-1">Score = Pending Duty * 100 - Penalties.</div>`;
+        } else {
+            logHtml = `<div class="text-gray-500 italic">Log not available (Session reloaded).</div>`;
         }
 
-        logHtml += `</div><div class="text-[10px] text-gray-400 italic mt-2 border-t pt-1">Score = Pending Duty * 100 - Penalties (Limit: -5000, Day: -2000, Adj: -1000).</div>`;
-
+        // Save to Slot
         invigilationSlots[key].allocationLog = logHtml;
         invigilationSlots[key].assigned = selectedEmails;
 
-        const addedCount = selectedEmails.length;
-        if(typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${addedCount} staff to session ${key}`);
+        // --- 2. STANDARD LOGGING & SAVE ---
+        if(typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${selectedEmails.length} staff to session ${key}`);
 
         await syncSlotsToCloud();
         window.closeModal('manual-allocation-modal');
@@ -4950,14 +4972,15 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
 }
 window.viewSlotHistory = function(key) {
     const slot = invigilationSlots[key];
-    if (!slot || !slot.allocationLog) return alert("No history log available for this slot.");
-    
+    if (!slot || !slot.allocationLog) return alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
+
     const list = document.getElementById('inconvenience-list');
     const title = document.getElementById('inconvenience-modal-subtitle');
-    
+
+    // Reuse the Inconvenience Modal
     document.querySelector('#inconvenience-modal h3').textContent = "📜 Allocation Logic";
     title.textContent = `Justification for ${key}`;
-    
+
     list.innerHTML = slot.allocationLog;
     window.openModal('inconvenience-modal');
 }
