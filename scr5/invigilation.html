@@ -525,9 +525,12 @@
             <p class="text-xs text-gray-500 mb-4">Configure roles, limits, and integrations.</p>
             
             <div class="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
-                <label class="block text-xs font-bold text-blue-800 mb-1">Global Default Duty (Per Month)</label>
+                <div class="flex justify-between items-center mb-1">
+                    <label class="block text-xs font-bold text-blue-800">Global Default Duty (Per Month)</label>
+                    <button id="global-target-lock-btn" onclick="toggleGlobalTargetLock()" class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒 Locked</button>
+                </div>
                 <div class="flex items-center gap-2">
-                    <input type="number" id="global-duty-target" class="w-20 p-1.5 border border-blue-300 rounded text-sm text-center font-bold" min="0">
+                    <input type="number" id="global-duty-target" class="w-20 p-1.5 border border-blue-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition" min="0" disabled>
                     <span class="text-xs text-blue-600">for staff without specific roles.</span>
                 </div>
             </div>
