@@ -3731,11 +3731,12 @@ window.handleStaffCSVUpload = function(input) {
     reader.readAsText(file);
 }
 
-// 4. Parse & Analyze CSV (Robust Date Fix)
+// 4. Parse & Analyze CSV (Robust Date Fix: Handles DD-MM-YY)
 function processStaffCSV(csvText) {
     const lines = csvText.split('\n');
     if (lines.length < 2) return alert("CSV is empty or invalid.");
 
+    // Normalize headers: remove quotes and trim
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
     
     // Column Mapping
@@ -3755,38 +3756,47 @@ function processStaffCSV(csvText) {
 
     const parsedData = [];
     
-    // --- FIXED DATE HELPER ---
+    // --- FIXED DATE HELPER (Handles DD-MM-YY) ---
     const formatDate = (dateStr) => {
         if (!dateStr) return new Date().toISOString().split('T')[0]; 
         try {
-            // Normalize separators
-            let cleanStr = dateStr.replace(/\//g, '-').trim();
+            // Normalize separators: Convert dots (.) and slashes (/) to dashes (-)
+            let cleanStr = dateStr.replace(/[./]/g, '-').trim();
             let parts = cleanStr.split('-');
             
             let y, m, d;
 
-            // Case 1: YYYY-MM-DD (e.g. 2025-06-01)
+            if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+
+            // Case 1: YYYY-MM-DD (e.g. 2025-11-29)
             if (parts[0].length === 4) {
                 y = parts[0];
                 m = parts[1];
                 d = parts[2];
             } 
-            // Case 2: DD-MM-YYYY (e.g. 01-06-2025)
+            // Case 2: DD-MM-YYYY (e.g. 29-11-2025)
             else if (parts[2].length === 4) {
                 y = parts[2];
                 m = parts[1];
                 d = parts[0];
-            } else {
-                // Fallback for unknown formats
-                return new Date(dateStr).toISOString().split('T')[0];
+            } 
+            // Case 3: DD-MM-YY (e.g. 29-11-25) <--- NEW LOGIC
+            else if (parts[2].length === 2) {
+                y = "20" + parts[2]; // Assume 2000s
+                m = parts[1];
+                d = parts[0];
+            }
+            else {
+                return new Date().toISOString().split('T')[0];
             }
 
-            // STRICT PADDING (The Fix)
+            // STRICT PADDING (Ensure 01, 05, etc.)
             m = m.padStart(2, '0');
             d = d.padStart(2, '0');
 
-            return `${y}-${m}-${d}`;
+            return `${y}-${m}-${d}`; // HTML5 Input Standard
         } catch (e) {
+            console.error("Date parsing error", e);
             return new Date().toISOString().split('T')[0];
         }
     };
@@ -3796,7 +3806,7 @@ function processStaffCSV(csvText) {
         const line = lines[i].trim();
         if (!line) continue;
         
-        // Handle quoted values
+        // Handle quoted values logic (e.g., "Doe, John")
         const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
         const row = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); 
         
