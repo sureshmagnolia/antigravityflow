@@ -1560,10 +1560,18 @@ window.calculateSlotsFromSchedule = async function() {
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve;
 
-            // --- C. Fetch Official Exam Name ---
+            // --- C. Fetch Official Exam Name (Robust Stream Check) ---
             let officialExamName = "";
             if (typeof window.getExamName === "function") {
-                officialExamName = window.getExamName(datePart, timePart, "Regular");
+                // 1. Try streams actually present in this session
+                const streamsInSession = Object.keys(data.streams);
+                for (const strm of streamsInSession) {
+                    officialExamName = window.getExamName(datePart, timePart, strm);
+                    if (officialExamName) break; // Found a match!
+                }
+                
+                // 2. Fallbacks
+                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
                 if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
             }
 
