@@ -4251,12 +4251,21 @@ window.downloadMasterBackup = function() {
     link.click();
     document.body.removeChild(link);
 }
-
 window.handleMasterRestore = function(input) {
     const file = input.files[0];
     if (!file) return;
 
-    if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current data:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Are you sure?")) {
+    // 1. First Warning (Click OK)
+    if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current system data including:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Do you want to proceed?")) {
+        input.value = "";
+        return;
+    }
+
+    // 2. Second Warning (Type CONFIRM)
+    const check = prompt("🔴 FINAL SAFETY CHECK\n\nTo overwrite the database, please type 'CONFIRM' in the box below:");
+
+    if (check !== "CONFIRM") {
+        alert("❌ Restore Aborted.\nThe confirmation code was incorrect.");
         input.value = "";
         return;
     }
@@ -4308,6 +4317,7 @@ window.handleMasterRestore = function(input) {
     };
     reader.readAsText(file);
 }
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
