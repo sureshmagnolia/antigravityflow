@@ -802,11 +802,18 @@
                     </select>
                 </div>
 
-                <div id="qp-entry-section" class="hidden">
-                    <p class="text-gray-600 mb-4">
-                        Assign a Question Paper (QP) Code to each course. This code will be used in the Absentee Statement.
-                        **Click 'Save QP Codes' below to commit changes to local memory.**
-                    </p>
+        <div id="qp-entry-section" class="hidden">
+            <div class="flex justify-between items-start mb-4">
+            <p class="text-gray-600 text-sm flex-1">
+                    Assign a Question Paper (QP) Code to each course. Codes are saved locally.
+            </p>
+            <button id="toggle-qp-lock-btn" class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                <span>Codes Locked</span>
+            </button>
+        </div>
 
                     <div class="space-y-4">
                         <div class="flex items-center gap-3 px-2">
