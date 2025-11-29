@@ -240,62 +240,79 @@ function getDutiesDoneCount(email) {
     return count;
 }
 function calculateStaffTarget(staff) {
-    // 1. Get Current Academic Year Boundaries
+    // 1. Get Academic Year Boundaries (June 1st to May 31st)
     const acYear = getCurrentAcademicYear();
     const today = new Date();
     
-    // 2. Determine Start Date
-    // Rule: Start from June 1st. If joined AFTER June 1st, use Joining Date.
-    const joinDate = new Date(staff.joiningDate);
-    let calcStart = acYear.start;
+    // 2. Determine Calculation Period
+    // We calculate up to 'today' (or end of AY if today is past it)
+    let calcEnd = (today < acYear.end) ? today : acYear.end;
     
-    if (joinDate > acYear.start) {
-        calcStart = joinDate;
-    }
+    // Start from June 1st OR Joining Date (whichever is later)
+    const joinDate = new Date(staff.joiningDate);
+    let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
-    // 3. Determine End Date (Today or End of AY)
-    const calcEnd = (today < acYear.end) ? today : acYear.end;
-
-    if (calcStart > calcEnd) return 0; // Joined in future or data error
+    // Safety: Joined in future
+    if (calcStart > calcEnd) return 0; 
 
     let totalTarget = 0;
     let cursor = new Date(calcStart);
     
-    // 4. Iterate Month by Month
+    // 3. Iterate Month by Month
     while (cursor <= calcEnd) {
-        // Use the target from the role configuration or global default
-        let monthlyRate = globalDutyTarget; 
+        const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+        const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
         
-        // Designation Override
+        // --- STEP A: SET BASELINE (Designation) ---
+        // This applies PERMANENTLY unless overridden by a temporary role.
+        let monthlyRate = globalDutyTarget; // Default fallback
+        
         if (designationsConfig[staff.designation] !== undefined) {
              monthlyRate = designationsConfig[staff.designation];
         }
 
-        // Role Override (Time-Bound)
+        // --- STEP B: CHECK FOR TEMPORARY OVERRIDE (Role) ---
+        // Only applies if a role is active during THIS specific month.
         if (staff.roleHistory && staff.roleHistory.length > 0) {
-            const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-            const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-
-            staff.roleHistory.forEach(roleAssign => {
-                const roleStart = new Date(roleAssign.start);
-                const roleEnd = new Date(roleAssign.end);
-                
-                // Check overlap
-                if (roleStart <= currentMonthEnd && roleEnd >= currentMonthStart) {
-                    if (rolesConfig[roleAssign.role] !== undefined) {
-                        monthlyRate = rolesConfig[roleAssign.role];
-                    }
-                }
+            
+            const activeRoles = staff.roleHistory.filter(r => {
+                const rStart = new Date(r.start);
+                const rEnd = new Date(r.end);
+                // Check Overlap: Did this role exist during this month?
+                return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
             });
+
+            if (activeRoles.length > 0) {
+                // If multiple roles active, find the one with the LOWEST target (Max Relaxation)
+                let bestRoleTarget = monthlyRate;
+                let hasApplicableRole = false;
+
+                activeRoles.forEach(r => {
+                    if (rolesConfig[r.role] !== undefined) {
+                        const t = rolesConfig[r.role];
+                        // Relaxation Logic: Only apply if it REDUCES the duty load
+                        if (t < bestRoleTarget) {
+                            bestRoleTarget = t;
+                        }
+                        hasApplicableRole = true;
+                    }
+                });
+
+                if (hasApplicableRole) {
+                    monthlyRate = bestRoleTarget;
+                }
+            }
         }
 
+        // Add this month's result to total
         totalTarget += monthlyRate;
         
-        // Move to next month (set to 1st to avoid edge cases like Feb 30)
-        cursor.setDate(1);
+        // --- STEP C: MOVE TO NEXT MONTH ---
+        // Set date to 1st of next month to avoid edge cases
+        cursor.setDate(1); 
         cursor.setMonth(cursor.getMonth() + 1);
         
-        // Safety break
+        // Stop if we pass the end date
         if (cursor.getFullYear() > calcEnd.getFullYear() + 1) break; 
     }
 
