@@ -556,12 +556,15 @@ function renderStaffTable() {
 }
 
 function renderStaffRankList(myEmail) {
-    const list = document.getElementById('staff-rank-list');
-    if (!list) return;
+    // Target BOTH lists (Desktop & Mobile)
+    const containers = [
+        document.getElementById('staff-rank-list'),
+        document.getElementById('staff-rank-list-mobile')
+    ];
     
-    // 1. Calculate and Sort (Filter out Archived)
+    // 1. Calculate and Sort
     const rankedStaff = staffData
-        .filter(s => s.status !== 'archived') // <--- FILTER ADDED
+        .filter(s => s.status !== 'archived')
         .map(s => ({ 
             ...s, 
             pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email) 
@@ -571,8 +574,8 @@ function renderStaffRankList(myEmail) {
             return a.name.localeCompare(b.name);
         });
 
-    // 2. Render List (Same as before)
-    list.innerHTML = rankedStaff.map((s, i) => {
+    // 2. Generate HTML
+    const html = rankedStaff.map((s, i) => {
         const isMe = s.email === myEmail;
         const bgClass = isMe ? "bg-indigo-50 border-indigo-200" : "bg-gray-50 border-transparent hover:bg-gray-100";
         const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
@@ -601,6 +604,11 @@ function renderStaffRankList(myEmail) {
                 <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-green-600'} ml-2">${displayPending}</span>
             </div>`;
     }).join('');
+
+    // 3. Inject into DOM
+    containers.forEach(container => {
+        if(container) container.innerHTML = html;
+    });
 }
 
 function renderStaffCalendar(myEmail) {
