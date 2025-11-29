@@ -1108,8 +1108,14 @@
     <div id="scribe-room-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div class="mt-3">
-                <h3 class="text-lg font-medium text-gray-900 mb-1" id="scribe-room-modal-title">Select Room for...</h3>
-                <p class="text-sm text-gray-500 mb-4">Only rooms not used in automatic or manual allotment are shown.</p>
+               <h3 class="text-lg font-medium text-gray-900 mb-1" id="scribe-room-modal-title">Select Room for...</h3>
+                <p class="text-sm text-gray-500 mb-2">Only rooms not used in automatic or manual allotment are shown.</p>
+
+                <div class="mb-2 relative">
+                    <input type="text" id="scribe-room-search" placeholder="🔍 Search room..." 
+                       class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                    <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
 
                 <div id="scribe-room-selection-list" class="space-y-2 max-h-96 overflow-y-auto">
                     </div>
