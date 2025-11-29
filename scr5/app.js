@@ -338,9 +338,16 @@ const newUserEmailInput = document.getElementById('new-user-email');
 const addUserBtn = document.getElementById('add-user-btn');
 const userListContainer = document.getElementById('user-list');
 const absenteeQpFilter = document.getElementById('absentee-qp-filter');
-    
+const superAdminBtn = document.getElementById('super-admin-btn');
+const superAdminModal = document.getElementById('super-admin-modal');
+const closeSuperModal = document.getElementById('close-super-modal');
+const whitelistInput = document.getElementById('whitelist-email-input');
+const addWhitelistBtn = document.getElementById('add-whitelist-btn');
+const whitelistContainer = document.getElementById('whitelist-container');
+  
     // *** MOVED HERE TO FIX ERROR ***
 const SUPER_ADMIN_EMAIL = "sureshmagnolia@gmail.com"; 
+
 // ******************************
 
 
@@ -6415,19 +6422,20 @@ window.real_populate_qp_code_session_dropdown = function() {
     }
 }
 
-// V61: Event listener for the QP Code session dropdown
-sessionSelectQP.addEventListener('change', () => {
-    const sessionKey = sessionSelectQP.value;
-    if (sessionKey) {
-        qpEntrySection.classList.remove('hidden');
-        render_qp_code_list(sessionKey);
-    } else {
-        qpEntrySection.classList.add('hidden');
-        qpCodeContainer.innerHTML = '';
-        qpCodeStatus.textContent = '';
-        saveQpCodesButton.disabled = true; // V62: Disable save button
-    }
-});
+if (sessionSelectQP) {
+    sessionSelectQP.addEventListener('change', () => {
+        const sessionKey = sessionSelectQP.value;
+        if (sessionKey) {
+            qpEntrySection.classList.remove('hidden');
+            render_qp_code_list(sessionKey);
+        } else {
+            qpEntrySection.classList.add('hidden');
+            qpCodeContainer.innerHTML = '';
+            qpCodeStatus.textContent = '';
+            saveQpCodesButton.disabled = true; 
+        }
+    });
+}
 
 // V93: Renders the QP Code list (Regular First, then Alphabetical)
 function render_qp_code_list(sessionKey) {
@@ -9446,12 +9454,6 @@ Are you sure?
 // 🚀 SUPER ADMIN LOGIC
 // ==========================================
 
-const superAdminBtn = document.getElementById('super-admin-btn');
-const superAdminModal = document.getElementById('super-admin-modal');
-const closeSuperModal = document.getElementById('close-super-modal');
-const whitelistInput = document.getElementById('whitelist-email-input');
-const addWhitelistBtn = document.getElementById('add-whitelist-btn');
-const whitelistContainer = document.getElementById('whitelist-container');
 
 // 1. CHECK IF USER IS SUPER ADMIN
 function checkSuperAdminAccess(user) {
