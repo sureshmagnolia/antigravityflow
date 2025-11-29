@@ -2163,16 +2163,21 @@ window.loadSessionAttendance = function() {
     ui.attPlaceholder.classList.add('hidden');
     ui.attList.innerHTML = '';
     
-    // --- RESET SEARCH ---
-    const searchInput = document.getElementById('att-substitute-search');
-    const searchResults = document.getElementById('att-substitute-results');
-    if (searchInput) {
-        searchInput.value = "";
-        searchInput.disabled = isLocked;
-        if(isLocked) searchInput.classList.add('bg-gray-100', 'cursor-not-allowed');
-        else searchInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
-    }
-    if (searchResults) searchResults.classList.add('hidden');
+    // --- RESET SEARCH INPUTS ---
+    const inputs = ['att-substitute-search', 'att-cs-search', 'att-sas-search'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.value = "";
+            el.disabled = isLocked;
+            if(isLocked) el.classList.add('bg-gray-100', 'cursor-not-allowed');
+            else el.classList.remove('bg-gray-100', 'cursor-not-allowed');
+        }
+    });
+    
+    // Clear Hidden IDs
+    document.getElementById('att-cs-email').value = "";
+    document.getElementById('att-sas-email').value = "";
     currentSubstituteCandidate = null;
 
     // --- 1. SUPERVISION LOGIC (Robust & Date-Aware) ---
@@ -2183,38 +2188,16 @@ window.loadSessionAttendance = function() {
     let defaultCS = "";
     let defaultSAS = "";
     
-    // Helper: Check if a role string matches "Chief Superintendent" concept
-    const isCS = (r) => {
-        const s = r.toLowerCase().trim();
-        return s === "cs" || 
-               s === "chief superintendent" || 
-               s === "chief supt" || 
-               s === "chief" || 
-               s === "exam chief";
-    };
-
-    // Helper: Check if a role string matches "Senior Asst. Superintendent" concept
-    const isSAS = (r) => {
-        const s = r.toLowerCase().trim();
-        return s === "sas" || 
-               s === "senior asst. superintendent" || 
-               s === "senior assistant superintendent" || 
-               s === "senior supt";
-    };
+    // Helper for Role Matching
+    const isCS = (r) => { const s = r.toLowerCase().trim(); return s === "cs" || s.includes("chief"); };
+    const isSAS = (r) => { const s = r.toLowerCase().trim(); return s === "sas" || s.includes("senior"); };
     
     staffData.forEach(s => {
         if (s.roleHistory) {
-            // Find role active ON THE EXAM DATE
             const activeRole = s.roleHistory.find(r => {
                 const rStart = new Date(r.start); rStart.setHours(0,0,0,0);
                 const rEnd = new Date(r.end); rEnd.setHours(23,59,59,999);
-                
-                // Date Overlap Check
-                if (rStart <= endOfDay && rEnd >= startOfDay) {
-                    // Role Name Check (Using Helpers)
-                    return isCS(r.role) || isSAS(r.role);
-                }
-                return false;
+                return rStart <= endOfDay && rEnd >= startOfDay && (isCS(r.role) || isSAS(r.role));
             });
             
             if (activeRole) {
@@ -2224,33 +2207,30 @@ window.loadSessionAttendance = function() {
         }
     });
 
-    // Determine Current Selection (Saved > Default)
     const savedSup = slot.supervision || {};
     const currentCS = savedSup.cs || defaultCS;
     const currentSAS = savedSup.sas || defaultSAS;
 
-    const csSelect = document.getElementById('att-cs-select');
-    const sasSelect = document.getElementById('att-sas-select');
-    
-    const populateSup = (select, selectedVal) => {
-        select.innerHTML = '<option value="">-- Select --</option>';
-        staffData.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.email;
-            opt.textContent = s.name;
-            if (s.email === selectedVal) opt.selected = true;
-            select.appendChild(opt);
-        });
-        select.disabled = isLocked;
-    };
-
-    if (csSelect) populateSup(csSelect, currentCS);
-    if (sasSelect) populateSup(sasSelect, currentSAS);
+    // --- POPULATE SEARCH INPUTS ---
+    if (currentCS) {
+        const s = staffData.find(st => st.email === currentCS);
+        if(s) {
+            document.getElementById('att-cs-search').value = s.name;
+            document.getElementById('att-cs-email').value = s.email;
+        }
+    }
+    if (currentSAS) {
+        const s = staffData.find(st => st.email === currentSAS);
+        if(s) {
+            document.getElementById('att-sas-search').value = s.name;
+            document.getElementById('att-sas-email').value = s.email;
+        }
+    }
 
     // --- 2. ATTENDANCE LIST ---
     let presentSet = new Set(slot.attendance || slot.assigned || []);
     
-    // Auto-Mark CS/SAS as Present in the list
+    // Auto-Mark CS/SAS as Present
     if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
     if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
     
@@ -2351,11 +2331,13 @@ window.saveAttendance = async function() {
     const key = ui.attSessionSelect.value;
     if (!key) return;
     
-    const csVal = document.getElementById('att-cs-select').value;
-    const sasVal = document.getElementById('att-sas-select').value;
+    // GET VALUES FROM HIDDEN INPUTS
+    const csVal = document.getElementById('att-cs-email').value;
+    const sasVal = document.getElementById('att-sas-email').value;
 
+    // Validate
     if (!csVal || !sasVal) {
-        alert("⚠️ Mandatory Fields Missing\n\nPlease select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS) before saving attendance.");
+        alert("⚠️ Mandatory Fields Missing\n\nPlease search and select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS).");
         return;
     }
     
@@ -2372,7 +2354,6 @@ window.saveAttendance = async function() {
     
     await syncSlotsToCloud();
     
-    // Refresh UI
     populateAttendanceSessions(); 
     renderStaffTable(); 
     alert("Attendance & Supervision Saved!");
@@ -4851,6 +4832,81 @@ window.cancelBulkSending = function() {
     }
 }
 
+// --- UNIFIED SEARCH HANDLER (CS, SAS, SUBSTITUTE) ---
+function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
+    const input = document.getElementById(inputId);
+    const results = document.getElementById(resultsId);
+    const hidden = hiddenId ? document.getElementById(hiddenId) : null;
+
+    if (!input || !results) return;
+
+    input.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        
+        // Clear hidden value on type (force re-selection)
+        if (hidden) hidden.value = ""; 
+        
+        if (query.length < 2) {
+            results.classList.add('hidden');
+            return;
+        }
+
+        // Filter Logic
+        let matches = staffData.filter(s => s.status !== 'archived');
+        
+        // Exclude those already in attendance (Only for Substitute search)
+        if (excludeCurrentList) {
+            const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+            matches = matches.filter(s => !presentEmails.includes(s.email));
+        }
+
+        // Search Name or Dept
+        matches = matches.filter(s => s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query));
+
+        // SORT ALPHABETICALLY
+        matches.sort((a, b) => a.name.localeCompare(b.name));
+
+        results.innerHTML = '';
+        if (matches.length === 0) {
+            results.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
+        } else {
+            matches.forEach(s => {
+                const div = document.createElement('div');
+                div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
+                div.innerHTML = `
+                    <span class="font-bold text-gray-800 text-xs">${s.name}</span>
+                    <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
+                `;
+                
+                div.onclick = () => {
+                    input.value = s.name;
+                    if (hidden) hidden.value = s.email;
+                    
+                    // Special case for Substitute (Global Var)
+                    if (inputId === 'att-substitute-search') {
+                        currentSubstituteCandidate = s;
+                    }
+                    
+                    results.classList.add('hidden');
+                };
+                results.appendChild(div);
+            });
+        }
+        results.classList.remove('hidden');
+    });
+
+    // Hide on click outside
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !results.contains(e.target)) {
+            results.classList.add('hidden');
+        }
+    });
+}
+
+// Initialize Listeners
+setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
+setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
+setupSearchHandler('att-substitute-search', 'att-substitute-results', null, true);
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
