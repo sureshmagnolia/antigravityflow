@@ -255,14 +255,10 @@ function calculateStaffTarget(staff) {
     const today = new Date();
     
     // 2. Determine Calculation Period
-    // We calculate up to 'today' (or end of AY if today is past it)
     let calcEnd = (today < acYear.end) ? today : acYear.end;
-    
-    // Start from June 1st OR Joining Date (whichever is later)
     const joinDate = new Date(staff.joiningDate);
     let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
-    // Safety: Joined in future
     if (calcStart > calcEnd) return 0; 
 
     let totalTarget = 0;
@@ -273,34 +269,30 @@ function calculateStaffTarget(staff) {
         const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
         const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
         
-        // --- STEP A: SET BASELINE (Designation) ---
-        // This applies PERMANENTLY unless overridden by a temporary role.
-        let monthlyRate = globalDutyTarget; // Default fallback
-        
-        if (designationsConfig[staff.designation] !== undefined) {
-             monthlyRate = designationsConfig[staff.designation];
-        }
+        // --- STEP A: SET BASELINE (Global Only) ---
+        // Designation is IRRELEVANT. Everyone starts with the Global Target.
+        let monthlyRate = globalDutyTarget; 
 
-        // --- STEP B: CHECK FOR TEMPORARY OVERRIDE (Role) ---
+        // --- STEP B: CHECK FOR ROLE OVERRIDE ---
         // Only applies if a role is active during THIS specific month.
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             
             const activeRoles = staff.roleHistory.filter(r => {
                 const rStart = new Date(r.start);
                 const rEnd = new Date(r.end);
-                // Check Overlap: Did this role exist during this month?
+                // Check Overlap
                 return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
             });
 
             if (activeRoles.length > 0) {
-                // If multiple roles active, find the one with the LOWEST target (Max Relaxation)
+                // If active roles exist, find the one with the LOWEST target
+                // (e.g. If Global is 3, but HOD is 1, use 1)
                 let bestRoleTarget = monthlyRate;
                 let hasApplicableRole = false;
 
                 activeRoles.forEach(r => {
                     if (rolesConfig[r.role] !== undefined) {
                         const t = rolesConfig[r.role];
-                        // Relaxation Logic: Only apply if it REDUCES the duty load
                         if (t < bestRoleTarget) {
                             bestRoleTarget = t;
                         }
@@ -317,12 +309,10 @@ function calculateStaffTarget(staff) {
         // Add this month's result to total
         totalTarget += monthlyRate;
         
-        // --- STEP C: MOVE TO NEXT MONTH ---
-        // Set date to 1st of next month to avoid edge cases
+        // Move to next month
         cursor.setDate(1); 
         cursor.setMonth(cursor.getMonth() + 1);
         
-        // Stop if we pass the end date
         if (cursor.getFullYear() > calcEnd.getFullYear() + 1) break; 
     }
 
