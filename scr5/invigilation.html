@@ -112,6 +112,19 @@
                         </div>
                         <input type="file" id="staff-csv-upload" accept=".csv" class="hidden" onchange="handleStaffCSVUpload(this)">
                     </div>
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">System Data</label>
+                        <button onclick="downloadMasterBackup()" class="w-full mb-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Backup All Data (JSON)
+                        </button>
+                        
+                        <button onclick="document.getElementById('restore-master-upload').click()" class="w-full bg-white text-red-600 border border-red-200 px-3 py-2 rounded text-xs font-bold hover:bg-red-50 flex items-center justify-center gap-2 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            Restore Full Backup
+                        </button>
+                        <input type="file" id="restore-master-upload" accept=".json" class="hidden" onchange="handleMasterRestore(this)">
+                    </div>
                     <button onclick="openRoleConfigModal()" class="w-full mt-2 bg-white text-gray-700 border border-gray-300 px-4 py-3 rounded-lg shadow-sm hover:bg-gray-50 font-medium text-sm flex justify-center gap-2 transition">
                         <span>⚙️</span> Settings & Roles
                     </button>
