@@ -50,6 +50,7 @@ let cloudUnsubscribe = null;
 let advanceUnavailability = {}; // Stores { "DD.MM.YYYY": { FN: [], AN: [] } }
 let globalDutyTarget = 2; // Default
 let googleScriptUrl = "";
+let isEmailConfigLocked = true; // <--- NEW
 let isRoleLocked = true;
 let isDeptLocked = true;
 let isStaffListLocked = true; // Default to Locked
@@ -1915,24 +1916,28 @@ function getCurrentAcademicYear() {
 // --- ROLE EDITOR FUNCTIONS ---
 
 window.openRoleConfigModal = function() {
-    // 1. Reset Locks
+    // 1. Reset ALL Locks
     isRoleLocked = true;
     isDeptLocked = true;
-    
+    isEmailConfigLocked = true; // <--- NEW
+
     // 2. Update UI for Locks
     updateLockIcon('role-lock-btn', true);
     updateLockIcon('dept-lock-btn', true);
+    updateLockIcon('email-config-lock-btn', true); // <--- NEW
+
     toggleInputVisibility('role-input-row', true);
     toggleInputVisibility('dept-input-row', true);
+    
+    // Disable Email Input initially
+    const urlInput = document.getElementById('google-script-url');
+    if(urlInput) {
+        urlInput.value = googleScriptUrl;
+        urlInput.disabled = true;
+    }
 
     // 3. Load Data & Render
     document.getElementById('global-duty-target').value = globalDutyTarget;
-
-    // *** ADD THIS BLOCK ***
-    const urlInput = document.getElementById('google-script-url');
-    if(urlInput) urlInput.value = googleScriptUrl;
-    // ********************
-
     renderRolesList();
     if(typeof renderDepartmentsList === "function") renderDepartmentsList();
 
@@ -2014,9 +2019,9 @@ window.saveRoleConfig = async function() {
     
     globalDutyTarget = newGlobal;
     
-    // *** ADD THIS LINE ***
+    // CAPTURE URL
     const newUrl = document.getElementById('google-script-url').value.trim();
-    googleScriptUrl = newUrl; // Update local variable immediately
+    googleScriptUrl = newUrl; 
     
     // Save to Cloud
     const ref = doc(db, "colleges", currentCollegeId);
@@ -2024,7 +2029,7 @@ window.saveRoleConfig = async function() {
         invigRoles: JSON.stringify(rolesConfig),
         invigDepartments: JSON.stringify(departmentsConfig),
         invigGlobalTarget: globalDutyTarget,
-        invigGoogleScriptUrl: googleScriptUrl // <--- ADD THIS TO SAVE
+        invigGoogleScriptUrl: googleScriptUrl // <--- SAVED HERE
     });
     
     window.closeModal('role-config-modal');
@@ -4080,6 +4085,16 @@ window.toggleStaffListLock = function() {
     }
     renderStaffTable();
 }
+
+window.toggleEmailConfigLock = function() {
+    isEmailConfigLocked = !isEmailConfigLocked;
+    const input = document.getElementById('google-script-url');
+    const btn = document.getElementById('email-config-lock-btn');
+    
+    if(input) input.disabled = isEmailConfigLocked;
+    if(btn) updateLockIcon('email-config-lock-btn', isEmailConfigLocked);
+}
+
 // This makes functions available to HTML onclick="" events
 window.toggleLock = toggleLock;
 window.waNotify = waNotify;
@@ -4148,6 +4163,7 @@ window.sendSingleEmail = sendSingleEmail;
 window.sendBulkEmails = sendBulkEmails;
 window.getFirstName = getFirstName;
 window.toggleStaffListLock = toggleStaffListLock;
+window.toggleEmailConfigLock = toggleEmailConfigLock;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
