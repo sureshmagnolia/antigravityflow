@@ -1430,7 +1430,6 @@ window.waNotify = function(key) {
     const msg = encodeURIComponent(`Exam Duty: ${key}.`);
     window.open(`https://wa.me/${phones[0]}?text=${msg}`, '_blank');
 }
-
 window.calculateSlotsFromSchedule = async function() {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
     if(btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
@@ -1455,7 +1454,7 @@ window.calculateSlotsFromSchedule = async function() {
 
         if(students.length === 0) throw new Error("No exam data found.");
 
-        // 2. Process Sessions
+        // 2. Advanced Calculation
         const sessions = {};
         students.forEach(s => {
             const key = `${s.Date} | ${s.Time}`;
@@ -1479,29 +1478,44 @@ window.calculateSlotsFromSchedule = async function() {
         let newSlots = { ...invigilationSlots }; 
         let hasChanges = false;
 
+        // --- A. CLEANUP LEGACY DATA (Remove 'courses' field) ---
+        Object.keys(newSlots).forEach(k => {
+            if (newSlots[k].courses) {
+                delete newSlots[k].courses; // Remove unwanted data
+                hasChanges = true; // Mark for save
+            }
+        });
+        // -------------------------------------------------------
+
         Object.keys(sessions).forEach(key => {
             const data = sessions[key];
             const [datePart, timePart] = key.split(' | ');
 
-            // --- A. SLOT CALCULATION (Keep 1:5 for Digital System) ---
+            // --- B. CALCULATE REQUIREMENTS ---
             let calculatedReq = 0;
+            
+            // 1. Regular Streams (1:30)
             Object.values(data.streams).forEach(count => {
                 calculatedReq += Math.ceil(count / 30);
             });
+            
+            // 2. Scribes (1:5 RULE)
             if (data.scribeCount > 0) {
                 calculatedReq += Math.ceil(data.scribeCount / 5); 
             }
+
+            // 3. Reserve (10% of base)
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve;
 
-            // --- B. Fetch Exam Name ---
+            // --- C. Fetch Official Exam Name ---
             let officialExamName = "";
             if (typeof window.getExamName === "function") {
                 officialExamName = window.getExamName(datePart, timePart, "Regular");
                 if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
             }
 
-            // --- C. Update Slot ---
+            // --- D. Update Slot ---
             if (!newSlots[key]) {
                 newSlots[key] = { 
                     required: finalReq, 
@@ -1509,8 +1523,8 @@ window.calculateSlotsFromSchedule = async function() {
                     unavailable: [], 
                     isLocked: true,
                     examName: officialExamName,
-                    scribeCount: data.scribeCount,   // <--- STORED FOR REPORT
-                    studentCount: data.totalStudents // <--- STORED FOR REPORT
+                    scribeCount: data.scribeCount,
+                    studentCount: data.totalStudents
                 };
                 changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
                 hasChanges = true;
@@ -1519,7 +1533,7 @@ window.calculateSlotsFromSchedule = async function() {
                 if (newSlots[key].scribeCount !== data.scribeCount || newSlots[key].studentCount !== data.totalStudents) {
                     newSlots[key].scribeCount = data.scribeCount;
                     newSlots[key].studentCount = data.totalStudents;
-                    hasChanges = true; // Silent update
+                    hasChanges = true; 
                 }
                 
                 if (officialExamName && newSlots[key].examName !== officialExamName) {
@@ -1541,17 +1555,22 @@ window.calculateSlotsFromSchedule = async function() {
             }
         });
 
+        // 3. Confirm
         if (!hasChanges) {
-            alert("✅ Data checked. Metadata updated.");
+            alert("✅ Cloud data checked. No changes.");
         } else {
             let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
-            if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION: ${removalLog.length} staff removed.`;
-            if (confirm(msg + "\n\nProceed?")) {
+            if (removalLog.length > 0) msg += `\n\n🚨 REDUCTION ALERT: ${removalLog.length} staff will be removed.`;
+            
+            // Note about cleanup
+            if (msg === "⚠️ UPDATES FOUND ⚠️\n\n") msg = "✅ Optimization: Cleaning up old course data from slots.";
+
+            if (confirm(msg + "\n\nProceed with update?")) {
                 invigilationSlots = newSlots;
                 await syncSlotsToCloud();
                 renderSlotsGridAdmin();
                 if (removalLog.length > 0) showRemovalNotification(removalLog);
-                else alert("Updated successfully!");
+                else alert("Slots updated successfully!");
             }
         }
 
@@ -1562,6 +1581,7 @@ window.calculateSlotsFromSchedule = async function() {
         if(btn) { btn.disabled = false; btn.innerText = "Sync Cloud / Generate Slots"; }
     }
 }
+
 
 // --- Helper: Smart Removal (Lowest Priority First) ---
 function pruneAssignments(slot, countToRemove) {
