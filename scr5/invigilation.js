@@ -56,6 +56,7 @@ let isDeptLocked = true;
 let isStaffListLocked = true; // Default to Locked
 let currentSubstituteCandidate = null; // Stores selected staff for substitution
 let isGlobalTargetLocked = true; // <--- NEW
+let currentAdminDate = new Date(); // Tracks the currently viewed month in Admin
 let tempAttendanceBatch = {}; // Stores parsed CSV data grouped by session key
 let currentEmailQueue = []; // Stores the list for bulk sending
 
@@ -479,85 +480,110 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
     });
 }
 // --- RENDER ADMIN SLOTS (Grouped by Month & Week, Slots Ascending) ---
+// --- RENDER ADMIN SLOTS (Monthly View) ---
 function renderSlotsGridAdmin() {
     if(!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
     
-    // 1. Prepare Data & Sort
-    const slotItems = Object.keys(invigilationSlots).map(key => ({
-        key,
-        date: parseDate(key),
-        slot: invigilationSlots[key]
-    }));
+    // 1. Date Headers
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const currentMonthStr = monthNames[currentAdminDate.getMonth()];
+    const currentYear = currentAdminDate.getFullYear();
 
-    slotItems.sort((a, b) => b.date - a.date);
+    // --- NAVIGATION BAR ---
+    const navHtml = `
+        <div class="col-span-full flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200 shadow-sm mb-2 sticky top-0 z-10">
+            <button onclick="changeAdminMonth(-1)" class="px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-2 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                Previous Month
+            </button>
+            
+            <h3 class="text-lg font-black text-indigo-800 uppercase tracking-wide flex items-center gap-2">
+                <span>📅</span> ${currentMonthStr} ${currentYear}
+            </h3>
+            
+            <button onclick="changeAdminMonth(1)" class="px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded border border-gray-300 flex items-center gap-2 transition">
+                Next Month
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </button>
+        </div>
+    `;
+    ui.adminSlotsGrid.innerHTML = navHtml;
 
-    let lastMonth = "";
+    // 2. Filter Data for Current Month
+    const slotItems = [];
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
+            slotItems.push({
+                key,
+                date: date,
+                slot: invigilationSlots[key]
+            });
+        }
+    });
 
+    // 3. Empty State
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML = `<div class="col-span-full text-center text-gray-400 py-10 italic">No exam slots available. Add a slot to begin.</div>`;
+        ui.adminSlotsGrid.innerHTML += `
+            <div class="col-span-full text-center py-16 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                <p class="text-gray-400 font-medium mb-2">No exam sessions scheduled for ${currentMonthStr}.</p>
+                <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline text-sm flex items-center justify-center gap-1 mx-auto">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    Add Slot
+                </button>
+            </div>`;
         return;
     }
 
-    // Group Logic
+    // 4. Group by Week
     const groupedSlots = {};
     slotItems.forEach(item => {
-        const monthStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const weekNum = getWeekOfMonth(item.date);
-        const groupKey = `${monthStr}-W${weekNum}`;
+        const groupKey = `${mStr}-W${weekNum}`;
         if (!groupedSlots[groupKey]) {
-            groupedSlots[groupKey] = { month: monthStr, week: weekNum, items: [] };
+            groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
         }
         groupedSlots[groupKey].items.push(item);
     });
 
-    // Sort Groups (Newest Week First)
+    // 5. Sort Groups (Ascending: Week 1 -> Week 4)
     const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => {
         const dateA = groupedSlots[a].items[0].date;
         const dateB = groupedSlots[b].items[0].date;
-        return dateB - dateA;
+        return dateA - dateB; 
     });
 
+    // 6. Render Groups
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
         
-        // Month Header
-        if (group.month !== lastMonth) {
-            ui.adminSlotsGrid.innerHTML += `
-                <div class="col-span-full mt-6 mb-1 border-b border-gray-300 pb-2">
-                    <h3 class="text-lg font-bold text-gray-700 flex items-center gap-2">📅 ${group.month}</h3>
-                </div>`;
-            lastMonth = group.month;
-        }
-
-        // Week Header (With NOTIFY Button)
+        // Week Header
         ui.adminSlotsGrid.innerHTML += `
-            <div class="col-span-full mt-3 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
+            <div class="col-span-full mt-4 mb-2 flex flex-wrap justify-between items-center bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 shadow-sm gap-2">
                 <span class="text-indigo-900 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100">Week ${group.week}</span>
+                    <span class="bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">Week ${group.week}</span>
                 </span>
                 <div class="flex gap-2">
                     <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" 
                         class="text-[10px] bg-green-600 text-white border border-green-700 px-3 py-1 rounded hover:bg-green-700 font-bold transition shadow-sm flex items-center gap-1">
-                        📢 Notify Faculty
+                        📢 Notify
                     </button>
 
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" 
                         class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-3 py-1 rounded hover:bg-indigo-700 font-bold transition shadow-sm flex items-center gap-1">
                         ⚡ Auto-Assign
                     </button>
-                    <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" 
-                        class="text-[10px] bg-white border border-red-200 text-red-600 px-3 py-1 rounded hover:bg-red-50 font-bold transition shadow-sm flex items-center gap-1">
-                        🔒 Lock
-                    </button>
-                    <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" 
-                        class="text-[10px] bg-white border border-green-200 text-green-600 px-3 py-1 rounded hover:bg-green-50 font-bold transition shadow-sm flex items-center gap-1">
-                        🔓 Unlock
-                    </button>
+                    
+                    <div class="flex rounded shadow-sm">
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold transition border-r-0">🔒</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold transition">🔓</button>
+                    </div>
                 </div>
             </div>`;
 
-        // Render Slots (Ascending Date Order within Week)
+        // Render Slots (Ascending Date)
         group.items.sort((a, b) => a.date - b.date);
         
         group.items.forEach(({ key, slot }) => {
@@ -585,10 +611,8 @@ function renderSlotsGridAdmin() {
                         ${unavButton}
                     </div>
                     <div class="grid grid-cols-3 gap-2 mt-3">
-                        <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Send Daily Reminder">
-                            🔔 Remind
-                        </button>
-                        <button onclick="printSessionReport('${key}')" class="col-span-1 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition" title="Print Report"><span>🖨️</span> Print</button>
+                        <button onclick="openSlotReminderModal('${key}')" class="col-span-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded py-1.5 hover:bg-green-100 font-bold transition" title="Send Daily Reminder">🔔 Remind</button>
+                        <button onclick="printSessionReport('${key}')" class="col-span-1 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded py-1.5 hover:bg-gray-200 font-bold flex items-center justify-center gap-1 transition">🖨️ Print</button>
                         <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition">Manual</button>
                     </div>
                      <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
@@ -1090,6 +1114,11 @@ function updateHeaderButtons(currentView) {
     }
 }
 
+// --- HELPER: Change Month ---
+window.changeAdminMonth = function(delta) {
+    currentAdminDate.setMonth(currentAdminDate.getMonth() + delta);
+    renderSlotsGridAdmin();
+}
 function switchToStaffView() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (me) initStaffDashboard(me);
@@ -4855,6 +4884,7 @@ window.handleMasterRestore = handleMasterRestore;
 window.downloadAttendanceTemplate = downloadAttendanceTemplate;
 window.handleAttendanceCSVUpload = handleAttendanceCSVUpload;
 window.filterManualStaff = filterManualStaff;
+window.changeAdminMonth = changeAdminMonth;
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
