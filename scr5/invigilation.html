@@ -118,8 +118,13 @@
                 </div>
 
                 <div class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
-                    <div class="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h2 class="font-bold text-gray-800">Staff & Duty Load</h2>
+                    <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap justify-between items-center gap-2">
+                        <div class="flex items-center gap-3">
+                            <h2 class="font-bold text-gray-800">Staff & Duty Load</h2>
+                            <button id="btn-staff-list-lock" onclick="toggleStaffListLock()" class="bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200">
+                                <span>🔒</span> Locked
+                            </button>
+                        </div>
                         <input type="text" id="staff-search" placeholder="Search..." class="pl-2 py-1 border border-gray-300 rounded text-sm w-48" oninput="filterStaffTable()">
                     </div>
                     <div class="overflow-x-auto">
