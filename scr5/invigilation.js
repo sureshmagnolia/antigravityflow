@@ -399,7 +399,7 @@ function getFirstName(fullName) {
     return fullName.split(' ')[0]; // "Abdul Raheem" -> "Abdul"
 }
 
-// --- AUTOMATIC EMAIL SYSTEM (Google Apps Script) ---
+// --- AUTOMATIC EMAIL SYSTEM (Google Apps Script - Fixed) ---
 window.sendSingleEmail = function(btn, email, name, subject, message) {
     if (!email) return alert("No email address for this faculty.");
     if (!googleScriptUrl) return alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
@@ -414,10 +414,11 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
     const htmlBody = message.replace(/\n/g, '<br>');
 
     // Send via Proxy (Google Script)
+    // FIX: Use 'text/plain' to avoid CORS Preflight issues
     fetch(googleScriptUrl, {
         method: "POST",
-        mode: "no-cors", // Google Scripts require no-cors mode
-        headers: { "Content-Type": "application/json" },
+        mode: "no-cors", 
+        headers: { "Content-Type": "text/plain" }, 
         body: JSON.stringify({
             to: email,
             subject: subject,
@@ -425,8 +426,13 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
         })
     })
     .then(() => {
+        // Success Assumption (no-cors hides actual response)
         console.log('Request sent to Google Script');
-        btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Sent`;
+        
+        btn.innerHTML = `
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            Sent
+        `;
         btn.classList.remove('bg-gray-400', 'cursor-wait');
         btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
         
@@ -435,7 +441,7 @@ window.sendSingleEmail = function(btn, email, name, subject, message) {
     })
     .catch(error => {
         console.error('FAILED...', error);
-        alert("Network Error: Could not reach Google Script.");
+        alert("Network Error: Could not reach Google Script.\nCheck your internet or the Script URL.");
         btn.disabled = false;
         btn.innerHTML = originalText;
         btn.classList.add('bg-red-600');
