@@ -9,13 +9,25 @@ const provider = window.firebase.provider;
 
 // --- CONFIG ---
 const DEFAULT_DESIGNATIONS = { "Assistant Professor": 2, "Associate Professor": 1, "Guest Lecturer": 4, "Professor": 0 };
-// REPLACE the existing DEFAULT_ROLES line with this:
+
+// CANONICAL ROLE NAMES (The "Official" System Names)
+const ROLE_CS = "Chief Superintendent";
+const ROLE_SAS = "Senior Asst. Superintendent";
+const ROLE_PRINCIPAL = "Principal";
+
+// Protected Roles (Cannot be deleted)
+const SYSTEM_ROLES = [ROLE_CS, ROLE_SAS, ROLE_PRINCIPAL];
+
+// Default Config (Uses the constants)
 const DEFAULT_ROLES = { 
     "Vice Principal": 0, 
     "HOD": 1, 
+    "NSS Officer": 1, 
     "Warden": 0, 
-    "Chief Superintendent": 0,       // <--- NEW
-    "Senior Asst. Superintendent": 0 // <--- NEW
+    "Exam Chief": 0,
+    [ROLE_CS]: 0,       
+    [ROLE_SAS]: 0,
+    [ROLE_PRINCIPAL]: 0
 };
 
 // Protected Roles (Cannot be deleted)
@@ -2138,6 +2150,7 @@ function populateAttendanceSessions() {
         ui.attSessionSelect.appendChild(opt);
     });
 }
+
 window.loadSessionAttendance = function() {
     const key = ui.attSessionSelect.value;
     if (!key) {
@@ -2165,8 +2178,7 @@ window.loadSessionAttendance = function() {
     if (searchResults) searchResults.classList.add('hidden');
     currentSubstituteCandidate = null;
 
-    // --- 1. SUPERVISION LOGIC (Robust Defaulting) ---
-    // Calculate session date range (Whole Day)
+    // --- 1. SUPERVISION LOGIC (Robust & Date-Aware) ---
     const sessionDate = parseDate(key);
     const startOfDay = new Date(sessionDate); startOfDay.setHours(0,0,0,0);
     const endOfDay = new Date(sessionDate); endOfDay.setHours(23,59,59,999);
@@ -2174,34 +2186,48 @@ window.loadSessionAttendance = function() {
     let defaultCS = "";
     let defaultSAS = "";
     
+    // Helper: Check if a role string matches "Chief Superintendent" concept
+    const isCS = (r) => {
+        const s = r.toLowerCase().trim();
+        return s === "cs" || 
+               s === "chief superintendent" || 
+               s === "chief supt" || 
+               s === "chief" || 
+               s === "exam chief";
+    };
+
+    // Helper: Check if a role string matches "Senior Asst. Superintendent" concept
+    const isSAS = (r) => {
+        const s = r.toLowerCase().trim();
+        return s === "sas" || 
+               s === "senior asst. superintendent" || 
+               s === "senior assistant superintendent" || 
+               s === "senior supt";
+    };
+    
     staffData.forEach(s => {
         if (s.roleHistory) {
-            // Find role active ON THAT DAY
+            // Find role active ON THE EXAM DATE
             const activeRole = s.roleHistory.find(r => {
                 const rStart = new Date(r.start); rStart.setHours(0,0,0,0);
                 const rEnd = new Date(r.end); rEnd.setHours(23,59,59,999);
                 
-                // Check Date Overlap
+                // Date Overlap Check
                 if (rStart <= endOfDay && rEnd >= startOfDay) {
-                    // Check Role Name (Case Insensitive for safety)
-                    const roleName = r.role.toLowerCase();
-                    return roleName === "chief superintendent" || 
-                           roleName === "exam chief" || 
-                           roleName === "senior asst. superintendent" ||
-                           roleName === "sas"; 
+                    // Role Name Check (Using Helpers)
+                    return isCS(r.role) || isSAS(r.role);
                 }
                 return false;
             });
             
             if (activeRole) {
-                const rName = activeRole.role.toLowerCase();
-                if (rName === "chief superintendent" || rName === "exam chief") defaultCS = s.email;
-                if (rName === "senior asst. superintendent" || rName === "sas") defaultSAS = s.email;
+                if (isCS(activeRole.role)) defaultCS = s.email;
+                if (isSAS(activeRole.role)) defaultSAS = s.email;
             }
         }
     });
 
-    // Determine Current Selection (Saved takes priority, then Default)
+    // Determine Current Selection (Saved > Default)
     const savedSup = slot.supervision || {};
     const currentCS = savedSup.cs || defaultCS;
     const currentSAS = savedSup.sas || defaultSAS;
@@ -2227,7 +2253,7 @@ window.loadSessionAttendance = function() {
     // --- 2. ATTENDANCE LIST ---
     let presentSet = new Set(slot.attendance || slot.assigned || []);
     
-    // Auto-Mark CS/SAS as Present
+    // Auto-Mark CS/SAS as Present in the list
     if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
     if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
     
@@ -2236,7 +2262,6 @@ window.loadSessionAttendance = function() {
     });
 
     // --- 3. LOCK STATE UI ---
-    // (Keep existing lock logic...)
     const addBtn = document.getElementById('btn-att-add');
     const saveBtn = document.getElementById('btn-att-save');
     const lockBtn = document.getElementById('btn-att-lock');
@@ -2272,7 +2297,6 @@ window.loadSessionAttendance = function() {
     
     updateAttCount();
 }
-
 
 function addAttendanceRow(email, isLocked) {
     const s = staffData.find(st => st.email === email);
@@ -4419,7 +4443,13 @@ async function processAttendanceCSV(csvText) {
         const sessionType = row[sessIdx] ? row[sessIdx].toUpperCase() : "FN"; 
         const email = row[emailIdx];
         const role = roleIdx !== -1 ? row[roleIdx].toUpperCase() : "INVIGILATOR";
-
+        // Update Role (Robust CSV Matching)
+            if (role === "CS" || role === "CHIEF" || role === "CHIEF SUPERINTENDENT") {
+                slot.supervision.cs = email;
+            }
+            if (role === "SAS" || role === "SENIOR" || role === "SENIOR ASST. SUPERINTENDENT" || role === "SAS") {
+                slot.supervision.sas = email;
+            }
         if (!rawDate || !email) continue;
 
         const dateStr = parseDateKey(rawDate);
