@@ -7264,10 +7264,37 @@ function selectRoomForAllotment(roomName, capacity, targetStream) {
     // 3. Find unallotted students MATCHING THE TARGET STREAM
     const candidates = [];
     // Sort first to ensure consistent filling (Stream -> Course -> RegNo)
-    sessionStudentRecords.sort((a, b) => {
-        if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-        return a['Register Number'].localeCompare(b['Register Number']);
-    });
+    // *** MODIFIED SORT: Prefix Descending (Z->Y), Number Ascending (001->002) ***
+sessionStudentRecords.sort((a, b) => {
+    // 1. Course Name (A-Z)
+    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+
+    const regA = a['Register Number'] ? a['Register Number'].trim() : "";
+    const regB = b['Register Number'] ? b['Register Number'].trim() : "";
+
+    // Extract Prefix (Letters) and Number (Digits)
+    // Example: "VPAZSBO001" -> Prefix "VPAZSBO", Number "001"
+    const matchA = regA.match(/^([A-Z]+)(\d+)$/i);
+    const matchB = regB.match(/^([A-Z]+)(\d+)$/i);
+
+    if (matchA && matchB) {
+        const prefixA = matchA[1];
+        const numA = parseInt(matchA[2], 10);
+        const prefixB = matchB[1];
+        const numB = parseInt(matchB[2], 10);
+
+        // 2. Sort Prefix DESCENDING (Z comes before Y)
+        if (prefixA !== prefixB) {
+            return prefixB.localeCompare(prefixA); 
+        }
+
+        // 3. Sort Number ASCENDING (1 comes before 2)
+        return numA - numB;
+    }
+
+    // Fallback if Register Number format is standard (Ascending)
+    return regA.localeCompare(regB);
+});
 
     for (const student of sessionStudentRecords) {
         const regNo = student['Register Number'];
