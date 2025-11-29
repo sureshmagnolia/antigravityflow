@@ -536,6 +536,9 @@
                     <div class="flex flex-col gap-2 mb-2 shrink-0">
                         <div class="flex justify-between items-center">
                             <h4 class="font-bold text-gray-700 text-sm uppercase">Available Staff</h4>
+                            <button onclick="unselectAllManualStaff()" class="text-xs text-red-600 hover:text-red-800 font-bold bg-red-50 border border-red-200 px-2 py-1 rounded transition cursor-pointer shadow-sm">
+                                Unselect All
+                            </button>
                         </div>
                         <div class="relative">
                             <input type="text" id="manual-staff-search" oninput="filterManualStaff()" 
