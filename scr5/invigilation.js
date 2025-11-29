@@ -163,7 +163,7 @@ function setupLiveSync(collegeId, mode) {
             // CONFIGS
             designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
             const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
-            rolesConfig = JSON.parse(collegeData.invigRoles || JSON.stringify(DEFAULT_ROLES));
+            rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
             globalDutyTarget = parseInt(collegeData.invigGlobalTarget || 2);
@@ -1980,17 +1980,15 @@ function renderRolesList() {
     }
 
     sortedRoles.forEach(([role, target]) => {
+        // Check if this is a Protected System Role
         const isSystemRole = SYSTEM_ROLES.includes(role);
-        
-        // Lock Logic:
-        // 1. If Global Lock is ON -> Hide All Buttons
-        // 2. If Global Lock is OFF -> Show Buttons (But hide DELETE for System Roles)
         
         let actionButtons = '';
         
         if (!isRoleLocked) {
+            // If System Role -> Hide Delete Button
             const deleteBtn = isSystemRole 
-                ? `<span class="text-gray-300 text-[10px] cursor-not-allowed" title="System Default">🚫</span>` 
+                ? `<span class="text-gray-300 text-[10px] cursor-not-allowed px-1.5" title="System Default">🚫</span>` 
                 : `<button onclick="deleteRoleConfig('${role}')" class="text-red-500 hover:text-red-700 font-bold px-1.5">&times;</button>`;
                 
             actionButtons = `
