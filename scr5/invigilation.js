@@ -5489,7 +5489,7 @@ window.executeReschedule = async function() {
 }
 
 // ==========================================
-// 📄 DUTY NOTIFICATION PREVIEW (Print + Download)
+// 📄 DUTY NOTIFICATION DOWNLOAD (Fixed Layout)
 // ==========================================
 
 window.printDutyNotification = function(key) {
@@ -5501,7 +5501,6 @@ window.printDutyNotification = function(key) {
     const [d, m, y] = dateStr.split('.');
     const examDate = new Date(`${y}-${m}-${d}`);
     
-    // Calculate Excel Serial Date
     const excelBaseDate = new Date(1899, 11, 30);
     const dayDiff = Math.floor((examDate - excelBaseDate) / (1000 * 60 * 60 * 24));
     
@@ -5510,14 +5509,15 @@ window.printDutyNotification = function(key) {
     const reportTime = calculateReportTime(timeStr);
     const logoUrl = "logo.png"; 
 
-    // 2. LAYOUT LOGIC (Limit 20)
+    // 2. LAYOUT LOGIC (Auto Split > 20)
     const totalStaff = slot.assigned.length;
-    const useTwoColumns = totalStaff > 20; // SPLIT ONLY IF > 20
+    const useTwoColumns = totalStaff > 20; 
 
     const generateRow = (email, idx) => {
         const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "" };
         let phone = staff.phone || "-";
-        let nameDisplay = staff.name.length > 25 ? staff.name.substring(0, 22) + "..." : staff.name;
+        // Truncate Name
+        let nameDisplay = staff.name.length > 28 ? staff.name.substring(0, 26) + ".." : staff.name;
         
         return `
             <tr>
@@ -5534,7 +5534,7 @@ window.printDutyNotification = function(key) {
     let tableContentHtml = "";
 
     if (useTwoColumns) {
-        // --- 2 COLUMN LAYOUT (No Signature) ---
+        // --- 2 COLUMN LAYOUT ---
         const mid = Math.ceil(totalStaff / 2);
         const leftList = slot.assigned.slice(0, mid);
         const rightList = slot.assigned.slice(mid);
@@ -5545,7 +5545,7 @@ window.printDutyNotification = function(key) {
                     <tr>
                         <th style="width: 25px;">No</th>
                         <th>Name & Dept</th>
-                        <th style="width: 80px;">Mobile</th>
+                        <th style="width: 70px;">Mobile</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -5565,7 +5565,7 @@ window.printDutyNotification = function(key) {
             </div>
         `;
     } else {
-        // --- 1 COLUMN LAYOUT (No Signature) ---
+        // --- 1 COLUMN LAYOUT ---
         tableContentHtml = `
             <table class="staff-table" style="width: 100%; margin-top: 10px;">
                 <thead>
@@ -5582,7 +5582,7 @@ window.printDutyNotification = function(key) {
         `;
     }
 
-    // 3. OPEN PREVIEW WINDOW
+    // 3. GENERATE WINDOW
     const w = window.open('', '_blank');
     w.document.write(`
         <html>
@@ -5594,42 +5594,29 @@ window.printDutyNotification = function(key) {
                 
                 body { font-family: 'Times New Roman', serif; background: #f3f4f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
                 
-                /* CONTROL BAR (No Print) */
+                /* CONTROL BAR */
                 #controls {
-                    margin-bottom: 20px;
-                    display: flex;
-                    gap: 10px;
-                    background: white;
-                    padding: 10px 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
                 }
                 .btn {
-                    padding: 8px 16px;
-                    font-weight: bold;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-family: sans-serif;
-                    font-size: 14px;
+                    padding: 10px 20px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px;
+                    background-color: #2563eb; color: white;
                 }
-                .btn-print { background-color: #374151; color: white; }
-                .btn-download { background-color: #2563eb; color: white; }
-                .btn:hover { opacity: 0.9; }
+                .btn:hover { background-color: #1d4ed8; }
 
-                /* A4 PAGE STYLING */
+                /* DOCUMENT CONTAINER */
                 .content-wrapper {
                     width: 210mm;
-                    /* REMOVED FIXED HEIGHT TO FIX BLANK PAGE ISSUE */
-                    height: auto;
+                    /* FIXED: Auto height prevents blank page overflow */
+                    height: auto; 
+                    min-height: 100mm; 
                     padding: 15mm;
                     background: white;
                     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
                     box-sizing: border-box;
-                    overflow: hidden; 
                 }
 
-                .header { text-align: center; margin-bottom: 20px; position: relative; }
+                .header { text-align: center; margin-bottom: 20px; }
                 .header img { height: 65px; width: auto; margin-bottom: 5px; }
                 .college-name { font-size: 14pt; font-weight: bold; text-transform: uppercase; }
                 .address { font-size: 9pt; }
@@ -5646,28 +5633,17 @@ window.printDutyNotification = function(key) {
                     border: 1px solid #000; padding: 5px; text-align: center; background: #f9f9f9; 
                 }
                 
-                /* Table Styles */
                 .staff-table { border-collapse: collapse; }
                 .staff-table th, .staff-table td { border: 1px solid black; padding: 4px; vertical-align: middle; }
                 .staff-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; font-size: 10pt; }
                 
                 .footer { margin-top: 30px; text-align: right; font-weight: bold; font-size: 11pt; }
                 .signature-line { display: inline-block; text-align: center; }
-
-                /* PRINT MEDIA QUERY */
-                @media print {
-                    body { background: white; padding: 0; }
-                    #controls { display: none !important; }
-                    .content-wrapper { box-shadow: none; margin: 0; width: 100%; }
-                    @page { margin: 0; }
-                }
             </style>
         </head>
         <body>
-            
             <div id="controls">
-                <button class="btn btn-print" onclick="window.print()">🖨️ Print / Save PDF</button>
-                <button class="btn btn-download" onclick="downloadPDF()">⬇️ One-Click Download</button>
+                <button class="btn" onclick="downloadPDF()">⬇️ Download PDF</button>
             </div>
 
             <div class="content-wrapper" id="pdf-content">
@@ -5675,20 +5651,12 @@ window.printDutyNotification = function(key) {
                     <img src="${logoUrl}" alt="Logo" onerror="this.style.display='none'"> 
                     <div class="college-name">GOVERNMENT VICTORIA COLLEGE, PALAKKAD</div>
                     <div class="address">Kerala, India, PIN 678001 | Affiliation: University of Calicut</div>
-                    <div class="meta">
-                        📞 0491 2576773 | ✉️ victoriapkd@gmail.com | 🌐 www.gvc.ac.in
-                    </div>
+                    <div class="meta">📞 0491 2576773 | ✉️ victoriapkd@gmail.com | 🌐 www.gvc.ac.in</div>
                 </div>
 
                 <div class="title-section">
-                    <div class="designation">
-                        Chief Superintendent,<br>
-                        University Examinations
-                    </div>
-                    <div class="doc-number">
-                        No: EXAM/${dayDiff}${sessionCode}<br>
-                        Date: ${new Date().toLocaleDateString('en-GB')}
-                    </div>
+                    <div class="designation">Chief Superintendent,<br>University Examinations</div>
+                    <div class="doc-number">No: EXAM/${dayDiff}${sessionCode}<br>Date: ${new Date().toLocaleDateString('en-GB')}</div>
                 </div>
 
                 <div class="body-text">
@@ -5705,32 +5673,30 @@ window.printDutyNotification = function(key) {
 
                 <div class="footer">
                     <br><br><br>
-                    <div class="signature-line">
-                        Chief Superintendent
-                    </div>
+                    <div class="signature-line">Chief Superintendent</div>
                 </div>
             </div>
 
             <script>
                 function downloadPDF() {
                     const element = document.getElementById('pdf-content');
-                    const btn = document.querySelector('.btn-download');
-                    btn.textContent = "Generating...";
+                    const btn = document.querySelector('.btn');
+                    btn.textContent = "Processing...";
                     btn.disabled = true;
 
                     const opt = {
-                        margin: 0, // Clean margins
+                        margin: 10, // 10mm Margin prevents content touching edges
                         filename: 'Duty_Notification_${dateStr}.pdf',
                         image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                        html2canvas: { scale: 2, useCORS: true },
                         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
                     };
 
                     html2pdf().set(opt).from(element).save().then(() => {
                         btn.textContent = "✅ Downloaded";
                         setTimeout(() => { 
-                            btn.textContent = "⬇️ One-Click Download";
-                            btn.disabled = false;
+                            btn.textContent = "⬇️ Download PDF"; 
+                            btn.disabled = false; 
                         }, 2000);
                     });
                 }
