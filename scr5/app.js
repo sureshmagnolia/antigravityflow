@@ -7513,39 +7513,55 @@ window.real_loadGlobalScribeList = function() {
     renderGlobalScribeList();
 }
 
-// 2. Render the global list (Updated with Lock Logic & Stream)
+// 2. Render the global list (Responsive: Card on Mobile, Row on PC)
 function renderGlobalScribeList() {
     if (!currentScribeListDiv) return; 
     currentScribeListDiv.innerHTML = "";
     
     if (globalScribeList.length === 0) {
-        currentScribeListDiv.innerHTML = `<em class="text-gray-500">No students added to the scribe list.</em>`;
+        currentScribeListDiv.innerHTML = `<div class="text-center py-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 text-gray-400 text-xs italic">No scribes added yet.</div>`;
         return;
     }
     
     globalScribeList.forEach(student => {
         const item = document.createElement('div');
-        item.className = 'flex justify-between items-center p-2 bg-white border border-gray-200 rounded';
+        // Mobile: Column (Card), Desktop: Row
+        item.className = 'group flex flex-col md:flex-row justify-between items-start md:items-center p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition mb-2 gap-3 md:gap-4';
         
         const strm = student.stream || "Regular";
         
-        // Determine button state based on Lock
-        const btnDisabled = isScribeListLocked ? 'disabled' : '';
-        const btnClass = isScribeListLocked 
-            ? 'text-gray-300 cursor-not-allowed' 
-            : 'text-red-600 hover:text-red-800 cursor-pointer';
+        // Determine button styling
+        const isLocked = isScribeListLocked;
+        const btnDisabled = isLocked ? 'disabled' : '';
+        
+        // Button: Full width on mobile, auto on desktop
+        const btnBase = "text-xs font-bold px-3 py-1.5 rounded border transition w-full md:w-auto text-center flex items-center justify-center gap-1";
+        const btnStyle = isLocked 
+            ? "bg-gray-50 text-gray-400 border-gray-100 cursor-not-allowed" 
+            : "bg-white text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300 cursor-pointer";
+
+        const btnIcon = isLocked ? '' : '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+        const btnText = isLocked ? "Locked" : "Remove";
 
         item.innerHTML = `
-            <div class="flex items-center gap-2">
-                <span class="font-medium">${student.regNo}</span>
-                <span class="text-sm text-gray-600">${student.name}</span>
-                <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-100 px-1.5 rounded border border-gray-200">${strm}</span>
+            <div class="flex flex-col md:flex-row md:items-center gap-1.5 md:gap-3 w-full min-w-0">
+                <div class="flex items-center justify-between md:justify-start gap-2">
+                    <span class="font-mono font-bold text-gray-800 text-sm bg-gray-100 px-2 py-0.5 rounded md:bg-transparent md:p-0">${student.regNo}</span>
+                    <span class="text-[10px] uppercase font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 tracking-wide">${strm}</span>
+                </div>
+                <div class="text-xs text-gray-600 truncate font-medium pl-1 md:pl-0" title="${student.name}">
+                    ${student.name}
+                </div>
             </div>
-            <button class="text-xs font-medium ${btnClass}" ${btnDisabled}>&times; Remove</button>
+            
+            <div class="w-full md:w-auto md:shrink-0 pt-2 md:pt-0 border-t md:border-0 border-gray-100">
+                <button class="${btnBase} ${btnStyle}" ${btnDisabled}>
+                    ${btnIcon} ${btnText}
+                </button>
+            </div>
         `;
         
-        // Only attach click event if unlocked
-        if (!isScribeListLocked) {
+        if (!isLocked) {
             item.querySelector('button').onclick = () => removeScribeStudent(student.regNo, student.name);
         }
         
