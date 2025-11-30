@@ -3814,7 +3814,7 @@ function generateDailyWhatsApp(name, dateStr, duties) {
         dutyList += `\n🔹 *Session:* ${d.session} (${d.time})\n   ⏰ *Report by:* ${rTime}\n`;
     });
 
-    return `📢 *INVIGILATION DUTY REMINDER* 📢\n\nDear *${name}*,\n\nThis is to inform you that you have invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n*Duty Details:*${dutyList}\n👉 *Instructions:*\n1. Kindly abide by the rules and regulations of the University.\n2. Please report to the Chief Superintendent's office *before the stipulated time*.\n3. In case of any inconvenience/leave, you are strictly requested to *arrange a mutual replacement* to ensure the examination is conducted uninterrupted.\n\nThank you for your cooperation.\n\n- Chief Superintendent\nExam Wing`;
+    return `📢 *INVIGILATION DUTY REMINDER* 📢\n\nDear *${name}*,\n\nThis is to inform you that you have invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n*Duty Details:*${dutyList}\n👉 *Instructions:*\n1. Kindly abide by the rules and regulations of the University.\n2. Please report to the Chief Superintendent's office *before the stipulated time*.\n3. In case of any inconvenience/leave, you are strictly requested to *arrange a replacement* to ensure the examination is conducted uninterrupted.\n\nThank you for your cooperation.\n\n- Chief Superintendent\nExam Wing`;
 }
 
 // 4. Daily SMS (Shortest)
