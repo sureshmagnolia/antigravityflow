@@ -721,7 +721,6 @@ function renderStaffTable() {
         ui.staffTableBody.appendChild(row);
     });
 }
-
 function renderStaffRankList(myEmail) {
     // Target BOTH lists (Desktop & Mobile)
     const containers = [
@@ -732,10 +731,13 @@ function renderStaffRankList(myEmail) {
     // 1. Calculate and Sort
     const rankedStaff = staffData
         .filter(s => s.status !== 'archived')
-        .map(s => ({ 
-            ...s, 
-            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email) 
-        }))
+        .map(s => { 
+            const target = calculateStaffTarget(s);
+            const done = getDutiesDoneCount(s.email);
+            const pending = target - done;
+            // Return all stats so we can display them
+            return { ...s, done, pending }; 
+        })
         .sort((a, b) => {
             if (b.pending !== a.pending) return b.pending - a.pending;
             return a.name.localeCompare(b.name);
@@ -756,6 +758,7 @@ function renderStaffRankList(myEmail) {
             if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
         }
 
+        // New Format: Done (Green) / Pending (Red)
         return `
             <div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1">
                 <div class="flex items-center gap-2 overflow-hidden">
@@ -768,15 +771,24 @@ function renderStaffRankList(myEmail) {
                         <span class="text-[9px] text-gray-400 truncate">${s.dept}</span>
                     </div>
                 </div>
-                <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-green-600'} ml-2">${displayPending}</span>
+                
+                <div class="text-right flex items-center gap-1 bg-white px-1.5 py-0.5 rounded border border-gray-100 shadow-sm">
+                     <span class="font-mono font-bold text-green-600" title="Completed Duties">${s.done}</span>
+                     <span class="text-gray-300 text-[10px]">/</span>
+                     <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-gray-400'}" title="Pending Duties">${displayPending}</span>
+                </div>
             </div>`;
     }).join('');
 
-    // 3. Inject into DOM
+    // 3. Inject into DOM with BOTTOM SPACER
+    // The spacer ensures the last item is visible above mobile bottom bars
+    const spacer = `<div class="h-24 w-full shrink-0"></div>`;
+
     containers.forEach(container => {
-        if(container) container.innerHTML = html;
+        if(container) container.innerHTML = html + spacer;
     });
 }
+
 
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
