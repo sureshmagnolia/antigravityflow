@@ -168,6 +168,7 @@ function setupLiveSync(collegeId, mode) {
     
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
+            updateSyncStatus("Synced", "success"); // <--- ADD THIS
             collegeData = docSnap.data();
             
             // CONFIGS
@@ -1168,13 +1169,28 @@ function switchToStaffView() {
 }
 
 async function syncSlotsToCloud() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error(e);
+        updateSyncStatus("Save Failed", "error");
+        alert("⚠️ Failed to save slots. Please check your internet connection.");
+    }
 }
 
 async function syncStaffToCloud() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error(e);
+        updateSyncStatus("Save Failed", "error");
+    }
 }
 
 // --- NEW: ADD STAFF ACCESS (SEPARATE FIELD) ---
@@ -1290,8 +1306,15 @@ window.toggleAdvance = async function(dateStr, email, session) {
 }
 
 async function saveAdvanceUnavailability() {
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error(e);
+        updateSyncStatus("Save Failed", "error");
+    }
 }
 window.toggleWholeDay = async function(dateStr, email) {
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
@@ -5237,6 +5260,39 @@ window.syncAllStaffPermissions = async function() {
     }
 };
 
+// --- SYNC STATUS & NETWORK LOGIC ---
+
+function updateSyncStatus(msg, type) {
+    const el = document.getElementById('sync-status');
+    if(!el) return;
+    
+    let color = "bg-gray-400";
+    let textClass = "text-gray-500";
+    
+    if (type === 'success') { 
+        color = "bg-green-500"; 
+        textClass = "text-green-600"; 
+    } else if (type === 'error') { 
+        color = "bg-red-500"; 
+        textClass = "text-red-600"; 
+    } else if (type === 'neutral') { 
+        color = "bg-blue-500 animate-pulse"; 
+        textClass = "text-blue-600"; 
+    }
+    
+    el.className = `text-[10px] font-bold ${textClass} flex items-center gap-1`;
+    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span> ${msg}`;
+}
+
+// Network Listeners
+window.addEventListener('online', () => {
+    updateSyncStatus("Back Online", "success");
+    // Optional: Trigger a re-fetch if needed, or just let Firestore reconnect automatically
+});
+
+window.addEventListener('offline', () => {
+    updateSyncStatus("No Internet", "error");
+});
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
 setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
