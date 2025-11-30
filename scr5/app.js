@@ -1720,7 +1720,7 @@ function updateDashboard() {
         if(dashContainer) dashContainer.classList.add('hidden');
         if(todayContainer) todayContainer.classList.add('hidden');
         return;
-    }
+        }
 
     // 1. UPDATE GLOBAL STATS
     const totalStudents = allStudentData.length;
@@ -1822,6 +1822,8 @@ function updateDashboard() {
     // 5. REFRESH CALENDAR & SETTINGS
     if (typeof renderCalendar === 'function') renderCalendar();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+    // Check for Invigilation Slots for Today
+    renderDashboardInvigilation();
 }
 
 // ==========================================
@@ -11361,13 +11363,163 @@ if (btnCopyPortal) {
     });
 }
 
-// 3. Initial Call (Try to generate if already logged in)
-updateStudentPortalLink();
+// ==========================================
+// 🖨️ DASHBOARD INVIGILATION PRINTER
+// ==========================================
 
+function renderDashboardInvigilation() {
+    const wrapper = document.getElementById('dashboard-invigilation-wrapper');
+    const container = document.getElementById('dashboard-invigilation-buttons');
+    if (!wrapper || !container) return;
 
+    // 1. Get Data from Local Storage
+    const slotsJson = localStorage.getItem('examInvigilationSlots');
+    if (!slotsJson) {
+        wrapper.classList.add('hidden');
+        return;
+    }
 
+    const slots = JSON.parse(slotsJson);
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const todayStr = `${dd}.${mm}.${yyyy}`;
 
+    // 2. Find Today's Sessions
+    const todayKeys = Object.keys(slots).filter(k => k.startsWith(todayStr));
+    
+    if (todayKeys.length === 0) {
+        wrapper.classList.add('hidden');
+        return;
+    }
 
+    // 3. Render Buttons
+    container.innerHTML = '';
+    todayKeys.sort(); // Sort AM/PM
+
+    todayKeys.forEach(key => {
+        const timePart = key.split(' | ')[1];
+        const btn = document.createElement('button');
+        btn.className = "bg-white text-indigo-700 hover:bg-indigo-50 font-bold py-2 px-4 rounded shadow-sm text-xs flex items-center gap-2 transition";
+        btn.innerHTML = `
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+            Print ${timePart}
+        `;
+        btn.onclick = () => printDashboardSession(key, slots[key]);
+        container.appendChild(btn);
+    });
+
+    wrapper.classList.remove('hidden');
+}
+
+// Standalone Print Function (Does not depend on invigilation.js variables)
+function printDashboardSession(key, slot) {
+    const [datePart, timePart] = key.split(' | ');
+    const collegeName = localStorage.getItem('examCollegeName') || "Government Victoria College";
+    
+    // Load Staff Data for Names
+    const staffJson = localStorage.getItem('examStaffData');
+    const staffData = staffJson ? JSON.parse(staffJson) : [];
+    
+    // Identify Session
+    const isAN = (timePart.includes("PM") || timePart.startsWith("12:") || timePart.startsWith("12."));
+    const sessionLabel = isAN ? "AFTERNOON SESSION" : "FORENOON SESSION";
+    
+    // Exam Name Logic
+    let examName = slot.examName || "University Examinations";
+    
+    // Prepare Rows
+    const scribes = slot.scribeCount || 0;
+    const totalStudents = slot.studentCount || 0;
+    const regularStudents = Math.max(0, totalStudents - scribes);
+    const regularInvigs = Math.ceil(regularStudents / 30);
+    const totalRowsToPrint = Math.max((slot.assigned || []).length + 5, regularInvigs + scribes + 2, 20);
+
+    let rowsHtml = "";
+    
+    (slot.assigned || []).forEach((email, index) => {
+        const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "" };
+        rowsHtml += `
+            <tr>
+                <td class="center">${index + 1}</td>
+                <td class="bold">${staff.name}</td>
+                <td>${staff.dept}</td>
+                <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
+            </tr>
+        `;
+    });
+
+    // Empty Rows
+    for (let i = (slot.assigned || []).length; i < totalRowsToPrint; i++) {
+        rowsHtml += `<tr><td class="center">${i + 1}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    }
+
+    // Open Print Window
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Invigilation List - ${datePart}</title>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+                body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; color: #000; }
+                @page { size: A4 portrait; margin: 15mm; }
+                .container { width: 100%; max-width: 210mm; margin: 0 auto; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; font-weight: 800; }
+                .header h2 { margin: 5px 0 0; font-size: 13pt; font-weight: 600; }
+                .header h3 { margin: 5px 0 0; font-size: 11pt; font-weight: normal; text-transform: uppercase; }
+                .meta { display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; margin-bottom: 15px; padding: 5px; background-color: #f3f4f6; border: 1px solid #ddd; }
+                table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+                th, td { border: 1px solid #000; padding: 8px 4px; vertical-align: middle; }
+                th { background-color: #e5e7eb !important; font-weight: bold; text-align: center; -webkit-print-color-adjust: exact; }
+                .center { text-align: center; }
+                .bold { font-weight: 600; }
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
+                .footer div { text-align: center; width: 40%; border-top: 1px solid #000; padding-top: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>${collegeName}</h1>
+                    <h2>Invigilation Duty List</h2>
+                    <h3>${examName}</h3>
+                </div>
+                <div class="meta">
+                    <span>Date: ${datePart}</span>
+                    <span>${sessionLabel} (${timePart})</span>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">Sl</th>
+                            <th style="width: 25%; text-align:left; padding-left:8px;">Name of Invigilator</th>
+                            <th style="width: 10%;">Dept</th>
+                            <th style="width: 8%;">RNBB</th>
+                            <th style="width: 8%;">Asgd<br>Script</th>
+                            <th style="width: 8%;">Used<br>Script</th>
+                            <th style="width: 8%;">Retd<br>Script</th>
+                            <th style="width: 18%;">Remarks</th>
+                            <th style="width: 10%;">Sign</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+                <div class="footer">
+                    <div>Senior Assistant Superintendent</div>
+                    <div>Chief Superintendent</div>
+                </div>
+            </div>
+            <script>window.onload = function() { setTimeout(() => window.print(), 500); };<\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
 // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
