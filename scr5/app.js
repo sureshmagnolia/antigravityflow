@@ -8061,10 +8061,12 @@ editCourseSelect.addEventListener('change', () => {
 });
 
 // 3. Render Table (Updated with Stream Column)
+// 3. Render Table (Responsive: Card on Mobile, Table on PC)
 function renderStudentEditTable() {
     editDataContainer.innerHTML = '';
+    
     if (currentCourseStudents.length === 0) {
-        editDataContainer.innerHTML = '<p class="text-gray-500">No students found for this course.</p>';
+        editDataContainer.innerHTML = '<div class="text-gray-500 text-center py-8 bg-gray-50 rounded-lg border border-gray-200 italic">No students found for this course.</div>';
         editPaginationControls.classList.add('hidden');
         return;
     }
@@ -8073,45 +8075,88 @@ function renderStudentEditTable() {
     const end = start + STUDENTS_PER_EDIT_PAGE;
     const pageStudents = currentCourseStudents.slice(start, end);
 
+    // --- NEW RESPONSIVE STRUCTURE ---
+    // 1. Table Header is HIDDEN on Mobile
+    // 2. Table Body becomes a BLOCK on Mobile
+    // 3. Rows become CARDS with borders/shadows on Mobile
+    
     let tableHtml = `
-        <table class="edit-data-table">
-            <thead>
+        <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50 hidden md:table-header-group">
                 <tr>
-                    <th>Sl No</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Stream</th> <th>Course</th>
-                    <th>Register Number</th>
-                    <th>Name</th>
-                    <th class="actions-cell">Actions</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group">
     `;
 
     pageStudents.forEach((student, index) => {
         const uniqueRowIndex = start + index; 
         const serialNo = uniqueRowIndex + 1;
-        // Default to "Regular" if stream is missing
         const streamDisplay = student.Stream || "Regular";
         
+        // Card-like styling for Mobile (block, border, margin) vs Table-row for Desktop
         tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}">
-                <td>${serialNo}</td>
-                <td>${student.Date}</td>
-                <td>${student.Time}</td>
-                <td class="font-medium text-indigo-600">${streamDisplay}</td> <td>${student.Course}</td>
-                <td>${student['Register Number']}</td>
-                <td>${student.Name}</td>
-                <td class="actions-cell">
-                    <button class="edit-row-btn text-sm text-blue-600 hover:text-blue-800">Edit</button>
-                    <button class="delete-row-btn text-sm text-red-600 hover:text-red-800 ml-2">Delete</button>
+            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row mb-4 md:mb-0 bg-white border border-gray-200 md:border-0 rounded-lg md:rounded-none shadow-sm md:shadow-none mx-1 md:mx-0">
+                
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${serialNo}
+                </td>
+
+                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
+                    <div class="flex justify-between md:block">
+                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Schedule</span>
+                        <div>
+                            <div class="text-sm text-gray-900 font-medium">${student.Date}</div>
+                            <div class="text-xs text-gray-500">${student.Time}</div>
+                        </div>
+                    </div>
+                </td>
+
+                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
+                    <div class="flex justify-between items-center md:block">
+                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Reg No</span>
+                        <span class="text-sm font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded md:bg-transparent md:px-0 md:text-gray-900">
+                            ${student['Register Number']}
+                        </span>
+                    </div>
+                </td>
+
+                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
+                    <div class="md:hidden text-xs font-bold text-gray-400 uppercase mb-1">Name</div>
+                    <div class="text-sm font-medium text-gray-900">${student.Name}</div>
+                    <div class="text-xs text-gray-400 md:hidden mt-0.5">${student.Course}</div> </td>
+
+                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
+                    <div class="flex justify-between items-center md:block">
+                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Stream</span>
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            ${streamDisplay}
+                        </span>
+                    </div>
+                </td>
+
+                <td class="block md:table-cell px-4 py-3 md:px-6 md:py-4 md:text-right bg-gray-50 md:bg-transparent rounded-b-lg md:rounded-none">
+                    <div class="flex justify-end gap-3">
+                        <button class="edit-row-btn flex-1 md:flex-none justify-center inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none">
+                            Edit
+                        </button>
+                        <button class="delete-row-btn flex-1 md:flex-none justify-center inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none">
+                            Remove
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
     });
 
-    tableHtml += `</tbody></table>`;
+    tableHtml += `</tbody></table></div>`;
     editDataContainer.innerHTML = tableHtml;
     renderEditPagination(currentCourseStudents.length);
 }
