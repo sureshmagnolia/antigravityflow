@@ -3135,6 +3135,7 @@ function renderAdminTodayStats() {
             </div>
         `;
     }
+} // <--- THIS BRACE WAS MISSING
 window.openCompletedDutiesModal = function(email) {
     const list = document.getElementById('completed-duties-list');
     if (!list) return;
