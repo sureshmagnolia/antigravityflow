@@ -635,8 +635,11 @@ function renderSlotsGridAdmin() {
                          <button onclick="openManualAllocationModal('${key}')" class="col-span-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1.5 hover:bg-indigo-100 font-bold transition" title="Manual Edit">Edit</button>
                          <button onclick="viewSlotHistory('${key}')" class="col-span-1 text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded py-1.5 hover:bg-orange-100 font-bold transition ${hasLog}" title="View Logic">📜</button>
                     </div>
-                     <button onclick="toggleLock('${key}')" class="w-full mt-2 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock Slot' : 'Lock Slot'}</button>
-                </div>`;
+                        <div class="flex gap-2 mt-2">
+                            <button onclick="toggleLock('${key}')" class="flex-1 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
+                            <button onclick="deleteSlot('${key}')" class="px-3 text-xs border border-red-200 rounded py-1.5 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white" title="Delete Slot">🗑️</button>
+                        </div>                
+                    </div>`;
         });
     });
 }
@@ -1270,6 +1273,27 @@ async function saveManualSlot() {
     window.closeModal('add-slot-modal');
     renderSlotsGridAdmin();
 }
+
+// --- NEW: Delete Slot Function ---
+window.deleteSlot = async function(key) {
+    // 1. Security Check
+    if (!confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot?\n\nSlot: ${key}\n\nThis will remove all assigned staff and records for this session.`)) return;
+    
+    // 2. Delete from local object
+    if (invigilationSlots[key]) {
+        delete invigilationSlots[key];
+        
+        // 3. Save to Cloud
+        await syncSlotsToCloud();
+        
+        // 4. Refresh Grid
+        renderSlotsGridAdmin();
+        
+        // 5. Log it
+        if(typeof logActivity === 'function') logActivity("Slot Deleted", `Admin deleted slot: ${key}`);
+    }
+}
+
 // --- NEW: Toggle Advance Unavailability ---
 window.toggleAdvance = async function(dateStr, email, session) {
     // 1. Init date object if missing
