@@ -10956,7 +10956,7 @@ function loadInitialData() {
         });
     }
 
-    // 5. Render Function (Updated: CLEAN B&W - No Shading)
+    // 5. Render Function (Strictly Black & White)
     function renderBillHTML(bill, container) {
         function numToWords(n) {
             const a = ['','One ','Two ','Three ','Four ','Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
@@ -10987,10 +10987,10 @@ function loadInitialData() {
             ? `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`
             : `<col style="width: 16%;"><col style="width: 12%;"><col style="width: 10%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 8%;"><col style="width: 10%;"><col style="width: 10%;"><col style="width: 12%;">`;
 
-        const osHeader = isRegular ? '<th class="p-1 border border-black text-center text-black">OS</th>' : '';
-        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center text-black">Peon</th>' : '';
-        const osFooter = isRegular ? `<td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.office.total}</td>` : '';
-        const peonFooter = hasPeon ? `<td class="p-2 border border-black text-black">₹${bill.peon}</td>` : '';
+        const osHeader = isRegular ? '<th class="p-1 border border-black text-center text-black bg-white">OS</th>' : '';
+        const peonHeader = hasPeon ? '<th class="p-1 border border-black text-center text-black bg-white">Peon</th>' : '';
+        const osFooter = isRegular ? `<td class="p-2 border border-black text-black bg-white">₹${bill.supervision_breakdown.office.total}</td>` : '';
+        const peonFooter = hasPeon ? `<td class="p-2 border border-black text-black bg-white">₹${bill.peon}</td>` : '';
         const tableTotal = bill.invigilation + bill.clerical + bill.sweeping + bill.peon + bill.supervision;
 
         let supSummaryHTML = isRegular 
@@ -11008,7 +11008,7 @@ function loadInitialData() {
             const peonCell = hasPeon ? `<td class="p-1 border align-middle text-xs text-black">₹${d.peon_cost}</td>` : '';
 
             return `
-                <tr class="border-b border-black text-center">
+                <tr class="border-b border-black text-center bg-white">
                     <td class="p-1 border border-black text-left align-middle text-black">${d.date} <br><span class="text-[10px] text-black">${d.time}</span></td>
                     <td class="p-1 border border-black align-middle font-bold text-xs text-black">${studentDetail}</td>
                     <td class="p-1 border border-black align-middle text-xs text-black">${invigDetail}<br><span class="text-black text-[10px]">(₹${d.invig_cost})</span></td>
@@ -11024,56 +11024,56 @@ function loadInitialData() {
         }).join('');
 
         const html = `
-            <div class="bg-white border-2 border-black p-8 print-page mb-8 relative text-black">
+            <div class="bg-white border-2 border-black p-8 print-page mb-8 relative text-black shadow-none">
                 <div class="text-center border-b-2 border-black pb-4 mb-4">
                     <h2 class="text-xl font-bold uppercase leading-tight text-black">${currentCollegeName}</h2>
                     <h3 class="text-lg font-semibold mt-1 text-black">Remuneration Bill: ${bill.title}</h3>
-                    <p class="text-sm text-black mt-1">Stream: ${bill.stream}</p>
+                    <p class="text-sm text-black mt-1">Stream: ${bill.stream} | Generated on ${new Date().toLocaleDateString()}</p>
                 </div>
-                <table class="w-full border-collapse border border-black text-sm mb-4 table-fixed text-black">
+                <table class="w-full border-collapse border border-black text-sm mb-4 table-fixed text-black bg-white">
                     <colgroup>${colGroup}</colgroup>
                     <thead>
-                        <tr>
-                            <th class="p-1 border border-black text-left text-black font-bold">Session</th>
-                            <th class="p-1 border border-black text-center text-black font-bold">Candidates</th>
-                            <th class="p-1 border border-black text-center text-black font-bold">Invig</th>
-                            <th class="p-1 border border-black text-center text-black font-bold">Clerk</th>
+                        <tr class="bg-white">
+                            <th class="p-1 border border-black text-left text-black font-bold bg-white">Session</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">Candidates</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">Invig</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">Clerk</th>
                             ${peonHeader}
-                            <th class="p-1 border border-black text-center text-black font-bold">Swpr</th>
-                            <th class="p-1 border border-black text-center text-black font-bold">CS</th>
-                            <th class="p-1 border border-black text-center text-black font-bold">SAS</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">Swpr</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">CS</th>
+                            <th class="p-1 border border-black text-center text-black font-bold bg-white">SAS</th>
                             ${osHeader}
-                            <th class="p-1 border border-black text-center font-bold text-black">Total</th>
+                            <th class="p-1 border border-black text-center font-bold text-black bg-white">Total</th>
                         </tr>
                     </thead>
-                    <tbody>${rows}</tbody>
-                    <tfoot class="font-bold text-xs text-center">
-                        <tr>
-                            <td colspan="2" class="p-2 border border-black text-right text-black">Subtotals:</td>
-                            <td class="p-2 border border-black text-black">₹${bill.invigilation}</td>
-                            <td class="p-2 border border-black text-black">₹${bill.clerical}</td>
+                    <tbody class="bg-white">${rows}</tbody>
+                    <tfoot class="font-bold text-xs text-center bg-white">
+                        <tr class="bg-white">
+                            <td colspan="2" class="p-2 border border-black text-right text-black bg-white">Subtotals:</td>
+                            <td class="p-2 border border-black text-black bg-white">₹${bill.invigilation}</td>
+                            <td class="p-2 border border-black text-black bg-white">₹${bill.clerical}</td>
                             ${peonFooter}
-                            <td class="p-2 border border-black text-black">₹${bill.sweeping}</td>
-                            <td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.chief.total}</td>
-                            <td class="p-2 border border-black text-black">₹${bill.supervision_breakdown.senior.total}</td>
+                            <td class="p-2 border border-black text-black bg-white">₹${bill.sweeping}</td>
+                            <td class="p-2 border border-black text-black bg-white">₹${bill.supervision_breakdown.chief.total}</td>
+                            <td class="p-2 border border-black text-black bg-white">₹${bill.supervision_breakdown.senior.total}</td>
                             ${osFooter}
-                            <td class="p-2 border border-black text-lg text-black">₹${tableTotal}</td>
+                            <td class="p-2 border border-black text-lg text-black bg-white">₹${tableTotal}</td>
                         </tr>
                     </tfoot>
                 </table>
-                <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid text-black">
-                    <div class="p-3 border border-black">
+                <div class="summary-box grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm border-t-2 border-black pt-4 break-inside-avoid text-black bg-white">
+                    <div class="p-3 border border-black bg-white">
                         <div class="font-bold text-black border-b border-black mb-2 pb-1">1. Supervision Breakdown</div>
                         <div class="text-xs text-black leading-relaxed">${supSummaryHTML}</div>
                     </div>
-                    <div class="space-y-2">
+                    <div class="space-y-2 bg-white">
                         <div class="flex justify-between border-b border-dotted border-black pb-1 font-bold text-black">2. Other Allowances</div>
                         <div class="flex justify-between border-b border-dotted border-black pb-1 text-black"><span>Contingency:</span> <span class="font-mono font-bold">₹${bill.contingency.toFixed(2)}</span></div>
                         <div class="flex justify-between border-b border-dotted border-black pb-1 text-black"><span>Data Entry Operator:</span> <span class="font-mono font-bold">₹${bill.data_entry}</span></div>
                         <div class="flex justify-between border-b border-dotted border-black pb-1 text-black"><span>Accountant:</span> <span class="font-mono font-bold">₹${(allRates[bill.stream] ? allRates[bill.stream].accountant : 0)}</span></div>
                     </div>
                 </div>
-                <div class="summary-box mt-6 p-3 border border-black flex flex-col items-end break-inside-avoid text-black">
+                <div class="summary-box mt-6 p-3 border border-black flex flex-col items-end break-inside-avoid text-black bg-white">
                     <div class="flex justify-between w-full items-center">
                         <span class="text-lg font-bold uppercase">Grand Total Claim</span>
                         <span class="text-2xl font-bold font-mono">₹${bill.grand_total.toFixed(2)}</span>
@@ -11089,7 +11089,6 @@ function loadInitialData() {
         `;
         container.insertAdjacentHTML('beforeend', html);
     }
-
 
 // ==========================================
 // 🔗 STUDENT PORTAL LINK GENERATOR
