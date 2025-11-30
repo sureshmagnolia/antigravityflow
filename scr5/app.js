@@ -11032,13 +11032,87 @@ function loadInitialData() {
         });
     }
 
+   // --- UPDATED PRINT LOGIC: Open Clean Window ---
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
-            document.body.classList.add('printing-bill');
-            window.print();
-            setTimeout(() => {
-                document.body.classList.remove('printing-bill');
-            }, 500);
+            // 1. Get the bill content only
+            const billContent = document.getElementById('remuneration-output').innerHTML;
+            if (!billContent.trim()) return alert("No bill generated to print.");
+
+            // 2. Open a new blank window
+            const printWindow = window.open('', '_blank');
+            
+            // 3. Write the clean HTML structure
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Print Bill</title>
+                    <script src="https://cdn.tailwindcss.com"><\/script>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+                        body { 
+                            font-family: 'Inter', sans-serif; 
+                            background: white; 
+                        }
+
+                        /* PRINT STYLES (A4 Portrait) */
+                        @media print {
+                            @page { 
+                                size: A4 portrait; 
+                                margin: 15mm; 
+                            }
+                            body { 
+                                margin: 0; 
+                                padding: 0; 
+                                -webkit-print-color-adjust: exact; 
+                            }
+                            /* Reset container styles for print */
+                            .print-page { 
+                                border: none !important; 
+                                shadow: none !important; 
+                                width: 100% !important; 
+                                max-width: 100% !important;
+                                margin: 0 !important; 
+                                padding: 0 !important; 
+                                page-break-after: always; 
+                            }
+                            .print-page:last-child { 
+                                page-break-after: auto; 
+                            }
+                            /* Hide any accidental UI elements */
+                            button, .no-print { 
+                                display: none !important; 
+                            }
+                        }
+
+                        /* SCREEN PREVIEW STYLES (Inside the pop-up) */
+                        .print-page {
+                            max-width: 210mm;
+                            margin: 20px auto;
+                            padding: 40px;
+                            border: 1px solid #ddd;
+                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${billContent}
+                    <script>
+                        // Auto-print when loaded
+                        window.onload = function() { 
+                            setTimeout(() => {
+                                window.print();
+                                // Optional: window.close(); 
+                            }, 500);
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
         });
     }
 
