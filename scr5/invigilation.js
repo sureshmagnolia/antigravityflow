@@ -637,6 +637,9 @@ function renderSlotsGridAdmin() {
                     </div>
                         <div class="flex gap-2 mt-2">
                             <button onclick="toggleLock('${key}')" class="flex-1 text-xs border border-gray-300 rounded py-1.5 hover:bg-gray-50 text-gray-700 font-medium transition shadow-sm bg-white">${slot.isLocked ? 'Unlock' : 'Lock'}</button>
+    
+                            <button onclick="openRescheduleModal('${key}')" class="px-3 text-xs border border-orange-200 rounded py-1.5 hover:bg-orange-50 text-orange-600 font-bold transition shadow-sm bg-white" title="Reschedule Exam">📅</button>
+    
                             <button onclick="deleteSlot('${key}')" class="px-3 text-xs border border-red-200 rounded py-1.5 hover:bg-red-50 text-red-600 font-bold transition shadow-sm bg-white" title="Delete Slot">🗑️</button>
                         </div>                
                     </div>`;
@@ -5389,6 +5392,178 @@ function updateSyncStatus(msg, type) {
     el.className = `text-[10px] font-bold ${textClass} flex items-center gap-1`;
     el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span> ${msg}`;
 }
+
+// ==========================================
+// 🗓️ RESCHEDULE & ALERT SYSTEM
+// ==========================================
+
+window.openRescheduleModal = function(key) {
+    if (!invigilationSlots[key]) return;
+    
+    document.getElementById('reschedule-old-key').value = key;
+    document.getElementById('reschedule-current-key').textContent = key;
+    
+    // Pre-fill current values for easier editing
+    const [datePart, timePart] = key.split(' | ');
+    
+    // Convert DD.MM.YYYY -> YYYY-MM-DD for input
+    const [d, m, y] = datePart.split('.');
+    document.getElementById('reschedule-new-date').value = `${y}-${m}-${d}`;
+    
+    // Convert Time (e.g., 09:30 AM -> 09:30)
+    // Basic parser (assuming standard format)
+    let time24 = "";
+    const match = timePart.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (match) {
+        let [_, h, min, p] = match;
+        h = parseInt(h);
+        if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+        if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+        time24 = `${String(h).padStart(2,'0')}:${min}`;
+    }
+    document.getElementById('reschedule-new-time').value = time24;
+
+    window.openModal('reschedule-modal');
+}
+
+window.executeReschedule = async function() {
+    const oldKey = document.getElementById('reschedule-old-key').value;
+    const dateInput = document.getElementById('reschedule-new-date').value;
+    const timeInput = document.getElementById('reschedule-new-time').value;
+
+    if (!dateInput || !timeInput) return alert("Please select new Date and Time.");
+
+    // 1. Generate New Key
+    const [y, m, d] = dateInput.split('-');
+    const formattedDate = `${d}.${m}.${y}`;
+
+    let [hours, minutes] = timeInput.split(':');
+    hours = parseInt(hours);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+
+    const newKey = `${formattedDate} | ${formattedTime}`;
+
+    if (newKey === oldKey) return alert("New time is the same as the old time.");
+    if (invigilationSlots[newKey]) {
+        if (!confirm(`Slot ${newKey} already exists! Merge staff into it?`)) return;
+    }
+
+    // 2. Move Data
+    const oldSlot = invigilationSlots[oldKey];
+    const affectedStaff = [...oldSlot.assigned]; // Copy list for notification
+
+    if (!invigilationSlots[newKey]) {
+        // Create new
+        invigilationSlots[newKey] = JSON.parse(JSON.stringify(oldSlot));
+    } else {
+        // Merge
+        const newSlot = invigilationSlots[newKey];
+        oldSlot.assigned.forEach(email => {
+            if (!newSlot.assigned.includes(email)) newSlot.assigned.push(email);
+        });
+        // Merge Scribes/Counts if needed logic here...
+    }
+
+    // 3. Delete Old
+    delete invigilationSlots[oldKey];
+
+    // 4. Save & Close
+    await syncSlotsToCloud();
+    window.closeModal('reschedule-modal');
+    renderSlotsGridAdmin();
+
+    // 5. Trigger Notification Modal
+    if (affectedStaff.length > 0) {
+        setTimeout(() => openRescheduleNotification(affectedStaff, oldKey, newKey), 500);
+    } else {
+        alert(`✅ Session moved to ${newKey}. (No staff were assigned).`);
+    }
+}
+
+// --- Reschedule Notification Modal ---
+function openRescheduleNotification(staffList, oldKey, newKey) {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+    const previewEl = document.getElementById('notif-message-preview');
+
+    title.textContent = "⚠️ Send Reschedule Alerts";
+    subtitle.textContent = `Notify ${staffList.length} staff about the time change.`;
+    list.innerHTML = '';
+    currentEmailQueue = [];
+
+    staffList.forEach((email, index) => {
+        const staff = staffData.find(s => s.email === email);
+        const fullName = staff ? staff.name : email;
+        const phone = staff ? (staff.phone || "").replace(/\D/g, '') : "";
+        const validPhone = phone.length >= 10 ? (phone.length === 10 ? "91"+phone : phone) : "";
+        const staffEmail = staff ? staff.email : "";
+
+        // --- GENERATE MESSAGES ---
+        const waMsg = `⚠️ *URGENT: EXAM RESCHEDULED* ⚠️\n\nDear *${fullName}*,\n\nThe exam session originally scheduled for:\n❌ *${oldKey}*\n\nHas been moved to:\n✅ *${newKey}*\n\nYour invigilation duty has been transferred to this new time. Please adjust your calendar accordingly.\n\n- Exam Wing`;
+        
+        const emailBody = `
+            <div style="font-family:Arial,sans-serif; color:#333;">
+                <h2 style="color:#c0392b;">⚠️ Exam Reschedule Alert</h2>
+                <p>Dear <b>${fullName}</b>,</p>
+                <p>This is to inform you that an exam session has been rescheduled.</p>
+                <div style="background:#fff5f5; border-left:4px solid #c0392b; padding:15px; margin:15px 0;">
+                    <p style="margin:0;"><b>Previous Schedule:</b> <strike>${oldKey}</strike></p>
+                    <p style="margin:5px 0 0 0; font-size:1.1em;"><b>New Schedule:</b> <span style="color:#c0392b;">${newKey}</span></p>
+                </div>
+                <p>Your duty assignment has been automatically moved to the new slot.</p>
+                <p>Regards,<br><b>Chief Superintendent</b></p>
+            </div>
+        `;
+
+        const waLink = validPhone ? `https://wa.me/${validPhone}?text=${encodeURIComponent(waMsg)}` : "#";
+        const btnId = `email-btn-${index}`;
+
+        if (staffEmail) {
+            currentEmailQueue.push({ 
+                email: staffEmail, 
+                name: fullName, 
+                subject: "URGENT: Invigilation Duty Rescheduled", 
+                body: emailBody, 
+                btnId: btnId 
+            });
+        }
+
+        // Show preview for first user
+        if (index === 0 && previewEl) {
+            previewEl.textContent = waMsg;
+        }
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center bg-orange-50 border border-orange-200 p-3 rounded-lg shadow-sm mb-2">
+                <div>
+                    <div class="font-bold text-gray-800">${fullName}</div>
+                    <div class="text-xs text-orange-700">Moved to: ${newKey.split('|')[0]}</div>
+                </div>
+                <div class="flex gap-2">
+                     <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${fullName}', 'URGENT: Reschedule Alert', '${emailBody.replace(/"/g, '&quot;')}')" ${staffEmail ? '' : 'disabled'} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition">Mail</button>
+                     <a href="${waLink}" target="_blank" ${validPhone ? '' : 'disabled'} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
+                </div>
+            </div>
+        `;
+    });
+    
+    // Add Bulk Button Logic
+    list.insertAdjacentHTML('afterbegin', `
+        <div class="mb-3 flex justify-end">
+            <button onclick="sendBulkEmails('btn-bulk-reschedule')" id="btn-bulk-reschedule" class="bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded shadow hover:bg-orange-700 transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Send All Emails
+            </button>
+        </div>
+    `);
+
+    window.openModal('notification-modal');
+}
+
 
 // Network Listeners
 window.addEventListener('online', () => {
