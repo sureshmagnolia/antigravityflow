@@ -1007,4 +1007,13 @@ tr.scribe-row-highlight td.signature-col {
     body.printing-bill .no-print {
         display: none !important;
     }
+    /* --- ADD THIS NEW BLOCK HERE --- */
+    /* Force hide specific Remuneration View elements when printing bill */
+    body.printing-bill #view-remuneration h1,
+    body.printing-bill #view-remuneration .bg-blue-50, 
+    body.printing-bill #view-remuneration .border-t > h2, 
+    body.printing-bill #view-remuneration .border-t > .bg-gray-100 {
+        display: none !important;
+    }
+    
 }
