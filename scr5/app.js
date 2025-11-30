@@ -11091,21 +11091,20 @@ function loadInitialData() {
     }
 
 
-// --- STUDENT PORTAL LINK LOGIC ---
+// ==========================================
+// 🔗 STUDENT PORTAL LINK GENERATOR
+// ==========================================
 
 function updateStudentPortalLink() {
     const linkInput = document.getElementById('student-portal-link');
     if (!linkInput) return;
 
     if (currentCollegeId) {
-        // 1. Get the current base URL (e.g., https://mysite.com/app/index.html)
+        // 1. Get the current base URL
         let currentUrl = window.location.href;
-        
-        // 2. Strip the filename to get the directory
         let baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
         
-        // 3. Construct Student URL
-        // It assumes student.html is in the same folder as index.html
+        // 2. Construct Link with the correct ID format
         const studentUrl = `${baseUrl}/student.html?id=/public_seating/${currentCollegeId}`;
         
         linkInput.value = studentUrl;
@@ -11117,20 +11116,21 @@ function updateStudentPortalLink() {
     }
 }
 
-// Attach to Settings Tab Click
+// 1. Update when clicking the Settings Tab
 if (navSettings) {
     navSettings.addEventListener('click', updateStudentPortalLink);
 }
 
-// Copy Button Logic
+// 2. Copy Button Functionality
 const btnCopyPortal = document.getElementById('copy-portal-btn');
 if (btnCopyPortal) {
     btnCopyPortal.addEventListener('click', () => {
         const linkInput = document.getElementById('student-portal-link');
-        if (!linkInput || !linkInput.value.startsWith('http')) return; // Don't copy placeholder text
+        if (!linkInput || !linkInput.value.startsWith('http')) return;
 
         linkInput.select();
-        linkInput.setSelectionRange(0, 99999); // For mobile
+        linkInput.setSelectionRange(0, 99999); // For mobile devices
+        
         navigator.clipboard.writeText(linkInput.value).then(() => {
             const originalText = btnCopyPortal.innerHTML;
             btnCopyPortal.innerHTML = `✅ Copied!`;
@@ -11145,6 +11145,13 @@ if (btnCopyPortal) {
         });
     });
 }
+
+// 3. Initial Call (Try to generate if already logged in)
+updateStudentPortalLink();
+
+
+
+
 
 // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
