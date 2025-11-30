@@ -279,38 +279,59 @@
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col items-center p-4 font-sans">
+    
     <script>
+        var isAuthorized = false;
         (function() {
             var pass = prompt("🔐 Admin Access Required\n\nPlease enter the password for tesseat.html:");
-            if (pass !== "admin123") {
+            if (pass === "admin123") {
+                isAuthorized = true;
+            } else {
+                // If wrong, we wipe the body so users see Access Denied
                 document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;background:#f3f4f6;font-family:sans-serif;color:#ef4444;'><h1>🚫 Access Denied</h1></div>";
-                throw new Error("Incorrect Password"); // Stop script execution
             }
         })();
     </script>
-    <div class="w-full max-w-md">
-        <div class="text-center mb-6 mt-2">
-            <h1 class="text-xl font-black text-gray-900 tracking-tight" id="college-name">Exam Centre</h1>
-            <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal (Test Mode)</p>
-        </div>
 
-        <div id="status" class="text-center text-sm font-medium text-indigo-600 mb-4 animate-pulse"></div>
-
-        <div id="search-section" class="hidden bg-white p-6 rounded-2xl shadow-xl shadow-indigo-50 border border-indigo-100">
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Enter Register Number</label>
-            <div class="flex gap-2">
-                <input type="text" id="reg-input" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 outline-none uppercase font-mono text-lg font-bold text-gray-800 placeholder-gray-300 transition-all" placeholder="e.g. ABCDE123">
-                <button onclick="searchStudent()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 active:scale-95">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                    </svg>
-                </button>
-            </div>
-        </div>
-
-        <div id="result-container" class="mt-8 space-y-4"></div>
+    <div id="protected-content" style="display: none;">
         
-        <p class="text-center text-[10px] text-gray-300 mt-12 font-medium">Powered by ExamFlow</p>
+        <div class="w-full max-w-md mx-auto">
+            <div class="text-center mb-6 mt-2">
+                <h1 class="text-xl font-black text-gray-900 tracking-tight" id="college-name">Exam Centre</h1>
+                <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal (Test Mode)</p>
+            </div>
+
+            <div id="status" class="text-center text-sm font-medium text-indigo-600 mb-4 animate-pulse"></div>
+
+            <div id="search-section" class="hidden bg-white p-6 rounded-2xl shadow-xl shadow-indigo-50 border border-indigo-100">
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Enter Register Number</label>
+                <div class="flex gap-2">
+                    <input type="text" id="reg-input" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 outline-none uppercase font-mono text-lg font-bold text-gray-800 placeholder-gray-300 transition-all" placeholder="e.g. ABCDE123">
+                    <button onclick="searchStudent()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="result-container" class="mt-8 space-y-4"></div>
+            
+            <p class="text-center text-[10px] text-gray-300 mt-12 font-medium">Powered by ExamFlow</p>
+        </div>
+
     </div>
+    <script>
+        if (isAuthorized) {
+            // Show content
+            var content = document.getElementById('protected-content');
+            if(content) content.style.display = 'block';
+        } else {
+            // Double check: Remove content if authorized is false (in case body wipe failed for some reason)
+            var content = document.getElementById('protected-content');
+            if(content) content.remove();
+        }
+    </script>
+
 </body>
 </html>
