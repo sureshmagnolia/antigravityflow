@@ -366,7 +366,8 @@ function initStaffDashboard(me) {
     if(typeof renderExchangeMarket === "function") {
         renderExchangeMarket(me.email);
     }
-    
+
+    renderStaffUpcomingSummary(me.email);
     showView('staff');
     
     document.getElementById('cal-prev').onclick = () => { 
@@ -6047,6 +6048,150 @@ window.addEventListener('offline', () => {
     updateSyncStatus("No Internet", "error");
 });
 
+// ==========================================
+// 📋 STAFF UPCOMING SUMMARY (Duties + Inconveniences)
+// ==========================================
+
+function renderStaffUpcomingSummary(email) {
+    const viewStaff = document.getElementById('view-staff');
+    if (!viewStaff) return;
+
+    // 1. Create/Find Container
+    let container = document.getElementById('staff-upcoming-summary');
+    if (!container) {
+        // Insert after the stats grid
+        const statsGrid = viewStaff.querySelector('.grid'); // The first grid is stats
+        container = document.createElement('div');
+        container.id = 'staff-upcoming-summary';
+        container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden";
+        
+        if(statsGrid && statsGrid.nextSibling) {
+            statsGrid.parentNode.insertBefore(container, statsGrid.nextSibling);
+        } else {
+            // Fallback
+            viewStaff.appendChild(container);
+        }
+    }
+
+    // 2. Gather Data
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const items = [];
+
+    // A. Assigned Duties
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const date = parseDate(key);
+        
+        if (date >= today && slot.assigned.includes(email)) {
+            // Determine Source (Volunteered vs Admin)
+            // Note: We can't strictly tell 'Admin' vs 'Volunteered' without history log, 
+            // but we can check if they are in 'exchangeRequests' (Posted by me)
+            const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(email);
+            const label = isPosted ? "⏳ Posted for Exchange" : "✅ Assigned Duty";
+            const style = isPosted ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700";
+            
+            items.push({
+                date: date,
+                key: key,
+                label: label,
+                style: style,
+                details: slot.examName || "University Exam"
+            });
+        }
+    });
+
+    // B. Inconveniences (Slot Specific)
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const date = parseDate(key);
+        
+        // Helper to check if I am in unavailability list
+        const isUnav = slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
+        
+        if (date >= today && isUnav) {
+            items.push({
+                date: date,
+                key: key,
+                label: "⛔ Unavailable",
+                style: "bg-red-100 text-red-700",
+                details: "Session Inconvenience"
+            });
+        }
+    });
+
+    // C. Inconveniences (Advance)
+    Object.keys(advanceUnavailability).forEach(dateStr => {
+        const d = parseDate(dateStr + " | 00:00 AM");
+        if (d >= today) {
+            const entry = advanceUnavailability[dateStr];
+            ['FN', 'AN'].forEach(sess => {
+                if (entry[sess] && entry[sess].some(u => u.email === email)) {
+                    // Avoid duplicate display if we already have a slot-specific one
+                    const slotKeyGuess = Object.keys(invigilationSlots).find(k => k.startsWith(dateStr) && k.includes(sess === 'AN' ? 'PM' : 'AM'));
+                    if (!slotKeyGuess || !items.some(i => i.key === slotKeyGuess && i.label.includes("Unavailable"))) {
+                        items.push({
+                            date: d,
+                            key: `${dateStr} (${sess})`,
+                            label: "🗓️ Advance Leave",
+                            style: "bg-gray-100 text-gray-600",
+                            details: "Marked in Advance"
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    // 3. Sort Chronologically
+    items.sort((a, b) => a.date - b.date);
+
+    // 4. Render
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 text-center text-gray-400 text-sm italic bg-gray-50">
+                You have no upcoming duties or unavailability records.
+            </div>
+        `;
+        return;
+    }
+
+    let listHtml = `
+        <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 font-bold text-gray-700 text-sm flex justify-between items-center">
+            <span>📋 Your Upcoming Schedule</span>
+        </div>
+        <div class="divide-y divide-gray-100">
+    `;
+
+    items.forEach(item => {
+        // Format Key (Remove Date if redundant, show Time/Session)
+        let title = item.key;
+        if (item.key.includes('|')) {
+            title = item.key.split('|')[1].trim(); // Just Time
+        }
+        
+        listHtml += `
+            <div class="p-3 flex items-center justify-between hover:bg-gray-50 transition">
+                <div class="flex items-center gap-3">
+                     <div class="flex flex-col items-center justify-center w-12 h-12 rounded-lg border border-gray-200 bg-white shadow-sm shrink-0">
+                        <span class="text-[10px] text-red-500 font-bold uppercase leading-none">${item.date.toLocaleString('en-us', {month:'short'})}</span>
+                        <span class="text-lg font-black text-gray-800 leading-none">${item.date.getDate()}</span>
+                    </div>
+                    <div>
+                        <div class="text-sm font-bold text-gray-800">${title}</div>
+                        <div class="text-xs text-gray-500">${item.details}</div>
+                    </div>
+                </div>
+                <div class="text-[10px] font-bold px-2 py-1 rounded border border-transparent ${item.style}">
+                    ${item.label}
+                </div>
+            </div>
+        `;
+    });
+
+    listHtml += `</div>`;
+    container.innerHTML = listHtml;
+}
 
     
 // Initialize Listeners
