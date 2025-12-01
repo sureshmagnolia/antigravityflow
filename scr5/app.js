@@ -7024,41 +7024,39 @@ function saveRoomAllotment() {
     localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 }
 
-// Update the display with current allotment status
-// Update the display with current allotment status (Stream-wise)
+// Update the display with current allotment status (Stream-wise + Room Stats)
 function updateAllotmentDisplay() {
     const [date, time] = currentSessionKey.split(' | ');
     const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const scribeRegNos = new Set((JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]')).map(s => s.regNo));
     
     const container = document.getElementById('allotment-student-count-section');
-    container.innerHTML = ''; // Clear previous
-    container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"; // Grid layout
+    container.innerHTML = ''; 
+    container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"; 
     container.classList.remove('hidden');
 
     // 1. Calculate Stats Per Stream
     const streamStats = {};
     
-    // Initialize with configured streams so they appear even if empty
+    // Initialize
     currentStreamConfig.forEach(stream => {
-        streamStats[stream] = { total: 0, allotted: 0 };
+        streamStats[stream] = { total: 0, allotted: 0, roomsUsed: 0 };
     });
-    // Ensure "Regular" exists as fallback
-    if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0 };
+    if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-// Count Totals (Including Scribes)
-sessionStudentRecords.forEach(s => {
-    // Removed scribe exclusion check here
-    const strm = s.Stream || "Regular";
-    if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0 };
-    streamStats[strm].total++;
-});
+    // Count Totals
+    sessionStudentRecords.forEach(s => {
+        const strm = s.Stream || "Regular";
+        if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
+        streamStats[strm].total++;
+    });
 
-    // Count Allotted
+    // Count Allotted Students & Rooms
     currentSessionAllotment.forEach(room => {
         const roomStream = room.stream || "Regular";
-        if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0 };
+        if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
+        
         streamStats[roomStream].allotted += room.students.length;
+        streamStats[roomStream].roomsUsed++; // <--- Count Rooms
     });
 
     // 2. Generate Cards
@@ -7066,29 +7064,42 @@ sessionStudentRecords.forEach(s => {
         const stats = streamStats[streamName];
         const remaining = stats.total - stats.allotted;
         
-        // Visual Cues
+        // Estimate Rooms Needed (Standard 30 capacity)
+        const estimatedRoomsNeeded = Math.ceil(stats.total / 30);
+        
         const isComplete = (remaining <= 0 && stats.total > 0);
         const borderColor = isComplete ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50";
         const titleColor = isComplete ? "text-green-800" : "text-blue-800";
 
         const cardHtml = `
-            <div class="${borderColor} border p-4 rounded-lg shadow-sm">
-                <h3 class="text-lg font-bold ${titleColor} mb-3 border-b border-gray-200 pb-1 flex justify-between">
-                    ${streamName} Stream
-                    ${isComplete ? '<span class="text-xs bg-green-200 text-green-800 px-2 py-1 rounded">Completed</span>' : ''}
-                </h3>
-                <div class="flex justify-between items-center text-sm">
-                    <div class="text-center">
-                        <p class="text-gray-500 font-medium">Total</p>
-                        <p class="text-xl font-bold text-gray-800">${stats.total}</p>
+            <div class="${borderColor} border p-4 rounded-lg shadow-sm flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-bold ${titleColor} mb-3 border-b border-gray-200 pb-1 flex justify-between">
+                        ${streamName} Stream
+                        ${isComplete ? '<span class="text-xs bg-green-200 text-green-800 px-2 py-1 rounded">Completed</span>' : ''}
+                    </h3>
+                    <div class="flex justify-between items-center text-sm mb-3">
+                        <div class="text-center">
+                            <p class="text-gray-500 font-medium text-xs uppercase">Total</p>
+                            <p class="text-xl font-bold text-gray-800">${stats.total}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-gray-500 font-medium text-xs uppercase">Allotted</p>
+                            <p class="text-xl font-bold text-blue-600">${stats.allotted}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-gray-500 font-medium text-xs uppercase">Remaining</p>
+                            <p class="text-xl font-bold ${remaining > 0 ? 'text-orange-600' : 'text-gray-400'}">${remaining}</p>
+                        </div>
                     </div>
-                    <div class="text-center">
-                        <p class="text-gray-500 font-medium">Allotted</p>
-                        <p class="text-xl font-bold text-blue-600">${stats.allotted}</p>
-                    </div>
-                    <div class="text-center">
-                        <p class="text-gray-500 font-medium">Remaining</p>
-                        <p class="text-xl font-bold ${remaining > 0 ? 'text-orange-600' : 'text-gray-400'}">${remaining}</p>
+                </div>
+
+                <div class="bg-white/60 rounded p-2 flex justify-between items-center text-xs border border-gray-200/50 mt-2">
+                    <span class="text-gray-600 font-bold uppercase tracking-wide">Rooms Used:</span>
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-lg font-black text-indigo-700">${stats.roomsUsed}</span>
+                        <span class="text-gray-400 font-medium">/</span>
+                        <span class="text-gray-600 font-medium" title="Estimated based on 30 students/room">~${estimatedRoomsNeeded} needed</span>
                     </div>
                 </div>
             </div>
@@ -7099,12 +7110,7 @@ sessionStudentRecords.forEach(s => {
     // Show/Hide Add Button based on global remaining
     const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
     const addSection = document.getElementById('add-room-section');
-    if (totalRemaining > 0) {
-        addSection.classList.remove('hidden');
-    } else {
-        // Optional: Hide button if totally finished, or keep it to allow edits
-        addSection.classList.remove('hidden'); 
-    }
+    if (addSection) addSection.classList.remove('hidden');
 
     // Render Rooms
     renderAllottedRooms();
