@@ -6049,24 +6049,22 @@ window.addEventListener('offline', () => {
 });
 
 // ==========================================
-// 📋 STAFF UPCOMING SCHEDULE (Taller & Cleaner)
+// 📋 STAFF UPCOMING SCHEDULE (Final Optimized Layout)
 // ==========================================
 
 function renderStaffUpcomingSummary(email) {
     const viewStaff = document.getElementById('view-staff');
     if (!viewStaff) return;
 
-    // 1. Cleanup Old/Blank Boxes (If any exist from previous versions)
-    const oldBox = document.getElementById('my-upcoming-duties');
-    if (oldBox) oldBox.remove();
-
-    // 2. Create/Find Main Container
+    // 1. Create/Find Container
     let container = document.getElementById('staff-upcoming-summary');
     if (!container) {
+        // Insert after the stats grid (first grid in view)
         const statsGrid = viewStaff.querySelector('.grid'); 
         container = document.createElement('div');
         container.id = 'staff-upcoming-summary';
-        container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden";
+        // Added 'min-h' to ensure it looks substantial even if empty
+        container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col";
         
         if(statsGrid && statsGrid.nextSibling) {
             statsGrid.parentNode.insertBefore(container, statsGrid.nextSibling);
@@ -6075,7 +6073,7 @@ function renderStaffUpcomingSummary(email) {
         }
     }
 
-    // 3. Gather Data
+    // 2. Gather Data
     const today = new Date();
     today.setHours(0,0,0,0);
     
@@ -6089,8 +6087,8 @@ function renderStaffUpcomingSummary(email) {
         
         if (date >= today && slot.assigned.includes(email)) {
             const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(email);
-            const label = isPosted ? "⏳ Posted for Exchange" : "✅ Assigned Duty";
-            const style = isPosted ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700";
+            const label = isPosted ? "⏳ Posted" : "✅ Duty";
+            const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-100 text-green-700 border-green-200";
             
             upcomingDuties.push({
                 date: date,
@@ -6131,36 +6129,37 @@ function renderStaffUpcomingSummary(email) {
         }
     });
 
-    // 4. Sort
+    // 3. Sort
     upcomingDuties.sort((a, b) => a.date - b.date);
     unavailableDates.sort((a, b) => a.date - b.date);
     const uniqueUnav = [...new Set(unavailableDates.map(u => u.str))];
 
-    // 5. Render HTML
+    // 4. Render HTML
     let htmlContent = `
-        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-800 text-sm flex justify-between items-center sticky top-0 z-10">
-            <span>📋 Your Upcoming Schedule</span>
-            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">${upcomingDuties.length} Duties</span>
+        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-800 text-sm flex justify-between items-center sticky top-0 z-20 shadow-sm">
+            <span class="flex items-center gap-2">📋 Your Upcoming Schedule</span>
+            <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full shadow-sm">${upcomingDuties.length}</span>
         </div>
     `;
 
     if (uniqueUnav.length > 0) {
         htmlContent += `
-            <div class="bg-red-50 px-4 py-2 border-b border-red-100 flex items-start gap-2">
+            <div class="bg-red-50 px-4 py-3 border-b border-red-100 flex items-start gap-2">
                 <span class="text-xs font-bold text-red-600 shrink-0 mt-0.5">⛔ Unavailable:</span>
-                <div class="text-xs text-red-700 leading-relaxed">
+                <div class="text-xs text-red-700 leading-relaxed font-medium">
                     ${uniqueUnav.join(', ')}
                 </div>
             </div>
         `;
     }
 
-    // *** UPDATE: Increased max-height to 60vh (approx 500-600px on mobile) ***
-    htmlContent += `<div class="overflow-y-auto custom-scroll" style="max-height: 60vh;">`; 
+    // *** UPDATE: Set fixed height container (65vh) to accommodate many entries on mobile ***
+    htmlContent += `<div class="overflow-y-auto custom-scroll bg-white" style="height: 65vh; min-height: 300px;">`; 
     
     if (upcomingDuties.length === 0) {
         htmlContent += `
-            <div class="p-6 text-center text-gray-400 text-sm italic">
+            <div class="flex flex-col items-center justify-center h-full text-center text-gray-400 text-sm italic p-6">
+                <svg class="w-12 h-12 mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                 No upcoming duties assigned.
             </div>`;
     } else {
@@ -6171,19 +6170,24 @@ function renderStaffUpcomingSummary(email) {
                 title = item.key.split('|')[1].trim(); 
             }
             
+            // Highlight Today's Duties
+            const isToday = item.date.toDateString() === new Date().toDateString();
+            const rowBg = isToday ? "bg-blue-50/50" : "hover:bg-gray-50";
+
             htmlContent += `
-                <div class="p-3 flex items-center justify-between hover:bg-gray-50 transition">
-                    <div class="flex items-center gap-3">
-                         <div class="flex flex-col items-center justify-center w-12 h-12 rounded-lg border border-gray-200 bg-white shadow-sm shrink-0">
-                            <span class="text-[10px] text-red-500 font-bold uppercase leading-none">${item.date.toLocaleString('en-us', {month:'short'})}</span>
-                            <span class="text-lg font-black text-gray-800 leading-none">${item.date.getDate()}</span>
+                <div class="p-3 flex items-center justify-between transition ${rowBg}">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                         <div class="flex flex-col items-center justify-center w-14 h-14 rounded-lg border border-gray-200 bg-white shadow-sm shrink-0">
+                            <span class="text-[10px] text-red-500 font-bold uppercase leading-none mt-1">${item.date.toLocaleString('en-us', {month:'short'})}</span>
+                            <span class="text-xl font-black text-gray-800 leading-none my-0.5">${item.date.getDate()}</span>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase leading-none mb-1">${item.date.toLocaleString('en-us', {weekday:'short'})}</span>
                         </div>
-                        <div>
-                            <div class="text-sm font-bold text-gray-800">${title}</div>
-                            <div class="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-xs">${item.details}</div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-bold text-gray-800 truncate">${title}</div>
+                            <div class="text-xs text-gray-500 truncate" title="${item.details}">${item.details}</div>
                         </div>
                     </div>
-                    <div class="text-[10px] font-bold px-2 py-1 rounded border border-transparent ${item.style} shrink-0 whitespace-nowrap">
+                    <div class="text-[10px] font-bold px-2 py-1 rounded border ${item.style} shrink-0 whitespace-nowrap shadow-sm">
                         ${item.label}
                     </div>
                 </div>
