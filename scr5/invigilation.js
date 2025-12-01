@@ -653,71 +653,102 @@ function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
     const filter = document.getElementById('staff-search').value.toLowerCase();
-    const today = new Date(); // Current timestamp for role check
+    const today = new Date(); 
 
     staffData.forEach((staff, index) => {
-        // Filter out archived
         if (staff.status === 'archived') return;
-        
-        // Search Filter
         if (filter && !staff.name.toLowerCase().includes(filter)) return;
         
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
         const pending = Math.max(0, target - done);
 
-        // --- 1. CURRENT ROLE TAG LOGIC ---
+        // Role Label
         let activeRoleLabel = "";
         if (staff.roleHistory && staff.roleHistory.length > 0) {
-            // Find role where TODAY is between Start and End
             const activeRole = staff.roleHistory.find(r => {
                 const start = new Date(r.start);
                 const end = new Date(r.end);
                 return start <= today && end >= today;
             });
-            
             if (activeRole) {
                 activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
             }
         }
-        // ---------------------------------
-        
+
         const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
-        
-        // --- 2. LOCK LOGIC ---
+
+        // Lock Logic & Buttons
         let actionButtons = "";
         if (isStaffListLocked) {
-            actionButtons = `<span class="text-gray-400 text-xs italic mr-2">Locked</span>`;
+            actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
         } else {
             actionButtons = `
-                <button onclick="editStaff(${index})" class="text-blue-600 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded border border-blue-100 transition">Edit</button>
-                <button onclick="openRoleAssignmentModal(${index})" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 transition">Role</button>
-                <button onclick="deleteStaff(${index})" class="text-red-500 hover:text-red-700 font-bold px-2 py-1 rounded hover:bg-red-50 transition">&times;</button>
+                <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
+                    <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
+                    <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
+                    <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
+                </div>
             `;
         }
 
         const row = document.createElement('tr');
-        row.className = "hover:bg-gray-50 transition border-b border-gray-100";
+        // Responsive Row: Block (Card) on Mobile, Table Row on Desktop
+        row.className = "block md:table-row bg-white md:hover:bg-gray-50 border border-gray-200 md:border-0 md:border-b md:border-gray-100 rounded-xl md:rounded-none shadow-sm md:shadow-none mb-4 md:mb-0 p-4 md:p-0";
         
-        // *** UPDATED HTML: Added ${staff.dept} ***
         row.innerHTML = `
-            <td class="px-6 py-3">
-                <div class="flex items-center">
-                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3">
+            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
+                
+                <div class="hidden md:flex items-center">
+                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
                         ${staff.name.charAt(0)}
                     </div>
                     <div>
                         <div class="text-sm font-bold text-gray-800">${staff.name}</div>
-                        <div class="text-xs text-gray-500">
+                        <div class="text-xs text-gray-500 mt-0.5">
                             <span class="font-semibold text-gray-600">${staff.dept}</span> | ${staff.designation} ${activeRoleLabel}
                         </div>
                     </div>
                 </div>
+
+                <div class="md:hidden">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-3">
+                             <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">
+                                ${staff.name.charAt(0)}
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-gray-900">${staff.name}</div>
+                                <div class="text-xs text-gray-500 font-medium">${staff.dept} ${activeRoleLabel}</div>
+                                <div class="text-[10px] text-gray-400">${staff.designation}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-2 mb-3 text-center bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <div>
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Target</div>
+                            <div class="font-mono text-sm font-bold text-gray-700">${target}</div>
+                        </div>
+                        <div class="border-l border-gray-200">
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Done</div>
+                            <div class="font-mono text-sm font-bold text-blue-600">${done}</div>
+                        </div>
+                        <div class="border-l border-gray-200">
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Pending</div>
+                            <div class="font-mono text-sm font-bold ${statusColor}">${pending}</div>
+                        </div>
+                    </div>
+                </div>
             </td>
-            <td class="px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
-            <td class="px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
-            <td class="px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
-            <td class="px-6 py-3 text-right text-xs font-medium flex justify-end gap-2 items-center">
+
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
+
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
+
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
+
+            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">
                 ${actionButtons}
             </td>
         `;
