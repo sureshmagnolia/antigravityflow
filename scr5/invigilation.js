@@ -72,6 +72,8 @@ let tempAttendanceBatch = {}; // Stores parsed CSV data grouped by session key
 let isBulkSendingCancelled = false; // <--- NEW FLAG
 let lastManualRanking = []; // Stores the scoring snapshot for the open modal
 let currentEmailQueue = []; // Stores the list for bulk sending
+let currentStaffPage = 1;
+const STAFF_PER_PAGE = 20;
 
 // --- DOM ELEMENTS ---
 const views = { login: document.getElementById('view-login'), admin: document.getElementById('view-admin'), staff: document.getElementById('view-staff') };
@@ -648,16 +650,47 @@ function renderSlotsGridAdmin() {
     // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
-// --- RENDER STAFF LIST (Responsive + Scroll Spacer) ---
+// --- RENDER STAFF LIST (Paginated + Responsive) ---
 function renderStaffTable() {
     if(!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
+    
     const filter = document.getElementById('staff-search').value.toLowerCase();
     const today = new Date(); 
 
-    staffData.forEach((staff, index) => {
-        if (staff.status === 'archived') return;
-        if (filter && !staff.name.toLowerCase().includes(filter)) return;
+    // 1. Filter & Map Data (Preserve Original Index)
+    // We map first to keep the original index 'i' for edit/delete functions
+    const filteredItems = staffData
+        .map((staff, i) => ({ ...staff, originalIndex: i }))
+        .filter(item => {
+            if (item.status === 'archived') return false;
+            if (filter && !item.name.toLowerCase().includes(filter) && !item.dept.toLowerCase().includes(filter)) return false;
+            return true;
+        });
+
+    // 2. Pagination Logic
+    const totalPages = Math.ceil(filteredItems.length / STAFF_PER_PAGE) || 1;
+    
+    // Ensure valid page
+    if (currentStaffPage > totalPages) currentStaffPage = totalPages;
+    if (currentStaffPage < 1) currentStaffPage = 1;
+
+    const start = (currentStaffPage - 1) * STAFF_PER_PAGE;
+    const end = start + STAFF_PER_PAGE;
+    const pageItems = filteredItems.slice(start, end);
+
+    // 3. Update Controls
+    const pageInfo = document.getElementById('staff-page-info');
+    const prevBtn = document.getElementById('btn-staff-prev');
+    const nextBtn = document.getElementById('btn-staff-next');
+
+    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
+    if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
+    if (nextBtn) nextBtn.disabled = (currentStaffPage === totalPages);
+
+    // 4. Render Rows
+    pageItems.forEach((staff) => {
+        const index = staff.originalIndex; // Use ORIGINAL index for actions
         
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
@@ -693,7 +726,6 @@ function renderStaffTable() {
         }
 
         const row = document.createElement('tr');
-        // Responsive Row: Block (Card) on Mobile, Table Row on Desktop
         row.className = "block md:table-row bg-white md:hover:bg-gray-50 border border-gray-200 md:border-0 md:border-b md:border-gray-100 rounded-xl md:rounded-none shadow-sm md:shadow-none mb-4 md:mb-0 p-4 md:p-0";
         
         row.innerHTML = `
@@ -755,8 +787,7 @@ function renderStaffTable() {
         ui.staffTableBody.appendChild(row);
     });
 
-    // --- MOBILE SPACER ROW ---
-    // Adds a 32 (8rem) empty block at the bottom ONLY on mobile
+    // Mobile Spacer
     const spacer = document.createElement('tr');
     spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
     spacer.innerHTML = `<td class="block border-none p-0"></td>`;
@@ -6277,7 +6308,28 @@ function renderStaffUpcomingSummary(email) {
     container.innerHTML = htmlContent;
 }
 
+// --- STAFF PAGINATION LISTENERS ---
+const btnStaffPrev = document.getElementById('btn-staff-prev');
+const btnStaffNext = document.getElementById('btn-staff-next');
 
+if(btnStaffPrev) {
+    btnStaffPrev.addEventListener('click', () => {
+        if(currentStaffPage > 1) {
+            currentStaffPage--;
+            renderStaffTable();
+        }
+    });
+}
+
+if(btnStaffNext) {
+    btnStaffNext.addEventListener('click', () => {
+        // Logic to check max page is inside renderStaffTable, 
+        // but we simply re-render and let it handle boundaries or just increment here
+        // To be safe, we increment and render, the function handles bounds.
+        currentStaffPage++;
+        renderStaffTable();
+    });
+}
     
 // Initialize Listeners
 setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
@@ -6307,7 +6359,6 @@ window.removeRoleFromStaff = removeRoleFromStaff;
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
 window.toggleUnavDetails = toggleUnavDetails;
-window.filterStaffTable = renderStaffTable;
 window.changeSlotReq = changeSlotReq;
 window.updateManualCounts = updateManualCounts;
 window.openRoleConfigModal = openRoleConfigModal;
@@ -6361,6 +6412,10 @@ window.filterManualStaff = filterManualStaff;
 window.changeAdminMonth = changeAdminMonth;
 window.cancelBulkSending = cancelBulkSending;
 window.viewSlotHistory = viewSlotHistory;
+window.filterStaffTable = function() {
+    currentStaffPage = 1; // Reset to first page on search
+    renderStaffTable();
+}
 window.switchAdminTab = function(tabName) {
     // Hide All
     document.getElementById('tab-content-staff').classList.add('hidden');
