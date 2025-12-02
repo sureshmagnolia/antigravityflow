@@ -7049,7 +7049,7 @@ function saveRoomAllotment() {
     localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 }
 
-// Update the display with current allotment status (Stream-wise + Room Stats)
+// Update display (Auto-Save Version)
 function updateAllotmentDisplay() {
     const [date, time] = currentSessionKey.split(' | ');
     const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -7059,37 +7059,30 @@ function updateAllotmentDisplay() {
     container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4"; 
     container.classList.remove('hidden');
 
-    // 1. Calculate Stats Per Stream
+    // 1. Calculate Stats
     const streamStats = {};
-    
-    // Initialize
     currentStreamConfig.forEach(stream => {
         streamStats[stream] = { total: 0, allotted: 0, roomsUsed: 0 };
     });
     if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-    // Count Totals
     sessionStudentRecords.forEach(s => {
         const strm = s.Stream || "Regular";
         if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
         streamStats[strm].total++;
     });
 
-    // Count Allotted Students & Rooms
     currentSessionAllotment.forEach(room => {
         const roomStream = room.stream || "Regular";
         if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
-        
         streamStats[roomStream].allotted += room.students.length;
-        streamStats[roomStream].roomsUsed++; // <--- Count Rooms
+        streamStats[roomStream].roomsUsed++;
     });
 
-    // 2. Generate Cards
+    // 2. Render Stats Cards
     Object.keys(streamStats).forEach(streamName => {
         const stats = streamStats[streamName];
         const remaining = stats.total - stats.allotted;
-        
-        // Estimate Rooms Needed (Standard 30 capacity)
         const estimatedRoomsNeeded = Math.ceil(stats.total / 30);
         
         const isComplete = (remaining <= 0 && stats.total > 0);
@@ -7104,27 +7097,17 @@ function updateAllotmentDisplay() {
                         ${isComplete ? '<span class="text-xs bg-green-200 text-green-800 px-2 py-1 rounded">Completed</span>' : ''}
                     </h3>
                     <div class="flex justify-between items-center text-sm mb-3">
-                        <div class="text-center">
-                            <p class="text-gray-500 font-medium text-xs uppercase">Total</p>
-                            <p class="text-xl font-bold text-gray-800">${stats.total}</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-gray-500 font-medium text-xs uppercase">Allotted</p>
-                            <p class="text-xl font-bold text-blue-600">${stats.allotted}</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-gray-500 font-medium text-xs uppercase">Remaining</p>
-                            <p class="text-xl font-bold ${remaining > 0 ? 'text-orange-600' : 'text-gray-400'}">${remaining}</p>
-                        </div>
+                        <div class="text-center"><p class="text-gray-500 font-medium text-xs uppercase">Total</p><p class="text-xl font-bold text-gray-800">${stats.total}</p></div>
+                        <div class="text-center"><p class="text-gray-500 font-medium text-xs uppercase">Allotted</p><p class="text-xl font-bold text-blue-600">${stats.allotted}</p></div>
+                        <div class="text-center"><p class="text-gray-500 font-medium text-xs uppercase">Remaining</p><p class="text-xl font-bold ${remaining > 0 ? 'text-orange-600' : 'text-gray-400'}">${remaining}</p></div>
                     </div>
                 </div>
-
                 <div class="bg-white/60 rounded p-2 flex justify-between items-center text-xs border border-gray-200/50 mt-2">
                     <span class="text-gray-600 font-bold uppercase tracking-wide">Rooms Used:</span>
                     <div class="flex items-baseline gap-1">
                         <span class="text-lg font-black text-indigo-700">${stats.roomsUsed}</span>
                         <span class="text-gray-400 font-medium">/</span>
-                        <span class="text-gray-600 font-medium" title="Estimated based on 30 students/room">~${estimatedRoomsNeeded} needed</span>
+                        <span class="text-gray-600 font-medium">~${estimatedRoomsNeeded} needed</span>
                     </div>
                 </div>
             </div>
@@ -7132,33 +7115,30 @@ function updateAllotmentDisplay() {
         container.insertAdjacentHTML('beforeend', cardHtml);
     });
 
-    // Show/Hide Add Button based on global remaining
     const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
     const addSection = document.getElementById('add-room-section');
     if (addSection) addSection.classList.remove('hidden');
 
-    // Render Rooms
     renderAllottedRooms();
     
-    // Show Save Section if we have data OR unsaved changes (even if list is empty)
+    // Update Save Button to indicate Auto-Save
     const saveSection = document.getElementById('save-allotment-section');
     const allottedSection = document.getElementById('allotted-rooms-section');
     
-    if (currentSessionAllotment.length > 0 || hasUnsavedAllotment) {
+    if (currentSessionAllotment.length > 0) {
         allottedSection.classList.remove('hidden');
         saveSection.classList.remove('hidden');
         
-        // Visual Feedback on Save Button
+        // Indicate Auto-Save Status
         const saveBtn = document.getElementById('save-room-allotment-button');
         if(saveBtn) {
-            if(hasUnsavedAllotment) {
-                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = "Save Changes";
-            } else {
-                // Optional: Visual cue that it's saved, but keep it visible
-                saveBtn.innerHTML = "✅ Saved";
-            }
+            saveBtn.innerHTML = `
+                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span>Auto-Saved</span>
+            `;
+            saveBtn.classList.add('bg-green-50', 'text-green-700', 'border-green-200', 'cursor-default');
+            saveBtn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+            saveBtn.disabled = true; 
         }
     } else {
         allottedSection.classList.add('hidden');
@@ -7248,13 +7228,13 @@ function renderAllottedRooms() {
     });
 }
 
-// Delete a room from allotment (Updated: Sets Unsaved Flag)
+// Delete a room from allotment (Auto-Save & Sync enabled)
 window.deleteRoom = function(index) {
     if (!confirm('Are you sure you want to remove this room allotment?')) return;
 
     const roomData = currentSessionAllotment[index];
 
-    // 1. Remove Scribe Mappings for students in this room
+    // Cleanup Scribes
     if (roomData && roomData.students) {
         roomData.students.forEach(s => {
             const reg = (typeof s === 'object') ? s['Register Number'] : s;
@@ -7264,13 +7244,17 @@ window.deleteRoom = function(index) {
         });
     }
 
-    // 2. Remove Room
+    // Remove
     currentSessionAllotment.splice(index, 1);
 
-    // 3. Mark as Unsaved
-    hasUnsavedAllotment = true;
+    // --- AUTO SAVE & SYNC ---
+    saveRoomAllotment(); // Update Local Storage
     
-    // 4. Update UI
+    if (typeof syncDataToCloud === 'function') {
+        syncDataToCloud(); // Update Cloud
+    }
+    // ------------------------
+    
     updateAllotmentDisplay();
 };
 
@@ -7390,68 +7374,48 @@ function showRoomSelectionModal() {
     roomSelectionModal.classList.remove('hidden');
 }
 
-// Select a room and allot students (Updated: Sets Unsaved Flag instead of Auto-Saving)
+// Select a room and allot students (Auto-Save & Sync enabled)
 function selectRoomForAllotment(roomName, capacity, targetStream) {
     const [date, time] = currentSessionKey.split(' | ');
     
-    // 1. Get all students for this session
     const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
     
-    // 2. Get already allotted RegNos (Global for session)
     const allottedRegNos = new Set();
     currentSessionAllotment.forEach(room => {
-        // Handle both object arrays and string arrays for safety
         room.students.forEach(s => {
             const reg = (typeof s === 'object') ? s['Register Number'] : s;
             allottedRegNos.add(reg);
         });
     });
 
-    // 3. Find unallotted students MATCHING THE TARGET STREAM
     const candidates = [];
     
-    // *** MODIFIED SORT: Prefix Descending (Z->Y), Number Ascending (001->002) ***
+    // Sort: Prefix Descending (Z->Y), Number Ascending (001->002)
     sessionStudentRecords.sort((a, b) => {
-        // 1. Course Name (A-Z)
         if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-
         const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
         const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
-
-        // Extract Prefix (Letters) and Number (Digits)
         const matchA = regA.match(/^([A-Z]+)(\d+)$/i);
         const matchB = regB.match(/^([A-Z]+)(\d+)$/i);
-
         if (matchA && matchB) {
             const prefixA = matchA[1].toUpperCase();
             const numA = parseInt(matchA[2], 10);
             const prefixB = matchB[1].toUpperCase();
             const numB = parseInt(matchB[2], 10);
-
-            // 2. Sort Prefix DESCENDING (Z comes before Y)
-            if (prefixA !== prefixB) {
-                return prefixB.localeCompare(prefixA); 
-            }
-
-            // 3. Sort Number ASCENDING (1 comes before 2)
+            if (prefixA !== prefixB) return prefixB.localeCompare(prefixA); 
             return numA - numB;
         }
-
-        // Fallback
         return regA.localeCompare(regB);
     });
 
     for (const student of sessionStudentRecords) {
         const regNo = student['Register Number'];
         const studentStream = student.Stream || "Regular"; 
-
-        // Condition: Not Allotted AND Matches Selected Stream
         if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
-            candidates.push(student); // Store full object for better data integrity
+            candidates.push(student); 
         }
     }
     
-    // 4. Allot up to capacity
     const newStudents = candidates.slice(0, capacity);
     
     if (newStudents.length === 0) {
@@ -7459,26 +7423,31 @@ function selectRoomForAllotment(roomName, capacity, targetStream) {
         return;
     }
 
-    // 5. Add to allotment
     currentSessionAllotment.push({
         roomName: roomName,
         capacity: capacity,
-        students: newStudents, // Storing objects now (cleaner for reports)
+        students: newStudents,
         stream: targetStream 
     });
     
-    // --- CRITICAL CHANGE: DO NOT SAVE YET ---
-    // saveRoomAllotment(); <--- REMOVED
-    // syncDataToCloud();   <--- REMOVED
+    // Update Scribe Map
+    newStudents.forEach(s => {
+        const reg = s['Register Number'];
+        if (globalScribeList.some(g => g.regNo === reg)) {
+            currentScribeAllotment[reg] = roomName;
+        }
+    });
+
+    // --- AUTO SAVE & SYNC ---
+    saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
     
-    // Set the Dirty Flag so the "Save" button appears
-    hasUnsavedAllotment = true; 
-    // ----------------------------------------
+    if (typeof syncDataToCloud === 'function') {
+        syncDataToCloud(); // Push to Firebase
+    }
+    // ------------------------
 
-    const modal = document.getElementById('room-selection-modal');
-    if(modal) modal.classList.add('hidden');
-
-    updateAllotmentDisplay();
+    roomSelectionModal.classList.add('hidden');
+    updateAllotmentDisplay(); // Now reads the saved data and shows Serial #
 }
 
 
