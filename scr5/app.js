@@ -1568,48 +1568,65 @@ function getNumericSortKey(key) {
     return `${parts[0]}_${parts[1]}_${String(roomNumber).padStart(4, '0')}`;
 }
 
-// --- Helper function to create a new room row HTML (Updated Placeholder) ---
+// --- Helper function to create a new room row HTML (Responsive Card/Row) ---
 function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocked = true) {
     const disabledAttr = isLocked ? 'disabled' : '';
     const bgClass = isLocked ? 'bg-gray-50 text-gray-500' : 'bg-white';
 
     // Edit Button
     const editBtnHtml = `
-        <button class="edit-room-btn text-blue-600 hover:text-blue-800 p-1" title="Edit Row">
+        <button class="edit-room-btn text-blue-600 hover:text-blue-800 p-1.5 md:p-1 transition rounded-full hover:bg-blue-50" title="Edit Row">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
               <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
             </svg>
         </button>
     `;
 
+    // Remove Button (Styled as button on mobile, Spacer on desktop if not last)
     const removeButtonHtml = isLast ? 
-        `<button class="remove-room-button ml-2 text-sm text-red-600 hover:text-red-800 font-medium">&times; Remove</button>` : 
-        `<div class="w-[70px]"></div>`;
+        `<button class="remove-room-button text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded transition">Remove</button>` : 
+        `<div class="w-[70px] hidden md:block"></div>`; // Hidden spacer on mobile
 
     // Capacity Tag Logic
     let capBadge = "";
     const capNum = parseInt(capacity) || 0;
     if (capNum > 30) {
-        capBadge = `<span class="ml-2 text-[10px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200" title="Above Standard">▲ ${capNum}</span>`;
+        capBadge = `<span class="ml-2 text-[10px] font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 shrink-0" title="Above Standard">▲ ${capNum}</span>`;
     } else if (capNum < 30) {
-        capBadge = `<span class="ml-2 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200" title="Below Standard">▼ ${capNum}</span>`;
+        capBadge = `<span class="ml-2 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shrink-0" title="Below Standard">▼ ${capNum}</span>`;
     }
     
     return `
-        <div class="room-row flex items-center gap-2 p-2 border-b border-gray-200" data-room-name="${roomName}">
-            <label class="room-name-label font-medium text-gray-700 w-24 shrink-0">${roomName}:</label>
+        <div class="room-row bg-white border border-gray-200 rounded-lg p-4 mb-3 shadow-sm md:flex md:items-center md:gap-2 md:p-2 md:border-0 md:border-b md:rounded-none md:shadow-none md:mb-0 transition-all hover:bg-gray-50" data-room-name="${roomName}">
             
-            <div class="flex items-center">
-                <input type="number" class="room-capacity-input block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass}" 
-                       value="${capacity}" min="1" placeholder="30" ${disabledAttr}>
-                ${capBadge}
+            <div class="flex justify-between items-center mb-3 md:mb-0 md:w-24 md:shrink-0 border-b border-gray-100 pb-2 md:border-0 md:pb-0">
+                <label class="room-name-label font-bold text-gray-800 text-sm md:font-medium md:text-gray-700">
+                    ${roomName}
+                </label>
             </div>
             
-            <input type="text" class="room-location-input block flex-grow p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass}" 
-                   value="${location}" placeholder="e.g., 101 - Commerce Block" ${disabledAttr}>
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:gap-2 flex-grow">
+                
+                <div class="flex items-center justify-between md:justify-start">
+                    <span class="text-xs font-semibold text-gray-500 uppercase md:hidden">Capacity</span>
+                    <div class="flex items-center">
+                        <input type="number" class="room-capacity-input block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500" 
+                               value="${capacity}" min="1" placeholder="30" ${disabledAttr}>
+                        ${capBadge}
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 w-full md:w-auto md:flex-grow">
+                    <span class="text-xs font-semibold text-gray-500 uppercase md:hidden w-16 shrink-0">Location</span>
+                    <input type="text" class="room-location-input block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500" 
+                           value="${location}" placeholder="e.g., 101 - Commerce Block" ${disabledAttr}>
+                </div>
+            </div>
             
-            ${editBtnHtml}
-            ${removeButtonHtml}
+            <div class="flex items-center justify-end gap-2 mt-3 md:mt-0 md:w-[90px] border-t pt-2 md:border-0 md:pt-0 border-gray-100">
+                ${editBtnHtml}
+                ${removeButtonHtml}
+            </div>
         </div>
     `;
 }
