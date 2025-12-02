@@ -11670,23 +11670,24 @@ if (btnSessionDelete) {
     });
 }
 // ==========================================
-// 📄 GLOBAL PDF PREVIEW & DOWNLOADER (Replica Fix)
+// 📄 GLOBAL PDF PREVIEW & DOWNLOADER (Fix for Blank Pages & Overlaps)
 // ==========================================
 window.openPdfPreview = function(contentHtml, filenamePrefix) {
-    // 1. CLONE STYLES (Ensures exact replica)
-    const headContent = document.head.innerHTML;
-    
-    // 2. GENERATE FILENAME
+    // 1. CLEAN CONTENT: Remove fixed heights that cause blank pages
+    const cleanContent = contentHtml
+        .replace(/min-height:\s*297mm/g, 'min-height: auto')
+        .replace(/height:\s*297mm/g, 'height: auto')
+        .replace(/mb-8/g, ''); // Remove large bottom margins
+
     const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
     const filename = `${filenamePrefix}_${dateStr}.pdf`;
 
-    // 3. OPEN POPUP
     const w = window.open('', '_blank');
     w.document.write(`
         <!DOCTYPE html>
         <html lang="en">
         <head>
-            ${headContent} <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+            ${document.head.innerHTML} <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
             <style>
                 body { background-color: #f3f4f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
                 
@@ -11694,40 +11695,47 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
                 #pdf-controls {
                     margin-bottom: 20px; background: white; padding: 10px 20px; 
                     border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-                    position: sticky; top: 10px; z-index: 50;
+                    position: sticky; top: 10px; z-index: 9999;
                 }
 
-                /* PREVIEW CONTAINER (A4 Width) */
+                /* PREVIEW CONTAINER */
                 #pdf-wrapper {
                     width: 210mm; 
-                    min-height: 297mm; 
                     background: white;
-                    padding: 10mm; /* Internal Padding */
+                    padding: 10mm; 
                     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
                     box-sizing: border-box;
                 }
 
-                /* RESET PAGE HEIGHTS FOR PDF (Fixes Blank Pages) */
+                /* CRITICAL PDF CSS OVERRIDES */
                 .print-page, .print-page-daywise, .print-page-sticker {
                     width: 100% !important;
-                    height: auto !important; /* Let content dictate height */
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important; /* Handled by wrapper */
-                    border: none !important;
-                    box-shadow: none !important;
-                    page-break-after: always;
+                    height: auto !important;     /* Allow content to define height */
+                    min-height: 0 !important;    /* Remove A4 forcing */
+                    margin: 0 !important;        /* Remove external margins */
+                    padding: 0 !important;       /* Padding is handled by wrapper */
+                    border: none !important;     /* Remove borders that look bad in PDF */
+                    box-shadow: none !important; 
+                    page-break-after: always;    /* Force clean break after each page block */
+                    display: block;
                 }
                 
-                /* PREVENT SPLITTING */
-                tr { page-break-inside: avoid; }
+                /* Prevent header/row splitting */
+                tr, .header-section, .summary-box { 
+                    page-break-inside: avoid; 
+                }
                 
+                /* Remove break after the very last page */
                 .print-page:last-child { page-break-after: auto; }
+                
+                /* Fix Table Borders */
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #000 !important; }
 
-                /* HIDE CONTROLS IN PRINT */
+                /* HIDE CONTROLS IN NATIVE PRINT */
                 @media print {
                     #pdf-controls { display: none !important; }
-                    #pdf-wrapper { box-shadow: none; margin: 0; width: 100%; }
+                    #pdf-wrapper { box-shadow: none; margin: 0; width: 100%; padding: 0; }
                     body { padding: 0; background: white; }
                     @page { margin: 10mm; } 
                 }
@@ -11739,12 +11747,12 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
                     🖨️ Print
                 </button>
                 <button onclick="downloadDoc()" class="bg-blue-600 text-white px-4 py-2 rounded font-bold shadow hover:bg-blue-700">
-                    ⬇️ One-Click Download
+                    ⬇️ Download PDF
                 </button>
             </div>
 
             <div id="pdf-wrapper">
-                ${contentHtml}
+                ${cleanContent}
             </div>
 
             <script>
@@ -11755,17 +11763,18 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
                     btn.disabled = true;
 
                     const opt = {
-                        margin: [5, 0, 5, 0], // Top, Left, Bottom, Right (mm)
+                        margin: [10, 10, 10, 10], // 10mm margins
                         filename: '${filename}',
                         image: { type: 'jpeg', quality: 0.98 },
                         html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
                         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                        // 'css' mode respects page-break-after: always
+                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } 
                     };
 
                     html2pdf().set(opt).from(element).save().then(() => {
                         btn.textContent = "✅ Downloaded";
-                        setTimeout(() => { btn.textContent = "⬇️ One-Click Download"; btn.disabled = false; }, 3000);
+                        setTimeout(() => { btn.textContent = "⬇️ Download PDF"; btn.disabled = false; }, 3000);
                     });
                 }
             <\/script>
@@ -11773,7 +11782,7 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
         </html>
     `);
     w.document.close();
-}   
+}
     // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
