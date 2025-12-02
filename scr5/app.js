@@ -192,7 +192,7 @@ let currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
 let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
-
+let hasUnsavedAllotment = false; // Tracks if room changes need saving
 // --- MAIN APP LOGIC ---
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -7140,12 +7140,26 @@ function updateAllotmentDisplay() {
     // Render Rooms
     renderAllottedRooms();
     
-    // Show Save Section
+    // Show Save Section if we have data OR unsaved changes (even if list is empty)
     const saveSection = document.getElementById('save-allotment-section');
     const allottedSection = document.getElementById('allotted-rooms-section');
-    if (currentSessionAllotment.length > 0) {
+    
+    if (currentSessionAllotment.length > 0 || hasUnsavedAllotment) {
         allottedSection.classList.remove('hidden');
         saveSection.classList.remove('hidden');
+        
+        // Visual Feedback on Save Button
+        const saveBtn = document.getElementById('save-room-allotment-button');
+        if(saveBtn) {
+            if(hasUnsavedAllotment) {
+                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = "Save Changes";
+            } else {
+                // Optional: Visual cue that it's saved, but keep it visible
+                saveBtn.innerHTML = "✅ Saved";
+            }
+        }
     } else {
         allottedSection.classList.add('hidden');
         saveSection.classList.add('hidden');
@@ -7234,12 +7248,30 @@ function renderAllottedRooms() {
     });
 }
 
-// Delete a room from allotment
+// Delete a room from allotment (Updated: Sets Unsaved Flag)
 window.deleteRoom = function(index) {
-    if (confirm('Are you sure you want to remove this room allotment?')) {
-        currentSessionAllotment.splice(index, 1);
-        updateAllotmentDisplay();
+    if (!confirm('Are you sure you want to remove this room allotment?')) return;
+
+    const roomData = currentSessionAllotment[index];
+
+    // 1. Remove Scribe Mappings for students in this room
+    if (roomData && roomData.students) {
+        roomData.students.forEach(s => {
+            const reg = (typeof s === 'object') ? s['Register Number'] : s;
+            if (currentScribeAllotment[reg]) {
+                delete currentScribeAllotment[reg];
+            }
+        });
     }
+
+    // 2. Remove Room
+    currentSessionAllotment.splice(index, 1);
+
+    // 3. Mark as Unsaved
+    hasUnsavedAllotment = true;
+    
+    // 4. Update UI
+    updateAllotmentDisplay();
 };
 
 // Show room selection modal (Updated: Excludes Scribe Rooms)
@@ -7358,7 +7390,7 @@ function showRoomSelectionModal() {
     roomSelectionModal.classList.remove('hidden');
 }
 
-// Select a room and allot students (Fixed: Adds Save Step)
+// Select a room and allot students (Updated: Sets Unsaved Flag instead of Auto-Saving)
 function selectRoomForAllotment(roomName, capacity, targetStream) {
     const [date, time] = currentSessionKey.split(' | ');
     
@@ -7368,58 +7400,61 @@ function selectRoomForAllotment(roomName, capacity, targetStream) {
     // 2. Get already allotted RegNos (Global for session)
     const allottedRegNos = new Set();
     currentSessionAllotment.forEach(room => {
-        room.students.forEach(regNo => allottedRegNos.add(regNo));
+        // Handle both object arrays and string arrays for safety
+        room.students.forEach(s => {
+            const reg = (typeof s === 'object') ? s['Register Number'] : s;
+            allottedRegNos.add(reg);
+        });
     });
 
     // 3. Find unallotted students MATCHING THE TARGET STREAM
     const candidates = [];
-    // Sort first to ensure consistent filling (Stream -> Course -> RegNo)
+    
     // *** MODIFIED SORT: Prefix Descending (Z->Y), Number Ascending (001->002) ***
-sessionStudentRecords.sort((a, b) => {
-    // 1. Course Name (A-Z)
-    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+    sessionStudentRecords.sort((a, b) => {
+        // 1. Course Name (A-Z)
+        if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
 
-    const regA = a['Register Number'] ? a['Register Number'].trim() : "";
-    const regB = b['Register Number'] ? b['Register Number'].trim() : "";
+        const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
+        const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
 
-    // Extract Prefix (Letters) and Number (Digits)
-    // Example: "VPAZSBO001" -> Prefix "VPAZSBO", Number "001"
-    const matchA = regA.match(/^([A-Z]+)(\d+)$/i);
-    const matchB = regB.match(/^([A-Z]+)(\d+)$/i);
+        // Extract Prefix (Letters) and Number (Digits)
+        const matchA = regA.match(/^([A-Z]+)(\d+)$/i);
+        const matchB = regB.match(/^([A-Z]+)(\d+)$/i);
 
-    if (matchA && matchB) {
-        const prefixA = matchA[1];
-        const numA = parseInt(matchA[2], 10);
-        const prefixB = matchB[1];
-        const numB = parseInt(matchB[2], 10);
+        if (matchA && matchB) {
+            const prefixA = matchA[1].toUpperCase();
+            const numA = parseInt(matchA[2], 10);
+            const prefixB = matchB[1].toUpperCase();
+            const numB = parseInt(matchB[2], 10);
 
-        // 2. Sort Prefix DESCENDING (Z comes before Y)
-        if (prefixA !== prefixB) {
-            return prefixB.localeCompare(prefixA); 
+            // 2. Sort Prefix DESCENDING (Z comes before Y)
+            if (prefixA !== prefixB) {
+                return prefixB.localeCompare(prefixA); 
+            }
+
+            // 3. Sort Number ASCENDING (1 comes before 2)
+            return numA - numB;
         }
 
-        // 3. Sort Number ASCENDING (1 comes before 2)
-        return numA - numB;
-    }
-
-    // Fallback if Register Number format is standard (Ascending)
-    return regA.localeCompare(regB);
-});
+        // Fallback
+        return regA.localeCompare(regB);
+    });
 
     for (const student of sessionStudentRecords) {
         const regNo = student['Register Number'];
-        const studentStream = student.Stream || "Regular"; // Default
+        const studentStream = student.Stream || "Regular"; 
 
-        // Condition: Not Allotted AND Matches Selected Stream (Scribes allowed)
+        // Condition: Not Allotted AND Matches Selected Stream
         if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
-            candidates.push(regNo);
+            candidates.push(student); // Store full object for better data integrity
         }
     }
     
     // 4. Allot up to capacity
-    const newStudentRegNos = candidates.slice(0, capacity);
+    const newStudents = candidates.slice(0, capacity);
     
-    if (newStudentRegNos.length === 0) {
+    if (newStudents.length === 0) {
         alert(`No unallotted students found for stream: ${targetStream}`);
         return;
     }
@@ -7428,37 +7463,48 @@ sessionStudentRecords.sort((a, b) => {
     currentSessionAllotment.push({
         roomName: roomName,
         capacity: capacity,
-        students: newStudentRegNos,
-        stream: targetStream // Save the stream tag for this room
+        students: newStudents, // Storing objects now (cleaner for reports)
+        stream: targetStream 
     });
     
-    // --- FIX: SAVE TO LOCAL STORAGE IMMEDIATELY ---
-    saveRoomAllotment(); 
-    // ----------------------------------------------
-
-    roomSelectionModal.classList.add('hidden');
-    updateAllotmentDisplay();
+    // --- CRITICAL CHANGE: DO NOT SAVE YET ---
+    // saveRoomAllotment(); <--- REMOVED
+    // syncDataToCloud();   <--- REMOVED
     
-    if (typeof syncDataToCloud === 'function') syncDataToCloud();
+    // Set the Dirty Flag so the "Save" button appears
+    hasUnsavedAllotment = true; 
+    // ----------------------------------------
+
+    const modal = document.getElementById('room-selection-modal');
+    if(modal) modal.classList.add('hidden');
+
+    updateAllotmentDisplay();
 }
 
 
 // Event Listeners for Room Allotment
-allotmentSessionSelect.addEventListener('change', () => {
-    const sessionKey = allotmentSessionSelect.value;
-    populateAbsenteeQpFilter(sessionKey);
-    if (sessionKey) {
-        loadRoomAllotment(sessionKey);
-        loadScribeAllotment(sessionKey); // <-- ADDED: Load scribe data at the same time
-    } else {
-        // Hide all sections
-        allotmentStudentCountSection.classList.add('hidden');
-        addRoomSection.classList.add('hidden');
-        allottedRoomsSection.classList.add('hidden');
-        saveAllotmentSection.classList.add('hidden');
-        scribeAllotmentListSection.classList.add('hidden'); // <-- ADDED
-    }
-});
+if (allotmentSessionSelect) {
+    allotmentSessionSelect.addEventListener('change', () => {
+        const sessionKey = allotmentSessionSelect.value;
+        
+        // 1. Reset Dirty Flag (New session loaded fresh)
+        hasUnsavedAllotment = false; 
+        
+        populateAbsenteeQpFilter(sessionKey);
+        
+        if (sessionKey) {
+            loadRoomAllotment(sessionKey);
+            loadScribeAllotment(sessionKey);
+        } else {
+            // Hide all sections
+            allotmentStudentCountSection.classList.add('hidden');
+            addRoomSection.classList.add('hidden');
+            allottedRoomsSection.classList.add('hidden');
+            saveAllotmentSection.classList.add('hidden');
+            scribeAllotmentListSection.classList.add('hidden');
+        }
+    });
+}
 
 addRoomAllotmentButton.addEventListener('click', () => {
     showRoomSelectionModal();
@@ -7490,12 +7536,37 @@ if (roomSearchInput) {
     });
 }
 
-saveRoomAllotmentButton.addEventListener('click', () => {
-    saveRoomAllotment();
-    roomAllotmentStatus.textContent = 'Room allotment saved successfully!';
-    setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
-    syncDataToCloud(); // <--- ADD THIS
-});
+if (saveRoomAllotmentButton) {
+    saveRoomAllotmentButton.addEventListener('click', () => {
+        if (!currentSessionKey) return;
+
+        // 1. Update Global Allotment Objects
+        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        allAllotments[currentSessionKey] = currentSessionAllotment;
+        
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        allScribeAllotments[currentSessionKey] = currentScribeAllotment;
+
+        // 2. Save to Local Storage
+        localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
+        
+        // 3. Sync to Cloud
+        if (currentCollegeId && typeof syncDataToCloud === 'function') {
+            syncDataToCloud();
+        }
+        
+        // 4. Reset Dirty Flag
+        hasUnsavedAllotment = false;
+
+        // 5. UI Feedback
+        roomAllotmentStatus.textContent = 'Allotment Saved Successfully!';
+        setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
+        
+        // 6. Refresh Display (Button changes to "✅ Saved")
+        updateAllotmentDisplay();
+    });
+}
 
 // --- END ROOM ALLOTMENT FUNCTIONALITY ---
 
