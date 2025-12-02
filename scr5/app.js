@@ -11670,14 +11670,18 @@ if (btnSessionDelete) {
     });
 }
 // ==========================================
-// 📄 GLOBAL PDF PREVIEW & DOWNLOADER (Fix for Blank Pages & Overlaps)
+// 📄 GLOBAL PDF PREVIEW & DOWNLOADER (Margins & Pagination Fixed)
 // ==========================================
 window.openPdfPreview = function(contentHtml, filenamePrefix) {
-    // 1. CLEAN CONTENT: Remove fixed heights that cause blank pages
+    // 1. CLEAN CONTENT: Remove fixed heights & large margins that cause blank pages
     const cleanContent = contentHtml
         .replace(/min-height:\s*297mm/g, 'min-height: auto')
         .replace(/height:\s*297mm/g, 'height: auto')
-        .replace(/mb-8/g, ''); // Remove large bottom margins
+        .replace(/width:\s*210mm/g, 'width: 100%') // Allow width to adapt
+        .replace(/padding:\s*2cm/g, 'padding: 10px') // Remove huge print padding
+        .replace(/mb-8/g, 'mb-4') // Reduce bottom margins
+        .replace(/shadow-xl/g, 'shadow-none') // Remove shadows
+        .replace(/border-2/g, 'border'); // Reduce thick borders
 
     const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
     const filename = `${filenamePrefix}_${dateStr}.pdf`;
@@ -11689,53 +11693,52 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
         <head>
             ${document.head.innerHTML} <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
             <style>
-                body { background-color: #f3f4f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+                body { background-color: #525659; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
                 
                 /* CONTROL BAR */
                 #pdf-controls {
                     margin-bottom: 20px; background: white; padding: 10px 20px; 
-                    border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                     position: sticky; top: 10px; z-index: 9999;
                 }
 
-                /* PREVIEW CONTAINER */
+                /* PREVIEW CONTAINER (Scaled to fit A4 with margins) */
                 #pdf-wrapper {
-                    width: 210mm; 
+                    width: 190mm; /* 210mm - 20mm margins */
                     background: white;
-                    padding: 10mm; 
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                    padding: 0; 
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
                     box-sizing: border-box;
                 }
 
-                /* CRITICAL PDF CSS OVERRIDES */
+                /* PDF PAGE STYLES */
                 .print-page, .print-page-daywise, .print-page-sticker {
                     width: 100% !important;
-                    height: auto !important;     /* Allow content to define height */
-                    min-height: 0 !important;    /* Remove A4 forcing */
-                    margin: 0 !important;        /* Remove external margins */
-                    padding: 0 !important;       /* Padding is handled by wrapper */
-                    border: none !important;     /* Remove borders that look bad in PDF */
-                    box-shadow: none !important; 
-                    page-break-after: always;    /* Force clean break after each page block */
+                    height: auto !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 20px !important; 
+                    border: none !important;
+                    box-shadow: none !important;
+                    page-break-after: always;
+                    page-break-inside: avoid; /* Prevent splitting in middle */
                     display: block;
                 }
                 
-                /* Prevent header/row splitting */
-                tr, .header-section, .summary-box { 
-                    page-break-inside: avoid; 
+                /* REMOVE LAST BREAK */
+                .print-page:last-child, .print-page-daywise:last-child { 
+                    page-break-after: auto !important; 
+                    margin-bottom: 0 !important;
                 }
                 
-                /* Remove break after the very last page */
-                .print-page:last-child { page-break-after: auto; }
-                
-                /* Fix Table Borders */
-                table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #000 !important; }
+                /* FIX TABLE OVERFLOW */
+                table { width: 100% !important; table-layout: fixed; }
+                td, th { word-wrap: break-word; overflow-wrap: break-word; }
 
                 /* HIDE CONTROLS IN NATIVE PRINT */
                 @media print {
                     #pdf-controls { display: none !important; }
-                    #pdf-wrapper { box-shadow: none; margin: 0; width: 100%; padding: 0; }
+                    #pdf-wrapper { width: 100%; box-shadow: none; margin: 0; }
                     body { padding: 0; background: white; }
                     @page { margin: 10mm; } 
                 }
@@ -11763,13 +11766,12 @@ window.openPdfPreview = function(contentHtml, filenamePrefix) {
                     btn.disabled = true;
 
                     const opt = {
-                        margin: [10, 10, 10, 10], // 10mm margins
+                        margin: [10, 10, 10, 10], // Top, Left, Bottom, Right (mm)
                         filename: '${filename}',
                         image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                        html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 800 }, 
                         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        // 'css' mode respects page-break-after: always
-                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } 
+                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
                     };
 
                     html2pdf().set(opt).from(element).save().then(() => {
