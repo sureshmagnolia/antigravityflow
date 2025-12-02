@@ -379,36 +379,38 @@ function initStaffDashboard(me) {
     if(typeof renderExchangeMarket === "function") {
         renderExchangeMarket(me.email);
     }
-   // --- CHECK FOR HoD ROLE & SHOW MONITOR BUTTON ---
+
+    // --- CHECK FOR HoD ROLE & SHOW MONITOR BUTTON ---
     const btnMonitor = document.getElementById('btn-hod-monitor');
     if (btnMonitor) {
-        // 1. Fix Date Comparison (Ignore Time)
+        // 1. Get "Today" at 00:00:00 to match the Role Start Date format
         const today = new Date();
-        today.setHours(0, 0, 0, 0); 
+        today.setHours(0, 0, 0, 0);
 
-        // 2. Check Functional Roles (Role History)
-        const hasActiveRole = me.roleHistory && me.roleHistory.some(r => {
+        const isHoD = me.roleHistory && me.roleHistory.some(r => {
+            // 2. Parse Role Dates
             const start = new Date(r.start);
-            const end = new Date(r.end);
-            // Check for HOD role (case insensitive or exact match)
-            // Fix: Normalized date comparison
-            return (r.role.toUpperCase() === 'HOD' || r.role.includes('Head')) && start <= today && end >= today;
-        });
+            start.setHours(0, 0, 0, 0); // Normalize Start to Midnight
 
-        // 3. Check Designation (NEW: Allows "HOD" in Designation field to work)
-        const hasDesignation = me.designation && (
-            me.designation.toUpperCase() === 'HOD' || 
-            me.designation.toLowerCase().includes('head of') || 
-            me.designation.toLowerCase().includes('dept') 
-        );
+            const end = new Date(r.end);
+            end.setHours(23, 59, 59, 999); // Fix: Set End Date to the VERY END of the day
+
+            // 3. Check Role Name (Case Insensitive)
+            const roleName = r.role.toUpperCase().trim();
+            const isHeadRole = roleName === 'HOD' || roleName.includes('HEAD');
+
+            // 4. Validate Date Range
+            return isHeadRole && (today >= start && today <= end);
+        });
         
-        // Show if EITHER is true
-        if (hasActiveRole || hasDesignation) { 
+        if (isHoD) { 
              btnMonitor.classList.remove('hidden');
         } else {
              btnMonitor.classList.add('hidden');
         }
     }
+
+    
     renderStaffUpcomingSummary(me.email);
     showView('staff');
     
