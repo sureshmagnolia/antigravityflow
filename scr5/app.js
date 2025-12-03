@@ -8346,6 +8346,7 @@ editSessionSelect.addEventListener('change', () => {
         editCourseSelectContainer.classList.remove('hidden');
     } else {
         editCourseSelectContainer.classList.add('hidden');
+        if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
     }
 });
 
@@ -8368,6 +8369,10 @@ editCourseSelect.addEventListener('change', () => {
     }
 
     if (selectedValue) {
+        if (toggleEditDataLockBtn) {
+            toggleEditDataLockBtn.classList.remove('hidden');
+            updateEditLockUI(); // Ensure it reflects the current state (Locked/Unlocked)
+        }
         const [date, time] = currentEditSession.split(' | ');
         
         // Split the key back to Course and Stream
@@ -8407,7 +8412,7 @@ editCourseSelect.addEventListener('change', () => {
         editSaveSection.classList.add('hidden');
         addNewStudentBtn.classList.add('hidden');
         if (countDisplay) countDisplay.classList.add('hidden');
-        
+        if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
         // Hide Bulk if open
         const bulk = document.getElementById('bulk-course-update-container');
         if(bulk) bulk.classList.add('hidden');
@@ -8429,17 +8434,22 @@ function renderStudentEditTable() {
     const end = start + STUDENTS_PER_EDIT_PAGE;
     const pageStudents = currentCourseStudents.slice(start, end);
 
+    // --- LOCK STATE STYLES ---
+    const btnState = isEditDataLocked ? 'disabled' : '';
+    const btnOpacity = isEditDataLocked ? 'opacity-50 cursor-not-allowed' : '';
+    // -------------------------
+
     let tableHtml = `
         <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
         <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50 hidden md:table-header-group">
                 <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
+                    <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group">
@@ -8467,8 +8477,8 @@ function renderStudentEditTable() {
                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">${streamDisplay}</span>
                 </td>
                 <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 font-bold">Edit</button>
-                    <button class="delete-row-btn text-red-600 hover:text-red-900 font-bold">Delete</button>
+                    <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 font-bold ${btnOpacity}" ${btnState}>Edit</button>
+                    <button class="delete-row-btn text-red-600 hover:text-red-900 font-bold ${btnOpacity}" ${btnState}>Delete</button>
                 </td>
 
                 <td class="md:hidden block p-3">
@@ -8496,11 +8506,11 @@ function renderStudentEditTable() {
                     </div>
 
                     <div class="flex gap-2">
-                        <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5">
+                        <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 ${btnOpacity}" ${btnState}>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                             Edit
                         </button>
-                        <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5">
+                        <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 ${btnOpacity}" ${btnState}>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
                             Delete
                         </button>
@@ -11781,6 +11791,51 @@ function printDashboardSession(key, slot) {
     `);
     printWindow.document.close();
 }
+
+
+
+// --- EDIT DATA LOCK LOGIC ---
+let isEditDataLocked = true; // Default Locked
+const toggleEditDataLockBtn = document.getElementById('toggle-edit-data-lock-btn');
+
+if (toggleEditDataLockBtn) {
+    toggleEditDataLockBtn.addEventListener('click', () => {
+        isEditDataLocked = !isEditDataLocked;
+        updateEditLockUI();
+        renderStudentEditTable(); // Re-render table to update row buttons
+    });
+}
+
+function updateEditLockUI() {
+    if (isEditDataLocked) {
+        // Locked State UI
+        toggleEditDataLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+            <span>List Locked</span>
+        `;
+        toggleEditDataLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
+        
+        // Disable Add Button
+        if(addNewStudentBtn) {
+            addNewStudentBtn.disabled = true;
+            addNewStudentBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+    } else {
+        // Unlocked State UI
+        toggleEditDataLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+            <span>Unlocked</span>
+        `;
+        toggleEditDataLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
+        
+        // Enable Add Button
+        if(addNewStudentBtn) {
+            addNewStudentBtn.disabled = false;
+            addNewStudentBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+}
+    
 // ==========================================
 // 🗓️ BULK SESSION OPERATIONS (Reschedule/Delete)
 // ==========================================
