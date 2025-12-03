@@ -8414,8 +8414,8 @@ editCourseSelect.addEventListener('change', () => {
     }
 });
 
-// 3. Render Table (Updated with Stream Column)
-// 3. Render Table (Responsive: Card on Mobile, Table on PC)
+// Find the renderStudentEditTable function (around line 1330) and replace it with this:
+
 function renderStudentEditTable() {
     editDataContainer.innerHTML = '';
     
@@ -8429,11 +8429,6 @@ function renderStudentEditTable() {
     const end = start + STUDENTS_PER_EDIT_PAGE;
     const pageStudents = currentCourseStudents.slice(start, end);
 
-    // --- NEW RESPONSIVE STRUCTURE ---
-    // 1. Table Header is HIDDEN on Mobile
-    // 2. Table Body becomes a BLOCK on Mobile
-    // 3. Rows become CARDS with borders/shadows on Mobile
-    
     let tableHtml = `
         <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
         <table class="min-w-full divide-y divide-gray-200">
@@ -8455,54 +8450,59 @@ function renderStudentEditTable() {
         const serialNo = uniqueRowIndex + 1;
         const streamDisplay = student.Stream || "Regular";
         
-        // Card-like styling for Mobile (block, border, margin) vs Table-row for Desktop
         tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row mb-4 md:mb-0 bg-white border border-gray-200 md:border-0 rounded-lg md:rounded-none shadow-sm md:shadow-none mx-1 md:mx-0">
+            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row mb-3 md:mb-0 bg-white border border-gray-200 md:border-0 rounded-xl md:rounded-none shadow-sm md:shadow-none mx-2 md:mx-0 overflow-hidden hover:shadow-md transition-shadow">
                 
-                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${serialNo}
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${serialNo}</td>
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-900 font-medium">${student.Date}</div>
+                    <div class="text-xs text-gray-500">${student.Time}</div>
                 </td>
-
-                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
-                    <div class="flex justify-between md:block">
-                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Schedule</span>
-                        <div>
-                            <div class="text-sm text-gray-900 font-medium">${student.Date}</div>
-                            <div class="text-xs text-gray-500">${student.Time}</div>
-                        </div>
-                    </div>
-                </td>
-
-                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
-                    <div class="flex justify-between items-center md:block">
-                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Reg No</span>
-                        <span class="text-sm font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded md:bg-transparent md:px-0 md:text-gray-900">
-                            ${student['Register Number']}
-                        </span>
-                    </div>
-                </td>
-
-                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
-                    <div class="md:hidden text-xs font-bold text-gray-400 uppercase mb-1">Name</div>
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-indigo-600">${student['Register Number']}</td>
+                <td class="hidden md:table-cell px-6 py-4">
                     <div class="text-sm font-medium text-gray-900">${student.Name}</div>
-                    <div class="text-xs text-gray-400 md:hidden mt-0.5">${student.Course}</div> </td>
+                    <div class="text-xs text-gray-500">${student.Course}</div>
+                </td>
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">${streamDisplay}</span>
+                </td>
+                <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 font-bold">Edit</button>
+                    <button class="delete-row-btn text-red-600 hover:text-red-900 font-bold">Delete</button>
+                </td>
 
-                <td class="block md:table-cell px-4 py-2 md:px-6 md:py-4 border-b md:border-0 border-gray-100">
-                    <div class="flex justify-between items-center md:block">
-                        <span class="md:hidden text-xs font-bold text-gray-400 uppercase">Stream</span>
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                <td class="md:hidden block p-3">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-3">
+                            <div class="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-200">
+                                ${student.Name.charAt(0)}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-sm font-bold text-gray-900 leading-tight truncate pr-2">${student.Name}</div>
+                                <div class="text-xs text-indigo-600 font-mono font-bold">${student['Register Number']}</div>
+                            </div>
+                        </div>
+                        <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">
                             ${streamDisplay}
                         </span>
                     </div>
-                </td>
 
-                <td class="block md:table-cell px-4 py-3 md:px-6 md:py-4 md:text-right bg-gray-50 md:bg-transparent rounded-b-lg md:rounded-none">
-                    <div class="flex justify-end gap-3">
-                        <button class="edit-row-btn flex-1 md:flex-none justify-center inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none">
+                    <div class="bg-gray-50 rounded-lg p-2 border border-gray-100 mb-3 text-xs text-gray-600 grid grid-cols-2 gap-y-1 gap-x-2">
+                        <div><span class="text-gray-400">Date:</span> <span class="font-medium text-gray-800">${student.Date}</span></div>
+                        <div><span class="text-gray-400">Time:</span> <span class="font-medium text-gray-800">${student.Time}</span></div>
+                        <div class="col-span-2 border-t border-gray-200 mt-1 pt-1 truncate">
+                            <span class="text-gray-400">Course:</span> <span class="font-medium text-gray-800" title="${student.Course}">${student.Course}</span>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                             Edit
                         </button>
-                        <button class="delete-row-btn flex-1 md:flex-none justify-center inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none">
-                            Remove
+                        <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                            Delete
                         </button>
                     </div>
                 </td>
