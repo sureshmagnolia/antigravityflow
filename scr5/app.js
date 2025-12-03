@@ -7382,13 +7382,14 @@ function renderAllottedRooms() {
     });
 }
 
-// Delete a room from allotment (Auto-Save & Sync enabled)
+// Delete a room from allotment (Updated: Cleans up Invigilator & Scribe mappings)
 window.deleteRoom = function(index) {
     if (!confirm('Are you sure you want to remove this room allotment?')) return;
 
     const roomData = currentSessionAllotment[index];
+    const roomName = roomData.roomName; // Capture room name before deletion
 
-    // Cleanup Scribes
+    // 1. Cleanup Scribes (Existing)
     if (roomData && roomData.students) {
         roomData.students.forEach(s => {
             const reg = (typeof s === 'object') ? s['Register Number'] : s;
@@ -7398,18 +7399,38 @@ window.deleteRoom = function(index) {
         });
     }
 
-    // Remove
+    // 2. Cleanup Invigilator Assignment (NEW FIX)
+    // We must remove the invigilator mapping for this room so they become "Free" again
+    const allInvigMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    
+    if (allInvigMappings[currentSessionKey] && allInvigMappings[currentSessionKey][roomName]) {
+        // Remove the assignment from storage
+        delete allInvigMappings[currentSessionKey][roomName];
+        localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvigMappings));
+        
+        // Update the global variable if it's currently loaded
+        if (currentInvigMapping) {
+            delete currentInvigMapping[roomName];
+        }
+    }
+
+    // 3. Remove Room from Allotment
     currentSessionAllotment.splice(index, 1);
 
     // --- AUTO SAVE & SYNC ---
-    saveRoomAllotment(); // Update Local Storage
+    saveRoomAllotment(); // Update Local Storage (Room & Scribe)
     
     if (typeof syncDataToCloud === 'function') {
-        syncDataToCloud(); // Update Cloud
+        syncDataToCloud(); // Update Cloud (pushes the updated Invig Mapping too)
     }
     // ------------------------
     
     updateAllotmentDisplay();
+    
+    // Refresh Invig Panel if it's visible
+    if (typeof renderInvigilationPanel === 'function') {
+        renderInvigilationPanel();
+    }
 };
 
 // Show room selection modal (Updated: Excludes Scribe Rooms)
