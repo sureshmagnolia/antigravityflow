@@ -12398,24 +12398,29 @@ window.autoAssignInvigilators = function() {
     }
 }
 
-// 5. Print List (Updated: Stream Wise + Scribes + Empty Rows)
+// 5. Print List (Updated: Full Columns + Exam Name + Dept)
 window.printInvigilatorList = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
 
     const [date, time] = sessionKey.split(' | ');
     const serialMap = getRoomSerialMap(sessionKey);
-    
+
     // 1. Load Data
     const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-    
-    // 2. Build Room List with Stream Info
+
+    // Load Staff Data for Dept Lookup
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const staffDeptMap = {};
+    staffData.forEach(s => staffDeptMap[s.name] = s.dept || "");
+
+    // 2. Build Room List
     const roomList = [];
-    
-    // A. Regular Allotments
+
+    // A. Regular
     if (currentSessionAllotment) {
         currentSessionAllotment.forEach(r => {
             roomList.push({
@@ -12427,26 +12432,20 @@ window.printInvigilatorList = function() {
         });
     }
 
-    // B. Scribe Allotments (Deduce Stream)
+    // B. Scribe
     const scribeRooms = new Set(Object.values(sessionScribeMap));
-    const scribeStreamMap = {}; // { "RoomName": "Stream" }
+    const scribeStreamMap = {}; 
 
-    // Find stream for scribe rooms by looking at students
+    // D. Deduce Stream for Scribe Rooms
     if (allStudentData) {
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        // Map RegNo -> Stream
         const regStreamMap = {};
         sessionStudents.forEach(s => regStreamMap[s['Register Number']] = s.Stream || "Regular");
-
+        
         Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
             const sStream = regStreamMap[regNo] || "Regular";
-            // Logic: If room already marked Regular, keep it. If new, set it. 
-            // If room has mixed streams, prioritize Regular.
-            if (!scribeStreamMap[roomName]) {
-                scribeStreamMap[roomName] = sStream;
-            } else if (scribeStreamMap[roomName] !== "Regular" && sStream === "Regular") {
-                scribeStreamMap[roomName] = "Regular";
-            }
+            if (!scribeStreamMap[roomName]) scribeStreamMap[roomName] = sStream;
+            else if (scribeStreamMap[roomName] !== "Regular" && sStream === "Regular") scribeStreamMap[roomName] = "Regular";
         });
     }
 
@@ -12459,53 +12458,46 @@ window.printInvigilatorList = function() {
         });
     });
 
-    // 3. Separate Lists
+    // 3. Separate & Sort Lists
     const regularList = roomList.filter(r => r.stream === "Regular").sort((a, b) => a.serial - b.serial);
     const otherList = roomList.filter(r => r.stream !== "Regular").sort((a, b) => a.serial - b.serial);
 
-    // 4. Calculate Empty Rows needed
-    // Calc Theoretical Need
-    let totalCandidates = 0;
-    let totalScribes = 0;
-    if (allStudentData) {
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-        
-        sessionStudents.forEach(s => {
-            if (scribeRegNos.has(s['Register Number'])) totalScribes++;
-            else totalCandidates++;
-        });
+    // 4. Get Exam Name (Dynamic)
+    let examName = getExamName(date, time, "Regular");
+    if (!examName && otherList.length > 0) {
+         examName = getExamName(date, time, otherList[0].stream);
     }
-    
-    // Standard Formula: 1 per 30 candidates + 1 per 5 scribes
-    const theoreticalNeed = Math.ceil(totalCandidates / 30) + Math.ceil(totalScribes / 5);
-    const currentRoomCount = roomList.length;
-    
-    // Ensure we have at least 20 rows or enough to match theoretical need + buffer
-    const totalRowsToPrint = Math.max(currentRoomCount + 5, theoreticalNeed + 2, 20);
+    if (!examName) examName = "University Examinations";
 
-    // 5. Generate HTML Rows
+    // 5. Calc Total Rows Needed (Candidates/30 + Scribes/5)
+    // We just ensure we have enough blank rows for manual entries if needed
+    const minRows = 20; 
     let rowsHtml = "";
 
+    // 6. Render Function
     const renderRows = (list, title) => {
         if (list.length === 0) return;
         
-        // Header Row
         rowsHtml += `
             <tr style="background-color:#f3f4f6;">
-                <td colspan="4" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase;">
+                <td colspan="9" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt;">
                     ${title}
                 </td>
             </tr>
         `;
 
-        list.forEach((room, idx) => {
+        list.forEach(room => {
             const invigName = currentSessionInvigs[room.name] || "-";
+            const invigDept = staffDeptMap[invigName] || "";
+            
             const roomInfo = currentRoomConfig[room.name] || {};
             const location = roomInfo.location ? `<br><span style="font-size:8pt; color:#555;">(${roomInfo.location})</span>` : "";
-            const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:5px;">(Scribe)</span>` : "";
-            
+            const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:2px;">(Scribe)</span>` : "";
+
+            const invigDisplay = (invigName !== "-") 
+                ? `<div style="line-height:1.2;"><strong>${invigName}</strong><br><span style="font-size:8pt; color:#444;">${invigDept}</span></div>` 
+                : "-";
+
             rowsHtml += `
                 <tr>
                     <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${room.serial}</td>
@@ -12513,46 +12505,86 @@ window.printInvigilatorList = function() {
                         <strong>${room.name}</strong> ${scribeBadge}
                         ${location}
                     </td>
-                    <td style="border:1px solid #000; padding:6px; font-size:10pt;">${invigName}</td>
-                    <td style="border:1px solid #000; padding:6px;"></td>
-                </tr>`;
+                    <td style="border:1px solid #000; padding:6px;">${invigDisplay}</td>
+                    <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> </tr>`;
         });
     };
 
     renderRows(regularList, "Regular Stream");
     renderRows(otherList, "Other Streams");
 
-    // 6. Add Empty Rows at the End
-    // Calculate how many rows we already added (items + headers)
-    const usedRows = regularList.length + otherList.length + (regularList.length > 0 ? 1 : 0) + (otherList.length > 0 ? 1 : 0);
-    
-    for (let i = usedRows; i < totalRowsToPrint; i++) {
+    // 7. Add Empty Rows (Fill page)
+    const currentRows = regularList.length + otherList.length + (regularList.length ? 1 : 0) + (otherList.length ? 1 : 0);
+    const rowsToAdd = Math.max(0, minRows - currentRows);
+
+    for (let i = 0; i < rowsToAdd; i++) {
          rowsHtml += `
             <tr>
-                <td style="border:1px solid #000; padding:6px; text-align:center;">-</td>
+                <td style="border:1px solid #000; padding:6px; text-align:center; color:#ccc;">-</td>
+                <td style="border:1px solid #000; padding:6px;"></td>
+                <td style="border:1px solid #000; padding:6px;"></td>
+                <td style="border:1px solid #000; padding:6px;"></td>
+                <td style="border:1px solid #000; padding:6px;"></td>
+                <td style="border:1px solid #000; padding:6px;"></td>
                 <td style="border:1px solid #000; padding:6px;"></td>
                 <td style="border:1px solid #000; padding:6px;"></td>
                 <td style="border:1px solid #000; padding:6px;"></td>
             </tr>`;
     }
 
+    // 8. Generate PDF Window
     const w = window.open('', '_blank');
     w.document.write(`
-        <html><head><title>Hall vs Invigilator - ${date}</title><style>
-            body { font-family: sans-serif; padding: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th { background: #eee; border: 1px solid #000; padding: 8px; text-align: left; }
-            h1, h2, h3 { text-align: center; margin: 5px; }
-        </style></head><body>
-            <h1>${currentCollegeName}</h1>
-            <h2>Hall vs Invigilator Assignment</h2>
-            <h3>${date} (${time})</h3>
+        <html>
+        <head>
+            <title>Invigilation List - ${date}</title>
+            <style>
+                body { font-family: 'Arial', sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 15px; }
+                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; }
+                .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
+                .header h3 { margin: 5px 0 0; font-size: 12pt; }
+                
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+                th { background: #eee; border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
+                td { vertical-align: middle; }
+                
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
+                .footer div { text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>${currentCollegeName}</h1>
+                <h2>${examName}</h2>
+                <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+            </div>
+
             <table>
-                <thead><tr><th width="5%" style="text-align:center;">Sl</th><th width="30%">Hall / Location</th><th width="40%">Invigilator</th><th width="25%">Signature</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">Sl</th>
+                        <th style="width: 15%; text-align:left;">Hall / Location</th>
+                        <th style="width: 20%; text-align:left;">Invigilator</th>
+                        <th style="width: 13%;">RNBB</th>
+                        <th style="width: 6%;">Asgd</th>
+                        <th style="width: 6%;">Used</th>
+                        <th style="width: 6%;">Retd</th>
+                        <th style="width: 19%;">Remarks</th>
+                        <th style="width: 10%;">Sign</th>
+                    </tr>
+                </thead>
                 <tbody>${rowsHtml}</tbody>
             </table>
+
+            <div class="footer">
+                <div>Senior Assistant Superintendent</div>
+                <div>Chief Superintendent</div>
+            </div>
+
             <script>window.onload = () => window.print();<\/script>
-        </body></html>
+        </body>
+        </html>
     `);
     w.document.close();
 }
