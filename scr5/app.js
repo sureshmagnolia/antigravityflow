@@ -247,7 +247,6 @@ const ABSENTEE_LIST_KEY = 'examAbsenteeList';
 const QP_CODE_LIST_KEY = 'examQPCodes';
 const BASE_DATA_KEY = 'examBaseData';
 const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
-
 const INVIG_MAPPING_KEY = 'examInvigilatorMapping';
 let currentInvigMapping = {}; // { "SessionKey": { "RoomName": "StaffName" } }
 
@@ -551,7 +550,7 @@ function syncDataFromCloud(collegeId) {
             'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
             'examQPCodes', 'examScribeList', 'examScribeAllotment', 
             'examAbsenteeList', 'examSessionNames', 'lastUpdated', 'examRulesConfig',
-            'examInvigilationSlots', 'examStaffData' // <--- ADDED THESE TWO
+            'examInvigilationSlots', 'examStaffData', 'examInvigilatorMapping' // <--- ADDED THESE TWO
         ].forEach(key => {
             if (mainData[key]) localStorage.setItem(key, mainData[key]);
         });
@@ -691,7 +690,8 @@ async function syncDataToCloud() {
             'examCollegeName', 'examStreamsConfig', 'examRoomConfig', 
             'examQPCodes', 'examScribeList', 'examScribeAllotment', 
             'examAbsenteeList', 'examSessionNames', 'examRulesConfig',
-            'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles' // Persist Staff/Roles
+            'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles',
+            'examInvigilatorMapping' // Persist Staff/Roles
         ];
 
         const finalMainData = { lastUpdated: timestamp };
