@@ -1644,6 +1644,18 @@
                     <input type="number" id="admin-storage-limit" class="flex-1 p-2 border rounded text-sm" placeholder="Limit in MB (e.g., 20)">
                     <button id="set-limit-btn" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">Set Limit</button>
                 </div>
+
+
+    
+    <button id="btn-storage-stats" class="w-full mt-2 bg-teal-600 text-white px-3 py-2 rounded hover:bg-teal-700 text-sm font-bold shadow-sm flex justify-center items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" /></svg>
+        Check Storage Usage
+    </button>
+
+
+                
+
+                
             </div>
         </div>
        
@@ -1721,6 +1733,25 @@
 
         <div class="p-3 border-t border-gray-100 bg-white text-center shrink-0">
             <p class="text-[10px] text-gray-400">Tap WhatsApp icon to contact invigilator</p>
+        </div>
+    </div>
+</div>
+<div id="storage-stats-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 overflow-y-auto h-full w-full z-[60] flex justify-center items-center">
+    <div class="relative bg-white rounded-lg shadow-2xl p-6 w-[40rem] max-h-[80vh] flex flex-col animate-slide-up">
+        <div class="flex justify-between items-center mb-4 border-b border-gray-200 pb-3 shrink-0">
+            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <span class="bg-teal-100 text-teal-700 p-1 rounded">🔥</span> Cloud Storage Usage
+            </h3>
+            <button id="close-storage-modal" class="text-gray-400 hover:text-gray-700 font-bold text-2xl leading-none">&times;</button>
+        </div>
+        
+        <div id="storage-stats-list" class="flex-1 overflow-y-auto custom-scroll space-y-2 pr-2">
+            </div>
+
+        <div class="mt-4 pt-3 border-t border-gray-100 text-right shrink-0">
+            <p class="text-[10px] text-gray-400 italic">
+                * Usage estimated based on data chunks (1 Chunk ≈ 0.8 MB). Accurate within ~10%.
+            </p>
         </div>
     </div>
 </div>
