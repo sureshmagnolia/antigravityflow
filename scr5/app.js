@@ -12398,7 +12398,7 @@ window.autoAssignInvigilators = function() {
     }
 }
 
-// 5. Print List (Updated: Just Location + Normal Font)
+// 5. Print List (Updated: Multi-page Split + Footer Protection)
 window.printInvigilatorList = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -12411,198 +12411,190 @@ window.printInvigilatorList = function() {
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-
-    // Load Staff Data for Dept Lookup
+    
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
     const staffDeptMap = {};
     staffData.forEach(s => staffDeptMap[s.name] = s.dept || "");
 
-    // 2. Build Consolidated Room List
+    // 2. Build Room List
     const roomList = [];
-
-    // A. Regular Allotments
     if (currentSessionAllotment) {
         currentSessionAllotment.forEach(r => {
-            roomList.push({
-                name: r.roomName,
-                stream: r.stream || "Regular",
-                isScribe: false,
-                serial: serialMap[r.roomName] || 999
-            });
+            roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false, serial: serialMap[r.roomName] || 999 });
         });
     }
 
-    // B. Scribe Allotments (Deduce Stream from Students)
+    // Scribe Logic
     const scribeRooms = new Set(Object.values(sessionScribeMap));
     const scribeStreamMap = {}; 
-
     if (allStudentData) {
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
         const regStreamMap = {};
         sessionStudents.forEach(s => regStreamMap[s['Register Number']] = s.Stream || "Regular");
-        
         Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
             const sStream = regStreamMap[regNo] || "Regular";
-            // If room has mixed streams, prioritize Regular
             if (!scribeStreamMap[roomName]) scribeStreamMap[roomName] = sStream;
             else if (scribeStreamMap[roomName] !== "Regular" && sStream === "Regular") scribeStreamMap[roomName] = "Regular";
         });
     }
-
     scribeRooms.forEach(roomName => {
-        roomList.push({
-            name: roomName,
-            stream: scribeStreamMap[roomName] || "Regular",
-            isScribe: true,
-            serial: serialMap[roomName] || 999
-        });
+        roomList.push({ name: roomName, stream: scribeStreamMap[roomName] || "Regular", isScribe: true, serial: serialMap[roomName] || 999 });
     });
 
-    // 3. Group by Stream
+    // 3. Group by Stream & Sort
     const streams = {};
     roomList.forEach(r => {
         const s = r.stream || "Regular";
         if (!streams[s]) streams[s] = [];
         streams[s].push(r);
     });
-
-    // 4. Get Exam Name
-    let examName = getExamName(date, time, "Regular");
-    if (!examName) {
-        const otherStreams = Object.keys(streams).filter(s => s !== "Regular");
-        if (otherStreams.length > 0) examName = getExamName(date, time, otherStreams[0]);
-    }
-    if (!examName) examName = "University Examinations";
-
-    // 5. Calculate Empty Rows Needed
-    const minRows = 20; 
-    let rowsHtml = "";
-    let usedRowsCount = 0;
-
-    // Render Function for each Stream Group
-    const renderStreamGroup = (list, title) => {
-        if (!list || list.length === 0) return;
-        
-        // Stream Header
-        rowsHtml += `
-            <tr style="background-color:#f3f4f6;">
-                <td colspan="9" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt;">
-                    ${title}
-                </td>
-            </tr>
-        `;
-        usedRowsCount++; 
-
-        list.forEach(room => {
-            const invigName = currentSessionInvigs[room.name] || "-";
-            const invigDept = staffDeptMap[invigName] || "";
-            
-            const roomInfo = currentRoomConfig[room.name] || {};
-            
-            // --- CHANGE: Use Location if available, else Room Name. No Bold. ---
-            const displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;
-            
-            const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:5px;">(Scribe)</span>` : "";
-
-            // Format Name & Dept
-            const invigDisplay = (invigName !== "-") 
-                ? `<div style="line-height:1.2;"><strong>${invigName}</strong><br><span style="font-size:8pt; color:#444;">${invigDept}</span></div>` 
-                : "-";
-
-            rowsHtml += `
-                <tr>
-                    <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${room.serial}</td>
-                    <td style="border:1px solid #000; padding:6px;">
-                        ${displayLoc} ${scribeBadge}
-                    </td>
-                    <td style="border:1px solid #000; padding:6px;">${invigDisplay}</td>
-                    <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> <td style="border:1px solid #000; padding:6px;"></td> </tr>`;
-            usedRowsCount++; 
-        });
-    };
-
-    // Sort Streams: Regular first, then alphabetical
     const sortedStreamNames = Object.keys(streams).sort((a, b) => {
-        if (a === "Regular") return -1;
-        if (b === "Regular") return 1;
-        return a.localeCompare(b);
+        if (a === "Regular") return -1; if (b === "Regular") return 1; return a.localeCompare(b);
     });
 
-    // Generate HTML for each stream
+    // 4. Create Flat Render List (Headers + Data)
+    const renderList = [];
     sortedStreamNames.forEach(streamName => {
         const list = streams[streamName].sort((a, b) => a.serial - b.serial);
-        const title = streamName.toLowerCase().includes('stream') ? streamName : `${streamName} Stream`;
-        renderStreamGroup(list, title);
+        if (list.length > 0) {
+            const title = streamName.toLowerCase().includes('stream') ? streamName : `${streamName} Stream`;
+            renderList.push({ type: 'header', text: title });
+            list.forEach(item => renderList.push({ type: 'data', data: item }));
+        }
     });
 
-    // 6. Add Empty Rows to fill page
-    const rowsToAdd = Math.max(0, minRows - usedRowsCount);
+    // 5. Calculate Pages
+    // Constraints: Page 1 fits ~20 rows (Header takes space). Page 2+ fits ~30 rows.
+    const ROWS_PAGE_1 = 20;
+    const ROWS_PAGE_OTHER = 30;
+    
+    const pages = [];
+    let currentPage = [];
+    let currentLimit = ROWS_PAGE_1;
 
-    for (let i = 0; i < rowsToAdd; i++) {
-         rowsHtml += `
-            <tr>
-                <td style="border:1px solid #000; padding:6px; text-align:center; color:#ccc;">-</td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-                <td style="border:1px solid #000; padding:6px;"></td>
-            </tr>`;
+    renderList.forEach((item, index) => {
+        currentPage.push(item);
+        
+        if (currentPage.length >= currentLimit) {
+            // If it's just a header at the bottom, push to next page
+            if (item.type === 'header') {
+                const header = currentPage.pop();
+                pages.push(currentPage);
+                currentPage = [header];
+            } else {
+                pages.push(currentPage);
+                currentPage = [];
+            }
+            currentLimit = ROWS_PAGE_OTHER; // Subsequent pages hold more
+        }
+    });
+
+    // Add remaining items
+    if (currentPage.length > 0) {
+        // Logic to avoid orphaned footer: 
+        // If last page has VERY few items (e.g. 1 or 2), pull a few from previous page? 
+        // For now, standard flow is usually fine.
+        pages.push(currentPage);
     }
 
-    // 7. Generate Print Window
+    // 6. Generate HTML
+    let examName = getExamName(date, time, "Regular") || "University Examinations";
+    let allPagesHtml = ``;
+    const totalPages = pages.length;
+
+    pages.forEach((pageItems, pageIndex) => {
+        const isLastPage = (pageIndex === totalPages - 1);
+        let tableRows = "";
+
+        pageItems.forEach(item => {
+            if (item.type === 'header') {
+                tableRows += `<tr style="background-color:#f3f4f6;"><td colspan="9" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt;">${item.text}</td></tr>`;
+            } else {
+                const room = item.data;
+                const invigName = currentSessionInvigs[room.name] || "-";
+                const invigDept = staffDeptMap[invigName] || "";
+                const roomInfo = currentRoomConfig[room.name] || {};
+                const location = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name; // Just location, no Room ID if loc exists
+                const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:2px;">(Scribe)</span>` : "";
+                const invigDisplay = (invigName !== "-") ? `<div style="line-height:1.2;"><strong>${invigName}</strong><br><span style="font-size:8pt; color:#444;">${invigDept}</span></div>` : "-";
+
+                tableRows += `
+                    <tr>
+                        <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${room.serial}</td>
+                        <td style="border:1px solid #000; padding:6px;">${location} ${scribeBadge}</td>
+                        <td style="border:1px solid #000; padding:6px;">${invigDisplay}</td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                        <td style="border:1px solid #000; padding:6px;"></td>
+                    </tr>`;
+            }
+        });
+
+        // Fill last page with empty rows if needed (Only if it's the only page and very empty)
+        if (isLastPage && totalPages === 1 && pageItems.length < 15) {
+            const rowsToAdd = 15 - pageItems.length;
+            for (let i = 0; i < rowsToAdd; i++) {
+                tableRows += `<tr><td style="border:1px solid #000; padding:6px; text-align:center;">-</td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td></tr>`;
+            }
+        }
+
+        const footerHtml = isLastPage ? `
+            <div class="footer" style="margin-top: 30px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; page-break-inside: avoid;">
+                <div style="text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px;">Senior Assistant Superintendent</div>
+                <div style="text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px;">Chief Superintendent</div>
+            </div>` : "";
+
+        allPagesHtml += `
+            <div class="print-page" style="padding: 15mm; height: 100%; display: flex; flex-direction: column; page-break-after: always;">
+                <div class="header" style="text-align: center; margin-bottom: 10px;">
+                    <h1 style="margin: 0; font-size: 16pt; text-transform: uppercase;">${currentCollegeName}</h1>
+                    <h2 style="margin: 5px 0 0; font-size: 14pt; font-weight: bold;">${examName}</h2>
+                    <h3 style="margin: 5px 0 0; font-size: 12pt;">${date} &nbsp;|&nbsp; ${time}</h3>
+                </div>
+                <div style="flex-grow: 1;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+                        <thead>
+                            <tr>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 5%; text-align:center;">Sl</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 15%;">Hall / Location</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 20%;">Invigilator</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 13%;">RNBB</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Asgd</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Used</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Retd</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 19%;">Remarks</th>
+                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 10%;">Sign</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>
+                ${footerHtml}
+                <div style="text-align:center; font-size:8pt; margin-top:10px; color:#888;">Page ${pageIndex + 1} of ${totalPages}</div>
+            </div>
+        `;
+    });
+
     const w = window.open('', '_blank');
     w.document.write(`
         <html>
         <head>
             <title>Invigilation List - ${date}</title>
             <style>
-                body { font-family: 'Arial', sans-serif; padding: 20px; }
-                .header { text-align: center; margin-bottom: 15px; }
-                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; }
-                .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
-                .header h3 { margin: 5px 0 0; font-size: 12pt; }
-                
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
-                th { background: #eee; border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
-                td { vertical-align: middle; }
-                
-                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
-                .footer div { text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px; }
+                body { font-family: 'Arial', sans-serif; margin: 0; padding: 0; background: #ccc; }
+                .print-page { background: white; width: 210mm; min-height: 297mm; margin: 10px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
+                @media print {
+                    body { background: white; }
+                    .print-page { width: 100%; min-height: 100%; margin: 0; box-shadow: none; border: none; page-break-after: always; }
+                    .print-page:last-child { page-break-after: auto; }
+                }
             </style>
         </head>
         <body>
-            <div class="header">
-                <h1>${currentCollegeName}</h1>
-                <h2>${examName}</h2>
-                <h3>${date} &nbsp;|&nbsp; ${time}</h3>
-            </div>
-
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 5%;">Sl</th>
-                        <th style="width: 15%; text-align:left;">Hall / Location</th>
-                        <th style="width: 20%; text-align:left;">Invigilator</th>
-                        <th style="width: 13%;">RNBB</th>
-                        <th style="width: 6%;">Asgd</th>
-                        <th style="width: 6%;">Used</th>
-                        <th style="width: 6%;">Retd</th>
-                        <th style="width: 19%;">Remarks</th>
-                        <th style="width: 10%;">Sign</th>
-                    </tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
-
-            <div class="footer">
-                <div>Senior Assistant Superintendent</div>
-                <div>Chief Superintendent</div>
-            </div>
-
+            ${allPagesHtml}
             <script>window.onload = () => window.print();<\/script>
         </body>
         </html>
