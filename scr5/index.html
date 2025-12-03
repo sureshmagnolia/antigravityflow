@@ -679,23 +679,31 @@
             Apply Changes to All Students
         </button>
     </div>
+
+
+<div class="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 mb-4">
+    
+    <div id="edit-student-count" class="text-sm font-bold text-blue-700 hidden"></div>
+
+    <div class="flex items-center gap-3 ml-auto">
+        <button id="toggle-edit-data-lock-btn" class="hidden text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-2 rounded hover:bg-gray-200 transition shadow-sm h-10">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+            </svg>
+            <span>List Locked</span>
+        </button>
+
+        <button id="add-new-student-btn" class="hidden inline-flex justify-center items-center rounded-md border border-dashed border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 shadow-sm hover:bg-green-100 h-10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Student
+        </button>
+    </div>
 </div>
 
 
-                <div class="flex justify-end mb-2">
-                    <button id="toggle-edit-data-lock-btn" class="hidden text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                        </svg>
-                        <span>List Locked</span>
-                    </button>
-                </div>
-
-                    
-         </div>   <button id="add-new-student-btn" class="w-full inline-flex justify-center items-center rounded-md border border-dashed border-green-500 bg-green-50 py-2 px-4 text-sm font-medium text-green-700 shadow-sm hover:bg-green-100 mb-4 hidden">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-    + Add New Student
-            </button>       
+    
 
                 <div id="edit-data-container" class="mb-4">
                     </div>
