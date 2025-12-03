@@ -12398,7 +12398,7 @@ window.autoAssignInvigilators = function() {
     }
 }
 
-// 5. Print List (Updated: Multi-page Split + Footer Protection)
+// 5. Print List (Final: Stream-Wise Empty Rows + Invig Names)
 window.printInvigilatorList = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -12411,190 +12411,224 @@ window.printInvigilatorList = function() {
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-    
+
+    // Staff Dept Lookup
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
     const staffDeptMap = {};
     staffData.forEach(s => staffDeptMap[s.name] = s.dept || "");
 
-    // 2. Build Room List
+    // 2. Build Consolidated Room List
     const roomList = [];
+
+    // A. Regular Allotments
     if (currentSessionAllotment) {
         currentSessionAllotment.forEach(r => {
-            roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false, serial: serialMap[r.roomName] || 999 });
+            roomList.push({
+                name: r.roomName,
+                stream: r.stream || "Regular",
+                isScribe: false,
+                serial: serialMap[r.roomName] || 999
+            });
         });
     }
 
-    // Scribe Logic
-    const scribeRooms = new Set(Object.values(sessionScribeMap));
+    // B. Prepare Student Counts (For Empty Row Calculation)
+    const streamCounts = {}; // { "Regular": { candidates: 0, scribes: 0 } }
     const scribeStreamMap = {}; 
+
     if (allStudentData) {
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+
+        // Map Scribe Rooms to Streams
         const regStreamMap = {};
-        sessionStudents.forEach(s => regStreamMap[s['Register Number']] = s.Stream || "Regular");
+        sessionStudents.forEach(s => {
+            const sStream = s.Stream || "Regular";
+            regStreamMap[s['Register Number']] = sStream;
+
+            // Initialize stats
+            if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
+
+            if (scribeRegNos.has(s['Register Number'])) {
+                streamCounts[sStream].scribes++;
+            } else {
+                streamCounts[sStream].candidates++;
+            }
+        });
+
         Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
             const sStream = regStreamMap[regNo] || "Regular";
             if (!scribeStreamMap[roomName]) scribeStreamMap[roomName] = sStream;
             else if (scribeStreamMap[roomName] !== "Regular" && sStream === "Regular") scribeStreamMap[roomName] = "Regular";
         });
     }
+
+    // C. Scribe Allotments
+    const scribeRooms = new Set(Object.values(sessionScribeMap));
     scribeRooms.forEach(roomName => {
-        roomList.push({ name: roomName, stream: scribeStreamMap[roomName] || "Regular", isScribe: true, serial: serialMap[roomName] || 999 });
+        roomList.push({
+            name: roomName,
+            stream: scribeStreamMap[roomName] || "Regular",
+            isScribe: true,
+            serial: serialMap[roomName] || 999
+        });
     });
 
-    // 3. Group by Stream & Sort
+    // 3. Group Rooms by Stream
     const streams = {};
     roomList.forEach(r => {
         const s = r.stream || "Regular";
         if (!streams[s]) streams[s] = [];
         streams[s].push(r);
     });
-    const sortedStreamNames = Object.keys(streams).sort((a, b) => {
-        if (a === "Regular") return -1; if (b === "Regular") return 1; return a.localeCompare(b);
-    });
 
-    // 4. Create Flat Render List (Headers + Data)
-    const renderList = [];
-    sortedStreamNames.forEach(streamName => {
-        const list = streams[streamName].sort((a, b) => a.serial - b.serial);
-        if (list.length > 0) {
-            const title = streamName.toLowerCase().includes('stream') ? streamName : `${streamName} Stream`;
-            renderList.push({ type: 'header', text: title });
-            list.forEach(item => renderList.push({ type: 'data', data: item }));
-        }
-    });
-
-    // 5. Calculate Pages
-    // Constraints: Page 1 fits ~20 rows (Header takes space). Page 2+ fits ~30 rows.
-    const ROWS_PAGE_1 = 20;
-    const ROWS_PAGE_OTHER = 30;
-    
-    const pages = [];
-    let currentPage = [];
-    let currentLimit = ROWS_PAGE_1;
-
-    renderList.forEach((item, index) => {
-        currentPage.push(item);
-        
-        if (currentPage.length >= currentLimit) {
-            // If it's just a header at the bottom, push to next page
-            if (item.type === 'header') {
-                const header = currentPage.pop();
-                pages.push(currentPage);
-                currentPage = [header];
-            } else {
-                pages.push(currentPage);
-                currentPage = [];
-            }
-            currentLimit = ROWS_PAGE_OTHER; // Subsequent pages hold more
-        }
-    });
-
-    // Add remaining items
-    if (currentPage.length > 0) {
-        // Logic to avoid orphaned footer: 
-        // If last page has VERY few items (e.g. 1 or 2), pull a few from previous page? 
-        // For now, standard flow is usually fine.
-        pages.push(currentPage);
+    // 4. Get Exam Name
+    let examName = getExamName(date, time, "Regular");
+    if (!examName) {
+        const otherStreams = Object.keys(streams).filter(s => s !== "Regular");
+        if (otherStreams.length > 0) examName = getExamName(date, time, otherStreams[0]);
     }
+    if (!examName) examName = "University Examinations";
 
-    // 6. Generate HTML
-    let examName = getExamName(date, time, "Regular") || "University Examinations";
-    let allPagesHtml = ``;
-    const totalPages = pages.length;
+    // 5. Generate HTML
+    let rowsHtml = "";
+    
+    // Sort Streams: Regular First
+    const sortedStreamNames = Object.keys(streams).sort((a, b) => {
+        if (a === "Regular") return -1;
+        if (b === "Regular") return 1;
+        return a.localeCompare(b);
+    });
 
-    pages.forEach((pageItems, pageIndex) => {
-        const isLastPage = (pageIndex === totalPages - 1);
-        let tableRows = "";
+    // Add streams that have students but maybe no rooms yet (to show empty rows)
+    Object.keys(streamCounts).forEach(s => {
+        if (!streams[s] && !sortedStreamNames.includes(s)) sortedStreamNames.push(s);
+    });
 
-        pageItems.forEach(item => {
-            if (item.type === 'header') {
-                tableRows += `<tr style="background-color:#f3f4f6;"><td colspan="9" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt;">${item.text}</td></tr>`;
-            } else {
-                const room = item.data;
-                const invigName = currentSessionInvigs[room.name] || "-";
-                const invigDept = staffDeptMap[invigName] || "";
-                const roomInfo = currentRoomConfig[room.name] || {};
-                const location = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name; // Just location, no Room ID if loc exists
-                const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:2px;">(Scribe)</span>` : "";
-                const invigDisplay = (invigName !== "-") ? `<div style="line-height:1.2;"><strong>${invigName}</strong><br><span style="font-size:8pt; color:#444;">${invigDept}</span></div>` : "-";
+    sortedStreamNames.forEach(streamName => {
+        const list = streams[streamName] || [];
+        list.sort((a, b) => a.serial - b.serial);
+        
+        const title = streamName.toLowerCase().includes('stream') ? streamName : `${streamName} Stream`;
+        
+        // A. Stream Header
+        rowsHtml += `
+            <tr style="background-color:#f3f4f6;">
+                <td colspan="9" style="border:1px solid #000; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt;">
+                    ${title}
+                </td>
+            </tr>
+        `;
 
-                tableRows += `
-                    <tr>
-                        <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${room.serial}</td>
-                        <td style="border:1px solid #000; padding:6px;">${location} ${scribeBadge}</td>
-                        <td style="border:1px solid #000; padding:6px;">${invigDisplay}</td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                        <td style="border:1px solid #000; padding:6px;"></td>
-                    </tr>`;
-            }
+        // B. Actual Rooms
+        list.forEach(room => {
+            const invigName = currentSessionInvigs[room.name] || "-";
+            const invigDept = staffDeptMap[invigName] || "";
+            const roomInfo = currentRoomConfig[room.name] || {};
+            
+            const displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;
+            const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:5px;">(Scribe)</span>` : "";
+
+            const invigDisplay = (invigName !== "-") 
+                ? `<div style="line-height:1.2;"><strong>${invigName}</strong><br><span style="font-size:8pt; color:#444;">${invigDept}</span></div>` 
+                : "-";
+
+            rowsHtml += `
+                <tr>
+                    <td style="border:1px solid #000; padding:6px; text-align:center; font-weight:bold;">${room.serial}</td>
+                    <td style="border:1px solid #000; padding:6px;">
+                        ${displayLoc} ${scribeBadge}
+                    </td>
+                    <td style="border:1px solid #000; padding:6px;">${invigDisplay}</td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                </tr>`;
         });
 
-        // Fill last page with empty rows if needed (Only if it's the only page and very empty)
-        if (isLastPage && totalPages === 1 && pageItems.length < 15) {
-            const rowsToAdd = 15 - pageItems.length;
-            for (let i = 0; i < rowsToAdd; i++) {
-                tableRows += `<tr><td style="border:1px solid #000; padding:6px; text-align:center;">-</td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td><td style="border:1px solid #000; padding:6px;"></td></tr>`;
-            }
+        // C. Calculate Empty Rows (Per Stream)
+        // Logic: (Candidates / 30) + (Scribes / 1) - Actual Rooms
+        const stats = streamCounts[streamName] || { candidates: 0, scribes: 0 };
+        
+        const candidateReq = Math.ceil(stats.candidates / 30);
+        const scribeReq = stats.scribes; // 1 row per scribe student (User Request)
+        const totalReq = candidateReq + scribeReq;
+        
+        // Ensure at least 2 empty rows buffer for every stream
+        const buffer = 2;
+        const actualCount = list.length;
+        const emptyRowsNeeded = Math.max(buffer, totalReq - actualCount);
+        
+        for (let i = 0; i < emptyRowsNeeded; i++) {
+             rowsHtml += `
+                <tr>
+                    <td style="border:1px solid #000; padding:6px; text-align:center; color:#ccc;">-</td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                    <td style="border:1px solid #000; padding:6px;"></td>
+                </tr>`;
         }
-
-        const footerHtml = isLastPage ? `
-            <div class="footer" style="margin-top: 30px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; page-break-inside: avoid;">
-                <div style="text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px;">Senior Assistant Superintendent</div>
-                <div style="text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px;">Chief Superintendent</div>
-            </div>` : "";
-
-        allPagesHtml += `
-            <div class="print-page" style="padding: 15mm; height: 100%; display: flex; flex-direction: column; page-break-after: always;">
-                <div class="header" style="text-align: center; margin-bottom: 10px;">
-                    <h1 style="margin: 0; font-size: 16pt; text-transform: uppercase;">${currentCollegeName}</h1>
-                    <h2 style="margin: 5px 0 0; font-size: 14pt; font-weight: bold;">${examName}</h2>
-                    <h3 style="margin: 5px 0 0; font-size: 12pt;">${date} &nbsp;|&nbsp; ${time}</h3>
-                </div>
-                <div style="flex-grow: 1;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
-                        <thead>
-                            <tr>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 5%; text-align:center;">Sl</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 15%;">Hall / Location</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 20%;">Invigilator</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 13%;">RNBB</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Asgd</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Used</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 6%;">Retd</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 10%;">Remarks</th>
-                                <th style="background: #eee; border: 1px solid #000; padding: 6px; width: 19%;">Sign</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </div>
-                ${footerHtml}
-                <div style="text-align:center; font-size:8pt; margin-top:10px; color:#888;">Page ${pageIndex + 1} of ${totalPages}</div>
-            </div>
-        `;
     });
 
+    // 6. Generate Print Window
     const w = window.open('', '_blank');
     w.document.write(`
         <html>
         <head>
             <title>Invigilation List - ${date}</title>
             <style>
-                body { font-family: 'Arial', sans-serif; margin: 0; padding: 0; background: #ccc; }
-                .print-page { background: white; width: 210mm; min-height: 297mm; margin: 10px auto; box-shadow: 0 0 10px rgba(0,0,0,0.1); box-sizing: border-box; }
-                @media print {
-                    body { background: white; }
-                    .print-page { width: 100%; min-height: 100%; margin: 0; box-shadow: none; border: none; page-break-after: always; }
-                    .print-page:last-child { page-break-after: auto; }
-                }
+                body { font-family: 'Arial', sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 15px; }
+                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; }
+                .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
+                .header h3 { margin: 5px 0 0; font-size: 12pt; }
+                
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+                th { background: #eee; border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
+                td { vertical-align: middle; }
+                
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
+                .footer div { text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px; }
             </style>
         </head>
         <body>
-            ${allPagesHtml}
+            <div class="header">
+                <h1>${currentCollegeName}</h1>
+                <h2>${examName}</h2>
+                <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">Sl</th>
+                        <th style="width: 15%; text-align:left;">Hall / Location</th>
+                        <th style="width: 20%; text-align:left;">Invigilator</th>
+                        <th style="width: 13%;">RNBB</th>
+                        <th style="width: 6%;">Asgd</th>
+                        <th style="width: 6%;">Used</th>
+                        <th style="width: 6%;">Retd</th>
+                        <th style="width: 10%;">Remarks</th>
+                        <th style="width: 19%;">Sign</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+
+            <div class="footer">
+                <div>Senior Assistant Superintendent</div>
+                <div>Chief Superintendent</div>
+            </div>
+
             <script>window.onload = () => window.print();<\/script>
         </body>
         </html>
