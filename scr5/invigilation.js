@@ -2161,6 +2161,150 @@ window.runAutoAllocation = async function() {
     alert(`✅ Global Auto-Assign Complete!\nFilled ${assignedCount} positions across all unlocked slots.`);
 }
 //-------------------
+
+window.saveNewStaff = async function() {
+    const indexStr = document.getElementById('stf-edit-index').value;
+    const isEditMode = (indexStr !== "");
+    const index = isEditMode ? parseInt(indexStr) : -1;
+
+    const name = document.getElementById('stf-name').value.trim();
+    const email = document.getElementById('stf-email').value.trim();
+    const phone = document.getElementById('stf-phone').value.trim();
+    const dept = document.getElementById('stf-dept').value;
+    const designation = document.getElementById('stf-designation').value;
+    const date = document.getElementById('stf-join').value;
+
+    // Capture Available Days
+    const dayChecks = document.querySelectorAll('.stf-day-chk:checked');
+    const availableDays = Array.from(dayChecks).map(c => parseInt(c.value));
+
+    if (!name || !email) return alert("Name and Email are required.");
+
+    if (isEditMode) {
+        // --- UPDATE EXISTING STAFF ---
+        const oldData = staffData[index];
+        const oldEmail = oldData.email;
+
+        // 1. FULL EMAIL MIGRATION LOGIC
+        if (oldEmail !== email) {
+            // Check for duplicates
+            if (staffData.some(s => s.email === email && s !== oldData)) {
+                return alert("This email is already used by another staff member.");
+            }
+            
+            if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
+
+            // A. Swap Permissions in Cloud
+            await removeStaffAccess(oldEmail);
+            await addStaffAccess(email);
+
+            // B. MIGRATE HISTORY (Deep Find & Replace in Slots)
+            let slotsChanged = false;
+            
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+
+                // Assignments
+                if (slot.assigned.includes(oldEmail)) {
+                    slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e);
+                    slotsChanged = true;
+                }
+
+                // Attendance
+                if (slot.attendance && slot.attendance.includes(oldEmail)) {
+                    slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e);
+                    slotsChanged = true;
+                }
+
+                // Exchange Requests
+                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) {
+                    slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e);
+                    slotsChanged = true;
+                }
+
+                // Supervision (CS/SAS)
+                if (slot.supervision) {
+                    if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; }
+                    if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; }
+                }
+
+                // Slot Unavailability (Handle both strings and objects)
+                if (slot.unavailable) {
+                    let unavChanged = false;
+                    slot.unavailable = slot.unavailable.map(u => {
+                        if (typeof u === 'string' && u === oldEmail) { 
+                            unavChanged = true; 
+                            return email; 
+                        }
+                        if (typeof u === 'object' && u.email === oldEmail) { 
+                            unavChanged = true; 
+                            return { ...u, email: email }; 
+                        }
+                        return u;
+                    });
+                    if (unavChanged) slotsChanged = true;
+                }
+            });
+
+            if (slotsChanged) await syncSlotsToCloud();
+
+            // C. MIGRATE ADVANCE UNAVAILABILITY
+            let advanceChanged = false;
+            Object.keys(advanceUnavailability).forEach(dateKey => {
+                ['FN', 'AN'].forEach(sess => {
+                    if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
+                        advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
+                            if (u.email === oldEmail) {
+                                advanceChanged = true;
+                                return { ...u, email: email };
+                            }
+                            return u;
+                        });
+                    }
+                });
+            });
+
+            if (advanceChanged) await saveAdvanceUnavailability();
+        }
+
+        // 2. Update Local Array with NEW data
+        staffData[index] = {
+            ...oldData,
+            name, email, phone, dept, designation, joiningDate: date,
+            preferredDays: availableDays // <--- SAVING PREFERENCE HERE
+        };
+
+        alert("Staff profile and records updated successfully.");
+
+    } else {
+        // --- ADD NEW STAFF ---
+        if (staffData.some(s => s.email === email)) {
+            return alert("Staff with this email already exists.");
+        }
+
+        const newObj = { 
+            name, email, phone, dept, designation, joiningDate: date, 
+            dutiesDone: 0, roleHistory: [], 
+            preferredDays: availableDays // <--- SAVING PREFERENCE HERE
+        };
+        
+        staffData.push(newObj);
+        await addStaffAccess(email);
+        alert("New staff added successfully.");
+    }
+
+    await syncStaffToCloud();
+    window.closeModal('add-staff-modal');
+    
+    if (!isAdmin) window.location.reload(); 
+    else {
+        renderStaffTable();
+        updateAdminUI();
+    }
+}
+
+
+
 window.saveNewStaff = async function() {
     const indexStr = document.getElementById('stf-edit-index').value;
     const isEditMode = (indexStr !== "");
@@ -2327,54 +2471,7 @@ window.saveNewStaff = async function() {
                 return alert("This email is already used by another staff member.");
             }
             
-            if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
 
-            // 1. Swap Permissions in Cloud
-            await removeStaffAccess(oldEmail);
-            await addStaffAccess(email);
-
-            // 2. MIGRATE HISTORY (Deep Find & Replace)
-            let slotsChanged = false;
-            
-            Object.keys(invigilationSlots).forEach(key => {
-                const slot = invigilationSlots[key];
-
-                // A. Assignments
-                if (slot.assigned.includes(oldEmail)) {
-                    slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // B. Attendance
-                if (slot.attendance && slot.attendance.includes(oldEmail)) {
-                    slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // C. Exchange Requests
-                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) {
-                    slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e);
-                    slotsChanged = true;
-                }
-
-                // D. Supervision (CS/SAS)
-                if (slot.supervision) {
-                    if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; }
-                    if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; }
-                }
-
-                // E. Slot Unavailability (Handle both strings and objects)
-                if (slot.unavailable) {
-                    let unavChanged = false;
-                    slot.unavailable = slot.unavailable.map(u => {
-                        if (typeof u === 'string' && u === oldEmail) { 
-                            unavChanged = true; 
-                            return email; 
-                        }
-                        if (typeof u === 'object' && u.email === oldEmail) { 
-                            unavChanged = true; 
-                            return { ...u, email: email }; 
-                        }
 
 
 
