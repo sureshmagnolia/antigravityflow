@@ -711,41 +711,75 @@ async function syncDataToCloud() {
 
         // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE) ---
         // Calculates requirements locally but preserves cloud assignments
+
+        // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE - V2 Scribe Aware) ---
+        // Calculates requirements locally but preserves cloud assignments
         const localBaseData = localStorage.getItem('examBaseData');
         if (localBaseData) {
             const students = JSON.parse(localBaseData);
-            const sessionCounts = {};
             
-            // 1. Count Students per Session
+            // 1. Load Scribe Data
+            const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+            const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+
+            const sessionStats = {};
+            
+            // 2. Count Candidates vs Scribes per Session
             students.forEach(s => {
                 const key = `${s.Date} | ${s.Time}`;
-                sessionCounts[key] = (sessionCounts[key] || 0) + 1;
-            });
-
-            // 2. Get Existing Cloud Slots (to preserve assignments)
-            const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
-            const mergedSlots = { ...cloudSlots };
-
-            // 3. Update Requirements
-            Object.keys(sessionCounts).forEach(key => {
-                const count = sessionCounts[key];
-                // Logic: 1 per 30 + 10% Reserve
-                const base = Math.ceil(count / 30);
-                const reserve = Math.ceil(base * 0.10);
-                const totalRequired = base + reserve;
-
-                if (!mergedSlots[key]) {
-                    // New Session
-                    mergedSlots[key] = { required: totalRequired, assigned: [], unavailable: [], isLocked: false };
+                if (!sessionStats[key]) {
+                    sessionStats[key] = { candidates: 0, scribes: 0 };
+                }
+                
+                if (scribeRegNos.has(s['Register Number'])) {
+                    sessionStats[key].scribes++;
                 } else {
-                    // Existing: Update ONLY the requirement, keep assignments
-                    mergedSlots[key].required = totalRequired;
+                    sessionStats[key].candidates++;
                 }
             });
 
-            // 4. Add to Update Payload
+            // 3. Get Existing Cloud Slots
+            const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
+            const mergedSlots = { ...cloudSlots };
+
+            // 4. Update Requirements (Match Invigilation.js Logic)
+            Object.keys(sessionStats).forEach(key => {
+                const stats = sessionStats[key];
+                
+                // Logic: (Candidates / 30) + (Scribes / 5)
+                const candidateReq = Math.ceil(stats.candidates / 30);
+                const scribeReq = Math.ceil(stats.scribes / 5);
+                const baseReq = candidateReq + scribeReq;
+                
+                // Reserve: 10% of Base
+                const reserve = Math.ceil(baseReq * 0.10);
+                const totalRequired = baseReq + reserve;
+
+                if (!mergedSlots[key]) {
+                    // New Session
+                    mergedSlots[key] = { 
+                        required: totalRequired, 
+                        assigned: [], 
+                        unavailable: [], 
+                        isLocked: false,
+                        scribeCount: stats.scribes, // Keep metadata updated
+                        studentCount: stats.candidates + stats.scribes
+                    };
+                } else {
+                    // Existing: Update Requirement & Metadata
+                    mergedSlots[key].required = totalRequired;
+                    mergedSlots[key].scribeCount = stats.scribes;
+                    mergedSlots[key].studentCount = stats.candidates + stats.scribes;
+                }
+            });
+
+            // 5. Add to Update Payload
             finalMainData['examInvigilationSlots'] = JSON.stringify(mergedSlots);
         }
+        // -------------------------------------------------------
+
+
+        
         // -------------------------------------------------------
 
         // --- STEP 3: Bulk Data Handling ---
