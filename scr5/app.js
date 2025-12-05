@@ -5264,28 +5264,96 @@ addRoomButton.addEventListener('click', () => {
     roomConfigContainer.insertAdjacentHTML('beforeend', newRowHtml);
 });
 
-// --- (V79) Remove Room Button (Event Delegation for all rows, in Settings) ---
-// --- Remove OR Edit Room Button (Event Delegation) ---
-roomConfigContainer.addEventListener('click', (e) => {
-    // HANDLE REMOVE
-    if (e.target.classList.contains('remove-room-button')) {
-        e.target.closest('.room-row').remove();
-        saveRoomConfigButton.click(); // Auto-save and re-render
-    }
-    
-    // HANDLE EDIT (Unlock Row)
-    const editBtn = e.target.closest('.edit-room-btn');
-    if (editBtn) {
-        const row = editBtn.closest('.room-row');
-        const inputs = row.querySelectorAll('input');
-        inputs.forEach(input => {
-            input.disabled = false;
-            input.classList.remove('bg-gray-50', 'text-gray-500');
-            input.classList.add('bg-white', 'text-black');
-        });
-        inputs[0].focus(); // Focus on capacity
-    }
-});
+// --- Remove OR Edit Room Button (Event Delegation: Auto-Save) ---
+if (roomConfigContainer) {
+    roomConfigContainer.addEventListener('click', (e) => {
+        
+        // 1. HANDLE REMOVE
+        if (e.target.classList.contains('remove-room-button')) {
+            if(!confirm("Delete this room?")) return;
+            
+            const row = e.target.closest('.room-row');
+            const roomName = row.getAttribute('data-room-name');
+            
+            // Remove from UI
+            row.remove();
+
+            // Remove from Data
+            if(currentRoomConfig[roomName]) {
+                delete currentRoomConfig[roomName];
+                localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(currentRoomConfig));
+                if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                
+                // Update Count
+                const countDisplay = document.getElementById('room-count-display');
+                if (countDisplay) countDisplay.textContent = Object.keys(currentRoomConfig).length;
+            }
+            return;
+        }
+        
+        // 2. HANDLE EDIT TOGGLE (Unlock <-> Save)
+        const editBtn = e.target.closest('.edit-room-btn');
+        if (editBtn) {
+            const row = editBtn.closest('.room-row');
+            const inputs = row.querySelectorAll('input');
+            const isCurrentlyLocked = inputs[0].disabled;
+
+            if (isCurrentlyLocked) {
+                // === STATE: LOCKED -> UNLOCK IT ===
+                inputs.forEach(input => {
+                    input.disabled = false;
+                    input.classList.remove('bg-gray-50', 'text-gray-500');
+                    input.classList.add('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
+                });
+                inputs[0].focus(); // Focus capacity
+
+                // Change Icon to CHECK (Green)
+                editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-green-600"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`;
+                editBtn.className = "edit-room-btn p-1.5 md:p-1 transition rounded-full bg-green-50 border border-green-200 hover:bg-green-100";
+
+            } else {
+                // === STATE: UNLOCKED -> SAVE & LOCK ===
+                const roomName = row.getAttribute('data-room-name');
+                const newCap = parseInt(row.querySelector('.room-capacity-input').value, 10) || 30;
+                const newLoc = row.querySelector('.room-location-input').value.trim();
+
+                // Basic Validation
+                if (!newLoc) {
+                    alert("Please enter a location (e.g., 'Ground Floor').");
+                    return;
+                }
+
+                // Update Config Object
+                if (!currentRoomConfig) currentRoomConfig = {};
+                currentRoomConfig[roomName] = { capacity: newCap, location: newLoc };
+
+                // Save to Storage
+                localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(currentRoomConfig));
+
+                // Lock Inputs
+                inputs.forEach(input => {
+                    input.disabled = true;
+                    input.classList.add('bg-gray-50', 'text-gray-500');
+                    input.classList.remove('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
+                });
+
+                // Revert Icon to PENCIL (Blue)
+                editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>`;
+                editBtn.className = "edit-room-btn p-1.5 md:p-1 transition rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-50";
+
+                // Sync
+                if (typeof syncDataToCloud === 'function') syncDataToCloud();
+                
+                // Feedback
+                const status = document.getElementById('room-config-status');
+                if(status) {
+                    status.textContent = `Saved ${roomName}`;
+                    setTimeout(() => status.textContent = "", 1500);
+                }
+            }
+        }
+    });
+}
 
 // *** NEW: Helper function to sort CSV data just like Python sort ***
 function getJsSortKey(row) {
