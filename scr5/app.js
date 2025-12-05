@@ -1296,48 +1296,77 @@ const EXAM_NAMES_KEY = 'examSessionNames';
 let currentExamNames = {}; 
 
 // ==========================================
-// 🗓️ EXAM SCHEDULER (MODAL REFACTOR)
+// 🗓️ EXAM SCHEDULER (DATABASE MODE)
 // ==========================================
 
 // Helper to determine if a time string is FN or AN
 function getSessionType(timeStr) {
-    if (!timeStr) return "FN";
-    const t = timeStr.toUpperCase();
-    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) return "AN";
+    if (!timeStr) return "FN"; // Default
+    const t = timeStr.toUpperCase().trim();
+    
+    // Logic: PM or 12:xx or 13:xx+ implies AN. Everything else is FN.
+    // This covers standard times (1:30 PM) and 24h times (13:30)
+    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") || 
+        t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:") || t.startsWith("16:")) {
+        return "AN";
+    }
     return "FN";
 }
 
-// Helper to convert Date+Session to a comparable number
+// Helper to convert Date+Session to a strictly comparable number (YYYYMMDDS)
+// S: 1 for FN, 2 for AN. This avoids all Timezone/Date Object issues.
 function getSessionValue(dateStr, sessionType) {
-    let d;
+    if (!dateStr) return 0;
+    
+    let y, m, d;
+    
+    // Handle YYYY-MM-DD (From Settings Input)
     if (dateStr.includes('-')) {
-        d = new Date(dateStr);
+        [y, m, d] = dateStr.split('-');
+    } 
+    // Handle DD.MM.YYYY (From CSV Data)
+    else if (dateStr.includes('.')) {
+        [d, m, y] = dateStr.split('.');
     } else {
-        const [dd, mm, yyyy] = dateStr.split('.');
-        d = new Date(`${yyyy}-${mm}-${dd}`);
+        return 0;
     }
-    d.setHours(12, 0, 0, 0); 
-    let val = d.getTime();
-    if (sessionType === "AN") val += 1; 
-    return val;
+    
+    // Ensure padding
+    m = String(m).padStart(2, '0');
+    d = String(d).padStart(2, '0');
+    y = String(y);
+
+    // 1 = FN, 2 = AN
+    const sessionBit = (sessionType === 'AN') ? '2' : '1';
+    
+    // Returns integer like 202511241 (FN) or 202511242 (AN)
+    return parseInt(`${y}${m}${d}${sessionBit}`, 10);
 }
 
 // --- CORE: Get Exam Name by checking Rules Database ---
 function getExamName(date, time, stream) {
+    // 1. Load Rules if empty (Safety)
     if (!currentExamRules || currentExamRules.length === 0) {
         const saved = localStorage.getItem(EXAM_RULES_KEY);
         if (saved) currentExamRules = JSON.parse(saved);
     }
+
     if (currentExamRules.length === 0) return "";
 
-    const currentSession = getSessionType(time);
-    const currentValue = getSessionValue(date, currentSession);
+    // 2. Calculate Value for Current Student Record
+    // This is where the conversion happens: 2:00 PM -> AN -> 202511242
+    const currentSession = getSessionType(time); 
+    const currentValue = getSessionValue(date, currentSession); 
     const currentStream = stream || "Regular";
 
+    // 3. Find Matching Rule (Newest First)
     for (let i = currentExamRules.length - 1; i >= 0; i--) {
         const rule = currentExamRules[i];
+        
+        // Stream Check
         if (rule.stream !== "All Streams" && rule.stream !== currentStream) continue;
 
+        // Date/Session Range Check
         const startVal = getSessionValue(rule.startDate, rule.startSession);
         const endVal = getSessionValue(rule.endDate, rule.endSession);
 
@@ -1345,7 +1374,8 @@ function getExamName(date, time, stream) {
             return rule.examName;
         }
     }
-    return "";
+
+    return ""; // No match found
 }
 
 // --- NEW MODAL UI ELEMENTS ---
