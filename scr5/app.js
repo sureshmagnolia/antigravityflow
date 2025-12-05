@@ -5187,13 +5187,14 @@ if (saveCollegeNameButton) {
     });
 }
 
- // --- (V79) Load data into dynamic form (in Settings) ---
+
+// --- (Refactored) Load Room Config into Modal ---
 function loadRoomConfig() {
     // V48: Load College Name
     currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
     if (collegeNameInput) {
         collegeNameInput.value = currentCollegeName;
-        collegeNameInput.disabled = true; // Ensure locked on load
+        collegeNameInput.disabled = true; 
     }
     
     // Load Room Config
@@ -5208,27 +5209,35 @@ function loadRoomConfig() {
     }
     
     currentRoomConfig = config;
-    roomConfigContainer.innerHTML = ''; 
-    
-    const sortedKeys = Object.keys(config).sort((a, b) => {
-        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
-        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
-        return numA - numB;
-    });
-    
-    // Add rows (LOCKED by default)
-    sortedKeys.forEach((roomName, index) => {
-        const roomData = config[roomName];
-        const isLast = (index === sortedKeys.length - 1);
-        
-        // *** FIX: Handle missing location in legacy data (convert undefined to "") ***
-        // This ensures the validation logic sees it as empty and forces an update.
-        const safeLocation = roomData.location || "";
 
-        const rowHtml = createRoomRowHtml(roomName, roomData.capacity, safeLocation, isLast, true);
-        roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
-    });
+    // 1. Populate List (Inside Modal)
+    if (roomConfigContainer) {
+        roomConfigContainer.innerHTML = ''; 
+        
+        const sortedKeys = Object.keys(config).sort((a, b) => {
+            const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+        });
+        
+        // Add rows (LOCKED by default)
+        sortedKeys.forEach((roomName, index) => {
+            const roomData = config[roomName];
+            const isLast = (index === sortedKeys.length - 1);
+            const safeLocation = roomData.location || "";
+
+            const rowHtml = createRoomRowHtml(roomName, roomData.capacity, safeLocation, isLast, true);
+            roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
+        });
+    }
+
+    // 2. Update Dashboard Widget Count (NEW)
+    const countDisplay = document.getElementById('room-count-display');
+    if (countDisplay) {
+        countDisplay.textContent = Object.keys(config).length;
+    }
 }
+    
 
 // --- (V28) Add New Room Button (in Settings) ---
 // --- Add New Room Button ---
@@ -12494,6 +12503,20 @@ async function loadStorageStats() {
     }
 }
 
+
+// --- ROOM SETTINGS MODAL LOGIC ---
+const roomSettingsModal = document.getElementById('room-settings-modal');
+
+window.openRoomSettingsModal = function() {
+    roomSettingsModal.classList.remove('hidden');
+    loadRoomConfig(); // Refresh list when opening
+}
+
+window.closeRoomSettingsModal = function() {
+    roomSettingsModal.classList.add('hidden');
+}    
+
+    
 // Initial Call (in case we start on settings page or refresh)
 updateStudentPortalLink();
 // --- NEW: Restore Last Active Tab ---
