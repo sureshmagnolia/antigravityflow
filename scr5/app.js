@@ -1304,62 +1304,48 @@ const EXAM_NAMES_KEY = 'examSessionNames';
 let currentExamNames = {}; 
 
 // ==========================================
-// 🗓️ EXAM SCHEDULER (DATABASE MODE)
+// 🗓️ EXAM SCHEDULER (MODAL REFACTOR)
 // ==========================================
 
 // Helper to determine if a time string is FN or AN
 function getSessionType(timeStr) {
-    if (!timeStr) return "FN"; // Default
+    if (!timeStr) return "FN";
     const t = timeStr.toUpperCase();
-    // Logic: If PM or 12:xx, it's AN. Else FN.
     if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) return "AN";
     return "FN";
 }
 
 // Helper to convert Date+Session to a comparable number
-// Returns timestamp + 0 (FN) or + 43200000 (AN - 12 hours)
 function getSessionValue(dateStr, sessionType) {
-    // dateStr format: "YYYY-MM-DD" (from input) OR "DD.MM.YYYY" (from csv)
     let d;
     if (dateStr.includes('-')) {
-        d = new Date(dateStr); // YYYY-MM-DD
+        d = new Date(dateStr);
     } else {
         const [dd, mm, yyyy] = dateStr.split('.');
-        d = new Date(`${yyyy}-${mm}-${dd}`); // Convert to ISO
+        d = new Date(`${yyyy}-${mm}-${dd}`);
     }
-    // Set to noon to avoid timezone edge cases
     d.setHours(12, 0, 0, 0); 
-    
     let val = d.getTime();
-    // If AN, add 1 "tick" (we just need it to be > FN)
     if (sessionType === "AN") val += 1; 
     return val;
 }
 
 // --- CORE: Get Exam Name by checking Rules Database ---
 function getExamName(date, time, stream) {
-    // 1. Load Rules if empty (Safety)
     if (!currentExamRules || currentExamRules.length === 0) {
         const saved = localStorage.getItem(EXAM_RULES_KEY);
         if (saved) currentExamRules = JSON.parse(saved);
     }
-
     if (currentExamRules.length === 0) return "";
 
-    // 2. Calculate Value for Current Student Record
     const currentSession = getSessionType(time);
     const currentValue = getSessionValue(date, currentSession);
     const currentStream = stream || "Regular";
 
-    // 3. Find Matching Rule
-    // We iterate in reverse to let newer rules (added last) take priority if overlaps exist
     for (let i = currentExamRules.length - 1; i >= 0; i--) {
         const rule = currentExamRules[i];
-        
-        // Stream Check
         if (rule.stream !== "All Streams" && rule.stream !== currentStream) continue;
 
-        // Date/Session Range Check
         const startVal = getSessionValue(rule.startDate, rule.startSession);
         const endVal = getSessionValue(rule.endDate, rule.endSession);
 
@@ -1367,11 +1353,15 @@ function getExamName(date, time, stream) {
             return rule.examName;
         }
     }
-
-    return ""; // No match found
+    return "";
 }
 
-// --- UI: Render the Scheduler Interface (Mobile Friendly & Tidy) ---
+// --- NEW MODAL UI ELEMENTS ---
+const examSettingsModal = document.getElementById('exam-settings-modal');
+const closeExamModalBtn = document.getElementById('close-exam-modal-btn');
+const examModalBody = document.getElementById('exam-modal-body');
+
+// 1. DASHBOARD VIEW: Renders ONLY the Summary Card
 function renderExamNameSettings() {
     const container = document.getElementById('exam-names-grid');
     const section = document.getElementById('exam-names-section');
@@ -1382,202 +1372,156 @@ function renderExamNameSettings() {
     if (!container || !section) return;
 
     section.classList.remove('hidden');
-    container.innerHTML = '';
+    
+    // Clean Summary Card
+    container.innerHTML = `
+        <div class="bg-white border border-indigo-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-full shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800">Exam Configuration</h3>
+                    <p class="text-sm text-gray-500">
+                        <span class="font-bold text-indigo-600">${currentExamRules.length}</span> Active Schedules Defined
+                    </p>
+                </div>
+            </div>
+            
+            <button onclick="openExamRulesModal()" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Manage List
+            </button>
+        </div>
+    `;
+}
 
-    // --- 1. HEADER TOOLBAR (Responsive Wrap) ---
-    // Change: Added flex-wrap and adjusted gap/margins for cleaner mobile spacing
+// 2. OPEN MODAL ACTION
+window.openExamRulesModal = function() {
+    examSettingsModal.classList.remove('hidden');
+    renderExamRulesInModal();
+}
+
+// 3. CLOSE MODAL ACTION
+if (closeExamModalBtn) {
+    closeExamModalBtn.addEventListener('click', () => {
+        examSettingsModal.classList.add('hidden');
+        renderExamNameSettings(); // Update dashboard summary
+    });
+}
+
+// 4. MODAL VIEW: Renders the Form & List INSIDE the Modal
+function renderExamRulesInModal() {
+    if (!examModalBody) return;
+    examModalBody.innerHTML = ''; 
+
+    // A. Toolbar
     const lockBtnHtml = `
-        <button id="toggle-exam-rules-lock" class="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full transition shadow-sm font-medium border ${isExamRulesLocked ? 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="${isExamRulesLocked ? 'M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z' : 'M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z'}" />
+        <button id="toggle-exam-rules-lock" class="text-xs flex items-center gap-1 px-3 py-1.5 rounded-full transition shadow-sm font-medium border ${isExamRulesLocked ? 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="${isExamRulesLocked ? 'M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z' : 'M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z'}" />
             </svg>
-            <span>${isExamRulesLocked ? 'Locked' : 'Unlocked'}</span>
+            <span>${isExamRulesLocked ? 'List Locked' : 'Unlocked to Edit'}</span>
         </button>
     `;
 
     const headerHtml = `
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-indigo-600"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
-                Exam Schedule
-            </h3>
-            <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-                 ${lockBtnHtml}
-                 ${!isAddingExamSchedule ? `<button onclick="setExamScheduleMode(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition flex items-center gap-1">+ New Schedule</button>` : ''}
-            </div>
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-3 sticky top-0 bg-gray-50 z-10 py-2 border-b border-gray-200">
+            <div class="flex items-center gap-2">${lockBtnHtml}</div>
+            ${!isAddingExamSchedule ? `
+            <button onclick="setExamScheduleMode(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-2 ${isExamRulesLocked ? 'opacity-50 cursor-not-allowed' : ''}" ${isExamRulesLocked ? 'disabled' : ''}>
+                <span>+</span> Add New Exam
+            </button>` : ''}
         </div>
     `;
 
-    // --- 2. ADD FORM (Mobile Optimized) ---
-    // Change: Increased vertical gaps, cleaner input styling, distinct sections for dates
+    // B. Form Logic
     let formHtml = '';
     if (isAddingExamSchedule) {
         const streams = (typeof currentStreamConfig !== 'undefined') ? currentStreamConfig : ["Regular"];
         const streamOptions = streams.map(s => `<option value="${s}">${s}</option>`).join('');
         
         formHtml = `
-            <div class="bg-white p-4 sm:p-5 rounded-xl border border-indigo-100 shadow-lg mb-6 relative ring-1 ring-indigo-50">
-                <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
-                    <h4 class="text-sm font-bold text-indigo-800 uppercase tracking-wide">Add New Exam</h4>
-                    <button onclick="setExamScheduleMode(false)" class="text-gray-400 hover:text-red-500 transition p-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                    </button>
+            <div class="bg-white p-6 rounded-xl border border-indigo-200 shadow-lg mb-8 relative ring-4 ring-indigo-50/50">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
+                    <h4 class="text-sm font-bold text-indigo-800 uppercase tracking-wide">Define New Exam</h4>
+                    <button onclick="setExamScheduleMode(false)" class="text-gray-400 hover:text-red-500"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    <div class="md:col-span-8">
-                        <label class="block text-xs font-semibold text-gray-600 mb-1.5">Exam Name</label>
-                        <input type="text" id="rule-name" class="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition" placeholder="e.g. 5th Semester B.Sc November 2025">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Exam Name</label>
+                        <input type="text" id="rule-name" class="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none" placeholder="e.g. Third Semester B.Sc">
                     </div>
-
-                    <div class="md:col-span-4">
-                        <label class="block text-xs font-semibold text-gray-600 mb-1.5">Applied Stream</label>
-                        <select id="rule-stream" class="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
-                            <option value="All Streams">All Streams (General)</option>
-                            ${streamOptions}
-                        </select>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Applied Stream</label>
+                        <select id="rule-stream" class="block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"><option value="All Streams">All Streams (General)</option>${streamOptions}</select>
                     </div>
-
-                    <div class="md:col-span-6">
-                        <label class="block text-xs font-semibold text-gray-600 mb-1.5">Starts From</label>
+                    <div></div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Start</label>
                         <div class="flex gap-2">
-                            <input type="date" id="rule-start-date" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white cursor-pointer focus:ring-1 focus:ring-indigo-500 outline-none" onclick="this.showPicker()">
-                            <select id="rule-start-session" class="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 font-medium">
-                                <option value="FN">FN</option>
-                                <option value="AN">AN</option>
-                            </select>
+                            <input type="date" id="rule-start-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" onclick="this.showPicker()">
+                            <select id="rule-start-session" class="w-24 px-2 py-2 border border-gray-300 bg-gray-50 font-bold text-sm"><option value="FN">FN</option><option value="AN">AN</option></select>
                         </div>
                     </div>
-
-                    <div class="md:col-span-6">
-                        <label class="block text-xs font-semibold text-gray-600 mb-1.5">Ends On</label>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">End</label>
                         <div class="flex gap-2">
-                            <input type="date" id="rule-end-date" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white cursor-pointer focus:ring-1 focus:ring-indigo-500 outline-none" onclick="this.showPicker()">
-                            <select id="rule-end-session" class="w-20 px-2 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 font-medium">
-                                <option value="AN" selected>AN</option>
-                                <option value="FN">FN</option>
-                            </select>
+                            <input type="date" id="rule-end-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" onclick="this.showPicker()">
+                            <select id="rule-end-session" class="w-24 px-2 py-2 border border-gray-300 bg-gray-50 font-bold text-sm"><option value="AN" selected>AN</option><option value="FN">FN</option></select>
                         </div>
                     </div>
                 </div>
-                
-                <div class="mt-5 flex justify-end gap-3 pt-3 border-t border-gray-100">
-                    <button onclick="setExamScheduleMode(false)" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 hover:bg-gray-100 transition">Cancel</button>
-                    <button id="add-rule-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-xs font-bold shadow-md transform active:scale-95 transition">
-                        Save Schedule
-                    </button>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button onclick="setExamScheduleMode(false)" class="px-4 py-2 rounded-lg text-sm font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+                    <button id="add-rule-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md">Save to List</button>
                 </div>
             </div>
         `;
     }
 
-    // --- 3. HYBRID LIST VIEW (Mobile Cards + Desktop Table) ---
-    // Change: Created two separate visual structures based on screen size
+    // C. List Logic
     let listHtml = '';
-    
     if (currentExamRules.length > 0) {
         const sortedRules = [...currentExamRules].sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-        
-        // A. Mobile Cards View (Visible on < md)
-        let mobileCards = '';
-        sortedRules.forEach(rule => {
-            const fmt = (d) => d.split('-').reverse().slice(0, 2).join('/');
-            const onclickAction = isExamRulesLocked ? '' : `onclick="deleteExamRule('${rule.id}')"`;
-            const deleteBtn = isExamRulesLocked ? '' : `
-                <button class="absolute top-3 right-3 p-1.5 bg-white text-red-500 border border-red-100 rounded-full shadow-sm hover:bg-red-50" ${onclickAction}>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>`;
+        const fmt = (d) => d.split('-').reverse().slice(0, 2).join('/'); 
 
-            mobileCards += `
-                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm relative flex flex-col gap-2">
-                    ${deleteBtn}
-                    <div>
-                        <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Exam Name</span>
-                        <div class="font-bold text-gray-800 text-sm leading-tight pr-8">${rule.examName}</div>
-                    </div>
-                    
-                    <div class="flex items-center gap-2">
-                        <span class="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold border border-indigo-100 uppercase">${rule.stream}</span>
-                    </div>
+        let rows = sortedRules.map(rule => {
+            const btnClass = isExamRulesLocked ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100';
+            const action = isExamRulesLocked ? '' : `onclick="deleteExamRule('${rule.id}')"`;
 
-                    <div class="mt-1 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-600">
-                        <div>
-                            <span class="block text-[9px] text-gray-400 font-bold uppercase">From</span>
-                            ${fmt(rule.startDate)} <span class="font-bold text-orange-600">${rule.startSession}</span>
-                        </div>
-                        <div class="text-gray-300">➜</div>
-                        <div class="text-right">
-                            <span class="block text-[9px] text-gray-400 font-bold uppercase">To</span>
-                            ${fmt(rule.endDate)} <span class="font-bold text-indigo-600">${rule.endSession}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-
-        // B. Desktop Table View (Visible on >= md)
-        let desktopRows = '';
-        sortedRules.forEach(rule => {
-            const fmt = (d) => d.split('-').reverse().slice(0, 2).join('/');
-            const btnState = isExamRulesLocked ? 'disabled opacity-30 cursor-not-allowed text-gray-400' : 'text-red-500 hover:text-red-700 hover:bg-red-50 rounded';
-            const onclickAction = isExamRulesLocked ? '' : `onclick="deleteExamRule('${rule.id}')"`;
-
-            desktopRows += `
+            return `
                 <tr class="hover:bg-gray-50 border-b border-gray-100 last:border-0 transition">
                     <td class="px-4 py-3 text-sm font-bold text-gray-800">${rule.examName}</td>
-                    <td class="px-4 py-3 text-xs">
-                        <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded border border-gray-200 font-medium">${rule.stream}</span>
-                    </td>
-                    <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                        <span class="font-mono text-gray-500">${fmt(rule.startDate)}</span> <span class="text-xs font-bold text-orange-600 bg-orange-50 px-1 rounded">${rule.startSession}</span>
-                        <span class="text-gray-300 mx-1">➜</span>
-                        <span class="font-mono text-gray-500">${fmt(rule.endDate)}</span> <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-1 rounded">${rule.endSession}</span>
+                    <td class="px-4 py-3"><span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-100 uppercase">${rule.stream}</span></td>
+                    <td class="px-4 py-3 text-sm whitespace-nowrap text-gray-600">
+                        <span class="font-mono font-bold">${fmt(rule.startDate)}</span> <span class="text-[10px] bg-gray-200 px-1 rounded">${rule.startSession}</span>
+                        <span class="text-gray-300 mx-2">➜</span>
+                        <span class="font-mono font-bold">${fmt(rule.endDate)}</span> <span class="text-[10px] bg-gray-200 px-1 rounded">${rule.endSession}</span>
                     </td>
                     <td class="px-4 py-3 text-right">
-                        <button class="p-1.5 transition ${btnState}" ${onclickAction} title="Delete">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                        <button class="p-1.5 rounded transition ${btnClass}" ${action} title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                     </td>
-                </tr>
-            `;
-        });
+                </tr>`;
+        }).join('');
 
-        listHtml = `
-            <div class="md:hidden flex flex-col gap-2">
-                ${mobileCards}
-            </div>
-
-            <div class="hidden md:block bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <table class="w-full text-left border-collapse">
-                    <thead class="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                            <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th>
-                            <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                            <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Schedule Range</th>
-                            <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>${desktopRows}</tbody>
-                </table>
-            </div>
-        `;
+        listHtml = `<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"><table class="w-full text-left border-collapse"><thead class="bg-gray-100 border-b border-gray-200"><tr><th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Exam Name</th><th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Stream</th><th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase">Date Range</th><th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase text-right">Action</th></tr></thead><tbody class="divide-y divide-gray-50">${rows}</tbody></table></div>`;
     } else {
-        listHtml = `<div class="text-center text-gray-400 text-sm py-8 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-            <p>No exams scheduled yet.</p>
-            <p class="text-xs mt-1">Click "New Schedule" to define Exam Names for reports.</p>
-        </div>`;
+        listHtml = `<div class="text-center py-10 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50"><p class="text-gray-500 font-medium">No exams configured yet.</p><p class="text-xs text-gray-400">Click "+ Add New Exam" to start.</p></div>`;
     }
 
-    container.innerHTML = headerHtml + formHtml + listHtml;
+    examModalBody.innerHTML = headerHtml + formHtml + listHtml;
 
-    // --- RE-ATTACH LISTENERS (Logic remains same) ---
+    // Listeners
     const lockBtn = document.getElementById('toggle-exam-rules-lock');
-    if(lockBtn) {
-        lockBtn.addEventListener('click', () => {
-            isExamRulesLocked = !isExamRulesLocked;
-            renderExamNameSettings(); 
-        });
-    }
+    if(lockBtn) lockBtn.addEventListener('click', () => { isExamRulesLocked = !isExamRulesLocked; renderExamRulesInModal(); });
 
     const addBtn = document.getElementById('add-rule-btn');
     if(addBtn) {
@@ -1592,42 +1536,32 @@ function renderExamNameSettings() {
             if (!name || !sDate || !eDate) { alert("Please fill in Name, Start Date, and End Date."); return; }
             if (new Date(sDate) > new Date(eDate)) { alert("Start Date cannot be after End Date."); return; }
 
-            const newRule = {
-                id: Date.now().toString(),
-                examName: name,
-                stream: stream,
-                startDate: sDate,
-                startSession: sSess,
-                endDate: eDate,
-                endSession: eSess
-            };
-
+            const newRule = { id: Date.now().toString(), examName: name, stream: stream, startDate: sDate, startSession: sSess, endDate: eDate, endSession: eSess };
             currentExamRules.push(newRule);
             localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
-            
             isAddingExamSchedule = false; 
-            renderExamNameSettings();
+            renderExamRulesInModal();
+            renderExamNameSettings(); // Update Dashboard Count
             if (typeof syncDataToCloud === 'function') syncDataToCloud();
         });
     }
 }
 
-// Helper to toggle the "Add New" form
 window.setExamScheduleMode = function(isAdding) {
+    if (isExamRulesLocked && isAdding) return;
     isAddingExamSchedule = isAdding;
-    renderExamNameSettings();
+    renderExamRulesInModal();
 }
 
-// Global Delete Function for Rules
 window.deleteExamRule = function(id) {
     if(confirm("Remove this exam schedule?")) {
         currentExamRules = currentExamRules.filter(r => r.id !== id);
         localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
-        renderExamNameSettings();
+        renderExamRulesInModal();
+        renderExamNameSettings(); // Update Dashboard Count
         if (typeof syncDataToCloud === 'function') syncDataToCloud();
     }
 };
-    
 // *** NEW: Universal Base64 key generator ***
 function getBase64CourseKey(courseName) {
     try {
