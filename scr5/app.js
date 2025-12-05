@@ -10870,7 +10870,10 @@ function updateStudentPortalLink() {
 
 // 1. Update when clicking the Settings Tab
 if (navSettings) {
-    navSettings.addEventListener('click', updateStudentPortalLink);
+    navSettings.addEventListener('click', () => {
+        updateStudentPortalLink();       // Keep the existing link update
+        renderExamNameSettings();        // Add your new Exam List render
+    });
 }
 
 // 2. Copy Button Functionality
