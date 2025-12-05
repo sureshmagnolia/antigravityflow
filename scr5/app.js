@@ -6258,6 +6258,81 @@ filterAllRadio.addEventListener('change', () => {
         });
     }
 
+
+// ==========================================
+// 📂 SMART LOCAL/CLOUD BACKUP (File System API)
+// ==========================================
+
+const smartBackupBtn = document.getElementById('smart-backup-btn');
+
+if (smartBackupBtn) {
+    smartBackupBtn.addEventListener('click', async () => {
+        // 1. Browser Support Check
+        if (!('showDirectoryPicker' in window)) {
+            alert("Your browser does not support folder selection. Please use Chrome, Edge, or Opera.");
+            return;
+        }
+
+        // 2. Prepare Data
+        const backupData = {};
+        const ALL_DATA_KEYS = [
+            'examRoomConfig', 'examStreamsConfig', 'examCollegeName',
+            'examAbsenteeList', 'examQPCodes', 'examBaseData',
+            'examRoomAllotment', 'examScribeList', 'examScribeAllotment',
+            'examRulesConfig', 'examInvigilatorMapping', 'examInvigilationSlots', 'examStaffData'
+        ];
+
+        ALL_DATA_KEYS.forEach(key => {
+            const data = localStorage.getItem(key);
+            if (data) backupData[key] = data;
+        });
+
+        if (Object.keys(backupData).length === 0) {
+            alert("No data found to back up.");
+            return;
+        }
+
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const dateStr = new Date().toISOString().split('T')[0];
+        const fileName = `ExamFlow_Backup_${dateStr}.json`;
+
+        try {
+            // 3. User selects Root Folder (e.g., "Google Drive")
+            smartBackupBtn.textContent = "Select Folder...";
+            const rootHandle = await window.showDirectoryPicker({
+                id: 'examflow_backup_location', // Browser remembers this ID
+                mode: 'readwrite',
+                startIn: 'documents'
+            });
+
+            // 4. System Creates/Finds Specific Folder
+            // This satisfies the "if not available, create it" requirement
+            smartBackupBtn.textContent = "Saving...";
+            const projectFolderHandle = await rootHandle.getDirectoryHandle('ExamFlow_Backups', { create: true });
+
+            // 5. Write File
+            const fileHandle = await projectFolderHandle.getFileHandle(fileName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(jsonString);
+            await writable.close();
+
+            alert(`✅ Backup Saved Successfully!\n\nLocation: .../${projectFolderHandle.name}/${fileName}\n\nIf this folder is synced (e.g., Google Drive), your data is now in the cloud.`);
+
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error("Backup Failed:", err);
+                alert("Failed to save to folder: " + err.message);
+            }
+        } finally {
+            smartBackupBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                Save to Cloud/Drive Folder
+            `;
+        }
+    });
+}
+
+    
     // ==========================================
     // 💍 MASTER CSV DOWNLOAD (ONE RING TO RULE THEM ALL)
     // ==========================================
