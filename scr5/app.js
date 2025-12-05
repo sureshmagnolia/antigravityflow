@@ -11390,12 +11390,13 @@ window.removeScribeRoom = function(regNo) {
     renderScribeAllotmentList(currentSessionKey);
 };    
 
-
 // ==========================================
-// 👮 INVIGILATOR ASSIGNMENT MODULE (FIXED V3)
+// 👮 INVIGILATOR ASSIGNMENT MODULE (WITH SWAP)
 // ==========================================
 
-// 1. Render the Main Assignment Panel (Mobile-Fixed: Cute & Tidy)
+let swapSourceRoom = null; // Track which room is selected for swapping
+
+// 1. Render the Main Assignment Panel
 window.renderInvigilationPanel = function() {
     const section = document.getElementById('invigilator-assignment-section');
     const list = document.getElementById('invigilator-list-container');
@@ -11452,6 +11453,19 @@ window.renderInvigilationPanel = function() {
     const serialMap = getRoomSerialMap(sessionKey);
     allRooms.sort((a, b) => (serialMap[a.name] || 999) - (serialMap[b.name] || 999));
 
+    // --- SWAP MODE BANNER ---
+    if (swapSourceRoom) {
+        list.innerHTML += `
+            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold p-3 rounded-lg mb-3 flex justify-between items-center shadow-sm sticky top-0 z-10">
+                <div class="flex items-center gap-2">
+                    <span class="animate-pulse">🔄</span> 
+                    <span>Select a target room to swap invigilators.</span>
+                </div>
+                <button onclick="window.handleSwapClick('${swapSourceRoom.replace(/'/g, "\\'")}')" class="bg-white border border-orange-200 px-3 py-1 rounded hover:bg-orange-100 transition text-[10px]">Cancel</button>
+            </div>
+        `;
+    }
+
     // C. Render Rows
     allRooms.forEach(room => {
         const roomName = room.name;
@@ -11470,30 +11484,56 @@ window.renderInvigilationPanel = function() {
             return `<span class="text-[9px] px-1.5 py-0.5 rounded border ${color} font-bold uppercase tracking-wide whitespace-nowrap">${s}</span>`;
         }).join(' ');
 
-        const cardBorder = assignedName ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white";
-        
-        // Button Logic (Responsive)
+        // Visual State Logic
+        let cardBorder = assignedName ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white";
+        if (swapSourceRoom === roomName) cardBorder = "border-orange-400 ring-2 ring-orange-100 bg-orange-50";
+
+        // ACTION BUTTONS LOGIC
         let actionHtml = "";
-        if (assignedName) {
-            // Assigned State: Name + Change Button
-            actionHtml = `
-                <div class="flex items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
-                    <div class="flex items-center gap-2 min-w-0">
-                         <div class="bg-green-100 text-green-700 p-1 rounded-full shrink-0">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                         <span class="text-xs font-bold text-green-800 truncate max-w-[150px] sm:max-w-[200px]" title="${assignedName}">${assignedName}</span>
-                    </div>
-                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline shrink-0 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition">Change</button>
-                </div>
-            `;
+        
+        if (swapSourceRoom) {
+            // --- SWAP MODE ---
+            if (swapSourceRoom === roomName) {
+                // This is the source room
+                actionHtml = `
+                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
+                        Cancel
+                    </button>`;
+            } else {
+                // This is a target room
+                const btnLabel = assignedName ? "Swap Here" : "Move Here";
+                const btnColor = assignedName ? "bg-indigo-600 hover:bg-indigo-700" : "bg-green-600 hover:bg-green-700";
+                
+                actionHtml = `
+                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto ${btnColor} text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        ${btnLabel}
+                    </button>`;
+            }
         } else {
-            // Unassigned State: Assign Button (Full width on mobile)
-            actionHtml = `
-                <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full sm:w-auto mt-2 sm:mt-0 bg-indigo-600 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 transition shadow-sm flex items-center justify-center gap-1">
-                    <span>+</span> Assign
-                </button>
-            `;
+            // --- NORMAL MODE ---
+            if (assignedName) {
+                actionHtml = `
+                    <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                             <div class="bg-green-100 text-green-700 p-1 rounded-full shrink-0">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                             </div>
+                             <span class="text-xs font-bold text-green-800 truncate max-w-[150px] sm:max-w-[200px]" title="${assignedName}">${assignedName}</span>
+                        </div>
+                        <div class="flex gap-1 w-full sm:w-auto">
+                            <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Change</button>
+                            <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                actionHtml = `
+                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full sm:w-auto mt-2 sm:mt-0 bg-indigo-600 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 transition shadow-sm flex items-center justify-center gap-1">
+                        <span>+</span> Assign
+                    </button>
+                `;
+            }
         }
 
         list.innerHTML += `
@@ -11519,7 +11559,7 @@ window.renderInvigilationPanel = function() {
                         </div>
                     </div>
 
-                    <div class="sm:text-right min-w-[180px]">
+                    <div class="sm:text-right min-w-[200px]">
                         ${actionHtml}
                     </div>
                 </div>
@@ -11528,8 +11568,56 @@ window.renderInvigilationPanel = function() {
     });
 }
 
+// 2. Handle Swap Interaction
+window.handleSwapClick = function(roomName) {
+    if (swapSourceRoom === roomName) {
+        // Clicked same room -> Cancel Swap
+        swapSourceRoom = null;
+    } else if (swapSourceRoom) {
+        // Clicked different room -> Perform Swap
+        performSwap(swapSourceRoom, roomName);
+        return; // performSwap calls render
+    } else {
+        // Start Swap Mode
+        swapSourceRoom = roomName;
+    }
+    renderInvigilationPanel();
+}
 
-// 2. Open Modal (Populates List)
+// 3. Execute Swap Logic
+window.performSwap = function(roomA, roomB) {
+    const sessionKey = allotmentSessionSelect.value;
+    const invigNameA = currentInvigMapping[roomA];
+    const invigNameB = currentInvigMapping[roomB]; 
+
+    // Update Mapping (Swap logic handles empty/unassigned too)
+    if (invigNameB) {
+        currentInvigMapping[roomA] = invigNameB;
+    } else {
+        delete currentInvigMapping[roomA];
+    }
+    
+    if (invigNameA) {
+        currentInvigMapping[roomB] = invigNameA;
+    } else {
+        delete currentInvigMapping[roomB];
+    }
+
+    // Save & Sync
+    const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+    allMappings[sessionKey] = currentInvigMapping;
+    localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+    if(typeof syncDataToCloud === 'function') syncDataToCloud();
+
+    // Reset UI
+    swapSourceRoom = null;
+    renderInvigilationPanel();
+    
+    // Optional Feedback
+    // alert("Swapped successfully!"); 
+}
+
+// 4. Open Modal (Populates List)
 window.openInvigModal = function(roomName) {
     const modal = document.getElementById('invigilator-select-modal');
     const list = document.getElementById('invig-options-list');
@@ -11604,7 +11692,7 @@ window.openInvigModal = function(roomName) {
     input.oninput = (e) => renderList(e.target.value);
 }
 
-// 3. Save Assignment (And Close Modal)
+// 5. Save Assignment (And Close Modal)
 window.saveInvigAssignment = function(room, name) {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -11626,7 +11714,7 @@ window.saveInvigAssignment = function(room, name) {
     window.renderInvigilationPanel();
 }
 
-// 4. Auto-Assign
+// 6. Auto-Assign
 window.autoAssignInvigilators = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -11683,7 +11771,7 @@ window.autoAssignInvigilators = function() {
     }
 }
 
-// 6. Unassign All Invigilators
+// 7. Unassign All Invigilators
 window.unassignAllInvigilators = function() {
     const sessionKey = allotmentSessionSelect.value;
     if (!sessionKey) return;
@@ -11709,7 +11797,7 @@ window.unassignAllInvigilators = function() {
         alert("All invigilator assignments cleared for this session.");
     }
 }
-    
+
     
 // 5. Print List (Final: Stream-Wise Empty Rows + Invig Names + Dept + Mobile)
 window.printInvigilatorList = function() {
