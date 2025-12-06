@@ -1122,16 +1122,16 @@ function renderStaffCalendar(myEmail) {
                 }
 
                 contentHtml += `
-                    <div class="relative overflow-hidden rounded-lg border ${badgeClass} p-1.5 shadow-sm transition-transform hover:scale-105 ${glowClass} flex items-center justify-between gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
+                    <div class="relative overflow-hidden rounded-lg border ${badgeClass} p-1 md:p-1.5 shadow-sm transition-transform hover:scale-105 ${glowClass} flex flex-col md:flex-row items-start md:items-center justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <!-- Glossy Shine -->
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
                         
-                        <div class="flex items-center gap-1.5 z-10">
-                            <span class="text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
+                        <div class="flex items-center gap-1 md:gap-1.5 z-10">
+                            <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
                         </div>
-                        <div class="flex items-center gap-1 z-10">
-                            <span class="text-[9px] font-bold opacity-90 truncate max-w-[40px]">${statusText}</span>
-                            <span class="text-[10px] filter drop-shadow-sm">${icon}</span>
+                        <div class="flex items-center gap-0.5 md:gap-1 z-10">
+                            <span class="text-[7px] md:text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
+                            <span class="text-[9px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
             });
