@@ -503,14 +503,6 @@ function parseDate(key) {
     } catch (e) { return new Date(0); }
 }
 
-// Parse date string in DD.MM.YYYY format (without time)
-function parseDate2(dateStr) {
-    try {
-        const [d, m, y] = dateStr.split('.');
-        return new Date(y, m - 1, d);
-    } catch (e) { return new Date(0); }
-}
-
 function getWeekOfMonth(date) {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
     const dayOfWeek = firstDay.getDay(); // 0 (Sun) to 6 (Sat)
@@ -1592,6 +1584,282 @@ async function saveManualSlot() {
         unavailable: existing.unavailable || [],
         isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
+
+    await syncSlotsToCloud();
+    window.closeModal('add-slot-modal');
+    renderSlotsGridAdmin();
+}
+
+// Expose to window for HTML onclick handlers
+window.openAddSlotModal = openAddSlotModal;
+window.saveManualSlot = saveManualSlot;
+
+// --- NEW: Delete Slot Function ---
+window.deleteSlot = async function (key) {
+    // 1. Security Check
+    if (!confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot?\n\nSlot: ${key}\n\nThis will remove all assigned staff and records for this session.`)) return;
+
+    // 2. Delete from local object
+    if (invigilationSlots[key]) {
+        delete invigilationSlots[key];
+
+        // 3. Save to Cloud
+        await syncSlotsToCloud();
+
+        // 4. Refresh Grid
+        renderSlotsGridAdmin();
+
+        // 5. Log it
+        if (typeof logActivity === 'function') logActivity("Slot Deleted", `Admin deleted slot: ${key}`);
+    }
+}
+
+window.toggleAdvance = async function (dateStr, email, session) {
+    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+    if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+
+    const list = advanceUnavailability[dateStr][session];
+    const existingEntry = list.find(u => u.email === email);
+
+    if (existingEntry) {
+        // REMOVE (Simple Confirm)
+        if (confirm(`Remove 'Unavailable' status for ${session}?`)) {
+            advanceUnavailability[dateStr][session] = list.filter(u => u.email !== email);
+
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from ${dateStr} (${session}) unavailability list.`);
+
+            await saveAdvanceUnavailability();
+            renderStaffCalendar(email);
+
+            // 1. Update List Live
+            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+
+            // 2. CLOSE MODAL (Updated)
+            window.closeModal('day-detail-modal');
+        }
+    } else {
+        // ADD (Open Modal for Reason)
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`;
+        document.getElementById('unav-email').value = email;
+
+        document.getElementById('unav-reason').value = "";
+        document.getElementById('unav-details').value = "";
+        document.getElementById('unav-details-container').classList.add('hidden');
+
+        window.closeModal('day-detail-modal');
+        window.openModal('unavailable-modal');
+    }
+}
+
+async function saveAdvanceUnavailability() {
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error(e);
+        updateSyncStatus("Save Failed", "error");
+    }
+}
+window.toggleWholeDay = async function (dateStr, email) {
+    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+
+    const fnList = advanceUnavailability[dateStr].FN || [];
+    const anList = advanceUnavailability[dateStr].AN || [];
+    const isFullDay = fnList.some(u => u.email === email) && anList.some(u => u.email === email);
+
+    if (isFullDay) {
+        // CLEAR BOTH
+        if (confirm("Clear unavailability for the WHOLE DAY?")) {
+            advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
+            advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
+
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from Whole Day ${dateStr}.`);
+
+            await saveAdvanceUnavailability();
+            renderStaffCalendar(email);
+
+            // 1. Update List Live
+            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+
+            // 2. CLOSE MODAL (Updated)
+            window.closeModal('day-detail-modal');
+        }
+    } else {
+        // MARK BOTH
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`;
+        document.getElementById('unav-email').value = email;
+
+        document.getElementById('unav-reason').value = "";
+        document.getElementById('unav-details').value = "";
+        document.getElementById('unav-details-container').classList.add('hidden');
+
+        window.closeModal('day-detail-modal');
+        window.openModal('unavailable-modal');
+    }
+}
+// --- STANDARD EXPORTS ---
+window.toggleLock = async function (key) {
+    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
+    await syncSlotsToCloud();
+}
+
+// --- NEW: Lock All Function ---
+window.lockAllSessions = async function () {
+    if (!confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
+
+    let changed = false;
+    Object.keys(invigilationSlots).forEach(key => {
+        if (!invigilationSlots[key].isLocked) {
+            invigilationSlots[key].isLocked = true;
+            changed = true;
+        }
+    });
+
+    if (!confirm("Confirm duty?")) return;
+
+    const slot = invigilationSlots[key];
+    slot.assigned.push(email);
+
+    const me = staffData.find(s => s.email === email);
+    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
+    await syncSlotsToCloud();
+    await syncStaffToCloud();
+    window.closeModal('day-detail-modal');
+    renderStaffCalendar(email); // Refresh
+}
+
+window.changeSlotReq = async function (key, delta) {
+    const slot = invigilationSlots[key];
+    const newReq = slot.required + delta;
+    if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
+    if (newReq < 1) return;
+    slot.required = newReq;
+    await syncSlotsToCloud();
+    renderSlotsGridAdmin();
+}
+
+
+window.cancelDuty = async function (key, email, isLocked) {
+    if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
+    if (confirm("Cancel duty?")) {
+        invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
+        const me = staffData.find(s => s.email === email);
+        if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
+        logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
+        await syncSlotsToCloud();
+        await syncStaffToCloud();
+        window.closeModal('day-detail-modal');
+    }
+}
+function toggleUnavDetails() {
+    const reasonEl = document.getElementById('unav-reason');
+    const container = document.getElementById('unav-details-container');
+    if (!reasonEl || !container) return;
+
+    const reason = reasonEl.value;
+    if (['OD', 'DL', 'Medical'].includes(reason)) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+window.setAvailability = async function (key, email, isAvailable) {
+    if (isAvailable) {
+        if (confirm("Mark available?")) {
+            invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
+            await syncSlotsToCloud();
+
+            // *** FIX: Update List Live ***
+            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+
+            window.closeModal('day-detail-modal');
+            renderStaffCalendar(email); // Update calendar colors
+        }
+    } else {
+        document.getElementById('unav-key').value = key;
+        document.getElementById('unav-email').value = email;
+        document.getElementById('unav-reason').value = "";
+        document.getElementById('unav-details').value = "";
+        document.getElementById('unav-details-container').classList.add('hidden');
+        window.closeModal('day-detail-modal');
+        window.openModal('unavailable-modal');
+    }
+}
+window.confirmUnavailable = async function () {
+    const key = document.getElementById('unav-key').value;
+    const email = document.getElementById('unav-email').value;
+    const reason = document.getElementById('unav-reason').value;
+    const details = document.getElementById('unav-details').value.trim();
+
+    if (!reason) return alert("Select a reason.");
+    if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
+
+    const entry = { email, reason, details: details || "" };
+
+    if (key.startsWith('ADVANCE|')) {
+        // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
+        const [_, dateStr, session] = key.split('|');
+
+        // Ensure structure
+        if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+        if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
+        if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
+
+        if (session === 'WHOLE') {
+            // Remove existing to avoid duplicates
+            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
+            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
+
+            advanceUnavailability[dateStr].FN.push(entry);
+            advanceUnavailability[dateStr].AN.push(entry);
+
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
+        } else {
+            // Single Session
+            if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
+            advanceUnavailability[dateStr][session].push(entry);
+
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+        }
+
+        await saveAdvanceUnavailability();
+
+        // --- FIXES APPLIED HERE ---
+        window.closeModal('unavailable-modal');
+        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+        renderStaffCalendar(email);
+
+        // 1. LIVE UPDATE LIST
+        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+        // 2. DO NOT RE-OPEN MODAL (Issue 2 Fix)
+        // openDayModal(dateStr, email); <--- REMOVED
+        // --------------------------
+
+    } else {
+        // --- CASE B: SLOT SPECIFIC ---
+        if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
+        invigilationSlots[key].unavailable.push(entry);
+
+        logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
+
+        await syncSlotsToCloud();
+        window.closeModal('unavailable-modal');
+        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+
+        renderStaffCalendar(email);
+        // 1. LIVE UPDATE LIST
+        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+    }
+}
+
+window.waNotify = function (key) {
+    const slot = invigilationSlots[key];
+    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
 
     // Get first valid phone with prefix
     let phone = "";
