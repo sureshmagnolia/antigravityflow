@@ -11749,11 +11749,8 @@ Are you sure?
         </head>
         <body>
             <div id="pdf-controls">
-                <button onclick="window.print()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold shadow hover:bg-gray-800 mr-2">
+                <button onclick="window.print()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold shadow hover:bg-gray-800">
                     🖨️ Print
-                </button>
-                <button onclick="downloadDoc()" class="bg-blue-600 text-white px-4 py-2 rounded font-bold shadow hover:bg-blue-700">
-                    ⬇️ Download PDF
                 </button>
             </div>
 
