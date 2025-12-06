@@ -1614,6 +1614,39 @@ window.deleteSlot = async function (key) {
     }
 }
 
+
+// --- MISSING HELPER FUNCTIONS ---
+
+async function saveAdvanceUnavailability() {
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        // Ensure db and currentCollegeId are available in scope
+        const ref = doc(db, "colleges", currentCollegeId);
+        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
+        updateSyncStatus("Synced", "success");
+    } catch (e) {
+        console.error("Save Error:", e);
+        updateSyncStatus("Save Failed", "error");
+    }
+}
+
+// Function to toggle the "Details" box in the unavailability modal
+window.toggleUnavDetails = function() {
+    const reasonEl = document.getElementById('unav-reason');
+    const container = document.getElementById('unav-details-container');
+    if (!reasonEl || !container) return;
+    
+    const reason = reasonEl.value;
+    // Show details box only for specific reasons
+    if (['OD', 'DL', 'Medical', 'Other'].includes(reason)) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+
+
 window.toggleAdvance = async function(dateStr, email, session) {
     // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
