@@ -68,8 +68,8 @@ const UiModal = {
             </div>
             <div class="${this._bodyClass}">
                 <p class="mb-2">${message}</p>
-                <form onsubmit="event.preventDefault(); document.getElementById('ui-modal-ok-btn').click();">
-                    <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}">
+                <form onsubmit="return false;">
+                    <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}" autocomplete="${inputType === 'password' ? 'new-password' : 'off'}">
                 </form>
             </div>
         `;
