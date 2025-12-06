@@ -11700,7 +11700,7 @@ Are you sure?
                     box-sizing: border-box;
                 }
 
-                /* PAGE BLOCKS */
+                /* PAGE BLOCKS - Allow natural breaks */
                 .print-page, .print-page-daywise, .print-page-sticker {
                     width: 100% !important;
                     height: auto !important;
@@ -11709,13 +11709,25 @@ Are you sure?
                     padding: 15mm !important; /* Generous padding (shrinks on PDF) */
                     border: none !important;
                     box-shadow: none !important;
-                    page-break-after: always;
-                    page-break-inside: avoid;
+                    /* Removed page-break-inside: avoid to allow natural flow */
                     display: block;
                     box-sizing: border-box;
                 }
                 
-                .print-page:last-child { page-break-after: auto !important; margin-bottom: 0 !important; }
+                .print-page:last-child { margin-bottom: 0 !important; }
+
+                /* Protect summary sections and table rows from breaking */
+                .summary-box > div,
+                .summary-box > p {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                /* Protect table rows */
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
 
                 /* TABLE STABILITY */
                 table { 
