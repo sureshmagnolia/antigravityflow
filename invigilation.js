@@ -1295,6 +1295,17 @@ function renderExchangeMarket(myEmail) {
                     </div>
                     ${actionBtn}
                 </div>
+            </div>
+        `;
+    });
+}
+
+window.openDayDetail = function (dateStr, email) {
+    document.getElementById('modal-day-title').textContent = dateStr;
+    const container = document.getElementById('modal-sessions-container');
+    container.innerHTML = '';
+
+    // TRACK ASSIGNMENTS FOR THIS DAY
     let isAssignedFN = false;
     let isAssignedAN = false;
 
@@ -1329,22 +1340,22 @@ function renderExchangeMarket(myEmail) {
             let actionHtml = "";
             if (isAssigned) {
                 if (isPostedByMe) {
-                    actionHtml = `< div class="w-full bg-orange-50 p-2 rounded border border-orange-200" ><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div > `;
+                    actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
                 } else if (isLocked) {
-                    actionHtml = `< button onclick = "postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm" >♻️ Post for Exchange</button > `;
+                    actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
                 } else {
-                    actionHtml = `< button onclick = "cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold" >✅ Assigned(Click to Cancel)</button > `;
+                    actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
                 }
             } else if (marketOffers.length > 0) {
-                let offersHtml = marketOffers.map(seller => `< div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1" ><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div > `).join('');
-                actionHtml = `< div class="w-full mb-1" > ${ offersHtml }</div > `;
+                let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
+                actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
             } else if (isUnavailable) {
-                actionHtml = `< button onclick = "setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition" > Undo "Unavailable"</button > `;
+                actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
             } else {
-                const unavBtn = `< button onclick = "setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold" > Unavailable</button > `;
-                if (isLocked) actionHtml = `< div class="flex gap-2 w-full" > <div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${ unavBtn }</div > `;
-                else if (needed <= 0) actionHtml = `< div class="flex gap-2 w-full" > <div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${ unavBtn }</div > `;
-                else actionHtml = `< div class="flex gap-2 w-full" > <button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${ unavBtn }</div > `;
+                const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
+                if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
+                else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
+                else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
             }
 
             // Reserve Logic
@@ -1361,19 +1372,19 @@ function renderExchangeMarket(myEmail) {
                     const statusIcon = isExchanging ? "⏳" : "✅";
 
                     const isReserve = reserveEmails.includes(st);
-                    const reserveBadge = isReserve ? `< span class="bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded ml-1 border border-yellow-200" > Reserve</span > ` : "";
+                    const reserveBadge = isReserve ? `<span class="bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded ml-1 border border-yellow-200">Reserve</span>` : "";
                     const rowClass = isReserve ? "bg-yellow-50/50" : "bg-white";
 
-                    return `< div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1" > <span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div > `;
+                    return `<div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div>`;
                 }).join('');
 
-                staffListHtml = `< div class="mt-3 pt-2 border-t border-gray-200" ><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div > `;
+                staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
             }
 
-            container.innerHTML += `< div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2" ><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${ staffListHtml }</div > `;
+            container.innerHTML += `<div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${staffListHtml}</div>`;
         });
     } else {
-        container.innerHTML = `< p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4" > No exam sessions scheduled.</p > `;
+        container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
 
     // 2. ADVANCE / SESSION UNAVAILABILITY SECTION (With Logic to Disable if Assigned)
@@ -1390,20 +1401,20 @@ function renderExchangeMarket(myEmail) {
             return {
                 disabled: 'disabled',
                 class: 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
-                text: `🚫 On Duty(${ label })`
+                text: `🚫 On Duty (${label})`
             };
         }
         if (isMarked) {
             return {
                 disabled: '',
                 class: 'bg-red-600 text-white border-red-700 hover:bg-red-700',
-                text: `🚫 ${ label } Unavailable`
+                text: `🚫 ${label} Unavailable`
             };
         }
         return {
             disabled: '',
             class: 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50',
-            text: `Mark ${ label } `
+            text: `Mark ${label}`
         };
     };
 
@@ -1420,7 +1431,7 @@ function renderExchangeMarket(myEmail) {
     const wholeDisabled = anyDuty ? "disabled" : "";
 
     container.innerHTML += `
-            < div class="mt-4 pt-4 border-t border-gray-200" >
+        <div class="mt-4 pt-4 border-t border-gray-200">
             <h4 class="text-xs font-bold text-indigo-900 uppercase mb-2 flex items-center gap-2">
                 <span>🗓️</span> General Unavailability (OD/DL/Leave)
             </h4>
@@ -1445,8 +1456,8 @@ function renderExchangeMarket(myEmail) {
                     ${wholeText}
                 </button>
             </div>
-        </div >
-            `;
+        </div>
+    `;
 
     window.openModal('day-detail-modal');
 }
@@ -1551,7 +1562,7 @@ async function saveManualSlot() {
 
     // 1. Format Date: YYYY-MM-DD -> DD.MM.YYYY
     const [y, m, d] = dateInput.split('-');
-    const formattedDate = `${ d }.${ m }.${ y } `;
+    const formattedDate = `${d}.${m}.${y}`;
 
     // 2. Format Time: HH:MM -> hh:mm AM/PM
     let [hours, minutes] = timeInput.split(':');
@@ -1559,14 +1570,14 @@ async function saveManualSlot() {
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12; // the hour '0' should be '12'
-    const formattedTime = `${ String(hours).padStart(2, '0') }:${ minutes } ${ ampm } `;
+    const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
 
     // 3. Generate Key
-    const key = `${ formattedDate } | ${ formattedTime } `;
+    const key = `${formattedDate} | ${formattedTime}`;
 
     // 4. Check for existing
     if (invigilationSlots[key]) {
-        if (!confirm(`A slot for ${ key } already exists(Req: ${ invigilationSlots[key].required }).\n\nOverwrite with ${ reqInput }?`)) {
+        if (!confirm(`A slot for ${key} already exists (Req: ${invigilationSlots[key].required}).\n\nOverwrite with ${reqInput}?`)) {
             return;
         }
     }
@@ -1594,7 +1605,7 @@ window.saveManualSlot = saveManualSlot;
 // --- NEW: Delete Slot Function ---
 window.deleteSlot = async function (key) {
     // 1. Security Check
-    if (!confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot ?\n\nSlot: ${ key } \n\nThis will remove all assigned staff and records for this session.`)) return;
+    if (!confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot?\n\nSlot: ${key}\n\nThis will remove all assigned staff and records for this session.`)) return;
 
     // 2. Delete from local object
     if (invigilationSlots[key]) {
@@ -1607,7 +1618,7 @@ window.deleteSlot = async function (key) {
         renderSlotsGridAdmin();
 
         // 5. Log it
-        if (typeof logActivity === 'function') logActivity("Slot Deleted", `Admin deleted slot: ${ key } `);
+        if (typeof logActivity === 'function') logActivity("Slot Deleted", `Admin deleted slot: ${key}`);
     }
 }
 
@@ -1620,10 +1631,10 @@ window.toggleAdvance = async function (dateStr, email, session) {
 
     if (existingEntry) {
         // REMOVE (Simple Confirm)
-        if (confirm(`Remove 'Unavailable' status for ${ session } ? `)) {
+        if (confirm(`Remove 'Unavailable' status for ${session}?`)) {
             advanceUnavailability[dateStr][session] = list.filter(u => u.email !== email);
 
-            logActivity("Advance Unavailability Removed", `Removed ${ getNameFromEmail(email) } from ${ dateStr } (${ session }) unavailability list.`);
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from ${dateStr} (${session}) unavailability list.`);
 
             await saveAdvanceUnavailability();
             renderStaffCalendar(email);
@@ -1636,7 +1647,7 @@ window.toggleAdvance = async function (dateStr, email, session) {
         }
     } else {
         // ADD (Open Modal for Reason)
-        document.getElementById('unav-key').value = `ADVANCE | ${ dateStr }| ${ session } `;
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`;
         document.getElementById('unav-email').value = email;
 
         document.getElementById('unav-reason').value = "";
@@ -1674,7 +1685,7 @@ window.toggleWholeDay = async function (dateStr, email) {
             advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
             advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
 
-            logActivity("Advance Unavailability Removed", `Removed ${ getNameFromEmail(email) } from Whole Day ${ dateStr }.`);
+            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from Whole Day ${dateStr}.`);
 
             await saveAdvanceUnavailability();
             renderStaffCalendar(email);
@@ -1687,7 +1698,7 @@ window.toggleWholeDay = async function (dateStr, email) {
         }
     } else {
         // MARK BOTH
-        document.getElementById('unav-key').value = `ADVANCE | ${ dateStr }| WHOLE`;
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`;
         document.getElementById('unav-email').value = email;
 
         document.getElementById('unav-reason').value = "";
@@ -1725,7 +1736,7 @@ window.lockAllSessions = async function () {
 
     const me = staffData.find(s => s.email === email);
     if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    logActivity("Slot Booked", `${ getNameFromEmail(email) } volunteered for ${ key }.`);
+    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
     await syncSlotsToCloud();
     await syncStaffToCloud();
     window.closeModal('day-detail-modal');
@@ -1749,7 +1760,7 @@ window.cancelDuty = async function (key, email, isLocked) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         const me = staffData.find(s => s.email === email);
         if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
-        logActivity("Duty Cancelled", `${ getNameFromEmail(email) } cancelled duty for ${ key }.`);
+        logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
         await syncSlotsToCloud();
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
@@ -1784,7 +1795,7 @@ window.setAvailability = async function (key, email, isAvailable) {
     if (isAvailable) {
         if (confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-            logActivity("Marked Available", `${ getNameFromEmail(email) } marked as available for ${ key }.`);
+            logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
             await syncSlotsToCloud();
 
             // *** FIX: Update List Live ***
@@ -1843,7 +1854,7 @@ window.confirmUnavailable = async function () {
                     const dd = String(currentDate.getDate()).padStart(2, '0');
                     const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
                     const yyyy = currentDate.getFullYear();
-                    const iterDateStr = `${ dd }.${ mm }.${ yyyy } `;
+                    const iterDateStr = `${dd}.${mm}.${yyyy}`;
 
                     // Ensure structure
                     if (!advanceUnavailability[iterDateStr]) advanceUnavailability[iterDateStr] = { FN: [], AN: [] };
@@ -1871,7 +1882,7 @@ window.confirmUnavailable = async function () {
                 currentDate.setDate(currentDate.getDate() + 1);
             }
 
-            logActivity("Commuted Leave Range", `Marked ${ getNameFromEmail(email) } unavailable from ${ dateStr } to ${ toDateValue } (${ markedDates.length } days).Reason: ${ reason } `);
+            logActivity("Commuted Leave Range", `Marked ${getNameFromEmail(email)} unavailable from ${dateStr} to ${toDateValue} (${markedDates.length} days). Reason: ${reason}`);
 
         } else {
             // SINGLE DATE (Original logic)
@@ -1888,14 +1899,14 @@ window.confirmUnavailable = async function () {
                 advanceUnavailability[dateStr].FN.push(entry);
                 advanceUnavailability[dateStr].AN.push(entry);
 
-                logActivity("Advance Unavailability", `Marked ${ getNameFromEmail(email) } unavailable for WHOLE DAY on ${ dateStr }.Reason: ${ reason } `);
+                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
             } else {
                 // Single Session
                 if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
                 advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
                 advanceUnavailability[dateStr][session].push(entry);
 
-                logActivity("Advance Unavailability", `Marked ${ getNameFromEmail(email) } unavailable for ${ dateStr }(${ session }).Reason: ${ reason } `);
+                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
             }
         }
 
@@ -1917,7 +1928,7 @@ window.confirmUnavailable = async function () {
         if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
         invigilationSlots[key].unavailable.push(entry);
 
-        logActivity("Session Unavailability", `Marked ${ getNameFromEmail(email) } unavailable for ${ key }.Reason: ${ reason } `);
+        logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
 
         await syncSlotsToCloud();
         window.closeModal('unavailable-modal');
@@ -1948,7 +1959,7 @@ window.waNotify = function (key) {
     }
 
     if (!phone) return alert("No valid phone numbers found.");
-    const msg = encodeURIComponent(`Exam Duty: ${ key }.`);
+    const msg = encodeURIComponent(`Exam Duty: ${key}.`);
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 window.calculateSlotsFromSchedule = async function () {
