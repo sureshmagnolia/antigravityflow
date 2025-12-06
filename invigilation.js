@@ -1284,7 +1284,7 @@ function renderExchangeMarket(myEmail) {
     });
 }
 
-window.openDayModal = function (dateStr, email) {
+window.openDayDetail = function (dateStr, email) {
     document.getElementById('modal-day-title').textContent = dateStr;
     const container = document.getElementById('modal-sessions-container');
     container.innerHTML = '';
