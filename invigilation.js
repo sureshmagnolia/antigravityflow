@@ -668,45 +668,11 @@ function renderSlotsGridAdmin() {
                     <div class="flex rounded shadow-sm">
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-red-600 px-2 py-1 rounded-l hover:bg-red-50 font-bold border-r-0">🔒</button>
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-green-600 px-2 py-1 rounded-r hover:bg-green-50 font-bold">🔓</button>
-                    </div>
-                </div>
-            </div>`;
-
-        // Render Slots for this Week
-        group.slots.forEach((slot, index) => {
-            const slotDate = new Date(slot.dateKey);
-            const dateNum = slotDate.getDate();
-            const dayName = slotDate.toLocaleDateString('en-US', { weekday: 'short' });
-
-            // Status Logic
-            const assignedCount = slot.invigilators ? slot.invigilators.length : 0;
-            const requiredCount = slot.required || 2;
-            let statusColor = "bg-white border-gray-200";
-            let statusBadge = `<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-200">Processing...</span>`;
-
-            if (assignedCount >= requiredCount) {
-                statusColor = "bg-green-50 border-green-200 shadow-sm"; // Full
-                statusBadge = `<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold border border-green-200 flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> FILLED
-                </span>`;
-            } else if (assignedCount > 0) {
-                statusColor = "bg-yellow-50 border-yellow-200 shadow-sm"; // Partial
-                statusBadge = `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-[10px] font-bold border border-yellow-200 flex items-center gap-1">
-                     <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span> PARTIAL
-                </span>`;
-            } else {
-                statusColor = "bg-white border-red-200 shadow-sm hover:border-red-300"; // Empty
-                statusBadge = `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 flex items-center gap-1">
-                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span> EMPTY
-                </span>`;
-            }
-
-
             // Generate Card HTML
             ui.adminSlotsGrid.innerHTML += `
-            <div class="relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${statusColor} rounded-xl overflow-hidden flex flex-col">
+            < div class="relative group transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${statusColor} rounded-xl overflow-hidden flex flex-col" >
                 
-                <!-- Status Stripe -->
+                < !--Status Stripe-- >
                 <div class="absolute top-0 left-0 w-1.5 h-full ${assignedCount >= requiredCount ? 'bg-green-500' : (assignedCount > 0 ? 'bg-yellow-400' : 'bg-red-400')}"></div>
 
                 <div class="p-4 flex gap-4 h-full">
@@ -745,24 +711,24 @@ function renderSlotsGridAdmin() {
                     </div>
                 </div>
 
-                <!-- Action Footer -->
-                <div class="bg-gray-50/50 border-t border-gray-100 p-2 flex gap-2 justify-end backdrop-blur-sm">
-                    <button onclick="deleteSlot('${slot.id}')" 
-                        class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete Slot">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
-                    <button onclick="openAssignModal('${slot.id}')" 
-                        class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-sm shadow-indigo-200 transition flex items-center gap-1 group/btn">
-                        <span>Manage</span>
-                        <svg class="w-3 h-3 group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                    </button>
-                </div>
-            </div>`;
+                <!--Action Footer-- >
+            <div class="bg-gray-50/50 border-t border-gray-100 p-2 flex gap-2 justify-end backdrop-blur-sm">
+                <button onclick="deleteSlot('${slot.id}')"
+                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete Slot">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+                <button onclick="openAssignModal('${slot.id}')"
+                    class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-sm shadow-indigo-200 transition flex items-center gap-1 group/btn">
+                    <span>Manage</span>
+                    <svg class="w-3 h-3 group-hover/btn:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+            </div > `;
         });
     });
 
     // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
-    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
+    ui.adminSlotsGrid.innerHTML += `< div class="col-span-full h-32 w-full" ></div > `;
 }
 // Updated: Render Staff List with Clickable Done Count
 function renderStaffTable() {
@@ -810,7 +776,7 @@ function renderStaffTable() {
 
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
-    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
+    if (pageInfo) pageInfo.textContent = `Page ${ currentStaffPage } of ${ totalPages } (${ filteredItems.length } Staff)`;
     const prevBtn = document.getElementById('btn-staff-prev');
     const nextBtn = document.getElementById('btn-staff-next');
     if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
@@ -833,7 +799,7 @@ function renderStaffTable() {
                 return start <= today && end >= today;
             });
             if (activeRole) {
-                activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
+                activeRoleLabel = `< span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold" > ${ activeRole.role }</span > `;
             }
         }
 
@@ -842,22 +808,22 @@ function renderStaffTable() {
         // Lock Logic
         let actionButtons = "";
         if (isStaffListLocked) {
-            actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
+            actionButtons = `< div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0" > <span class="text-gray-400 text-xs italic mr-2">Locked</span></div > `;
         } else {
             actionButtons = `
-                <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
+        < div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0" >
                     <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
                     <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
                     <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
-                </div>
-            `;
+                </div >
+        `;
         }
 
         const row = document.createElement('tr');
         row.className = "block md:table-row bg-white/80 backdrop-blur md:hover:bg-gray-50 border border-white/40 md:border-0 md:border-b md:border-gray-100 rounded-xl md:rounded-none shadow-sm md:shadow-none mb-4 md:mb-0 p-4 md:p-0";
 
         row.innerHTML = `
-            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
+        < td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto" >
                 
                 <div class="hidden md:flex items-center">
                     <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
@@ -903,7 +869,7 @@ function renderStaffTable() {
                         </div>
                     </div>
                 </div>
-            </td>
+            </td >
 
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
 
@@ -920,13 +886,13 @@ function renderStaffTable() {
             <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">
                 ${actionButtons}
             </td>
-        `;
+    `;
         ui.staffTableBody.appendChild(row);
     });
 
     const spacer = document.createElement('tr');
     spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
-    spacer.innerHTML = `<td class="block border-none p-0"></td>`;
+    spacer.innerHTML = `< td class="block border-none p-0" ></td > `;
     ui.staffTableBody.appendChild(spacer);
 }
 
@@ -960,18 +926,18 @@ function renderStaffRankList(myEmail) {
         const isMe = s.email === myEmail;
         const bgClass = isMe ? "bg-indigo-50 border-indigo-200" : "bg-gray-50 border-transparent hover:bg-gray-100";
         const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
-        const rankBadge = absoluteIndex < 3 ? `text-orange-500 font-black` : `text-gray-400 font-medium`;
+        const rankBadge = absoluteIndex < 3 ? `text - orange - 500 font - black` : `text - gray - 400 font - medium`;
         const displayPending = Math.max(0, s.pending);
 
         let roleBadge = "";
         if (s.roleHistory) {
             const today = new Date();
             const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
+            if (activeRole) roleBadge = `< span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200" > ${ activeRole.role }</span > `;
         }
 
         return `
-            <div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1">
+        < div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1" >
                 <div class="flex items-center gap-2 overflow-hidden">
                     <span class="${rankBadge} w-6 text-center shrink-0 text-[10px]">${absoluteIndex + 1}</span>
                     <div class="flex flex-col min-w-0">
@@ -988,7 +954,7 @@ function renderStaffRankList(myEmail) {
                      <span class="text-gray-300 text-[10px]">/</span>
                      <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-gray-400'}" title="Pending Duties">${displayPending}</span>
                 </div>
-            </div>`;
+            </div > `;
     }).join('');
 
     // 4. Generate Pagination HTML (Updated with extra padding)
@@ -996,7 +962,7 @@ function renderStaffRankList(myEmail) {
     const nextDisabled = (currentRankPage === totalPages) ? "disabled opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer";
 
     const paginationHtml = `
-        <div class="flex justify-between items-center w-full bg-white py-2">
+        < div class="flex justify-between items-center w-full bg-white py-2" >
             <button onclick="changeRankPage(-1)" ${prevDisabled} class="px-3 py-1.5 rounded border border-gray-200 text-gray-600 text-[10px] font-bold transition flex items-center gap-1 bg-white shadow-sm">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                 Prev
@@ -1010,8 +976,8 @@ function renderStaffRankList(myEmail) {
                 Next
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
             </button>
-        </div>
-    `;
+        </div >
+        `;
 
     // 5. Inject Content into respective containers
 
@@ -1044,7 +1010,7 @@ function renderStaffCalendar(myEmail) {
     const month = currentCalDate.getMonth();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    if (ui.calTitle) ui.calTitle.textContent = `${monthNames[month]} ${year}`;
+    if (ui.calTitle) ui.calTitle.textContent = `${ monthNames[month] } ${ year } `;
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1066,20 +1032,20 @@ function renderStaffCalendar(myEmail) {
 
     let html = "";
     for (let i = 0; i < firstDayIndex; i++) {
-        html += `<div class="bg-gray-50 border border-gray-100 min-h-[5rem] md:min-h-[7rem]"></div>`;
+        html += `< div class="bg-gray-50 border border-gray-100 min-h-[5rem] md:min-h-[7rem]" ></div > `;
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
+        const dateStr = `${ String(day).padStart(2, '0') }.${ String(month + 1).padStart(2, '0') }.${ year } `;
         const slots = slotsByDate[day] || [];
 
-        let dayContent = `<div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400">${day}</div>`;
+        let dayContent = `< div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400" > ${ day }</div > `;
         let bgClass = "bg-white";
         let borderClass = "border-gray-200";
 
         // --- RENDER SLOTS ---
         if (slots.length > 0) {
-            dayContent += `<div class="flex flex-col gap-0.5 px-0.5 pb-0.5">`;
+            dayContent += `< div class="flex flex-col gap-0.5 px-0.5 pb-0.5" > `;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
 
             slots.forEach(slot => {
@@ -1095,54 +1061,54 @@ function renderStaffCalendar(myEmail) {
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
 
                 let badgeColor = "bg-green-100 text-green-700 border-green-200";
-                let statusText = `${available}/${needed}`;
+                let statusText = `${ available }/${needed}`;
 
-                if (isCompleted) { badgeColor = "bg-green-600 text-white border-green-600"; statusText = "Done"; }
-                else if (isPostedByMe) { badgeColor = "bg-orange-100 text-orange-700 border-orange-300"; statusText = "⏳ Posted"; }
-                else if (isAssigned) { badgeColor = "bg-blue-600 text-white border-blue-600"; statusText = "Assigned"; }
-                else if (isMarketAvailable) { badgeColor = "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"; statusText = "♻️ Market"; }
-                else if (isUnavailable) { badgeColor = "bg-red-50 text-red-600 border-red-200"; statusText = "Unavail"; }
-                else if (slot.isLocked) { badgeColor = "bg-gray-100 text-gray-500 border-gray-300"; statusText = "Locked"; }
-                else if (filled >= needed) { badgeColor = "bg-gray-100 text-gray-400 border-gray-200"; statusText = "Full"; }
+    if (isCompleted) { badgeColor = "bg-green-600 text-white border-green-600"; statusText = "Done"; }
+    else if (isPostedByMe) { badgeColor = "bg-orange-100 text-orange-700 border-orange-300"; statusText = "⏳ Posted"; }
+    else if (isAssigned) { badgeColor = "bg-blue-600 text-white border-blue-600"; statusText = "Assigned"; }
+    else if (isMarketAvailable) { badgeColor = "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"; statusText = "♻️ Market"; }
+    else if (isUnavailable) { badgeColor = "bg-red-50 text-red-600 border-red-200"; statusText = "Unavail"; }
+    else if (slot.isLocked) { badgeColor = "bg-gray-100 text-gray-500 border-gray-300"; statusText = "Locked"; }
+    else if (filled >= needed) { badgeColor = "bg-gray-100 text-gray-400 border-gray-200"; statusText = "Full"; }
 
-                dayContent += `
+    dayContent += `
                     <div class="text-[8px] md:text-[10px] font-bold p-0.5 rounded border ${badgeColor} flex flex-col md:flex-row justify-between items-center text-center md:text-left h-auto gap-0.5 shadow-sm leading-none">
                         <span>${slot.sessionType}</span>
                         <span class="whitespace-nowrap">${statusText}</span>
                     </div>`;
-            });
-            dayContent += `</div>`;
-            bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
+});
+dayContent += `</div>`;
+bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
         }
         else {
-            // --- NO SLOTS: CHECK ADVANCE UNAVAILABILITY ---
-            const adv = advanceUnavailability[dateStr];
-            let advBadges = "";
+    // --- NO SLOTS: CHECK ADVANCE UNAVAILABILITY ---
+    const adv = advanceUnavailability[dateStr];
+    let advBadges = "";
 
-            if (adv) {
-                // UPDATED CHECKS: use .some()
-                if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
-                    advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center mb-0.5">FN: Unavail</div>`;
-                }
-                if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
-                    advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center">AN: Unavail</div>`;
-                }
-            }
-
-            if (advBadges) {
-                dayContent += `<div class="flex flex-col px-0.5 mt-1">${advBadges}</div>`;
-                bgClass = "bg-red-50 hover:bg-red-100 cursor-pointer transition"; // Highlight day
-            } else {
-                // Empty day, but still clickable to add OD/DL
-                bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
-            }
+    if (adv) {
+        // UPDATED CHECKS: use .some()
+        if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
+            advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center mb-0.5">FN: Unavail</div>`;
         }
-
-        // Always clickable now
-        const clickAction = `onclick="openDayModal('${dateStr}', '${myEmail}')"`;
-        html += `<div class="border min-h-[5rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
+        if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
+            advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center">AN: Unavail</div>`;
+        }
     }
-    if (ui.calGrid) ui.calGrid.innerHTML = html;
+
+    if (advBadges) {
+        dayContent += `<div class="flex flex-col px-0.5 mt-1">${advBadges}</div>`;
+        bgClass = "bg-red-50 hover:bg-red-100 cursor-pointer transition"; // Highlight day
+    } else {
+        // Empty day, but still clickable to add OD/DL
+        bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
+    }
+}
+
+// Always clickable now
+const clickAction = `onclick="openDayModal('${dateStr}', '${myEmail}')"`;
+html += `<div class="border min-h-[5rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
+    }
+if (ui.calGrid) ui.calGrid.innerHTML = html;
 }
 
 function renderExchangeMarket(myEmail) {
