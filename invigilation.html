@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExamFlow Invigilation Portal v10.4</title>
+    <script src="tailwind.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
+            authDomain: "examflow-de08f.firebaseapp.com",
+            projectId: "examflow-de08f",
+            storageBucket: "examflow-de08f.firebasestorage.app",
+            messagingSenderId: "1094663914110",
+            appId: "1:1094663914110:web:50c4f206f2053a873f0e2f",
+            measurementId: "G-8S6GE8Q7NR"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.firebase = { 
+            auth: getAuth(app), db: getFirestore(app), provider: new GoogleAuthProvider(),
+            signInWithPopup, signOut, onAuthStateChanged,
+            doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot 
+        };
+      
+    </script>
+    <style>
+        .calendar-day { min-height: 100px; transition: all 0.2s; }
+        .calendar-day:hover { background-color: #f9fafb; }
+        .slot-card { transition: transform 0.2s; }
+        .slot-card:hover { transform: translateY(-2px); }
+        /* Custom Scrollbar for Rank List */
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+    </style>
+<link rel="preconnect" href="https://fonts.googleapis.com/css2">
+<link href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    .font-malayalam { font-family: 'Anek Malayalam', sans-serif; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex flex-col overflow-hidden">
+
+
+
+
+<header class="bg-white border-b border-gray-200 py-2 px-3 md:p-4 flex justify-between items-center shadow-sm z-10 shrink-0 h-14 md:h-auto transition-all">
+    <div class="flex items-center gap-2 md:gap-3 overflow-hidden">
+        <div class="bg-indigo-600 text-white p-1.5 md:p-2 rounded-md md:rounded-lg shadow-sm shrink-0">
+            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+        </div>
+        <div class="flex flex-col justify-center min-w-0">
+            <h1 class="text-sm md:text-lg font-bold text-gray-900 leading-tight truncate">Invigilation Portal <span class="text-indigo-600">10.1</span></h1>
+            <p id="header-college-name" class="text-[10px] md:text-xs text-gray-500 font-medium truncate max-w-[140px] sm:max-w-md">Exam Wing</p>
+        </div>
+    </div>
+
+    
+    <div id="auth-section" class="hidden flex items-center gap-2 md:gap-4 shrink-0">
+    <button onclick="openModal('help-modal')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm" title="User Guide / സഹായം">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0 1 18 0z" /></svg>
+        <span class="hidden md:inline">Help</span>
+    </button>
+
+    <button id="btn-hod-monitor" onclick="openHodMonitorModal()" class="hidden bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-200 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+        <span class="hidden md:inline">HoD Monitor</span>
+    </button>
+
+    <div class="text-right flex flex-col justify-center">
+        <div id="user-name" class="hidden sm:block text-xs md:text-sm font-bold text-gray-800 truncate max-w-[100px]">User</div>
+        <div class="flex items-center justify-end gap-1.5">
+            <div id="user-role" class="hidden md:block text-[10px] md:text-xs text-indigo-600 font-bold uppercase tracking-wider">Role</div>
+            <div id="sync-status" class="text-[9px] md:text-[10px] font-bold text-gray-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> <span class="hidden sm:inline">Sync</span>
+            </div>
+        </div>
+    </div>
+    
+    <button id="logout-btn" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition border border-gray-200">
+        Logout
+    </button>
+</div>
+</header> 
+
+    <main class="flex-1 overflow-y-auto p-6 relative">
+        
+        <div id="view-login" class="absolute inset-0 flex items-center justify-center bg-gray-50 z-50">
+            <div class="bg-white p-8 rounded-xl shadow-xl text-center max-w-md w-full border border-gray-200">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Staff Login</h2>
+                <p class="text-sm text-gray-500 mb-6">Sign in to manage duties.</p>
+                <button id="login-btn" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow hover:bg-indigo-700">Sign in with Google</button>
+                <p id="login-status" class="mt-4 text-xs text-red-500"></p>
+            </div>
+        </div>
+
+       <div id="view-admin" class="hidden max-w-7xl mx-auto">
+       <div id="admin-today-container" class="mb-6 hidden"></div>
+            
+            <div class="flex p-1 space-x-1 bg-gray-100 rounded-xl mb-6 select-none">
+                <button id="tab-btn-staff" onclick="switchAdminTab('staff')" class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center">
+                    Staff
+                </button>
+                <button id="tab-btn-slots" onclick="switchAdminTab('slots')" class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center">
+                    Duty Allocation
+                </button>
+                <button id="tab-btn-attendance" onclick="switchAdminTab('attendance')" class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center">
+                    Attendance
+                </button>
+            </div>
+
+            <div id="tab-content-staff" class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Overview</h3>
+                        
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-gray-600">Total Staff</span>
+                            <span id="stat-total-staff" class="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">0</span>
+                        </div>
+                        
+                        <div class="text-xs text-center text-blue-600 font-medium bg-blue-50 p-2 rounded border border-blue-100" id="lbl-academic-year">
+                            Calculating AY...
+                        </div>
+                    </div>
+                    <button onclick="openAddStaffModal()" class="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-sm hover:bg-indigo-700 font-medium text-sm flex justify-center gap-2">
+                        <span>+</span> Add Staff
+                    </button>
+                    <button id="btn-sync-perms" onclick="syncAllStaffPermissions()" 
+                        class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold px-4 py-2 rounded shadow-md flex items-center gap-2 transition">
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                        Sync Permissions
+                    </button>
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Bulk Actions</label>
+                        <div class="flex gap-2 mb-2">
+                            <button onclick="downloadStaffTemplate()" class="flex-1 bg-white border border-gray-300 text-gray-600 text-xs font-bold py-2 rounded hover:bg-gray-50 flex items-center justify-center gap-1">
+                                <span>⬇️</span> Template
+                            </button>
+                            <button onclick="document.getElementById('staff-csv-upload').click()" class="flex-1 bg-green-50 border border-green-200 text-green-700 text-xs font-bold py-2 rounded hover:bg-green-100 flex items-center justify-center gap-1">
+                                <span>⬆️</span> Upload
+                            </button>
+                        </div>
+                        <input type="file" id="staff-csv-upload" accept=".csv" class="hidden" onchange="handleStaffCSVUpload(this)">
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <label class="block text-xs font-bold text-gray-400 uppercase mb-2">System Data</label>
+                        <button onclick="downloadMasterBackup()" class="w-full mb-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Backup All Data (JSON)
+                        </button>
+                        
+                        <button onclick="document.getElementById('restore-master-upload').click()" class="w-full bg-white text-red-600 border border-red-200 px-3 py-2 rounded text-xs font-bold hover:bg-red-50 flex items-center justify-center gap-2 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            Restore Full Backup
+                        </button>
+                        <input type="file" id="restore-master-upload" accept=".json" class="hidden" onchange="handleMasterRestore(this)">
+                    </div>
+                    <button onclick="openRoleConfigModal()" class="w-full mt-2 bg-white text-gray-700 border border-gray-300 px-4 py-3 rounded-lg shadow-sm hover:bg-gray-50 font-medium text-sm flex justify-center gap-2 transition">
+                        <span>⚙️</span> Settings & Roles
+                    </button>
+                </div>
+
+                <div class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50 flex flex-wrap justify-between items-center gap-2">
+                        <div class="flex items-center gap-3">
+                            <h2 class="font-bold text-gray-800">Staff & Duty Load</h2>
+                            <button id="btn-staff-list-lock" onclick="toggleStaffListLock()" class="bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200">
+                                <span>🔒</span> Locked
+                            </button>
+                        </div>
+                        <input type="text" id="staff-search" placeholder="Search..." class="pl-2 py-1 border border-gray-300 rounded text-sm w-48" oninput="filterStaffTable()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 hidden md:table-header-group">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Staff</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Target</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Done</th>
+                                    <th class="px-6 py-3 text-center text-xs font-bold text-gray-500 uppercase">Pending</th>
+                                    <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Manage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+           <div id="staff-pagination-controls" class="fixed bottom-0 left-0 w-full z-50 bg-white border-t border-gray-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-between items-center md:static md:w-auto md:bg-transparent md:border-0 md:shadow-none md:p-0 md:mt-4">
+                <button id="btn-staff-prev" class="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    Prev
+                </button>
+                <span id="staff-page-info" class="text-xs text-gray-600 font-medium">Page 1 of 1</span>
+                <button id="btn-staff-next" class="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                    Next
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </button>
+            </div>
+
+
+
+                    
+                </div>
+            </div>
+
+            <div id="tab-content-slots" class="hidden space-y-6">
+                
+<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col sm:flex-row flex-wrap gap-4 items-center justify-between">
+    <div class="mb-2 sm:mb-0 text-center sm:text-left">
+        <h2 class="text-lg font-bold text-gray-800">Duty Allocation Manager</h2>
+        <p class="text-xs text-gray-500">Auto-assign invigilators based on pending duty load.</p>
+    </div>
+    <div class="flex flex-wrap gap-2 justify-center sm:justify-end w-full sm:w-auto">
+        <button onclick="openAddSlotModal()" class="bg-white text-indigo-700 border border-indigo-200 px-3 py-2 rounded-md text-xs font-bold hover:bg-indigo-50 shadow-sm flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            Add Slot
+        </button>
+
+        <button onclick="calculateSlotsFromSchedule()" class="bg-green-50 text-green-700 border border-green-200 px-3 py-2 rounded-md text-xs font-bold hover:bg-green-100 transition">
+            Sync Cloud
+        </button>
+        
+        <button onclick="runAutoAllocation()" class="bg-indigo-600 text-white px-3 py-2 rounded-md text-xs font-bold hover:bg-indigo-700 shadow-sm transition">
+            Auto-Assign
+        </button>
+        
+        <button onclick="viewAutoAssignLogs()" class="bg-white text-gray-600 border border-gray-300 px-3 py-2 rounded-md text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-1 transition">
+            <span>📜</span> Logs
+        </button>
+        
+        <button onclick="viewActivityLogs()" class="bg-white text-gray-700 border border-gray-300 px-3 py-2 rounded-md text-xs font-bold hover:bg-gray-50 shadow-sm flex items-center gap-1" title="View User Activity History">
+             <span>🕒</span> Activity
+        </button>
+
+        <button onclick="lockAllSessions()" class="bg-red-600 text-white px-3 py-2 rounded-md text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+            Lock All
+        </button>
+    </div>
+</div>
+
+                <div id="admin-slots-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
+
+           <div id="tab-content-attendance" class="hidden space-y-6">
+
+<div class="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
+        
+        <div class="flex flex-col gap-4 mb-6">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <h2 class="text-lg font-bold text-gray-800 shrink-0">Duty Attendance Register</h2>
+                
+                <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full lg:w-auto">
+                    
+                    <button onclick="downloadAttendanceTemplate()" class="justify-center bg-white border border-gray-300 text-gray-600 px-3 py-2 rounded shadow-sm hover:bg-gray-50 text-xs font-bold flex items-center gap-1 transition">
+                        <span>⬇️</span> Template
+                    </button>
+                    
+                    <button onclick="document.getElementById('att-csv-upload').click()" class="justify-center bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2 rounded shadow-sm hover:bg-blue-100 text-xs font-bold flex items-center gap-1 transition">
+                        <span>⬆️</span> Upload CSV
+                    </button>
+                    <input type="file" id="att-csv-upload" accept=".csv" class="hidden" onchange="handleAttendanceCSVUpload(this)">
+
+                    <button onclick="downloadAttendanceCSV()" class="col-span-2 sm:col-span-1 justify-center bg-green-600 text-white px-4 py-2 rounded shadow-sm hover:bg-green-700 text-xs font-bold flex items-center gap-2 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Download Register
+                    </button>
+                    
+                    <button onclick="clearOldData()" class="col-span-2 sm:col-span-1 justify-center bg-white border border-red-200 text-red-600 px-4 py-2 rounded shadow-sm hover:bg-red-50 text-xs font-bold flex items-center gap-2 transition sm:ml-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        Clear Old Data
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-end mb-6">
+            <div class="w-full sm:flex-1">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Select Session</label>
+                <select id="attendance-session-select" class="w-full p-2 border border-gray-300 rounded bg-white text-sm" onchange="loadSessionAttendance()">
+                    <option value="">-- Select Session --</option>
+                </select>
+            </div>
+            <div class="hidden sm:block text-right">
+                <span class="text-xs text-gray-400">Select a session to verify staff presence.</span>
+            </div>
+        </div>
+
+        <div id="attendance-area" class="hidden">
+
+               
+            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                <div class="mb-4 pb-4 border-b border-gray-200">
+                    <h3 class="font-bold text-gray-700 text-xs uppercase mb-2">Session Supervision</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="relative">
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Chief Superintendent (CS)</label>
+                            <input type="text" id="att-cs-search" placeholder="Search CS Name..." 
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                            <input type="hidden" id="att-cs-email">
+                            <div id="att-cs-results" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto custom-scroll hidden"></div>
+                        </div>
+                        
+                        <div class="relative">
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Senior Asst. Supt. (SAS)</label>
+                            <input type="text" id="att-sas-search" placeholder="Search SAS Name..." 
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                            <input type="hidden" id="att-sas-email">
+                            <div id="att-sas-results" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto custom-scroll hidden"></div>
+                        </div>
+                    </div>
+                </div>
+               
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-bold text-gray-700 text-sm">Staff on Duty</h3>
+                    <span class="text-xs text-gray-500" id="att-count-display">0 Present</span>
+                </div>
+                
+                <div id="attendance-list" class="space-y-2"></div>
+
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <label class="block text-xs font-bold text-indigo-600 uppercase mb-2">Add Substitute / Replacement</label>
+                    <div class="flex gap-2 relative">
+                        <div class="flex-1 relative">
+                            <input type="text" id="att-substitute-search" placeholder="Type 3+ chars to search faculty..." 
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+                            
+                            <div id="att-substitute-results" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-48 overflow-y-auto custom-scroll hidden"></div>
+                        </div>
+                        <button id="btn-att-add" onclick="addSubstituteToAttendance()" class="bg-indigo-100 text-indigo-700 px-4 py-2 rounded text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">
+                            <span>+</span> Add
+                        </button>
+                    </div>
+                </div>
+        </div>
+
+            <div class="flex flex-col sm:flex-row justify-between items-center mt-4 border-t pt-4 gap-3">
+                
+                <div id="att-lock-status" class="text-xs font-bold text-gray-400 italic w-full sm:w-auto text-center sm:text-left order-2 sm:order-1"></div>
+                
+                <div class="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto order-1 sm:order-2">
+                    <button id="btn-att-lock" class="justify-center bg-gray-100 text-gray-600 border border-gray-300 px-3 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-xs flex items-center gap-2 transition">
+                        <span>🔒</span> Lock
+                    </button>
+                    
+                    <button id="btn-att-save" onclick="saveAttendance()" class="justify-center bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 font-bold text-xs flex items-center gap-2 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        Confirm & Update
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+        
+        <div id="attendance-placeholder" class="text-center py-10 text-gray-400 italic">
+            Select a session above to mark attendance.
+        </div>
+    </div>
+    </div>
+    </div>
+
+        <div id="view-staff" class="hidden max-w-7xl mx-auto fade-in h-full flex flex-col pb-2">
+            
+            <div class="flex flex-col md:flex-row gap-6 h-full">
+                
+                <div class="md:w-1/4 flex flex-col gap-4 h-auto md:h-full md:overflow-y-auto custom-scroll pr-2">
+                    
+                    <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 shrink-0">
+                        <h2 class="text-xl font-bold text-gray-800 mb-1">Hello, <span id="staff-view-name">Invigilator</span></h2>
+                        <p class="text-xs text-gray-500 mb-4">Welcome to your duty portal.</p>
+                        
+                        <div class="grid grid-cols-2 gap-2 mb-4">
+                            <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-center">
+                                <p class="text-[10px] font-bold text-indigo-500 uppercase">Pending</p>
+                                <p class="text-2xl font-black text-indigo-700" id="staff-view-pending">-</p>
+                            </div>
+                            <div id="staff-completed-card" class="bg-green-50 border border-green-100 p-3 rounded-lg text-center cursor-pointer hover:bg-green-100 transition shadow-sm relative group">
+                                <p class="text-[10px] font-bold text-green-600 uppercase flex justify-center items-center gap-1">
+                                    Completed 
+                                    <svg class="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0 1 18 0z"></path></svg>
+                                </p>
+                                <p class="text-2xl font-black text-green-700" id="staff-view-completed">-</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-indigo-50 to-white p-4 rounded-lg shadow-sm border border-indigo-100 shrink-0 min-h-[250px] max-h-[350px] overflow-y-auto custom-scroll mt-4">
+                        <div class="flex justify-between items-center mb-2 pb-2 border-b border-indigo-100">
+                            <h3 class="text-xs font-bold text-indigo-600 uppercase flex items-center gap-1">
+                                <span>♻️</span> Duty Exchange Basket
+                            </h3>
+                            <span id="market-count-badge" class="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">0</span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <input type="text" id="exchange-search-input" placeholder="🔍 Search by faculty name..." 
+                                class="w-full p-2 text-xs border border-indigo-200 rounded shadow-sm focus:outline-none focus:border-indigo-500 bg-white/80">
+                        </div>
+
+                        <div id="staff-market-list" class="space-y-2">
+                            <p class="text-xs text-gray-400 italic text-center py-2">No duties available for exchange.</p>
+                        </div>
+                    </div>
+
+
+                <div class="hidden md:flex bg-white p-4 rounded-lg shadow-sm border border-gray-200 h-[600px] flex-col">
+                        <div class="flex justify-between items-center border-b pb-2 mb-2 shrink-0">
+                            <div>
+                            <h3 class="text-xs font-bold text-gray-500 uppercase">Duty Priority List</h3>
+                            <span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">Highest Pending 1st</span>
+                        </div>
+                            <button onclick="openDutyNormsModal()" class="text-[10px] text-indigo-600 border border-indigo-200 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 font-bold flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0 1 18 0z" /></svg>
+                            Norms
+                            </button>
+                        </div>
+                    <div id="staff-rank-list" class="space-y-1 overflow-y-auto custom-scroll flex-1 pr-1"></div>
+                    <div id="staff-rank-pagination" class="mt-2 pt-2 border-t border-gray-100 shrink-0"></div>
+                </div>
+                    
+                   
+
+                </div>
+
+
+<div class="md:w-3/4 flex flex-col gap-4 h-full">
+    
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col flex-1 relative">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0 rounded-t-lg">
+            <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span id="cal-month-title">Month Year</span>
+            </h2>
+            <div class="flex gap-2">
+                <button id="cal-prev" class="p-1 hover:bg-gray-200 rounded"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button>
+                <button id="cal-next" class="p-1 hover:bg-gray-200 rounded"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-500 py-2 shrink-0">
+            <div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div>
+        </div>
+        
+        <div id="calendar-grid" class="grid grid-cols-7 flex-1 overflow-y-auto custom-scroll bg-white"></div>
+        
+        <div class="p-2 bg-gray-50 text-[10px] text-gray-500 flex gap-4 justify-center border-t shrink-0 rounded-b-lg">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Available</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-600"></span> Assigned</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> Unavailable</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gray-300"></span> Full/Locked</span>
+        </div>
+    </div>
+
+    <div class="md:hidden bg-white p-4 rounded-lg shadow-sm border border-gray-200 h-[400px] flex flex-col mb-24">
+        <div class="flex justify-between items-center border-b pb-2 mb-2 shrink-0">
+            <div>
+                <h3 class="text-xs font-bold text-gray-500 uppercase">Duty Priority List</h3>
+                <span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">Highest Pending 1st</span>
+            </div>
+            <button onclick="openDutyNormsModal()" class="text-[10px] text-indigo-600 border border-indigo-200 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 font-bold flex items-center gap-1">
+                Norms
+            </button>
+        </div>
+        <div id="staff-rank-list-mobile" class="space-y-1 overflow-y-auto custom-scroll flex-1 pr-1"></div>
+        <div id="staff-rank-mobile-pagination" class="mt-2 pt-2 border-t border-gray-100 shrink-0"></div>
+    </div>
+
+</div>
+
+
+                
+            </div>
+        </div>
+
+    </main>
+
+    <div id="day-detail-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4 transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="modal-day-title">Date</h3>
+                    <p class="text-xs text-gray-500">Manage your availability</p>
+                </div>
+                <button onclick="closeModal('day-detail-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div id="modal-sessions-container" class="space-y-3 mb-4"></div>
+            
+            <div class="text-right">
+                <button onclick="closeModal('day-detail-modal')" class="text-sm text-gray-500 hover:underline">Close</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="add-staff-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4">
+        <h3 id="staff-modal-title" class="text-lg font-bold text-gray-800 mb-4">Add New Invigilator</h3>
+        
+        <div class="space-y-3">
+            <input type="hidden" id="stf-edit-index"> 
+            <input type="text" id="stf-name" placeholder="Full Name" class="w-full p-2 border rounded text-sm">
+            <input type="email" id="stf-email" placeholder="Gmail ID" class="w-full p-2 border rounded text-sm">
+            <input type="text" id="stf-phone" placeholder="WhatsApp (91xxxxx)" class="w-full p-2 border rounded text-sm">
+            
+            <select id="stf-dept" class="w-full p-2 border rounded text-sm bg-white">
+                <option value="">Select Department...</option>
+            </select>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs text-gray-500">Designation</label>
+                    <select id="stf-designation" class="w-full p-2 border rounded text-sm bg-white"></select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500">Joining Date</label>
+                    <input type="date" id="stf-join" class="w-full p-2 border rounded text-sm">
+                </div>
+            </div>
+
+            <div id="weekly-availability-section" class="pt-2 border-t border-gray-100 hidden">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Available Days (Weekly)</label>
+                <div class="flex flex-wrap gap-3 bg-gray-50 p-2 rounded border border-gray-100" id="stf-days-container">
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="1" checked> Mon</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="2" checked> Tue</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="3" checked> Wed</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="4" checked> Thu</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="5" checked> Fri</label>
+                    <label class="flex items-center text-xs gap-1 cursor-pointer"><input type="checkbox" class="stf-day-chk w-3.5 h-3.5 text-indigo-600 rounded" value="6" checked> Sat</label>
+                </div>
+                <p class="text-[9px] text-gray-400 mt-1 italic">Unchecking a day excludes the staff from Auto & Manual allocation on that day.</p>
+            </div>
+            </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+            <button onclick="closeModal('add-staff-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm">Cancel</button>
+            <button onclick="saveNewStaff()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold">Save</button>
+        </div>
+    </div>
+</div>
+
+
+
+    
+
+    <div id="role-assignment-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Assign Functional Role</h3>
+            <div class="bg-blue-50 p-3 rounded border border-blue-100 mb-4">
+                <span id="role-assign-name" class="font-bold text-gray-800 ml-2">Name</span>
+                <input type="hidden" id="role-assign-index">
+            </div>
+            <div class="space-y-3">
+                <select id="assign-role-select" class="w-full p-2 border rounded text-sm bg-white"></select>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="date" id="assign-start-date" class="w-full p-2 border rounded text-sm">
+                    <input type="date" id="assign-end-date" class="w-full p-2 border rounded text-sm">
+                </div>
+                <button onclick="saveRoleAssignment()" class="w-full bg-indigo-600 text-white py-2 rounded text-sm font-bold mt-2">Add Assignment</button>
+            </div>
+            <div class="mt-4 border-t pt-3">
+                <label class="text-xs text-gray-400 uppercase font-bold">History</label>
+                <div id="role-history-list" class="mt-2 space-y-1 max-h-32 overflow-y-auto"></div>
+            </div>
+            <div class="mt-4 text-right">
+                <button onclick="closeModal('role-assignment-modal')" class="text-gray-500 text-sm hover:underline">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="day-detail-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4 transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <div><h3 class="text-xl font-bold text-gray-800" id="modal-day-title">Date</h3><p class="text-xs text-gray-500">Manage your availability</p></div>
+                <button onclick="closeModal('day-detail-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <div id="modal-sessions-container" class="space-y-3 mb-4"></div>
+            <div class="text-right"><button onclick="closeModal('day-detail-modal')" class="text-sm text-gray-500 hover:underline">Close</button></div>
+        </div>
+    </div>
+
+    <div id="unavailable-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4 transition-all transform scale-100">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Mark Unavailable</h3>
+            <p class="text-xs text-gray-500 mb-4">Please specify the reason.</p>
+            <input type="hidden" id="unav-key"><input type="hidden" id="unav-email">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Reason</label>
+                    <select id="unav-reason" class="w-full p-2.5 border rounded-lg text-sm bg-white outline-none" onchange="toggleUnavDetails()">
+                        <option value="">-- Select --</option>
+                        <option value="CL">CL (Casual Leave)</option>
+                        <option value="Commuted Leave">Commuted Leave</option>
+                        <option value="OD">OD (On Duty)</option>
+                        <option value="DL">DL (Duty Leave)</option>
+                        <option value="Medical">Medical (With CS Permission)</option>
+                    </select>
+                </div>
+                <div id="unav-details-container" class="hidden bg-red-50 p-3 rounded-lg border border-red-100">
+                    <label class="block text-xs font-bold text-red-700 uppercase mb-1">Details Required</label>
+                    <textarea id="unav-details" class="w-full p-2 border border-red-200 rounded text-sm outline-none" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-3">
+                <button onclick="closeModal('unavailable-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg text-sm">Cancel</button>
+                <button onclick="confirmUnavailable()" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-bold">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="inconvenience-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <div><h3 class="text-lg font-bold text-red-700">Inconvenience Requests</h3><p class="text-xs text-gray-500" id="inconvenience-modal-subtitle">Session</p></div>
+                <button onclick="closeModal('inconvenience-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <div id="inconvenience-list" class="space-y-3 max-h-96 overflow-y-auto custom-scroll"></div>
+            <div class="mt-4 text-right border-t pt-3"><button onclick="closeModal('inconvenience-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold">Close</button></div>
+        </div>
+    </div>
+
+    <div id="manual-allocation-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-4xl m-4 h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800">Manual Duty Allocation</h3>
+                    <p class="text-sm text-gray-500">Session: <span id="manual-modal-title" class="font-bold text-indigo-700"></span> | Required: <span id="manual-modal-req" class="font-bold">0</span></p>
+                </div>
+                <div class="flex gap-2"><span class="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Slot Locked</span><button onclick="closeModal('manual-allocation-modal')" class="text-gray-400 text-2xl">&times;</button></div>
+            </div>
+            <input type="hidden" id="manual-session-key">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+                <div class="md:col-span-2 flex flex-col min-h-0">
+                    <div class="flex flex-col gap-2 mb-2 shrink-0">
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-bold text-gray-700 text-sm uppercase">Available Staff</h4>
+                            <button onclick="unselectAllManualStaff()" class="text-xs text-red-600 hover:text-red-800 font-bold bg-red-50 border border-red-200 px-2 py-1 rounded transition cursor-pointer shadow-sm">
+                                Unselect All
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="manual-staff-search" oninput="filterManualStaff()" 
+                                placeholder="Search staff by name or department..." 
+                                class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
+                            <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                    </div>
+                    
+                    <div class="border border-gray-200 rounded-lg bg-gray-50 flex-1 overflow-y-auto custom-scroll p-2">
+                        <table class="w-full text-sm text-left">
+                            <tbody id="manual-available-list" class="divide-y divide-gray-200 bg-white"></tbody>
+                        </table>
+                        <p id="manual-no-results" class="hidden text-center text-gray-400 text-xs py-4 italic">No matches found.</p>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-4 min-h-0">
+                    <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 shrink-0"><div class="text-center"><div class="text-xs text-indigo-500 font-bold uppercase">Selected / Required</div><div class="text-3xl font-black text-indigo-700 mt-1"><span id="manual-sel-count">0</span> / <span id="manual-req-count">0</span></div></div></div>
+                    <div class="flex flex-col flex-1 min-h-0"><h4 class="font-bold text-red-700 text-sm uppercase tracking-wide mb-2 shrink-0">Unavailable Staff</h4><div id="manual-unavailable-list" class="border border-red-100 bg-red-50 rounded-lg p-2 flex-1 overflow-y-auto custom-scroll space-y-2"></div></div>
+                </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end gap-3 shrink-0"><button onclick="closeModal('manual-allocation-modal')" class="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-bold">Cancel</button><button onclick="saveManualAllocation()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold">Save Assignments</button></div>
+        </div>
+    </div>
+
+
+<div id="role-config-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4 max-h-[90vh] flex flex-col">
+            
+            <div class="shrink-0">
+                <h3 class="text-lg font-bold text-gray-800 mb-1">Invigilation Settings</h3>
+                <p class="text-xs text-gray-500 mb-4">Configure roles, limits, and integrations.</p>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto custom-scroll min-h-0 pr-1">
+                
+                <div class="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-bold text-blue-800">Global Default Duty (Per Month)</label>
+                        <button id="global-target-lock-btn" onclick="toggleGlobalTargetLock()" class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒 Locked</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="global-duty-target" class="w-20 p-1.5 border border-blue-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition" min="0" disabled>
+                        <span class="text-xs text-blue-600">for staff without specific roles.</span>
+                    </div>
+                </div>
+
+                <div class="mb-4 bg-green-50 p-3 rounded border border-green-100">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-bold text-green-800">Google Apps Script URL (Auto-Email)</label>
+                        <button id="email-config-lock-btn" onclick="toggleEmailConfigLock()" class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒 Locked</button>
+                    </div>
+                    <input type="text" id="google-script-url" class="w-full p-1.5 border border-green-300 rounded text-xs text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition" placeholder="Paste your Web App URL here..." disabled>
+                </div>
+
+                <div class="flex justify-between items-center border-b pb-1 mb-2 mt-4">
+                    <h4 class="text-xs font-bold text-indigo-600 uppercase">Departments</h4>
+                    <button id="dept-lock-btn" onclick="toggleDeptLock()" class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition">🔒 Locked</button>
+                </div>
+
+                <div id="dept-list-container" class="flex flex-wrap gap-2 mb-3 max-h-32 overflow-y-auto custom-scroll p-2 bg-gray-50 rounded border border-gray-100"></div>
+                
+                <div id="dept-input-row" class="flex gap-2 mb-6 hidden items-center">
+                    <input type="text" id="new-dept-name" placeholder="Dept Name" class="w-1/3 p-2 border rounded text-xs">
+                    <input type="email" id="new-dept-email" placeholder="Dept Email (Optional)" class="flex-1 p-2 border rounded text-xs">
+                    <button onclick="addNewDepartment()" class="bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 py-2">+</button>
+                </div>
+                
+                <div class="flex justify-between items-center border-b pb-1 mb-2">
+                    <h4 class="text-xs font-bold text-indigo-600 uppercase">Role Configuration</h4>
+                    <button id="role-lock-btn" onclick="toggleRoleLock()" class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition">🔒 Locked</button>
+                </div>
+                
+                <div id="roles-list-container" class="space-y-2 max-h-48 overflow-y-auto mb-4 custom-scroll border border-gray-100 rounded p-2 bg-gray-50"></div>
+                
+                <div id="role-input-row" class="flex gap-2 mb-4 hidden">
+                    <input type="text" id="new-role-name" placeholder="New Role Name" class="flex-1 p-2 border rounded text-xs">
+                    <input type="number" id="new-role-target" placeholder="Target" class="w-16 p-2 border rounded text-xs">
+                    <button onclick="addNewRoleConfig()" class="bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700">+</button>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 border-t pt-4 mt-2 shrink-0">
+                <button onclick="closeModal('role-config-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm font-medium hover:bg-gray-200 transition">Close</button>
+                <button onclick="saveRoleConfig()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 shadow-sm transition">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+
+    <div id="add-slot-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Add Invigilation Slot</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Date</label>
+                    <input type="date" id="manual-slot-date" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Time</label>
+                    <input type="time" id="manual-slot-time" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Required Invigilators</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="manual-slot-req" class="w-full p-2 border border-gray-300 rounded text-sm font-bold text-center" value="1" min="1">
+                        <span class="text-xs text-gray-400 whitespace-nowrap">Staff Needed</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="closeModal('add-slot-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded text-sm">Cancel</button>
+                <button onclick="saveManualSlot()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 shadow">Add Slot</button>
+            </div>
+        </div>
+    </div>
+
+
+<div id="reschedule-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4 border-t-4 border-orange-500">
+            <h3 class="text-lg font-bold text-gray-800 mb-1">🗓️ Reschedule Session</h3>
+            <p class="text-xs text-gray-500 mb-4">Current: <span id="reschedule-current-key" class="font-bold text-indigo-600"></span></p>
+            <input type="hidden" id="reschedule-old-key">
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">New Date</label>
+                    <input type="date" id="reschedule-new-date" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none">
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">New Time</label>
+                    <input type="time" id="reschedule-new-time" class="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-orange-500 outline-none">
+                </div>
+
+                <div class="bg-orange-50 p-3 rounded border border-orange-200 text-xs text-orange-800">
+                    <strong>⚠️ Warning:</strong> All assigned invigilators will be moved to the new slot. You will be prompted to notify them immediately after.
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="closeModal('reschedule-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded text-sm">Cancel</button>
+                <button onclick="executeReschedule()" class="px-4 py-2 bg-orange-600 text-white rounded text-sm font-bold hover:bg-orange-700 shadow">Confirm & Notify</button>
+            </div>
+        </div>
+    </div>
+
+
+    
+    <div id="norms-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Duty Calculation Norms</h3>
+            <p class="text-xs text-gray-500 mb-4">Reference for duty assignment targets.</p>
+            
+            <div class="space-y-3 text-sm">
+                <div class="flex justify-between items-center bg-blue-50 p-2.5 rounded border border-blue-100">
+                    <span class="font-bold text-blue-800">Global Default</span>
+                    <span class="font-mono font-bold text-blue-600" id="ref-global-target">2/mo</span>
+                </div>
+                
+                <div>
+                    <div class="text-xs font-bold text-gray-400 uppercase mb-1">Role Specific Targets</div>
+                    <div id="ref-roles-list" class="space-y-1 max-h-48 overflow-y-auto custom-scroll border border-gray-100 rounded p-2">
+                        </div>
+                </div>
+            </div>
+
+            <div class="mt-6 text-right">
+                <button onclick="closeModal('norms-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">Close</button>
+            </div>
+        </div>
+    </div>
+    <div id="completed-duties-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-green-800">Duty History</h3>
+                    <p class="text-xs text-gray-500">Verified Attendance Records</p>
+                </div>
+                <button onclick="closeModal('completed-duties-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div id="completed-duties-list" class="space-y-2 max-h-80 overflow-y-auto custom-scroll p-1">
+                </div>
+            
+            <div class="mt-4 text-right pt-2 border-t border-gray-100">
+                <button onclick="closeModal('completed-duties-modal')" class="text-sm text-gray-500 hover:underline">Close</button>
+            </div>
+        </div>
+    </div>
+    <div id="notification-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl m-4 flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="notif-modal-title">Notification Center</h3>
+                    <p class="text-xs text-gray-500" id="notif-modal-subtitle">Select faculty to notify.</p>
+                </div>
+                <button onclick="closeModal('notification-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="bg-green-50 p-3 rounded border border-green-100 mb-4 shrink-0">
+                <p class="text-[10px] font-bold text-green-800 uppercase mb-1">Message Preview Format:</p>
+                <div id="notif-message-preview" class="text-xs text-gray-600 italic font-mono whitespace-pre-wrap max-h-20 overflow-y-auto custom-scroll"></div>
+            </div>
+
+            <div id="notif-list-container" class="flex-1 overflow-y-auto custom-scroll space-y-2 p-1">
+                </div>
+
+            <div class="mt-4 pt-3 border-t border-gray-200 flex justify-end shrink-0">
+                <button onclick="closeModal('notification-modal')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="staff-conflict-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Data Upload Options</h3>
+            
+            <div class="bg-blue-50 p-3 rounded border border-blue-100 text-sm text-blue-800 mb-4">
+                <p><strong>System Data:</strong> <span id="staff-existing-count">0</span> records</p>
+                <p><strong>New CSV Data:</strong> <span id="staff-new-count">0</span> records</p>
+                <hr class="my-2 border-blue-200">
+                <p class="font-bold">Found <span id="staff-unique-count">0</span> new unique staff members.</p>
+            </div>
+
+            <div class="space-y-3">
+                <button id="btn-staff-merge" class="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 shadow-sm">
+                    ✅ Merge (Add Only New)
+                </button>
+                
+                <button id="btn-staff-replace" class="w-full bg-white border-2 border-red-100 text-red-600 py-2 rounded font-bold hover:bg-red-50 hover:border-red-200">
+                    ⚠️ Replace All Data
+                </button>
+                
+                <button onclick="closeModal('staff-conflict-modal')" class="w-full bg-gray-100 text-gray-600 py-2 rounded font-bold hover:bg-gray-200">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="att-conflict-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md m-4">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Attendance Upload Options</h3>
+            
+            <div class="bg-purple-50 p-3 rounded border border-purple-100 text-sm text-purple-900 mb-4">
+                <p><strong>CSV Records Found:</strong> <span id="att-csv-count">0</span></p>
+                <p><strong>Sessions Affected:</strong> <span id="att-session-count">0</span></p>
+                <hr class="my-2 border-purple-200">
+                <p class="text-xs text-gray-600 mb-1">
+                    <strong>Merge:</strong> Adds new people from CSV to existing attendance lists.<br>
+                    <strong>Replace:</strong> Overwrites attendance lists for these sessions with CSV data.
+                </p>
+            </div>
+
+            <div class="space-y-3">
+                <button id="btn-att-merge" class="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 shadow-sm">
+                    ✅ Merge (Add Missing Only)
+                </button>
+                
+                <button id="btn-att-replace" class="w-full bg-white border-2 border-red-100 text-red-600 py-2 rounded font-bold hover:bg-red-50 hover:border-red-200">
+                    ⚠️ Replace Lists (Overwrite)
+                </button>
+                
+                <button onclick="closeModal('att-conflict-modal')" class="w-full bg-gray-100 text-gray-600 py-2 rounded font-bold hover:bg-gray-200">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+<div id="help-modal" class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity">
+    <div class="bg-white w-full max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-none">
+        
+        <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span class="bg-indigo-100 text-indigo-600 w-8 h-8 rounded-full flex items-center justify-center text-lg">💡</span> 
+                    Help & Guidelines
+                </h3>
+                <p class="text-xs text-gray-500 ml-10 -mt-1">App Guide & Exam Rules / നിർദ്ദേശങ്ങൾ</p>
+            </div>
+            <button onclick="closeModal('help-modal')" class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+        
+        <div class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 space-y-8">
+            
+            <div>
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Part A: App Instructions</span>
+                    <span class="h-px flex-1 bg-gray-200"></span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <h4 class="text-xs font-bold text-indigo-600 uppercase mb-2 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span> How to Use
+                        </h4>
+                        <ul class="space-y-2 text-xs text-gray-600 leading-relaxed">
+                            <li><b>1. Calendar:</b> <span class="text-blue-600 font-bold">Blue</span>=Your Duty, <span class="text-green-600 font-bold">Green</span>=Vacancy.</li>
+                            <li><b>2. Volunteer:</b> Click a Green date → "Volunteer".</li>
+                            <li><b>3. Leave:</b> Click a date → "Mark Unavailable". (Cannot mark leave if assigned; use Exchange).</li>
+                            <li><b>4. Exchange:</b> Click your Blue slot → "Post for Exchange". You remain responsible until accepted.</li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm font-malayalam">
+                        <h4 class="text-xs font-bold text-indigo-600 uppercase mb-2 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span> ഉപയോഗക്രമം
+                        </h4>
+                        <ul class="space-y-2 text-xs text-gray-600 leading-relaxed">
+                            <li><b>1. കലണ്ടർ:</b> <span class="text-blue-600 font-bold">നീല</span>=ഡ്യൂട്ടി ഉണ്ട്, <span class="text-green-600 font-bold">പച്ച</span>=ഒഴിവുണ്ട്.</li>
+                            <li><b>2. ഡ്യൂട്ടി എടുക്കാൻ:</b> പച്ച തീയതി ക്ലിക്ക് ചെയ്ത് "Volunteer" ചെയ്യുക.</li>
+                            <li><b>3. അവധി:</b> തീയതി ക്ലിക്ക് ചെയ്ത് "Mark Unavailable" നൽകുക. (ഡ്യൂട്ടി ഉണ്ടെങ്കിൽ ലീവ് പറ്റില്ല, പകരം Exchange ചെയ്യണം).</li>
+                            <li><b>4. കൈമാറ്റം:</b> സ്ലോട്ടിൽ ക്ലിക്ക് ചെയ്ത് "Post for Exchange" ചെയ്യുക.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="font-malayalam">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Part B: Official Rules</span>
+                    <span class="h-px flex-1 bg-gray-200"></span>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-indigo-100 shadow-sm ring-1 ring-indigo-50">
+                    <h3 class="text-base font-bold text-indigo-900 mb-4 flex items-center gap-2 pb-3 border-b border-gray-100">
+                        <span class="text-xl">📜</span> ഇന്‍വിജിലേഷന്‍ ഡ്യൂട്ടി: പൊതു നിര്‍ദ്ദേശങ്ങൾ
+                    </h3>
+
+                    <p class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-blue-900 text-xs leading-relaxed mb-5">
+                        യുജിസി റെഗുലേഷൻ/കോടതി വിധികൾ പ്രകാരം പരീക്ഷാ ജോലി അധ്യാപകരുടെ ഡ്യൂട്ടിയുടെ ഭാഗമാണ് (Part of Duty). 
+                        അസൗകര്യങ്ങൾ ഉണ്ടെങ്കിൽ സ്വയം പകരം സംവിധാനം ഏർപ്പെടുത്തി ചീഫ് സൂപ്രണ്ടിനെയോ SAS-നെയോ അറിയിക്കുക.
+                    </p>
+
+                    <div class="space-y-6 text-sm text-gray-700 leading-relaxed">
+                        
+                        <div>
+                            <h5 class="font-bold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+                                <span class="bg-gray-100 text-gray-600 w-5 h-5 rounded flex items-center justify-center text-xs">1</span>
+                                പരീക്ഷ തുടങ്ങുന്നതിന് മുൻപ്
+                            </h5>
+                            <ul class="list-disc list-inside pl-1 space-y-1 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                <li><b class="text-gray-900">30 മിനിറ്റ് മുൻപ്</b> ഓഫീസിൽ ഹാജരായി സാമഗ്രികൾ കൈപ്പറ്റുക.</li>
+                                <li>പ്രത്യേക നിർദ്ദേശങ്ങൾ ശ്രദ്ധിക്കുക. ബുക്ക്‌ലെറ്റുകളും ചോദ്യപേപ്പറും എണ്ണി തിട്ടപ്പെടുത്തുക.</li>
+                                <li>RNBB-യിൽ (Attendance Sheet) രജിസ്റ്റർ നമ്പറുകൾ രേഖപ്പെടുത്തുക.</li>
+                                <li><b class="text-gray-900">10 മിനിറ്റ് മുൻപ്</b> പരീക്ഷാ ഹാളിൽ എത്തുക.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h5 class="font-bold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+                                <span class="bg-gray-100 text-gray-600 w-5 h-5 rounded flex items-center justify-center text-xs">2</span>
+                                ഹാളിലെ നടപടിക്രമങ്ങൾ
+                            </h5>
+                            <ul class="list-disc list-inside pl-1 space-y-1 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                <li>അനുവദിക്കപ്പെട്ട കുട്ടികൾ തന്നെയല്ലേ സീറ്റിൽ എന്ന് ഉറപ്പുവരുത്തുക.</li>
+                                <li>പുസ്തകം, പേപ്പർ, മൊബൈൽ ഫോൺ എന്നിവ മാറ്റിവെപ്പിക്കുക.</li>
+                                <li>ബുക്ക്‌ലെറ്റിൽ രജിസ്റ്റർ നമ്പർ, ചോദ്യപേപ്പർ കോഡ് എന്നിവ കൃത്യമാണെന്ന് ഉറപ്പാക്കിയ ശേഷം മാത്രം ഒപ്പിടുക.</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-red-50 p-3 rounded-lg border border-red-100 my-4">
+                            <h5 class="font-bold text-red-700 text-sm mb-2 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                ശ്രദ്ധിക്കുക: അബ്സെന്റീസ് മാർക്കിംഗ്
+                            </h5>
+                            <ul class="list-disc list-inside pl-1 space-y-1.5 text-xs sm:text-sm text-red-800 marker:text-red-300">
+                                <li>പരീക്ഷ തുടങ്ങി <b class="underline">30 മിനിറ്റിന് ശേഷം</b> മാത്രം Absent രേഖപ്പെടുത്തുക (ചുവന്ന മഷിയിൽ).</li>
+                                <li>കുട്ടികൾ ഹാളിൽ ഇല്ല എന്ന് ഉറപ്പുവരുത്തുക (പിഴ: <b>₹5000</b>).</li>
+                                <li>ആബ്സെന്റ് ആയവരുടെ QP Code അതിനായുള്ള കോളത്തിൽ രേഖപ്പെടുത്തുക.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h5 class="font-bold text-gray-900 mb-2 flex items-center gap-2 text-sm">
+                                <span class="bg-gray-100 text-gray-600 w-5 h-5 rounded flex items-center justify-center text-xs">3</span>
+                                പരീക്ഷാ സമയത്തും അവസാനവും
+                            </h5>
+                            <ul class="list-disc list-inside pl-1 space-y-1 text-xs sm:text-sm text-gray-600 marker:text-gray-300">
+                                <li>ഹാളിൽ പൂർണ്ണ നിശബ്ദത പാലിക്കുക. ഫോൺ Silent Mode-ൽ സൂക്ഷിക്കുക.</li>
+                                <li>ക്രമക്കേടുകൾ കണ്ടാൽ തെളിവ് സഹിതം റിപ്പോർട്ട് ചെയ്യുക.</li>
+                                <li>ഒരു മണിക്കൂറിന് ശേഷം മാത്രമേ കുട്ടികളെ പുറത്തുവിടാവൂ.</li>
+                                <li>ഭിന്നശേഷിക്കാർക്ക് മണിക്കൂറിന് 20 മിനിറ്റ് അധിക സമയം നൽകുക.</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <h6 class="font-bold text-gray-700 text-xs mb-2">തിരികെ ഏൽപ്പിക്കുമ്പോൾ (Submission):</h6>
+                            <p class="text-xs text-gray-500 mb-3">അക്കൗണ്ട് ക്ലോസ് ചെയ്ത്, പേരെഴുതി ഒപ്പിട്ട് 5 മിനിറ്റിനുള്ളിൽ ഏൽപ്പിക്കുക.</p>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div class="bg-white p-2 rounded border border-gray-100 shadow-sm">
+                                    <span class="block font-bold text-indigo-600 mb-0.5">Barcode ഉള്ളവ:</span>
+                                    QP Code അടിസ്ഥാനത്തിൽ തരംതിരിക്കുക.
+                                </div>
+                                <div class="bg-white p-2 rounded border border-gray-100 shadow-sm">
+                                    <span class="block font-bold text-indigo-600 mb-0.5">Barcode ഇല്ലാത്തവ:</span>
+                                    Register Number ക്രമത്തിൽ അടുക്കുക.
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="p-4 border-t border-gray-200 bg-white shrink-0 flex justify-end">
+            <button onclick="closeModal('help-modal')" class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition transform active:scale-95 w-full sm:w-auto">
+                Close Guide
+            </button>
+        </div>
+    </div>
+</div>
+
+
+
+<div id="hod-monitor-modal" class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity">
+    <div class="bg-white w-full max-w-4xl h-[95vh] sm:h-auto sm:max-h-[90vh] rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up sm:animate-none">
+        
+        <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <span class="bg-purple-100 text-purple-600 w-8 h-8 rounded-full flex items-center justify-center text-lg">👁️</span> 
+                    Department Monitor
+                </h3>
+                <p class="text-xs text-gray-500 ml-10 -mt-1" id="hod-dept-name">Department Overview</p>
+            </div>
+            <button onclick="closeModal('hod-monitor-modal')" class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+        
+        <div id="hod-monitor-list" class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 space-y-4">
+            </div>
+        
+        <div class="p-4 border-t border-gray-200 bg-white shrink-0 flex justify-end">
+            <button onclick="closeModal('hod-monitor-modal')" class="bg-gray-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-900 shadow-sm transition">Close Monitor</button>
+        </div>
+    </div>
+</div>
+
+
+    
+<div id="dashboard-invig-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-[80] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-slide-up">
+        
+        <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 flex justify-between items-center shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <span class="bg-white/20 p-1.5 rounded-lg">📋</span> 
+                    <span id="dash-modal-title">Session Details</span>
+                </h3>
+                <p class="text-indigo-100 text-xs mt-0.5" id="dash-modal-subtitle">Invigilators on Duty</p>
+            </div>
+            <button onclick="document.getElementById('dashboard-invig-modal').classList.add('hidden')" class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+
+        <div id="dash-invig-list" class="p-4 overflow-y-auto custom-scroll space-y-3 bg-gray-50/50 flex-1">
+            </div>
+
+        <div class="p-3 border-t border-gray-100 bg-white text-center shrink-0">
+            <p class="text-[10px] text-gray-400">Tap WhatsApp icon to contact invigilator</p>
+        </div>
+    </div>
+</div>
+
+    
+    
+    <script type="module" src="invigilation.js">
+    </script>
+
+
+    
+</body>
+</html>

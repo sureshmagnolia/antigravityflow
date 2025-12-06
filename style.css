@@ -1,0 +1,1047 @@
+/* Loading Spinner Animation */
+.loader-spin {
+    border: 4px solid #f3f3f3; /* Light grey */
+    border-top: 4px solid #3b82f6; /* Blue */
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- PRINT STYLES --- */
+@media print {
+
+    html, body {
+        height: auto !important;
+        overflow-y: visible !important;
+        display: block !important;
+    }
+    
+    @page {
+        margin: 0.5cm; /* Minimal margin */
+    }
+    
+    body, #report-output-area {
+        background-color: white !important;
+        background: white !important;
+        color: black !important;
+    }
+
+/* In style.css, inside @media print { ... } */
+
+/* Hide EVERYTHING by default */
+/* --- REPLACEMENT CSS FOR PRINT SECTION --- */
+
+/* 1. Hide Navigation, Modals, PyScript, and Sibling Views */
+header,
+#main-nav,
+#student-edit-modal,
+#room-selection-modal,
+#student-search-result-modal,
+#scribe-room-modal,  /* Added missing modal */
+body > py-config,
+body > py-script,
+/* Hide all the main 'View' containers (siblings of report-controls) */
+#view-extractor,
+#view-edit-data,
+#view-scribe-settings,
+#view-room-allotment,
+#view-qpcodes,
+#view-search,
+#view-reports,
+#view-absentees,
+#view-settings,
+#view-room-settings {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* 2. Hide everything INSIDE '#report-controls' (buttons, status text)... */
+#report-controls > * {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* 3. ...EXCEPT the '#report-output-area', which must be explicitly visible */
+/* (Note: This rule likely already exists in your file, just ensure it looks like this) */
+#report-output-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+}
+
+/* 4. Reset the layout of Main and Report Controls so they don't restrict the page */
+main, #report-controls {
+    display: block !important;
+    visibility: visible !important; /* Ensure parents are visible */
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    max-width: none !important; /* Remove the 'max-w-2xl' restriction */
+    background: transparent !important; /* Remove gray background */
+    border: none !important;
+    box-shadow: none !important;
+}
+
+    /* NEW RULE TO ADD */
+
+/* Hide all direct children of report-controls... */
+#report-controls > * {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Force Show ONLY the report output area */
+#report-output-area {
+    display: block !important;
+    visibility: visible !important; /* <--- CRITICAL: Make sure content is visible */
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+    
+    /* Show ONLY the report content area and ensure it's visible */
+   #report-output-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important; /* <--- ADDED !IMPORTANT */
+    width: 100% !important;
+    height: auto !important; /* <--- ADDED FOR SAFTEY */
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+    /* Make sure each page is visible and breaks correctly */
+    .print-page {
+        display: block !important;
+        visibility: visible !important;
+        page-break-after: always;
+        page-break-inside: avoid;
+        width: 100%;
+        padding: 0.5cm; 
+        box-sizing: border-box;
+        box-shadow: none;
+        border: none;
+        margin: 0 !important;
+        min-height: auto !important;
+    }
+    .print-page-daywise {
+        width: 100% !important;
+        min-height: auto !important;
+    }
+
+    .print-page:last-child {
+        page-break-after: auto;
+    }
+    
+    h1, h2 {
+        text-align: center;
+        color: black;
+    }
+    h1 { font-size: 16pt; font-weight: bold; margin-bottom: 0.5rem; }
+    h2 { font-size: 14pt; font-weight: bold; margin-bottom: 1rem; }
+    h3 { font-size: 12pt; font-weight: bold; margin-bottom: 1rem; }
+
+    .course-summary {
+        display: none;
+    }
+
+    .invigilator-footer .course-summary-footer {
+        display: block;
+        font-size: 10pt;
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        border: 1px solid #ccc;
+        text-align: left;
+    }
+
+    .invigilator-footer .scribe-footnote {
+        display: block;
+        font-size: 9pt;
+        font-style: italic;
+        margin-top: 1rem;
+    }
+    
+    .report-location-header {
+        font-size: 12pt;
+        font-weight: bold;
+        font-style: italic;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 0.5rem;
+    }
+    
+    .invigilator-footer {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #ccc;
+        font-size: 10pt;
+        page-break-before: avoid;
+    }
+    .invigilator-footer div {
+        margin-bottom: 0.5rem;
+    }
+    .invigilator-footer .signature {
+        margin-top: 2.5rem;
+        border-top: 1px solid black;
+        width: 200px;
+        padding-top: 4px;
+        text-align: center;
+    }
+    
+    .print-page-break {
+        page-break-after: always;
+        border: 0;
+        height: 0;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8.5pt; 
+    }
+    th, td {
+        border: 1px solid black;
+        padding: 8px 3px; 
+        text-align: left;
+        word-wrap: break-word; 
+    }
+    th {
+        padding: 8px 3px;
+        background-color: #eee;
+    }
+
+/* --- FIND THIS BLOCK AND REPLACE IT --- */
+   /* --- INVERTED SCRIBE ROW STYLES (Print) --- */
+    tr.scribe-row-highlight {
+        background-color: #000000 !important; /* Black Background */
+        color: #ffffff !important;             /* White Text */
+        -webkit-print-color-adjust: exact; 
+        print-color-adjust: exact;
+    }
+    
+    /* Standard cells get white borders */
+    tr.scribe-row-highlight td {
+        border: 1px solid #ffffff !important;
+    }
+
+    /* EXCEPTION: Make Signature Cell White */
+    tr.scribe-row-highlight td.signature-col {
+        background-color: #ffffff !important; /* White Background */
+        border: 1px solid #000000 !important; /* Black Border (to see the box) */
+    }
+    
+    .print-table {
+        break-before: avoid;
+    }
+
+    /* Room-wise Seating Report */
+    .sl-col { width: 5%; }
+    .course-col { width: 30%; }
+    .reg-col { width: 15%; text-align: right; }
+    .name-col { width: 25%; }
+    .signature-col { width: 10%; } 
+    .remarks-col { width: 15%; }
+
+    /* Question Paper Report */
+    .q-paper-table .sl-col { width: 10%; }
+    .q-paper-table .course-col { width: 70%; }
+    .q-paper-table .count-col { width: 20%; }
+    .q-paper-table tfoot td { font-weight: bold; }
+    
+    /* Day-wise Report */
+    .print-header-group {
+        break-inside: avoid;
+        break-after: avoid; /* <-- ADD THIS LINE */
+    }
+    
+    .print-page-daywise h1 { font-size: 14pt; }
+    .print-page-daywise h2 { font-size: 12pt; margin-bottom: 0.5rem; }
+    .print-page-daywise .column-container {
+        display: block; 
+        gap: 0;
+    }
+    .print-page-daywise .column {
+        flex: none;
+        min-width: 100%;
+    }
+    .daywise-report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt; 
+        table-layout: auto; 
+        break-before: avoid;
+    }
+.daywise-report-table th,
+    .daywise-report-table td {
+        border: 1px solid #999;
+        padding: 1px 2px; /* Top/Bottom: 1px, Left/Right: 2px */
+        text-align: left;
+        word-wrap: break-word;
+        line-height: 1.1; /* Optional: Compresses text height slightly */
+    }
+    .daywise-report-table th {
+        background: #eee;
+    }
+    
+    /* Absentee Report */
+    .absentee-report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+        margin-top: 1rem;
+        break-before: avoid;
+    }
+    .absentee-report-table th,
+    .absentee-report-table td {
+        border: 1px solid #000;
+        padding: 5px;
+        text-align: left;
+    }
+    .absentee-report-table th {
+        background-color: #eee;
+        font-weight: bold;
+    }
+    .absentee-report-table .regno-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    .absentee-report-table .regno-list span {
+        padding: 2px 4px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: #f9f9f9;
+        margin-right: 4px;
+    }
+    .absentee-footer {
+        margin-top: 4rem;
+        padding-top: 1rem;
+        font-size: 11pt;
+        font-weight: bold;
+        float: right;
+    }
+    .absentee-footer .signature {
+        margin-top: 4rem;
+        border-top: 1px solid black;
+        padding-top: 4px;
+    }
+    
+    /* Scribe Report */
+    .scribe-report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt;
+        margin-top: 1rem;
+        break-before: avoid;
+    }
+    .scribe-report-table th,
+    .scribe-report-table td {
+        border: 1px solid #000;
+        padding: 5px;
+        text-align: left;
+        vertical-align: top;
+    }
+    .scribe-report-table th {
+        background-color: #eee;
+        font-weight: bold;
+    }
+
+    /* QP Distribution Report */
+    .print-page h4.qp-header {
+        font-size: 12pt;
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #666;
+        break-after: avoid;
+    }
+    .qp-distribution-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+        margin-top: 0.5rem;
+        margin-bottom: 1.5rem;
+        break-inside: avoid;
+    }
+    .qp-distribution-table th,
+    .qp-distribution-table td {
+        border: 1px solid #000;
+        padding: 6px;
+        text-align: left;
+    }
+    .qp-distribution-table th {
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+        font-weight: bold;
+    }
+
+    /* Scribe Proforma */
+    .proforma-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-top: 1.5rem; 
+        font-size: 11pt; 
+        break-before: avoid;
+    }
+    .proforma-table td { 
+        border: 1px solid #000; 
+        padding: 12px; 
+        vertical-align: top;
+    }
+    .proforma-table td.label { 
+        width: 35%; 
+        font-weight: bold; 
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+    }
+    .proforma-table td.data { 
+        width: 65%; 
+        font-weight: bold; 
+    }
+    .proforma-table td.fillable { 
+        height: 60px;
+        font-weight: normal; 
+    }
+    
+    /* Invigilator Report */
+    .invigilator-report-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+        margin-top: 1.5rem;
+        break-before: avoid;
+    }
+    .invigilator-report-table th,
+    .invigilator-report-table td {
+        border: 1px solid #000;
+        padding: 8px;
+        text-align: left;
+        vertical-align: top;
+    }
+    .invigilator-report-table th {
+        background-color: #eee !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+        font-weight: bold;
+    }
+    .invigilator-report-table tfoot td {
+        font-weight: bold;
+        background-color: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact; 
+        color-adjust: exact;
+    }
+
+}
+/* --- END PRINT STYLES --- */
+
+/* --- Report styles for the *viewer* (on-screen) --- */
+.print-page {
+    background: #ffffff;
+    width: 210mm; 
+    min-height: 297mm; 
+    padding: 2cm;
+    margin: 1rem auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    color: black;
+    box-sizing: border-box; 
+    font-size: 9pt; 
+}
+.print-page-daywise {
+    width: 297mm;
+    min-height: 210mm;
+}
+.print-page h1 {
+    font-size: 16pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+.print-page h2 {
+    font-size: 14pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+.print-page h3 {
+    font-size: 12pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+.print-page .course-summary {
+    font-size: 11pt;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+}
+.invigilator-footer .course-summary-footer {
+    display: block;
+    font-size: 10pt;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    text-align: left;
+}
+.invigilator-footer .scribe-footnote {
+    display: block;
+    font-size: 9pt;
+    font-style: italic;
+    margin-top: 1rem;
+}
+        
+.report-location-header {
+    font-size: 12pt;
+    font-weight: bold;
+    font-style: italic;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.5rem;
+}
+        
+.print-page table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+}
+.print-page th, .print-page td {
+    border: 1px solid black;
+    padding: 8px 3px;
+    text-align: left;
+    word-wrap: break-word;
+}
+.print-page th {
+    padding: 8px 3px;
+    background-color: #eee;
+}
+
+/* --- INVERTED SCRIBE ROW STYLES (Screen) --- */
+tr.scribe-row-highlight {
+    background-color: #000000;
+    color: #ffffff;
+}
+tr.scribe-row-highlight td {
+    border-color: #ffffff;
+}
+/* EXCEPTION: Make Signature Cell White on Screen too */
+tr.scribe-row-highlight td.signature-col {
+    background-color: #ffffff;
+    border: 1px solid #000000;
+}
+
+.edit-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+.edit-data-table th,
+.edit-data-table td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+.edit-data-table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+}
+.edit-data-table .edit-field {
+    display: block;
+    width: 100%;
+}
+.edit-data-table .view-field {
+    min-height: 2.25rem;
+    padding-top: 0.25rem;
+}
+.edit-data-table input[type="text"] {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.edit-data-table .actions-cell {
+    width: 100px;
+    text-align: center;
+}
+        
+.print-page .sl-col { width: 5%; }
+.print-page .course-col { width: 30%; }
+.print-page .reg-col { width: 15%; text-align: right; }
+.print-page .name-col { width: 25%; }
+.print-page .signature-col { width: 10%; } 
+.print-page .remarks-col { width: 15%; }
+
+.print-page .q-paper-table .sl-col { width: 10%; }
+.print-page .q-paper-table .course-col { width: 70%; }
+.print-page .q-paper-table .count-col { width: 20%; }
+.print-page .q-paper-table tfoot td { font-weight: bold; }
+        
+.print-header-group {
+    break-inside: avoid;
+}
+        
+.print-page-daywise h1 { font-size: 14pt; }
+.print-page-daywise h2 { font-size: 12pt; margin-bottom: 0.5rem; }
+.print-page-daywise .column-container {
+    display: flex;
+    gap: 10px;
+}
+.print-page-daywise .column {
+    flex: 1;
+    min-width: 0;
+}
+.daywise-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 6pt; 
+    table-layout: fixed;
+}
+.daywise-report-table th,
+.daywise-report-table td {
+    border: 1px solid #ccc;
+    padding: 2px;
+    text-align: left;
+    word-wrap: break-word;
+}
+.daywise-report-table th {
+    background: #f0f0f0;
+}
+        
+.absentee-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-top: 1rem;
+}
+.absentee-report-table th,
+.absentee-report-table td {
+    border: 1px solid #000;
+    padding: 5px;
+    text-align: left;
+    vertical-align: top;
+}
+.absentee-report-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+.absentee-report-table .regno-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    line-height: 1.6;
+}
+.absentee-report-table .regno-list span {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background-color: #f4f4f4;
+    margin-right: 4px;
+}
+.absentee-footer {
+    margin-top: 4rem;
+    padding-top: 1rem;
+    font-size: 11pt;
+    font-weight: bold;
+    float: right;
+}
+.absentee-footer .signature {
+    margin-top: 4rem;
+    border-top: 1px solid black;
+    padding-top: 4px;
+}
+
+.scribe-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    margin-top: 1rem;
+}
+.scribe-report-table th,
+.scribe-report-table td {
+    border: 1px solid #000;
+    padding: 5px;
+    text-align: left;
+    vertical-align: top;
+}
+.scribe-report-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+
+.proforma-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin-top: 1.5rem; 
+    font-size: 11pt; 
+}
+.proforma-table td { 
+    border: 1px solid #000; 
+    padding: 12px; 
+    vertical-align: top;
+}
+.proforma-table td.label { 
+    width: 35%; 
+    font-weight: bold; 
+    background-color: #eee;
+}
+.proforma-table td.data { 
+    width: 65%; 
+    font-weight: bold; 
+}
+.proforma-table td.fillable { 
+    height: 60px;
+    font-weight: normal; 
+}
+
+.print-page h4.qp-header {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #666;
+}
+.qp-distribution-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+.qp-distribution-table th,
+.qp-distribution-table td {
+    border: 1px solid #000;
+    padding: 6px;
+    text-align: left;
+}
+.qp-distribution-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+
+.autocomplete-container {
+    position: relative;
+}
+.autocomplete-results {
+    position: absolute;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    max-height: 200px;
+    overflow-y: auto;
+    width: 100%;
+    z-index: 10;
+    border-radius: 0 0 0.375rem 0.375rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+.autocomplete-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+}
+.autocomplete-item:hover, .autocomplete-item-active {
+    background-color: #f3f4f6;
+}
+.autocomplete-item strong {
+    color: #4f46e5;
+}
+
+.invigilator-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #ccc;
+    font-size: 10pt;
+}
+.invigilator-footer div {
+    margin-bottom: 0.5rem;
+}
+.invigilator-footer .signature {
+    margin-top: 2.5rem;
+    border-top: 1px solid black;
+    width: 200px;
+    padding-top: 4px;
+    text-align: center;
+}
+
+.print-page-break {
+    display: none;
+}
+/* --- END REPORT STYLES --- */
+/* --- NEW: Edit Data Table Styles (V10.1) --- */
+.edit-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    table-layout: fixed;
+}
+.edit-data-table th,
+.edit-data-table td {
+    border: 1px solid #e5e7eb;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+    word-wrap: break-word;
+}
+.edit-data-table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+}
+
+/* Column Widths (Updated for Stream Column) */
+.edit-data-table th:nth-child(1), 
+.edit-data-table td:nth-child(1) { width: 5%; }  /* Sl No */
+.edit-data-table th:nth-child(2), 
+.edit-data-table td:nth-child(2) { width: 9%; }  /* Date */
+.edit-data-table th:nth-child(3), 
+.edit-data-table td:nth-child(3) { width: 9%; }  /* Time */
+.edit-data-table th:nth-child(4), 
+.edit-data-table td:nth-child(4) { width: 10%; } /* Stream (NEW) */
+.edit-data-table th:nth-child(5), 
+.edit-data-table td:nth-child(5) { width: 20%; } /* Course */
+.edit-data-table th:nth-child(6), 
+.edit-data-table td:nth-child(6) { width: 15%; } /* RegNo */
+.edit-data-table th:nth-child(7), 
+.edit-data-table td:nth-child(7) { width: 20%; } /* Name */
+.edit-data-table th.actions-cell, 
+.edit-data-table td.actions-cell { width: 12%; text-align: center; }
+/* --- End of Edit Data Table Styles --- */
+/* --- NEW: Invigilator Report Styles (On-screen) --- */
+.invigilator-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+    margin-top: 1.5rem;
+}
+.invigilator-report-table th,
+.invigilator-report-table td {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+}
+.invigilator-report-table th {
+    background-color: #eee;
+    font-weight: bold;
+}
+.invigilator-report-table tfoot td {
+    font-weight: bold;
+    background-color: #f0f0f0;
+}
+/* --- END OF  Invigilator Report Styles (Print) --- */
+
+/* --- NEW Sidebar Navigation Styles (ExamFlow) --- */
+.nav-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem; /* 12px */
+    padding-top: 0.625rem; /* 10px */
+    padding-bottom: 0.625rem; /* 10px */
+    padding-left: 1rem; /* 16px */
+    padding-right: 1rem; /* 16px */
+    border-radius: 0.5rem; /* 8px */
+    font-size: 0.875rem; /* 14px */
+    font-weight: 600;
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+    border: none;
+    cursor: pointer;
+}
+.nav-button-active {
+    background-color: #4338ca; /* bg-indigo-700 */
+    color: #ffffff; /* text-white */
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+.nav-button-inactive {
+    background-color: transparent;
+    color: #9ca3af; /* text-gray-400 */
+}
+.nav-button-inactive:hover {
+    background-color: #374151; /* hover:bg-gray-700 */
+    color: #ffffff; /* hover:text-white */
+}
+
+.nav-button svg {
+    width: 1.25rem; /* 20px */
+    height: 1.25rem; /* 20px */
+    flex-shrink: 0;
+}
+/* --- END NEW Sidebar Styles --- */
+/* --- NEW: Search Result Modal Styles --- */
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.detail-item:last-child {
+    border-bottom: none;
+}
+.detail-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #4b5563; /* text-gray-600 */
+}
+.detail-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #111827; /* text-gray-900 */
+    text-align: right;
+}
+#search-result-scribe-block .detail-value {
+    font-weight: 700;
+    color: #c2410c; /* orange-700 */
+}
+
+/* --- NEW: Sidebar transition --- */
+#main-nav {
+    transition: width 0.3s ease-in-out, padding 0.3s ease-in-out;
+    overflow-x: hidden; /* Prevents text from spilling during animation */
+}
+/* At the bottom of style.css */
+.daywise-report-table th,
+.daywise-report-table td {
+    border: 1px solid #ccc;
+    padding: 1px 2px; /* <--- MATCH THE PRINT SETTING */
+    text-align: left;
+    word-wrap: break-word;
+} /* <--- THIS CLOSING BRACE WAS LIKELY MISSING OR MISPLACED */
+
+/* --- END OF Search Result Modal Styles --- */
+
+/* Mobile Table Wrapper */
+.table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto; /* Allows horizontal scrolling */
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iPhone */
+}
+
+/* --- REMUNERATION BILL PRINT STYLES (PAGINATION & FIT FIX) --- */
+@media print {
+    /* 1. Hide everything by default */
+    body.printing-bill {
+        visibility: hidden;
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* 2. Show only the bill and its children */
+    body.printing-bill #remuneration-output,
+    body.printing-bill #remuneration-output * {
+        visibility: visible;
+    }
+
+    /* 3. Position the Bill correctly */
+    body.printing-bill #remuneration-output {
+        display: block !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        margin: 0 !important;
+        padding: 5mm !important; /* Small padding for printer margins */
+        z-index: 9999;
+        background-color: white;
+    }
+
+    /* 4. Container Styles (Remove Borders/Shadows) */
+    body.printing-bill .print-page {
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    /* 5. Table Pagination & Sizing */
+    body.printing-bill table {
+        font-size: 9pt !important; /* Compact Font */
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    body.printing-bill th, 
+    body.printing-bill td {
+        padding: 4px 2px !important; /* Tight Padding */
+        border: 1px solid #000 !important; /* Clean Black Border */
+    }
+
+    /* Prevent rows from splitting across pages */
+    body.printing-bill tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* Ensure Header repeats on new pages */
+    body.printing-bill thead {
+        display: table-header-group;
+    }
+
+    /* Summary Box Protection */
+    body.printing-bill .summary-box {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border: 1px solid #000 !important; /* Single line border for print */
+        margin-top: 10px !important;
+    }
+    
+    /* Hide screen-only elements */
+    body.printing-bill .no-print {
+        display: none !important;
+    }
+
+    /* Force hide specific Remuneration View elements when printing bill */
+    body.printing-bill #view-remuneration h1,
+    body.printing-bill #view-remuneration .bg-blue-50, 
+    body.printing-bill #view-remuneration .border-t > h2, 
+    body.printing-bill #view-remuneration .border-t > .bg-gray-100 {
+        display: none !important;
+    }
+}
+
+/* --- REMUNERATION BILL MOBILE OPTIMIZATIONS --- */
+
+/* Ensure the bill container fits on mobile screens */
+#remuneration-output .print-page {
+    max-width: 100%;
+    margin: 0 auto;
+    overflow-x: auto; /* Allow scrolling if table is too wide */
+}
+
+@media (max-width: 768px) {
+    /* Remove large padding/borders on mobile to save space */
+    #remuneration-output .print-page {
+        padding: 15px !important;
+        border-width: 1px !important;
+        box-shadow: none !important;
+    }
+    
+    /* Scale down font size slightly for mobile view */
+    #remuneration-output table {
+        font-size: 0.75rem !important;
+    }
+    
+    #remuneration-output h2 {
+        font-size: 1.1rem !important;
+    }
+}

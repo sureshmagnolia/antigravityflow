@@ -1,0 +1,2419 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExamFlow V12.6 (Cloud Sync)</title>
+
+    <script src="tailwind.js"></script>
+
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="remuneration.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // *** UPDATED: Added 'orderBy' to imports ***
+        import {
+            getFirestore, doc, getDoc, setDoc,
+            collection, query, where, getDocs, orderBy,
+            addDoc, updateDoc, arrayUnion, arrayRemove,
+            onSnapshot, writeBatch
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Your Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
+            authDomain: "examflow-de08f.firebaseapp.com",
+            projectId: "examflow-de08f",
+            storageBucket: "examflow-de08f.firebasestorage.app",
+            messagingSenderId: "1094663914110",
+            appId: "1:1094663914110:web:50c4f206f2053a873f0e2f",
+            measurementId: "G-8S6GE8Q7NR"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        // *** EXPOSE ALL TOOLS TO WINDOW ***
+        window.firebase = {
+            auth, db, provider, signInWithPopup, signOut, onAuthStateChanged,
+            doc, getDoc, setDoc,
+            collection, query, where, getDocs, orderBy,
+            addDoc, updateDoc, arrayUnion, arrayRemove,
+            onSnapshot, writeBatch
+        };
+        console.log("Firebase Initialized (Full Suite Ready)");
+    </script>
+
+</head>
+
+<body class="bg-gray-100 font-sans flex flex-col h-screen">
+
+    <div id="initial-app-loader"
+        class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-opacity duration-500">
+
+        <div class="relative flex h-16 w-16 mb-6">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-16 w-16 bg-indigo-600"></span>
+        </div>
+
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">ExamFlow is Loading...</h2>
+        <p id="loader-message" class="text-indigo-600 font-medium italic animate-pulse">Summoning the Exam Spirits... 👻
+        </p>
+
+        <div class="w-64 h-1 bg-gray-200 rounded-full mt-6 overflow-hidden">
+            <div class="h-full bg-indigo-600 animate-[loading_1.5s_ease-in-out_infinite]" style="width: 50%"></div>
+        </div>
+
+        <style>
+            @keyframes loading {
+                0% {
+                    transform: translateX(-100%);
+                }
+
+                100% {
+                    transform: translateX(100%);
+                }
+            }
+        </style>
+    </div>
+
+    <header
+        class="w-full bg-gray-900 text-white h-14 px-3 shadow-lg flex flex-row items-center justify-between shrink-0 z-50 relative">
+
+        <div class="flex items-center gap-3 z-20">
+            <button id="sidebar-toggle" class="text-gray-300 hover:text-white focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+            </button>
+
+            <div class="flex items-center gap-2">
+                <img src="logo.png" class="h-8 w-auto rounded bg-white p-0.5" alt="Logo">
+                <div>
+                    <h1 class="text-sm md:text-lg font-bold text-white leading-none">
+                        ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1 hidden sm:inline">v12.6</span>
+                    </h1>
+                    <p
+                        class="text-[9px] text-gray-400 font-medium tracking-wide mt-0.5 hidden sm:block max-w-[200px] leading-tight">
+                        Developed by Exam Wing,<br>Govt Victoria College Palakkad
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div
+            class="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center hidden md:flex justify-center w-full max-w-3xl pointer-events-none z-10">
+            <h1 id="header-college-name"
+                class="text-lg md:text-xl font-bold text-indigo-100 tracking-wide uppercase text-shadow-sm leading-tight px-4">
+            </h1>
+        </div>
+
+        <div class="flex items-center gap-2 z-20">
+
+            <div id="mobile-sync-dot" class="hidden md:hidden w-2 h-2 rounded-full bg-gray-500 mr-1"
+                title="Sync Status"></div>
+
+            <div id="user-info" class="text-xs text-right hidden mr-2">
+                <div id="user-name" class="font-bold text-white">User</div>
+                <div id="sync-status" class="text-[10px] text-green-400">Synced</div>
+            </div>
+
+            <button id="btn-invigilation-portal" onclick="window.open('invigilation.html', '_blank')"
+                class="hidden bg-indigo-500 hover:bg-indigo-600 text-white p-1.5 md:px-3 md:py-2 rounded-md transition flex items-center gap-1 shadow-sm border border-indigo-400"
+                title="Invigilation Portal">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5 md:w-4 md:h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                </svg>
+                <span class="hidden md:inline text-xs font-bold">Invigilation</span>
+            </button>
+
+            <button id="admin-btn"
+                class="hidden bg-purple-600 hover:bg-purple-700 text-white p-1.5 md:px-3 md:py-2 rounded-md transition flex items-center gap-1"
+                title="Team Management">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5 md:w-4 md:h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
+                <span class="hidden md:inline text-xs font-bold">Team</span>
+            </button>
+
+            <button id="super-admin-btn"
+                class="hidden bg-red-600 hover:bg-red-700 text-white p-1.5 md:px-3 md:py-2 rounded-md transition flex items-center gap-1 border border-red-800 shadow-lg"
+                title="Super Admin">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5 md:w-4 md:h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+                </svg>
+            </button>
+
+            <button id="login-btn"
+                class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 md:px-3 md:py-2 rounded transition">
+                Login
+            </button>
+
+            <button id="logout-btn"
+                class="hidden bg-red-600 hover:bg-red-700 text-white p-1.5 md:px-3 md:py-2 rounded transition"
+                title="Logout">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5 md:w-4 md:h-4">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+                </svg>
+                <span class="hidden md:inline text-xs ml-1 font-bold">Logout</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+
+        <nav id="main-nav"
+            class="fixed inset-y-0 left-0 z-[60] w-64 bg-gray-900 text-gray-300 p-4 space-y-2 overflow-y-auto shadow-lg transition-transform duration-300 transform -translate-x-full md:translate-x-0 md:static md:inset-auto">
+
+            <div class="md:hidden flex justify-end mb-2">
+                <button id="close-sidebar-btn" class="text-gray-400 hover:text-white p-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <button id="nav-home" class="nav-button nav-button-active">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path
+                        d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                </svg>
+                <span>Home</span>
+            </button>
+
+            <button id="nav-extractor" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path
+                        d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" />
+                    <path
+                        d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+                </svg>
+                <span>Data Loading</span>
+            </button>
+            <button id="nav-edit-data" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path
+                        d="m2.695 14.762-1.262 3.155a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.886L17.5 5.502a2.121 2.121 0 0 0-3-3L5.42 13.42a4 4 0 0 0-.886 1.343Z" />
+                </svg>
+                <span>Data Editor</span>
+            </button>
+            <button id="nav-scribe-settings" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path
+                        d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.25 1.25 0 0 0 .41 1.415 2.5 2.5 0 0 0 3.54 0 1.25 1.25 0 0 0 .41-1.415 2.98 2.98 0 0 0 0-1.986 1.25 1.25 0 0 0-.41-1.414 2.5 2.5 0 0 0-3.54 0 1.25 1.25 0 0 0-.41 1.414 2.98 2.98 0 0 0 0 1.986ZM16.535 14.493a1.25 1.25 0 0 0 .41 1.415 2.5 2.5 0 0 0 3.54 0 1.25 1.25 0 0 0 .41-1.415 2.98 2.98 0 0 0 0-1.986 1.25 1.25 0 0 0-.41-1.414 2.5 2.5 0 0 0-3.54 0 1.25 1.25 0 0 0-.41 1.414 2.98 2.98 0 0 0 0 1.986Z" />
+                    <path
+                        d="M11.5 11.25a1.25 1.25 0 0 0-1.25-1.25h-1.5a1.25 1.25 0 0 0-1.25 1.25v6.5a1.25 1.25 0 0 0 1.25 1.25h1.5a1.25 1.25 0 0 0 1.25-1.25v-6.5Z" />
+                </svg>
+                <span>Scribe Assistance</span>
+            </button>
+            <button id="nav-room-allotment" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M3 4.25A2.25 2.25 0 0 1 5.25 2h9.5A2.25 2.25 0 0 1 17 4.25v11.5A2.25 2.25 0 0 1 14.75 18h-9.5A2.25 2.25 0 0 1 3 15.75V4.25ZM5.25 3.5c-.414 0-.75.336-.75.75v11.5c0 .414.336.75.75.75h9.5c.414 0 .75-.336.75-.75V4.25c0-.414-.336-.75-.75-.75h-9.5Z"
+                        clip-rule="evenodd" />
+                    <path
+                        d="M5 6.75C5 6.336 5.336 6 5.75 6H8a.75.75 0 0 1 .75.75v3.5A.75.75 0 0 1 8 11H5.75A.75.75 0 0 1 5 10.25v-3.5ZM12 6.75c0-.414.336-.75.75-.75H15a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75H12.75a.75.75 0 0 1-.75-.75v-3.5Z" />
+                    <path
+                        d="M5 13.75c0-.414.336-.75.75-.75H8a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75H5.75a.75.75 0 0 1-.75-.75v-3.5Z" />
+                </svg>
+                <span>Room Allotment</span>
+            </button>
+            <button id="nav-qpcodes" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span>QP Codes</span>
+            </button>
+
+            <button id="nav-search" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span>Search</span>
+            </button>
+
+            <button id="nav-reports" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M4 2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H4Zm2 5.25a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75Zm0 3.5a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span>Reports</span>
+            </button>
+            <button id="nav-absentees" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path
+                        d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6.875 11.125a3.375 3.375 0 1 0 6.25 0H6.875ZM3 10.875a3.375 3.375 0 1 1 6.75 0V11a.75.75 0 0 1-.75.75h-5.25a.75.75 0 0 1-.75-.75v-.125Z" />
+                    <path d="M13.125 11.125a3.375 3.375 0 1 0 6.25 0H13.125Z" />
+                    <path
+                        d="M17 10.875a3.375 3.375 0 1 1 6.75 0V11a.75.75 0 0 1-.75.75h-5.25a.75.75 0 0 1-.75-.75v-.125Z" />
+                </svg>
+                <span>Absentees</span>
+            </button>
+            <button id="nav-settings" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 0 1-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.566.379-1.566 2.6 0 2.978a1.532 1.532 0 0 1 .947 2.287c-.835 1.372.734 2.942 2.106 2.106a1.532 1.532 0 0 1 2.287.947c.379 1.566 2.6 1.566 2.978 0a1.533 1.533 0 0 1 2.287-.947c1.372.835 2.942-.734 2.106-2.106a1.533 1.533 0 0 1-.947-2.287c1.566-.379 1.566-2.6 0-2.978a1.532 1.532 0 0 1 .947-2.287c.835-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 0 1-2.287-.947ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span>Settings</span>
+            </button>
+            <button id="nav-remuneration" class="nav-button nav-button-inactive">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                    <path fill-rule="evenodd"
+                        d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span>Remuneration</span>
+            </button>
+        </nav>
+
+        <main class="flex-1 overflow-y-auto">
+
+            <div id="view-home" class="container w-full mx-auto p-4 min-h-screen">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Dashboard</h1>
+                    <p class="text-gray-600 mb-6">Overview of current exam data.</p>
+
+                    <div id="data-snapshot" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 hidden">
+                        <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center shadow-sm">
+                            <div class="p-3 rounded-full bg-blue-100 text-blue-600 mr-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-blue-500 font-bold uppercase tracking-wider">Total Students</p>
+                                <p id="dash-student-count" class="text-2xl font-bold text-gray-800">0</p>
+                            </div>
+                        </div>
+                        <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg flex items-center shadow-sm">
+                            <div class="p-3 rounded-full bg-purple-100 text-purple-600 mr-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-purple-500 font-bold uppercase tracking-wider">Unique Courses</p>
+                                <p id="dash-course-count" class="text-2xl font-bold text-gray-800">0</p>
+                            </div>
+                        </div>
+                        <div class="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-center shadow-sm">
+                            <div class="p-3 rounded-full bg-orange-100 text-orange-600 mr-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-orange-500 font-bold uppercase tracking-wider">Exam Days</p>
+                                <p id="dash-day-count" class="text-2xl font-bold text-gray-800">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="dashboard-invigilation-wrapper"
+                        class="hidden mb-8 bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg shadow-md p-4 text-white">
+                        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div class="flex items-center gap-3">
+                                <div class="bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 class="text-lg font-bold leading-tight">Invigilation Duties Today</h2>
+                                    <p class="text-indigo-100 text-xs font-medium">Print allocation lists for today's
+                                        sessions.</p>
+                                </div>
+                            </div>
+                            <div id="dashboard-invigilation-buttons"
+                                class="flex flex-wrap gap-2 justify-center md:justify-end">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="today-snapshot-section" class="mb-8 hidden border-t border-gray-200 pt-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span
+                                class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100 text-indigo-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h2 class="text-xl font-bold text-gray-800">Today's Overview</h2>
+                                <p class="text-sm text-gray-500 font-medium" id="today-date-display">...</p>
+                            </div>
+                        </div>
+                        <div id="today-sessions-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div>
+                    </div>
+                    <div id="calendar-section" class="mb-8 border-t border-gray-200 pt-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-center mb-4">
+                            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-blue-600">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                </svg>
+                                Exam Calendar
+                            </h2>
+                            <div class="flex items-center gap-4 bg-gray-100 p-1 rounded-lg">
+                                <button id="cal-prev-btn" class="p-1 hover:bg-white rounded-md shadow-sm transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <span id="cal-month-display"
+                                    class="font-bold text-gray-700 w-32 text-center">Loading...</span>
+                                <button id="cal-next-btn" class="p-1 hover:bg-white rounded-md shadow-sm transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                            <div class="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Sun</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Mon</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Tue</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Wed</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Thu</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Fri</div>
+                                <div class="py-2 text-center text-xs font-semibold text-gray-500 uppercase">Sat</div>
+                            </div>
+                            <div id="calendar-days-grid" class="grid grid-cols-7 bg-gray-200 gap-px border-gray-200">
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4 mt-3 text-xs text-gray-500 justify-end">
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-red-500 rounded-sm opacity-80"></div> Exam Session
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <div class="w-3 h-3 bg-white border border-gray-300 rounded-sm"></div> No Exam
+                            </div>
+                        </div>
+                    </div>
+                    <div id="date-search-section" class="mb-8 border-t border-gray-200 pt-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 gap-4">
+                            <div class="flex items-center gap-3">
+                                <span
+                                    class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-teal-100 text-teal-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h2 class="text-xl font-bold text-gray-800">Check Schedule</h2>
+                                    <p class="text-sm text-gray-500">Select a date to view hall requirements.</p>
+                                </div>
+                            </div>
+                            <div class="w-full sm:w-auto">
+                                <label for="dashboard-date-select"
+                                    class="block text-xs font-bold text-gray-500 uppercase mb-1">Select Exam
+                                    Date</label>
+                                <select id="dashboard-date-select"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm text-gray-700 focus:ring-indigo-500 focus:border-indigo-500 min-w-[200px]">
+                                    <option value="">-- Select a Date --</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="specific-date-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <p class="text-gray-400 italic ml-2">Select a date above to see details.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="view-extractor" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">Data Loading</h1>
+                    <p class="text-gray-600 mb-6">Upload new data via CSV or PDF extraction.</p>
+                    <div
+                        class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-blue-100 text-blue-600 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-blue-900 uppercase tracking-wide">Current System Data
+                                </h3>
+                                <p id="data-tab-status-text" class="text-base font-medium text-blue-700">No data loaded.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button id="btn-download-current-csv"
+                            class="hidden bg-blue-600 text-white px-4 py-2 rounded-md shadow hover:bg-blue-700 text-sm font-medium flex items-center gap-2 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" />
+                            </svg>
+                            Download CSV
+                        </button>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-6">
+                        <div class="bg-green-50 border border-green-200 p-5 rounded-lg mb-8">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h2 class="text-xl font-bold text-green-800 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                        </svg>
+                                        Option 1: Upload CSV File
+                                    </h2>
+                                    <p class="text-sm text-green-800 mt-1">Fastest method. Works offline without Python.
+                                    </p>
+                                </div>
+                                <button id="download-sample-csv-btn"
+                                    class="text-sm bg-white border border-green-300 text-green-700 px-3 py-1.5 rounded hover:bg-green-50 font-medium transition flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" />
+                                    </svg>
+                                    Download Template
+                                </button>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div id="csv-stream-wrapper" class="mb-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Select Stream for this
+                                        File:</label>
+                                    <select id="csv-stream-select"
+                                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                                    </select>
+                                </div>
+                                <label class="block text-sm font-medium text-gray-700">Select CSV File:</label>
+                                <div class="flex gap-2">
+                                    <input type="file" id="main-csv-upload" accept=".csv"
+                                        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-100 file:text-green-700 hover:file:bg-green-200" />
+                                    <button id="main-load-csv-btn"
+                                        class="inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-6 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                                        Load Data
+                                    </button>
+                                </div>
+                                <div id="main-csv-status" class="text-sm font-medium min-h-[20px]"></div>
+                            </div>
+                        </div>
+
+                        <div class="relative flex py-2 items-center">
+                            <div class="flex-grow border-t border-gray-300"></div>
+                            <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">OR</span>
+                            <div class="flex-grow border-t border-gray-300"></div>
+                        </div>
+
+                        <div class="mt-6 opacity-90">
+                            <h2 class="text-xl font-bold text-indigo-800 mb-2 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                                Option 2: Extract from PDF
+                            </h2>
+                            <p class="text-sm text-gray-600 mb-4">Use this if you only have the raw Nominal Roll PDF.
+                                Requires active internet/Python engine.</p>
+
+                            <div class="space-y-4 p-4 border border-indigo-100 rounded-lg">
+                                <div class="mb-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Select Stream for this
+                                        File:</label>
+                                    <select id="pdf-stream-select"
+                                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                                    </select>
+
+                                </div>
+                                <div>
+                                    <label for="pdf-file" class="block text-sm font-medium text-gray-700">Select PDF
+                                        Files:</label>
+                                    <input type="file" id="pdf-file" accept=".pdf" multiple
+                                        class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                                </div>
+
+                                <button id="run-button" py-click="start_extraction"
+                                    class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50">
+                                    <span id="spinner" class="loader-spin -ml-1 mr-3 h-5 w-5 text-white hidden"></span>
+                                    <span id="button-text">Run Batch Extraction</span>
+                                </button>
+
+                                <div class="mt-2">
+                                    <h3 class="text-xs font-medium text-gray-500 uppercase">Processing Log:</h3>
+                                    <div id="status"
+                                        class="w-full h-24 p-2 mt-1 bg-gray-900 text-gray-200 text-xs font-mono rounded-md overflow-y-auto">
+                                        Ready for extraction...
+                                    </div>
+                                    <div id="status-log" class="hidden"></div>
+                                </div>
+                                <div id="download-area">
+                                    <div id="csv-download-container"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div id="view-remuneration" class="container max-w-5xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Exam Remuneration & Billing</h1>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b border-blue-200">
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-sm font-bold text-blue-800 uppercase tracking-wide">Rate Card:</h3>
+                                <select id="rate-stream-selector" onchange="renderRateConfigForm()"
+                                    class="text-sm border-gray-300 rounded p-1">
+                                    <option value="Regular">Regular Stream</option>
+                                    <option value="Other">Other Streams</option>
+                                </select>
+                            </div>
+                            <button id="toggle-rate-lock" onclick="toggleRemunerationLock()"
+                                class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition">
+                                Edit Rates
+                            </button>
+                        </div>
+                        <div id="rate-config-container">
+                        </div>
+                    </div>
+
+                    <div class="border-t border-gray-200 pt-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4">Generate Consolidated Bill</h2>
+
+                        <div class="bg-gray-100 p-4 rounded-lg mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">1. Select
+                                    Stream</label>
+                                <select id="bill-stream-select"
+                                    class="block w-full p-2 border border-gray-300 rounded text-sm">
+                                    <option value="Regular">Regular</option>
+                                    <option value="Other">Other Streams</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">2. Grouping
+                                    Mode</label>
+                                <select id="bill-mode-select"
+                                    class="block w-full p-2 border border-gray-300 rounded text-sm">
+                                    <option value="exam">By Exam Name</option>
+                                    <option value="period">By Date Range</option>
+                                </select>
+                            </div>
+
+                            <div id="bill-exam-dropdown-container">
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">3. Select Exam
+                                    (Optional)</label>
+                                <select id="bill-exam-select"
+                                    class="block w-full p-2 border border-gray-300 rounded text-sm">
+                                    <option value="">-- Generate All --</option>
+                                </select>
+                            </div>
+
+                            <div id="bill-date-range" class="hidden md:col-span-2 flex gap-2">
+                                <div class="flex-1">
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">From</label>
+                                    <input type="date" id="bill-start-date"
+                                        class="w-full p-2 border border-gray-300 rounded text-sm">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">To</label>
+                                    <input type="date" id="bill-end-date"
+                                        class="w-full p-2 border border-gray-300 rounded text-sm">
+                                </div>
+                            </div>
+
+                            <div class="md:col-span-4 flex justify-end gap-3 mt-2">
+                                <button id="btn-print-bill"
+                                    class="hidden bg-gray-800 text-white px-6 py-2 rounded shadow hover:bg-gray-900 flex items-center gap-2 font-bold transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+                                    </svg>
+                                    Print Bill
+                                </button>
+
+                                <button id="btn-generate-bill"
+                                    class="bg-green-600 text-white px-6 py-2 rounded shadow hover:bg-green-700 flex items-center gap-2 font-bold">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                    </svg>
+                                    Generate Bill
+                                </button>
+                            </div>
+
+                        </div>
+
+                        <div id="remuneration-output" class="hidden space-y-8">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div id="view-edit-data" class="w-full mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Edit Student Data</h1>
+
+                    <div id="edit-data-content-wrapper" class="hidden">
+                        <p class="text-sm text-gray-600 mb-4">
+                            Here you can edit student data on a course-by-course basis. Changes are saved to the app's
+                            memory.
+                            Click "Save All Changes" at the bottom to permanently update the main data source.
+                        </p>
+
+                        <div class="mb-4">
+                            <label for="edit-session-select" class="block text-sm font-medium text-gray-700 mb-1">Select
+                                Exam Session:</label>
+                            <select id="edit-session-select"
+                                class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">-- Select a Session --</option>
+                            </select>
+                        </div>
+
+
+
+                        <div id="bulk-session-ops-container"
+                            class="hidden mb-6 bg-white border border-indigo-200 rounded-lg shadow-sm overflow-hidden transition-all">
+
+                            <div
+                                class="bg-indigo-50 px-3 py-2 flex flex-wrap justify-between items-center gap-2 border-b border-indigo-100">
+
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <div class="p-1 bg-indigo-100 rounded text-indigo-600 shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                    </div>
+                                    <h3
+                                        class="text-xs font-bold text-indigo-800 uppercase tracking-wide flex items-center truncate">
+                                        <span class="truncate">Session Ops</span>
+                                        <span id="session-ops-count-badge"
+                                            class="ml-2 bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[10px] hidden shadow-sm whitespace-nowrap shrink-0">0
+                                            Students</span>
+                                    </h3>
+                                </div>
+
+                                <button id="btn-session-ops-lock"
+                                    class="text-[10px] font-bold flex items-center gap-1 bg-white border border-indigo-200 text-gray-500 px-2 py-1 rounded hover:bg-gray-50 transition shadow-sm shrink-0 ml-auto sm:ml-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <span>Locked</span>
+                                </button>
+                            </div>
+
+                            <div id="session-ops-controls"
+                                class="p-3 bg-white opacity-50 pointer-events-none transition-opacity">
+                                <div class="flex flex-col md:flex-row gap-3 md:items-end">
+
+                                    <div class="flex-1 grid grid-cols-2 md:flex md:items-end gap-2">
+                                        <div class="md:w-32">
+                                            <label
+                                                class="block text-[9px] font-bold text-gray-400 uppercase mb-0.5 ml-1">New
+                                                Date</label>
+                                            <input type="date" id="session-new-date"
+                                                class="w-full p-1.5 h-8 text-xs border border-gray-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-gray-50"
+                                                disabled>
+                                        </div>
+                                        <div class="md:w-24">
+                                            <label
+                                                class="block text-[9px] font-bold text-gray-400 uppercase mb-0.5 ml-1">New
+                                                Time</label>
+                                            <input type="time" id="session-new-time"
+                                                class="w-full p-1.5 h-8 text-xs border border-gray-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-gray-50"
+                                                disabled>
+                                        </div>
+                                        <button id="btn-session-reschedule"
+                                            class="col-span-2 md:col-span-1 bg-indigo-600 text-white text-xs font-bold px-3 h-8 rounded hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm whitespace-nowrap flex items-center justify-center gap-1"
+                                            disabled>
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                            </svg>
+                                            Move
+                                        </button>
+                                    </div>
+
+                                    <div class="hidden md:block w-px h-8 bg-gray-200 mx-1"></div>
+
+                                    <button id="btn-session-delete"
+                                        class="w-full md:w-auto bg-white border border-red-200 text-red-600 text-xs font-bold px-3 h-8 rounded hover:bg-red-50 transition disabled:opacity-50 shadow-sm whitespace-nowrap flex items-center justify-center gap-1"
+                                        disabled>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete Session
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+
+
+                        <div id="edit-course-select-container" class="mb-6 hidden">
+                            <label for="edit-course-select" class="block text-sm font-medium text-gray-700 mb-1">Select
+                                Course:</label>
+                            <select id="edit-course-select"
+                                class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">-- Select a Course --</option>
+                            </select>
+                        </div>
+
+
+
+                        <div id="bulk-course-update-container"
+                            class="hidden mt-4 mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg transition-all">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-sm font-bold text-yellow-800 uppercase flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Reschedule / Change Stream for All Students in this Course
+                                </h3>
+                                <button id="btn-bulk-edit-mode"
+                                    class="text-xs flex items-center gap-1 bg-white border border-yellow-300 text-yellow-700 px-3 py-1 rounded hover:bg-yellow-100 transition shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                                    </svg>
+                                    Unlock to Edit
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end opacity-50 pointer-events-none transition-opacity"
+                                id="bulk-inputs-wrapper">
+
+                                <div>
+                                    <label class="block text-xs font-bold text-red-600 uppercase mb-1">Danger
+                                        Zone</label>
+                                    <button id="delete-course-btn" disabled
+                                        class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-red-100 py-2 px-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete Course
+                                    </button>
+                                </div>
+
+                                <div class="lg:col-span-2">
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Course
+                                        Name</label>
+                                    <input type="text" id="bulk-new-course" disabled
+                                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 bg-gray-50"
+                                        placeholder="Course Name">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Date</label>
+                                    <div class="relative">
+                                        <input type="date" id="bulk-new-date" disabled
+                                            class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 cursor-pointer bg-gray-50"
+                                            onclick="this.showPicker()">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New Time</label>
+                                    <div class="relative">
+                                        <input type="time" id="bulk-new-time" disabled
+                                            class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 cursor-pointer bg-gray-50"
+                                            onclick="this.showPicker()">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">New
+                                        Stream</label>
+                                    <select id="bulk-new-stream" disabled
+                                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:border-yellow-500 focus:ring-yellow-500 bg-gray-50">
+                                    </select>
+                                </div>
+
+                                <div class="md:col-span-2 lg:col-span-4">
+                                    <button id="btn-bulk-apply-changes" disabled
+                                        class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-yellow-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Apply Changes to All Students
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 mb-4">
+
+                            <div id="edit-student-count" class="text-sm font-bold text-blue-700 hidden"></div>
+
+                            <div class="flex items-center gap-3 ml-auto">
+                                <button id="toggle-edit-data-lock-btn"
+                                    class="hidden text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-2 rounded hover:bg-gray-200 transition shadow-sm h-10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                    </svg>
+                                    <span>List Locked</span>
+                                </button>
+
+                                <button id="add-new-student-btn"
+                                    class="hidden inline-flex justify-center items-center rounded-md border border-dashed border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 shadow-sm hover:bg-green-100 h-10">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Student
+                                </button>
+                            </div>
+                        </div>
+
+
+
+
+                        <div id="edit-data-container" class="mb-4">
+                        </div>
+
+                        <div id="edit-pagination-controls" class="flex justify-between items-center mb-6 hidden">
+                            <button id="edit-prev-page"
+                                class="inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                                disabled>
+                                &larr; Previous
+                            </button>
+                            <span id="edit-page-info" class="text-sm text-gray-700"></span>
+                            <button id="edit-next-page"
+                                class="inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                                disabled>
+                                Next &rarr;
+                            </button>
+                        </div>
+
+                        <div id="edit-save-section" class="hidden">
+                            <button id="save-edit-data-button"
+                                class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                                Save All Changes to Local Storage
+                            </button>
+                            <div id="edit-data-status" class="text-sm text-green-600 font-medium text-center h-5 mt-2">
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div id="edit-data-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV on the "Data" tab to enable this
+                            feature.</p>
+                    </div>
+
+                </div>
+            </div>
+
+
+
+
+
+            <div id="view-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Application Settings</h1>
+
+                    <div id="exam-names-section" class="mb-6 bg-pink-50 border border-pink-200 p-4 rounded-lg hidden">
+                        <div id="exam-names-grid" class="grid grid-cols-1 gap-3"></div>
+                    </div>
+
+                    <div class="bg-purple-50 border border-purple-200 p-4 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">Exam Streams</h2>
+                        <button id="toggle-stream-lock-btn"
+                            class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-3.5 h-3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            </svg>
+                            <span>List Locked</span>
+                        </button>
+                        <p class="text-gray-600 mb-4 text-sm mt-2">Define the streams (e.g., Regular, Distance). You
+                            will select one of these when uploading data.</p>
+                        <div class="space-y-3">
+                            <div id="stream-config-container" class="space-y-2"></div>
+                            <div id="stream-input-group" class="flex gap-2 hidden">
+                                <input type="text" id="new-stream-input"
+                                    class="block flex-grow p-2 border border-gray-300 rounded-md text-sm"
+                                    placeholder="Enter Stream Name">
+                                <button id="add-stream-btn"
+                                    class="bg-purple-600 text-white px-4 py-2 rounded-md text-sm hover:bg-purple-700 font-medium">Add</button>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-blue-800 mb-2 border-b border-blue-200 pb-2">
+                            Room Capacity & Location
+                        </h2>
+                        <p class="text-sm text-blue-600 mb-4">
+                            Define rooms and their capacities. This list is saved to your browser.
+                        </p>
+
+                        <div
+                            class="bg-white border border-blue-100 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="p-3 bg-blue-100 text-blue-600 rounded-full shrink-0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-gray-800">Room Master List</h3>
+                                    <p class="text-sm text-gray-500">
+                                        <span id="room-count-display" class="font-bold text-blue-600">0</span> Rooms
+                                        Configured
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button onclick="openRoomSettingsModal()"
+                                class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Manage Rooms
+                            </button>
+                        </div>
+                    </div>
+
+
+
+
+
+
+
+
+
+                    <div class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">College Name</h2>
+                        <div class="mb-6 flex gap-2 items-end">
+                            <div class="flex-grow relative">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Name (for Reports)</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="college-name-input" disabled
+                                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100 disabled:text-gray-500">
+                                    <button id="edit-college-name-btn"
+                                        class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white py-2 px-3 text-gray-700 shadow-sm hover:bg-gray-50"><svg
+                                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                                        </svg></button>
+                                </div>
+                            </div>
+                            <button id="save-college-name-button"
+                                class="inline-flex items-center justify-center rounded-md border border-transparent bg-indigo-500 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-600">Save</button>
+                        </div>
+                        <div id="college-name-status" class="text-sm font-medium text-green-600 mt-2 block h-5"></div>
+                    </div>
+
+                    <div class="bg-teal-50 border border-teal-200 p-4 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-teal-800 mb-2 pb-2 border-b border-teal-300">Student Portal
+                            Link</h2>
+                        <p class="text-sm text-gray-600 mb-3">Share this link with your students.</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="student-portal-link"
+                                class="w-full p-2 border border-gray-300 rounded text-sm bg-white text-gray-500 font-mono"
+                                readonly>
+                            <button id="copy-portal-btn"
+                                class="bg-teal-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-teal-700 shadow-sm flex items-center gap-2 transition shrink-0"><svg
+                                    xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                </svg> Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+                        <h2 class="text-xl font-bold text-blue-800 mb-4 pb-2 border-b border-blue-300">Settings
+                            Management</h2>
+                        <p class="text-sm text-gray-600 mb-3">Backup/Restore configurations only.</p>
+                        <div class="flex gap-2 mb-4">
+                            <button id="backup-settings-btn"
+                                class="flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg> Download Settings Only
+                            </button>
+                        </div>
+                        <div class="mt-4 border-t border-blue-200 pt-4">
+                            <label class="block text-sm font-bold text-blue-800 mb-2">Restore Settings:</label>
+                            <div class="flex gap-2">
+                                <input type="file" id="restore-settings-input" accept=".json"
+                                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200" />
+                                <button id="restore-settings-btn"
+                                    class="whitespace-nowrap inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Upload
+                                    & Restore</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-red-50 border-2 border-red-200 p-4 rounded-lg mb-6 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 -mt-2 -mr-2 text-red-100 opacity-50 pointer-events-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"
+                                class="w-32 h-32">
+                                <path
+                                    d="M12 2L1 21h22L12 2zm0 3.45l8.27 14.55H3.73L12 5.45zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
+                            </svg>
+                        </div>
+
+                        <h2
+                            class="text-xl font-bold text-red-800 mb-4 pb-2 border-b border-red-300 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-6 h-6">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                            </svg>
+                            Danger Zone
+                        </h2>
+
+                        <p class="text-sm text-red-800 mb-4 font-medium">
+                            <strong>NUKE IT ALL:</strong> Wipes all data (Student, Exams, Allotments) from Browser &
+                            Cloud. Settings remain safe.
+                        </p>
+
+                        <button id="nuke-it-all-btn"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-red-800 bg-red-600 py-4 px-4 text-lg font-bold text-white shadow-lg hover:bg-red-700 hover:shadow-xl transition-all transform hover:scale-[1.01]">
+                            ☢️ NUKE IT ALL (MASTER RESET) ☢️
+                        </button>
+
+                        <div class="flex gap-2 mt-2">
+                            <button id="reset-student-data-button"
+                                class="w-full bg-red-100 text-red-800 border border-red-300 py-2 px-4 rounded text-sm font-bold hover:bg-red-200">
+                                Reset Student Data Only
+                            </button>
+                        </div>
+
+                        <div class="mt-4 pt-4 border-t border-red-200">
+                            <h3 class="text-sm font-bold text-gray-700 mb-2">Bunker (Full Data Export & Recovery)</h3>
+
+                            <div class="flex flex-col gap-2">
+                                <button id="master-download-csv-btn"
+                                    class="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded text-sm font-bold hover:bg-indigo-700 shadow-sm transition-all">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3-3m0 0 3-3m-3 3h7.5" />
+                                    </svg>
+                                    Download MASTER CSV (The One Ring 💍)
+                                </button>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <button id="smart-sync-btn"
+                                        class="w-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-3 rounded-md text-sm font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition shadow-sm mb-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        ☁️ Smart Sync (Backup / Restore)
+                                    </button>
+                                </div>
+
+                                <div class="flex gap-2 mt-1">
+                                    <button id="backup-data-button"
+                                        class="flex-1 bg-white border border-gray-300 text-gray-600 px-2 py-1 rounded text-[10px] hover:bg-gray-50">Download
+                                        JSON</button>
+                                    <div class="flex-1 relative">
+                                        <button id="restore-data-button-trigger"
+                                            class="w-full bg-white border border-gray-300 text-gray-600 px-2 py-1 rounded text-[10px] hover:bg-gray-50"
+                                            onclick="document.getElementById('restore-file-input').click()">Restore
+                                            JSON</button>
+                                        <input type="file" id="restore-file-input" accept=".json" class="hidden" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+
+
+            <div id="view-room-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+            </div>
+
+            <div id="view-qpcodes" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">QP Code Settings</h1>
+
+                    <div id="qpcode-content-wrapper" class="hidden">
+                        <div class="mb-4">
+                            <label for="session-select-qp" class="block text-sm font-medium text-gray-700 mb-1">Select
+                                Exam Session:</label>
+                            <select id="session-select-qp"
+                                class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">-- Select a Session --</option>
+                            </select>
+                        </div>
+
+                        <div id="qp-entry-section" class="hidden">
+                            <div class="flex justify-between items-start mb-4">
+                                <p class="text-gray-600 text-sm flex-1">
+                                    Assign a Question Paper (QP) Code to each course. Codes are saved locally.
+                                </p>
+                                <button id="toggle-qp-lock-btn"
+                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                    </svg>
+                                    <span>Codes Locked</span>
+                                </button>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div class="flex items-center gap-3 px-2">
+                                    <label class="font-semibold text-gray-700 w-2/3">Course Name</label>
+                                    <label class="font-semibold text-gray-700 w-1/3">QP Code</label>
+                                </div>
+
+                                <div id="qp-code-container" class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                                </div>
+                            </div>
+                            <div id="qp-code-status" class="text-sm text-green-600 font-medium text-center h-5 mt-4">
+                            </div>
+
+                            <button id="save-qp-codes-button"
+                                class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 mt-4">
+                                Save QP Codes
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <div id="qpcode-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+                    </div>
+
+                </div>
+            </div>
+
+            <div id="view-search" class="container max-w-2xl mx-auto p-4 hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Search Student Details</h1>
+
+                    <div id="search-content-wrapper">
+                        <div class="bg-gray-100 p-3 rounded-lg mb-5">
+                            <h4 class="font-semibold text-gray-700 mb-2 text-sm">Search Mode:</h4>
+                            <div class="flex gap-6">
+                                <div class="flex items-center">
+                                    <input type="radio" id="search-mode-session" name="search-mode" value="session"
+                                        checked class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <label for="search-mode-session"
+                                        class="ml-2 text-sm text-gray-700 font-medium">Specific Session</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input type="radio" id="search-mode-global" name="search-mode" value="global"
+                                        class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <label for="search-mode-global"
+                                        class="ml-2 text-sm text-gray-700 font-medium">Global Search (All Exams)</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="search-session-container" class="mb-4">
+                            <label for="search-session-select"
+                                class="block text-sm font-medium text-gray-700 mb-1">Select Exam Session:</label>
+                            <select id="search-session-select"
+                                class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">-- Select a Session --</option>
+                            </select>
+                        </div>
+
+                        <div id="student-search-section" class="mb-6">
+                            <label for="student-search-input"
+                                class="block text-sm font-medium text-gray-700 mb-1">Search Register Number or
+                                Name:</label>
+                            <div class="autocomplete-container">
+                                <input type="text" id="student-search-input"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                    placeholder="Type 2+ chars..." disabled>
+                                <div id="student-search-autocomplete" class="autocomplete-results hidden"></div>
+                            </div>
+                            <span id="student-search-status" class="text-sm text-gray-500 mt-1"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div id="view-reports" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Reports</h1>
+
+                    <p class="text-gray-600 mb-4">
+                        Generate reports based on the last loaded data. (Buttons are enabled after extraction or CSV
+                        load.)
+                    </p>
+
+                    <div id="report-filter-section" class="bg-gray-100 p-4 rounded-lg mb-6 hidden">
+                        <h4 class="font-semibold text-gray-700 mb-2">Filter Reports By:</h4>
+
+                        <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                            <div class="flex items-center">
+                                <input type="radio" id="filter-all" name="report-filter" value="all"
+                                    class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                <label for="filter-all" class="ml-2 text-sm text-gray-700 font-medium">All Sessions
+                                    (Bulk)</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="radio" id="filter-session" name="report-filter" value="session" checked
+                                    class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                <label for="filter-session" class="ml-2 text-sm text-gray-700 font-medium">Specific
+                                    Session</label>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div id="reports-session-dropdown-container">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Session</label>
+                                <select id="reports-session-select"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                    <option value="">-- Select a Session --</option>
+                                </select>
+                            </div>
+
+                            <div id="reports-stream-dropdown-container">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Stream</label>
+                                <select id="reports-stream-select"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                                    <option value="all">All Streams (Combined)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div class="space-y-4">
+                        <button id="generate-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                            disabled>
+                            Generate Room-wise Seating Report
+                        </button>
+
+                        <div class="flex flex-col sm:flex-row gap-3 items-end">
+
+                            <div class="flex gap-2 shrink-0">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Rows</label>
+                                    <select id="daywise-rows"
+                                        class="block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                        <option value="30">30</option>
+                                        <option value="31">31</option>
+                                        <option value="32">32</option>
+                                        <option value="33">33</option>
+                                        <option value="34">34</option>
+                                        <option value="35" selected>35</option>
+                                        <option value="36">36</option>
+                                        <option value="37">37</option>
+                                        <option value="38">38</option>
+                                        <option value="39">39</option>
+                                        <option value="40">40</option>
+                                        <option value="41">41</option>
+                                        <option value="42">42</option>
+                                        <option value="43">43</option>
+                                        <option value="44">44</option>
+                                        <option value="45">45</option>
+                                        <option value="46">46</option>
+                                        <option value="47">47</option>
+                                        <option value="48">48</option>
+                                        <option value="49">49</option>
+                                        <option value="50">50</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Cols</label>
+                                    <select id="daywise-cols"
+                                        class="block w-20 p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                        <option value="1">1</option>
+                                        <option value="2" selected>2</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button id="generate-daywise-report-button"
+                                class="flex-grow inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-2.5 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                                disabled>
+                                Generate Seating Details for Candidates
+                            </button>
+                        </div>
+
+                        <button id="generate-qpaper-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                            disabled>
+                            Generate Question Paper Report
+                        </button>
+
+                        <button id="generate-qp-distribution-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                            disabled>
+                            Generate QP Distribution by QP-Code Report
+                        </button>
+
+                        <button id="generate-scribe-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-orange-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-orange-700 disabled:opacity-50"
+                            disabled>
+                            Generate Scribe Assistance Report
+                        </button>
+
+                        <button id="generate-scribe-proforma-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-orange-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-orange-700 disabled:opacity-50"
+                            disabled>
+                            Generate Scribe Proforma (One Page Per Scribe)
+                        </button>
+
+                        <button id="generate-invigilator-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-teal-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
+                            disabled>
+                            Generate Invigilator Requirement Summary
+                        </button>
+
+                        <button id="generate-sticker-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-purple-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-purple-700 disabled:opacity-50"
+                            disabled>
+                            Generate Room Stickers (2 per Page)
+                        </button>
+
+                        <button id="generate-room-summary-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+                            disabled>
+                            Generate Room Allotment Summary
+                        </button>
+
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-absentees" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Mark Absentees</h1>
+
+                    <div id="absentee-content-wrapper" class="hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label for="session-select" class="block text-sm font-medium text-gray-700 mb-1">Select
+                                    Exam Session:</label>
+                                <select id="session-select"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                    <option value="">-- Select a Session --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="absentee-qp-filter"
+                                    class="block text-sm font-medium text-gray-700 mb-1">Filter by QP Code
+                                    (Report):</label>
+                                <select id="absentee-qp-filter"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                                    disabled>
+                                    <option value="all">All QP Codes (Bulk)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="generate-absentee-report-button"
+                            class="mt-6 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                            disabled>
+                            Generate Absentee Statement
+                        </button>
+
+                        <div id="absentee-search-section" class="mb-6 hidden">
+                            <label for="absentee-search" class="block text-sm font-medium text-gray-700 mb-1">Search
+                                Register Number:</label>
+                            <div class="autocomplete-container">
+                                <input type="text" id="absentee-search"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                    placeholder="Type 3 chars...">
+                                <div id="autocomplete-results" class="autocomplete-results hidden"></div>
+                            </div>
+
+                            <div id="selected-student-details"
+                                class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md hidden">
+                                <div class="font-medium text-gray-800" id="selected-student-name"></div>
+                                <div class="text-sm text-gray-600" id="selected-student-course"></div>
+                                <div class="text-sm text-gray-600" id="selected-student-room"></div>
+                                <button id="add-absentee-button"
+                                    class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-red-700">
+                                    Add to Absentee List
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="absentee-list-section" class="hidden">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-medium text-gray-900 flex items-center gap-2">
+                                    Current Absentee List
+                                    <span id="absentee-count-badge"
+                                        class="bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full border border-red-200">0</span>
+                                </h3>
+
+                                <button id="toggle-absentee-lock-btn"
+                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                    </svg>
+                                    <span>List Locked</span>
+                                </button>
+                            </div>
+
+                            <div id="current-absentee-list"
+                                class="min-h-[50px] bg-gray-50 border border-gray-200 rounded-md p-3 space-y-2">
+                            </div>
+                        </div>
+
+
+                    </div>
+
+                    <div id="absentee-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV on the "Reports" tab to enable this
+                            feature.</p>
+                    </div>
+
+                </div>
+            </div>
+
+            <div id="view-scribe-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Scribe Assistance</h1>
+
+                    <div id="scribe-content-wrapper" class="hidden">
+                        <p class="text-gray-600 mb-4">
+                            Add students who require scribe assistance. This list is global and will apply to all exam
+                            sessions.
+                        </p>
+                        <div class="mb-6">
+                            <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search
+                                Student (Register Number or Name):</label>
+                            <div class="autocomplete-container">
+                                <input type="text" id="scribe-search"
+                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                                    placeholder="Type 2+ chars of Register Number or Name...">
+                                <div id="scribe-autocomplete-results" class="autocomplete-results hidden"></div>
+                            </div>
+
+                            <div id="scribe-selected-student-details"
+                                class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md hidden">
+                                <div class="font-medium text-gray-800" id="scribe-selected-student-name"></div>
+                                <div class="text-sm text-gray-600" id="scribe-selected-student-regno"></div>
+                                <button id="add-scribe-student-button"
+                                    class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                                    Add to Scribe List
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="text-lg font-medium text-gray-900">Current Scribe List (Global):</h3>
+                                <button id="toggle-scribe-lock-btn"
+                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                    </svg>
+                                    <span>List Locked</span>
+                                </button>
+                            </div>
+                            <div id="current-scribe-list"
+                                class="min-h-[50px] bg-gray-50 border border-gray-200 rounded-md p-3 space-y-2">
+                            </div>
+
+
+                            <div id="scribe-pagination-controls" class="flex justify-between items-center mt-3 hidden">
+                                <button id="scribe-prev-page"
+                                    class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
+                                    &larr; Prev
+                                </button>
+                                <span id="scribe-page-info" class="text-sm text-gray-600 font-bold">Page 1</span>
+                                <button id="scribe-next-page"
+                                    class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
+                                    Next &rarr;
+                                </button>
+                            </div>
+
+
+                        </div>
+                    </div>
+
+                    <div id="scribe-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="scribe-room-modal"
+                class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <h3 class="text-lg font-medium text-gray-900 mb-1" id="scribe-room-modal-title">Select Room
+                            for...</h3>
+                        <p class="text-sm text-gray-500 mb-2">Only rooms not used in automatic or manual allotment are
+                            shown.</p>
+
+                        <div class="mb-2 relative">
+                            <input type="text" id="scribe-room-search" placeholder="🔍 Search room..."
+                                class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                            <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+
+                        <div id="scribe-room-selection-list" class="space-y-2 max-h-96 overflow-y-auto">
+                        </div>
+                        <div class="mt-4">
+                            <button id="scribe-close-room-modal"
+                                class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="student-edit-modal"
+                class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div
+                    class="relative top-10 mx-auto p-5 border w-[95%] md:w-full max-w-lg shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4" id="student-edit-modal-title">Edit Student
+                            Details</h3>
+
+                        <div class="space-y-4">
+
+                            <div>
+                                <label for="modal-edit-date"
+                                    class="block text-sm font-medium text-gray-700">Date</label>
+                                <div class="relative">
+                                    <input type="date" id="modal-edit-date"
+                                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
+                                        onclick="this.showPicker()">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="modal-edit-time"
+                                    class="block text-sm font-medium text-gray-700">Time</label>
+                                <div class="relative">
+                                    <input type="time" id="modal-edit-time"
+                                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
+                                        onclick="this.showPicker()">
+                                </div>
+                            </div>
+
+
+
+
+                            <div>
+                                <label for="modal-edit-course"
+                                    class="block text-sm font-medium text-gray-700">Course</label>
+                                <input type="text" id="modal-edit-course"
+                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label for="modal-edit-stream"
+                                    class="block text-sm font-medium text-gray-700">Stream</label>
+                                <select id="modal-edit-stream"
+                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                                </select>
+                            </div>
+                            <div>
+                                <label for="modal-edit-regno" class="block text-sm font-medium text-gray-700">Register
+                                    Number</label>
+                                <input type="text" id="modal-edit-regno"
+                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                            </div>
+                            <div>
+                                <label for="modal-edit-name"
+                                    class="block text-sm font-medium text-gray-700">Name</label>
+                                <input type="text" id="modal-edit-name"
+                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex gap-3">
+                            <button id="modal-save-student"
+                                class="flex-1 inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700">
+                                Save Changes
+                            </button>
+                            <button id="modal-cancel-student"
+                                class="flex-1 inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="view-room-allotment" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Room Allotment</h1>
+
+                    <div id="room-allotment-content-wrapper" class="hidden">
+                        <div class="mb-4">
+                            <label for="allotment-session-select"
+                                class="block text-sm font-medium text-gray-700 mb-1">Select Exam Session:</label>
+                            <select id="allotment-session-select"
+                                class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">-- Select a Session --</option>
+                            </select>
+                        </div>
+
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
+                                Regular Room Allotment (Manual)
+                            </h2>
+                            <div id="allotment-student-count-section" class="mb-6 hidden">
+                                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-gray-800">Total Students:</h3>
+                                            <p class="text-2xl font-bold text-blue-600" id="total-students-count">0</p>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-gray-800">Awaiting Room Allotment:
+                                            </h3>
+                                            <p class="text-2xl font-bold text-orange-600" id="remaining-students-count">
+                                                0</p>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-semibold text-gray-800">Allotted:</h3>
+                                            <p class="text-2xl font-bold text-green-600" id="allotted-students-count">0
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="add-room-section" class="mb-6 hidden">
+                                <button id="add-room-allotment-button"
+                                    class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+                                    + Add Room
+                                </button>
+                            </div>
+
+                            <div id="allotted-rooms-section" class="mb-6 hidden">
+                                <div class="flex justify-between items-center mb-3">
+                                    <h3 class="text-lg font-medium text-gray-900">Allotted Rooms:</h3>
+
+                                    <button id="toggle-allotment-lock-btn"
+                                        class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                        </svg>
+                                        <span>List Locked</span>
+                                    </button>
+                                </div>
+
+                                <div id="allotted-rooms-list" class="space-y-3">
+                                </div>
+                            </div>
+
+
+                            <div id="save-allotment-section" class="hidden">
+                                <button id="save-room-allotment-button"
+                                    class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                                    Save Room Allotment
+                                </button>
+                                <div id="room-allotment-status"
+                                    class="text-sm text-green-600 font-medium text-center h-5 mt-2"></div>
+                            </div>
+                        </div>
+
+                        <div class="border border-gray-200 rounded-lg p-4 mt-8">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
+                                Scribe Allotment
+                            </h2>
+                            <div id="scribe-allotment-list-section" class="hidden">
+                                <div class="flex justify-between items-center mb-3">
+                                    <h3 id="scribe-session-header" class="text-lg font-medium text-gray-900">Scribe
+                                        Students for this Session:</h3>
+
+                                    <button id="toggle-scribe-allotment-lock-btn"
+                                        class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                                        </svg>
+                                        <span>List Locked</span>
+                                    </button>
+                                </div>
+
+                                <div id="scribe-allotment-list" class="space-y-3">
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <div id="invigilator-assignment-section" class="mt-8 pt-6 border-t border-gray-200 hidden">
+                            <div
+                                class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                                <h2 class="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span class="bg-indigo-100 text-indigo-600 p-1.5 rounded-md text-sm">👮</span>
+                                    Assign Invigilators
+                                </h2>
+                                <div class="flex gap-2 w-full sm:w-auto">
+                                    <button onclick="autoAssignInvigilators()"
+                                        class="flex-1 sm:flex-none justify-center text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded hover:bg-indigo-100 font-bold transition flex items-center gap-1">
+                                        <span>⚡</span> Auto
+                                    </button>
+
+                                    <button onclick="unassignAllInvigilators()"
+                                        class="flex-1 sm:flex-none justify-center text-xs bg-white text-red-600 border border-red-200 px-3 py-2 rounded hover:bg-red-50 font-bold transition flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0c.34-.059.68-.114 1.022-.165m-1.022.165A48.11 48.11 0 013.478 22.52m-1.022-.165c-.342.06-.682.114-1.022.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                        </svg>
+                                        Clear
+                                    </button>
+
+                                    <button onclick="printInvigilatorList()"
+                                        class="flex-1 sm:flex-none justify-center text-xs bg-gray-800 text-white px-3 py-2 rounded hover:bg-gray-900 font-bold transition flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                            stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+                                        </svg>
+                                        Print List
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div
+                                class="bg-blue-50 border border-blue-100 p-3 rounded-lg mb-4 text-xs text-blue-800 flex gap-2 items-start">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 mt-0.5"
+                                    viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                <span>Includes both Regular Halls and Scribe Rooms. Invigilators must be marked
+                                    "Assigned" in the Invigilation Portal to appear in search.</span>
+                            </div>
+
+                            <div id="invigilator-list-container" class="space-y-2"></div>
+                        </div>
+
+
+
+                    </div>
+
+                    <div id="room-selection-modal"
+                        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                            <div class="mt-3">
+                                <h3 class="text-lg font-medium text-gray-900 mb-4">Select Room</h3>
+                                <div class="mb-2 relative">
+                                    <input type="text" id="room-selection-search"
+                                        placeholder="🔍 Search room number or location..."
+                                        class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:outline-none focus:border-indigo-500 shadow-sm">
+                                    <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </div>
+                                <div id="room-selection-list" class="space-y-2 max-h-96 overflow-y-auto">
+                                </div>
+                                <div class="mt-4">
+                                    <button id="close-room-modal"
+                                        class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="room-allotment-loader" class="text-center text-gray-600">
+                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+                    </div>
+
+                </div>
+            </div>
+
+
+            <div id="student-search-result-modal"
+                class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div
+                    class="relative top-10 mx-auto p-5 border w-[95%] md:w-full max-w-2xl shadow-lg rounded-md bg-white">
+                    <div class="mt-3">
+                        <h3 class="text-lg leading-6 font-bold text-gray-900 border-b pb-2 mb-4"
+                            id="search-result-name">Student Name</h3>
+
+                        <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+                            <div>
+                                <span class="text-gray-500 block">Register Number:</span>
+                                <span class="font-mono font-bold text-gray-800" id="search-result-regno"></span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500 block">Stream:</span>
+                                <span class="font-bold text-indigo-600" id="search-result-stream"></span>
+                            </div>
+                        </div>
+
+                        <div id="search-result-single-view">
+                            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Current Session
+                                Details</h4>
+                            <div class="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                <div class="detail-item grid grid-cols-3">
+                                    <span class="text-sm text-gray-500">Course:</span>
+                                    <span class="col-span-2 text-sm font-medium text-gray-800"
+                                        id="search-result-course"></span>
+                                </div>
+                                <div class="detail-item grid grid-cols-3">
+                                    <span class="text-sm text-gray-500">QP Code:</span>
+                                    <span class="col-span-2 text-sm font-medium text-gray-800"
+                                        id="search-result-qpcode"></span>
+                                </div>
+                                <hr class="border-gray-200">
+                                <div class="detail-item grid grid-cols-3">
+                                    <span class="text-sm text-gray-500">Room:</span>
+                                    <span class="col-span-2 text-sm font-bold text-blue-700"
+                                        id="search-result-room"></span>
+                                </div>
+                                <div class="detail-item grid grid-cols-3" id="search-result-room-location-block">
+                                    <span class="text-sm text-gray-500">Location:</span>
+                                    <span class="col-span-2 text-sm text-gray-700"
+                                        id="search-result-room-location"></span>
+                                </div>
+                                <div class="detail-item grid grid-cols-3">
+                                    <span class="text-sm text-gray-500">Seat No:</span>
+                                    <span class="col-span-2 text-sm font-bold text-gray-800"
+                                        id="search-result-seat"></span>
+                                </div>
+
+                                <div class="hidden space-y-2 pt-2 border-t border-orange-200 mt-2"
+                                    id="search-result-scribe-block">
+                                    <div class="detail-item grid grid-cols-3">
+                                        <span class="text-sm text-orange-600 font-bold">Scribe Room:</span>
+                                        <span class="col-span-2 text-sm font-bold text-orange-800"
+                                            id="search-result-scribe-room"></span>
+                                    </div>
+                                    <div class="detail-item grid grid-cols-3" id="search-result-scribe-location-block">
+                                        <span class="text-sm text-orange-600">Location:</span>
+                                        <span class="col-span-2 text-sm text-orange-800"
+                                            id="search-result-scribe-room-location"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="search-result-global-view" class="hidden">
+                            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Exam History</h4>
+                            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                                Date</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                                Time</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                                Course</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                                                Room</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200" id="global-search-table-body">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 text-right">
+                            <button id="modal-close-search-result"
+                                class="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div id="report-controls" class="container max-w-2xl mx-auto p-4 bg-gray-100 rounded-lg hidden">
+                <span id="report-status" class="text-sm font-medium text-gray-700"></span>
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <button id="final-print-button"
+                        class="flex-1 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        Print Report (Browser)
+                    </button>
+
+                    <button id="clear-report-button"
+                        class="flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700">
+                        Clear Report
+                    </button>
+                    <div id="room-csv-download-container" class="w-full mt-2"></div>
+                </div>
+
+                <div id="report-output-area" class="mt-6 w-full" style="display: none;">
+                </div>
+
+                <div id="json-data-store" class="hidden"></div>
+                <div id="q-paper-data-store" class="hidden"></div>
+        </main>
+
+
+        <div id="admin-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
+            <div class="relative bg-white rounded-lg shadow-xl p-6 w-96">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">Manage Team Access</h3>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Add User (Gmail):</label>
+                    <div class="flex gap-2">
+                        <input type="email" id="new-user-email" class="flex-1 p-2 border rounded text-sm"
+                            placeholder="clerk@gmail.com">
+                        <button id="add-user-btn"
+                            class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">+</button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-sm font-semibold text-gray-600 mb-2">Current Users:</h4>
+                    <ul id="user-list" class="text-sm text-gray-700 space-y-2 max-h-40 overflow-y-auto">
+                    </ul>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button id="close-admin-modal"
+                        class="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="super-admin-modal"
+            class="hidden fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[70] flex justify-center items-center p-4 transition-opacity">
+            <div
+                class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
+
+                <div class="bg-gradient-to-r from-red-600 to-red-500 p-4 shrink-0 flex justify-between items-center">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span class="bg-white/20 p-1.5 rounded-lg">🛡️</span>
+                            Super Admin
+                        </h3>
+                        <p class="text-red-100 text-xs mt-0.5">Manage Colleges & Authorization</p>
+                    </div>
+                    <button id="close-super-modal"
+                        class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-4 sm:p-6 overflow-y-auto custom-scroll space-y-6 bg-white">
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Authorize New Admin</h4>
+                            <span
+                                class="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-bold border border-red-100">Step
+                                1</span>
+                        </div>
+                        <p class="text-xs text-gray-500 leading-relaxed">
+                            Enter the Gmail ID of the new Admin. This grants them permission to create a college
+                            database.
+                        </p>
+
+                        <div class="flex gap-2">
+                            <input type="email" id="whitelist-email-input"
+                                class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition"
+                                placeholder="principal@college.edu">
+                            <button id="add-whitelist-btn"
+                                class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 shadow-md transition shrink-0">
+                                Add
+                            </button>
+                        </div>
+
+                        <div class="bg-gray-50 rounded-lg border border-gray-100 overflow-hidden">
+                            <div
+                                class="bg-gray-100 px-3 py-2 text-[10px] font-bold text-gray-500 uppercase border-b border-gray-200">
+                                Authorized Accounts
+                            </div>
+                            <ul id="whitelist-container"
+                                class="text-sm text-gray-700 max-h-32 overflow-y-auto p-2 space-y-1 custom-scroll">
+                                <li class="text-gray-400 italic text-xs text-center py-2">Loading list...</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-dashed border-gray-200"></div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Manage Databases</h4>
+                            <span
+                                class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-bold border border-purple-100">Step
+                                2</span>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex gap-2">
+                                <div class="relative flex-1">
+                                    <select id="admin-college-select"
+                                        class="w-full p-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none appearance-none">
+                                        <option value="">-- Loading... --</option>
+                                    </select>
+                                    <div
+                                        class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-gray-500">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <button id="btn-admin-switch-college"
+                                    class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 shadow-md transition shrink-0">
+                                    Access
+                                </button>
+                            </div>
+
+                            <div class="flex gap-2">
+                                <input type="number" id="admin-storage-limit"
+                                    class="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="Limit (MB)">
+                                <button id="set-limit-btn"
+                                    class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-md transition shrink-0">
+                                    Set Limit
+                                </button>
+                            </div>
+
+                            <button id="btn-storage-stats"
+                                class="w-full bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-4 py-2.5 rounded-lg text-sm font-bold transition flex justify-center items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                Check Storage Usage
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-gray-50 border-t border-gray-100 text-center shrink-0">
+                    <p class="text-[10px] text-gray-400 font-medium">Super Admin Control Panel • ExamFlow</p>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+        <div id="csv-conflict-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
+            <div class="relative bg-white rounded-lg shadow-xl p-6 w-[32rem]">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">Data Upload Options</h3>
+
+                <div class="mb-6 text-sm text-gray-600 space-y-2">
+                    <p>Current System Data: <strong id="conflict-existing-count">0</strong> records.</p>
+                    <p>New File Data: <strong id="conflict-total-new">0</strong> records.</p>
+
+                    <div class="bg-blue-50 p-3 rounded text-blue-900 border border-blue-200 mt-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-5 h-5 inline-block mr-1 mb-0.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                        Found <strong><span id="conflict-unique-count" class="text-lg font-bold">0</span></strong> new
+                        records not in the system.
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button id="btn-merge-data"
+                        class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                        ✅ Add Only New Records (Merge)
+                    </button>
+
+                    <button id="btn-replace-data"
+                        class="w-full inline-flex justify-center items-center rounded-md border border-red-100 bg-white py-3 px-4 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 border-red-300">
+                        ⚠️ Replace Entire Database (Overwrite)
+                    </button>
+
+                    <button id="btn-cancel-upload"
+                        class="w-full inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="invigilator-select-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 z-[70] flex justify-center items-center">
+            <div class="bg-white rounded-xl shadow-2xl w-96 p-5">
+                <h3 class="text-lg font-bold text-gray-800 mb-1">Assign Invigilator</h3>
+                <p class="text-xs text-gray-500 mb-4" id="invig-modal-subtitle">Room: </p>
+
+                <input type="text" id="invig-search-input" placeholder="Search Name..."
+                    class="w-full p-2 border border-gray-300 rounded text-sm mb-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+
+                <div id="invig-options-list" class="border border-gray-100 rounded mb-4 space-y-1 p-1 custom-scroll"
+                    style="max-height: 300px; overflow-y: auto;">
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <button onclick="document.getElementById('invigilator-select-modal').classList.add('hidden')"
+                        class="px-3 py-1.5 text-gray-600 hover:bg-gray-100 rounded text-sm font-bold">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboard-invig-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-[80] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
+            <div
+                class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-slide-up">
+
+                <div
+                    class="bg-gradient-to-r from-indigo-600 to-blue-600 p-4 flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span class="bg-white/20 p-1.5 rounded-lg">📋</span>
+                            <span id="dash-modal-title">Session Details</span>
+                        </h3>
+                        <p class="text-indigo-100 text-xs mt-0.5" id="dash-modal-subtitle">Invigilators on Duty</p>
+                    </div>
+                    <button onclick="document.getElementById('dashboard-invig-modal').classList.add('hidden')"
+                        class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="dash-invig-list" class="p-4 overflow-y-auto custom-scroll space-y-3 bg-gray-50/50 flex-1">
+                </div>
+
+                <div class="p-3 border-t border-gray-100 bg-white text-center shrink-0">
+                    <p class="text-[10px] text-gray-400">Tap WhatsApp icon to contact invigilator</p>
+                </div>
+            </div>
+        </div>
+        <div id="storage-stats-modal"
+            class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 overflow-y-auto h-full w-full z-[80] flex justify-center items-center">
+            <div
+                class="relative bg-white rounded-lg shadow-2xl p-6 w-[40rem] max-h-[80vh] flex flex-col animate-slide-up">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-200 pb-3 shrink-0">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span class="bg-teal-100 text-teal-700 p-1 rounded">🔥</span> Cloud Storage Usage
+                    </h3>
+                    <button id="close-storage-modal"
+                        class="text-gray-400 hover:text-gray-700 font-bold text-2xl leading-none">&times;</button>
+                </div>
+
+                <div id="storage-stats-list" class="flex-1 overflow-y-auto custom-scroll space-y-2 pr-2">
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-gray-100 text-right shrink-0">
+                    <p class="text-[10px] text-gray-400 italic">
+                        * Usage estimated based on data chunks (1 Chunk ≈ 0.8 MB). Accurate within ~10%.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="exam-settings-modal"
+            class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[90] flex justify-center items-center p-4 transition-opacity">
+            <div
+                class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
+
+                <div class="bg-indigo-600 p-4 shrink-0 flex justify-between items-center text-white shadow-md z-10">
+                    <div>
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <span class="bg-white/20 p-1.5 rounded-lg">📅</span>
+                            Exam Master List
+                        </h3>
+                        <p class="text-indigo-100 text-xs mt-0.5">Define Exam Names based on Date & Session logic.</p>
+                    </div>
+                    <button id="close-exam-modal-btn"
+                        class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="exam-modal-body" class="p-6 overflow-y-auto custom-scroll bg-gray-50 flex-1">
+                </div>
+
+                <div class="p-3 bg-white border-t border-gray-100 text-center shrink-0">
+                    <p class="text-[10px] text-gray-400">Changes here update the "Exam Name" on generated reports.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="room-settings-modal"
+            class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[90] flex justify-center items-center p-4 transition-opacity">
+            <div
+                class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
+
+                <div class="bg-blue-600 p-4 shrink-0 flex justify-between items-center text-white shadow-md z-10">
+                    <div>
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <span class="bg-white/20 p-1.5 rounded-lg">🏫</span>
+                            Room Configuration
+                        </h3>
+                        <p class="text-blue-100 text-xs mt-0.5">Set capacity and location for each hall.</p>
+                    </div>
+                    <button onclick="closeRoomSettingsModal()"
+                        class="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-full transition focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-6 overflow-y-auto custom-scroll bg-gray-50 flex-1">
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                        <div
+                            class="hidden md:flex items-center gap-3 px-2 mb-2 border-b border-gray-200 pb-2 bg-gray-50/50 rounded-t-lg pt-2">
+                            <label class="font-bold text-gray-600 w-24 shrink-0 text-xs uppercase tracking-wider">Room
+                                Name</label>
+                            <label
+                                class="font-bold text-gray-600 w-20 text-xs uppercase tracking-wider">Capacity</label>
+                            <label class="font-bold text-gray-600 flex-grow text-xs uppercase tracking-wider">Location
+                                (e.g. Block / Floor)</label>
+                            <label class="w-[90px]"></label>
+                        </div>
+
+                        <div id="room-config-container"
+                            class="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scroll">
+                        </div>
+
+                        <button id="add-room-button"
+                            class="mt-4 w-full inline-flex justify-center items-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 py-3 px-4 text-sm font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add New Room
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center gap-4 shrink-0">
+                    <div id="room-config-status" class="text-sm text-green-600 font-bold"></div>
+                    <div class="flex gap-2">
+                        <button onclick="closeRoomSettingsModal()"
+                            class="px-5 py-2 rounded-lg text-sm font-bold text-gray-500 hover:bg-gray-100 border border-gray-200">Close</button>
+                        <button id="save-room-config-button"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md transition">
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+        <py-config class="hidden">
+            packages = ["pandas", "pdfplumber==0.9.0"]
+        </py-config>
+        <py-script src="main.py"></py-script>
+        <script src="ui-modal.js"></script>
+        <script src="app.js"></script>
+</body>
+
+</html>
