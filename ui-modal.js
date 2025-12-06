@@ -114,7 +114,9 @@ const UiModal = {
             </div>
             <div class="${this._bodyClass}">
                 <p class="mb-2">${message}</p>
-                <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}">
+                <form onsubmit="event.preventDefault(); document.getElementById('ui-modal-ok-btn').click();">
+                    <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}">
+                </form>
             </div>
         `;
 
@@ -125,6 +127,7 @@ const UiModal = {
             {
                 text: 'Submit',
                 classes: "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500",
+                id: 'ui-modal-ok-btn',
                 onClick: () => {
                     const val = document.getElementById('ui-modal-input').value;
                     return val; // This value is passed to resolve
