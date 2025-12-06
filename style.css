@@ -1321,8 +1321,8 @@ tr.scribe-row-highlight td.signature-col {
         left: 0;
         width: 100%;
         margin: 0 !important;
-        padding: 5mm !important;
-        /* Small padding for printer margins */
+        padding: 8mm 10mm !important;
+        /* Increased padding for printer margins */
         z-index: 9999;
         background-color: white;
     }
@@ -1364,13 +1364,18 @@ tr.scribe-row-highlight td.signature-col {
         display: table-header-group;
     }
 
-    /* Summary Box Protection */
+    /* Summary Box: Allow breaks between boxes, protect content inside */
     body.printing-bill .summary-box {
+        border: 1px solid #000 !important;
+        margin-top: 10px !important;
+        /* Removed break-inside: avoid to allow natural page breaks */
+    }
+
+    /* Protect individual elements INSIDE summary boxes from breaking */
+    body.printing-bill .summary-box>div,
+    body.printing-bill .summary-box>p {
         break-inside: avoid;
         page-break-inside: avoid;
-        border: 1px solid #000 !important;
-        /* Single line border for print */
-        margin-top: 10px !important;
     }
 
     /* Hide screen-only elements */
