@@ -1020,6 +1020,156 @@ window.changeRankPage = function (delta) {
     renderStaffRankList(myEmail);
 }
 
+function renderStaffCalendar(myEmail) {
+    const year = currentCalDate.getFullYear();
+    const month = currentCalDate.getMonth();
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    if (ui.calTitle) ui.calTitle.innerHTML = `<span class="text-gray-400 font-light">Calendar</span> <span class="text-indigo-800 font-black tracking-tight">${monthNames[month]} ${year}</span>`;
+
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Group Slots
+    const slotsByDate = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        const [dStr, tStr] = key.split(' | ');
+        const [dd, mm, yyyy] = dStr.split('.');
+        if (parseInt(mm) === month + 1 && parseInt(yyyy) === year) {
+            const dayNum = parseInt(dd);
+            if (!slotsByDate[dayNum]) slotsByDate[dayNum] = [];
+            let sessionType = "FN";
+            const t = tStr.toUpperCase();
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) sessionType = "AN";
+            slotsByDate[dayNum].push({ key, sessionType, ...invigilationSlots[key] });
+        }
+    });
+
+    let html = "";
+    // Empty cells for previous month
+    for (let i = 0; i < firstDayIndex; i++) {
+        html += `<div class="bg-gray-50/30 border border-gray-100/50 min-h-[6rem] md:min-h-[8rem] rounded-xl m-0.5 backdrop-blur-sm"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
+        const slots = slotsByDate[day] || [];
+
+        // Base Cell Style - "Glassy Plasticky"
+        let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[6rem] md:min-h-[8rem] rounded-xl m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
+        let dateClass = "absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-inner";
+
+        let contentHtml = "";
+
+        // --- RENDER SLOTS ---
+        if (slots.length > 0) {
+            contentHtml += `<div class="flex flex-col gap-1.5 p-2 mt-6">`;
+            slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
+
+            slots.forEach(slot => {
+                const filled = slot.assigned.length;
+                const needed = slot.required;
+
+                // Logic
+                const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
+                const isAssigned = slot.assigned.includes(myEmail);
+                const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
+                const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
+                const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
+
+                // "Plasticky" Badge Styles
+                let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
+                let icon = "🟢";
+                let statusText = `${Math.max(0, needed - filled)} Left`;
+                let glowClass = "";
+
+                if (isCompleted) {
+                    badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
+                    icon = "✅";
+                    statusText = "Done";
+                    glowClass = "shadow-lg shadow-green-200";
+                }
+                else if (isPostedByMe) {
+                    badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300";
+                    icon = "⏳";
+                    statusText = "Posted";
+                }
+                else if (isAssigned) {
+                    badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold";
+                    icon = "👮";
+                    statusText = "Duty";
+                    glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300";
+                }
+                else if (isMarketAvailable) {
+                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse";
+                    icon = "♻️";
+                    statusText = "Market";
+                }
+                else if (isUnavailable) {
+                    badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
+                    icon = "⛔";
+                    statusText = "Unavail";
+                }
+                else if (slot.isLocked) {
+                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200";
+                    icon = "🔒";
+                    statusText = "Locked";
+                }
+                else if (filled >= needed) {
+                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200";
+                    icon = "🈵";
+                    statusText = "Full";
+                }
+
+                contentHtml += `
+                    <div class="relative overflow-hidden rounded-lg border ${badgeClass} p-1.5 shadow-sm transition-transform hover:scale-105 ${glowClass} flex items-center justify-between gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
+                        <!-- Glossy Shine -->
+                        <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
+                        
+                        <div class="flex items-center gap-1.5 z-10">
+                            <span class="text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
+                        </div>
+                        <div class="flex items-center gap-1 z-10">
+                            <span class="text-[9px] font-bold opacity-90 truncate max-w-[40px]">${statusText}</span>
+                            <span class="text-[10px] filter drop-shadow-sm">${icon}</span>
+                        </div>
+                    </div>`;
+            });
+            contentHtml += `</div>`;
+        } else {
+            // Check Advance Unavailability
+            const adv = advanceUnavailability[dateStr];
+            if (adv) {
+                let hasUnavail = false;
+                let unavailHtml = `<div class="flex flex-col gap-1 p-2 mt-6">`;
+
+                if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
+                    hasUnavail = true;
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded-lg p-1 text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition">FN ⛔ Unavail</div>`;
+                }
+                if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
+                    hasUnavail = true;
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded-lg p-1 text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition">AN ⛔ Unavail</div>`;
+                }
+                unavailHtml += `</div>`;
+
+                if (hasUnavail) contentHtml += unavailHtml;
+            }
+        }
+
+        // Add 'Empty' Click Handler for blank days to allow adding unavailability
+        let clickAttr = `onclick="openDayDetail('${dateStr}', '${myEmail}')"`;
+
+        html += `
+            <div class="${cellClass}" ${clickAttr}>
+                <div class="${dateClass}">${day}</div>
+                ${contentHtml}
+            </div>
+        `;
+    }
+    if (ui.calGrid) ui.calGrid.innerHTML = html;
+}
+
 
 
 function renderExchangeMarket(myEmail) {
