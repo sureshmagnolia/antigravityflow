@@ -1617,1076 +1617,977 @@ window.deleteSlot = async function (key) {
         // 4. Refresh Grid
         renderSlotsGridAdmin();
 
-        // 5. Log it
-        if (typeof logActivity === 'function') logActivity("Slot Deleted", `Admin deleted slot: ${key}`);
-    }
-}
 
-window.toggleAdvance = async function (dateStr, email, session) {
-    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-    if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+        // --- NEW: Lock All Function ---
+        window.lockAllSessions = async function () {
+            if (!confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
 
-    const list = advanceUnavailability[dateStr][session];
-    const existingEntry = list.find(u => u.email === email);
+            let changed = false;
+            Object.keys(invigilationSlots).forEach(key => {
+                if (!invigilationSlots[key].isLocked) {
+                    invigilationSlots[key].isLocked = true;
+                    changed = true;
+                }
+            });
 
-    if (existingEntry) {
-        // REMOVE (Simple Confirm)
-        if (confirm(`Remove 'Unavailable' status for ${session}?`)) {
-            advanceUnavailability[dateStr][session] = list.filter(u => u.email !== email);
+            if (!confirm("Confirm duty?")) return;
 
-            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from ${dateStr} (${session}) unavailability list.`);
+            const slot = invigilationSlots[key];
+            slot.assigned.push(email);
 
-            await saveAdvanceUnavailability();
-            renderStaffCalendar(email);
-
-            // 1. Update List Live
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
-            // 2. CLOSE MODAL (Updated)
-            window.closeModal('day-detail-modal');
-        }
-    } else {
-        // ADD (Open Modal for Reason)
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`;
-        document.getElementById('unav-email').value = email;
-
-        document.getElementById('unav-reason').value = "";
-        document.getElementById('unav-details').value = "";
-        document.getElementById('unav-todate').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-        document.getElementById('unav-todate-container').classList.add('hidden');
-
-        window.closeModal('day-detail-modal');
-        window.openModal('unavailable-modal');
-    }
-}
-
-async function saveAdvanceUnavailability() {
-    updateSyncStatus("Saving...", "neutral");
-    try {
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
-        updateSyncStatus("Synced", "success");
-    } catch (e) {
-        console.error(e);
-        updateSyncStatus("Save Failed", "error");
-    }
-}
-window.toggleWholeDay = async function (dateStr, email) {
-    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-
-    const fnList = advanceUnavailability[dateStr].FN || [];
-    const anList = advanceUnavailability[dateStr].AN || [];
-    const isFullDay = fnList.some(u => u.email === email) && anList.some(u => u.email === email);
-
-    if (isFullDay) {
-        // CLEAR BOTH
-        if (confirm("Clear unavailability for the WHOLE DAY?")) {
-            advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
-            advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
-
-            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from Whole Day ${dateStr}.`);
-
-            await saveAdvanceUnavailability();
-            renderStaffCalendar(email);
-
-            // 1. Update List Live
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
-            // 2. CLOSE MODAL (Updated)
-            window.closeModal('day-detail-modal');
-        }
-    } else {
-        // MARK BOTH
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`;
-        document.getElementById('unav-email').value = email;
-
-        document.getElementById('unav-reason').value = "";
-        document.getElementById('unav-details').value = "";
-        document.getElementById('unav-todate').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-        document.getElementById('unav-todate-container').classList.add('hidden');
-
-        window.closeModal('day-detail-modal');
-        window.openModal('unavailable-modal');
-    }
-}
-// --- STANDARD EXPORTS ---
-window.toggleLock = async function (key) {
-    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
-    await syncSlotsToCloud();
-}
-
-// --- NEW: Lock All Function ---
-window.lockAllSessions = async function () {
-    if (!confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
-
-    let changed = false;
-    Object.keys(invigilationSlots).forEach(key => {
-        if (!invigilationSlots[key].isLocked) {
-            invigilationSlots[key].isLocked = true;
-            changed = true;
-        }
-    });
-
-    if (!confirm("Confirm duty?")) return;
-
-    const slot = invigilationSlots[key];
-    slot.assigned.push(email);
-
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(email); // Refresh
-}
-
-window.changeSlotReq = async function (key, delta) {
-    const slot = invigilationSlots[key];
-    const newReq = slot.required + delta;
-    if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
-    if (newReq < 1) return;
-    slot.required = newReq;
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-}
-
-
-window.cancelDuty = async function (key, email, isLocked) {
-    if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
-    if (confirm("Cancel duty?")) {
-        invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
-        const me = staffData.find(s => s.email === email);
-        if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
-        logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
-        await syncSlotsToCloud();
-        await syncStaffToCloud();
-        window.closeModal('day-detail-modal');
-    }
-}
-function toggleUnavDetails() {
-    const reasonEl = document.getElementById('unav-reason');
-    const detailsContainer = document.getElementById('unav-details-container');
-    const toDateContainer = document.getElementById('unav-todate-container');
-    if (!reasonEl || !detailsContainer || !toDateContainer) return;
-
-    const reason = reasonEl.value;
-
-    // Show details field for OD, DL, Medical
-    if (['OD', 'DL', 'Medical'].includes(reason)) {
-        detailsContainer.classList.remove('hidden');
-    } else {
-        detailsContainer.classList.add('hidden');
-    }
-
-    // Show To Date field for Commuted Leave
-    if (reason === 'Commuted Leave') {
-        toDateContainer.classList.remove('hidden');
-    } else {
-        toDateContainer.classList.add('hidden');
-    }
-}
-// Export to window so HTML can call it
-window.toggleUnavDetails = toggleUnavDetails;
-
-window.setAvailability = async function (key, email, isAvailable) {
-    if (isAvailable) {
-        if (confirm("Mark available?")) {
-            invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-            logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
+            const me = staffData.find(s => s.email === email);
+            if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+            logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
             await syncSlotsToCloud();
-
-            // *** FIX: Update List Live ***
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
+            await syncStaffToCloud();
             window.closeModal('day-detail-modal');
-            renderStaffCalendar(email); // Update calendar colors
+            renderStaffCalendar(email); // Refresh
         }
-    } else {
-        document.getElementById('unav-key').value = key;
-        document.getElementById('unav-email').value = email;
-        document.getElementById('unav-reason').value = "";
-        document.getElementById('unav-details').value = "";
-        document.getElementById('unav-todate').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-        document.getElementById('unav-todate-container').classList.add('hidden');
-        window.closeModal('day-detail-modal');
-        window.openModal('unavailable-modal');
-    }
-}
-window.confirmUnavailable = async function () {
-    const key = document.getElementById('unav-key').value;
-    const email = document.getElementById('unav-email').value;
-    const reason = document.getElementById('unav-reason').value;
-    const details = document.getElementById('unav-details').value.trim();
-    const toDateValue = document.getElementById('unav-todate').value; // Get To Date
 
-    if (!reason) return alert("Select a reason.");
-    if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
+        window.changeSlotReq = async function (key, delta) {
+            const slot = invigilationSlots[key];
+            const newReq = slot.required + delta;
+            if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
+            if (newReq < 1) return;
+            slot.required = newReq;
+            await syncSlotsToCloud();
+            renderSlotsGridAdmin();
+        }
 
-    const entry = { email, reason, details: details || "" };
 
-    if (key.startsWith('ADVANCE|')) {
-        // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
-        const [_, dateStr, session] = key.split('|');
+        window.cancelDuty = async function (key, email, isLocked) {
+            if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
+            if (confirm("Cancel duty?")) {
+                invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
+                const me = staffData.find(s => s.email === email);
+                if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
+                logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
+                await syncSlotsToCloud();
+                await syncStaffToCloud();
+                window.closeModal('day-detail-modal');
+            }
+        }
+        function toggleUnavDetails() {
+            const reasonEl = document.getElementById('unav-reason');
+            const detailsContainer = document.getElementById('unav-details-container');
+            const toDateContainer = document.getElementById('unav-todate-container');
+            if (!reasonEl || !detailsContainer || !toDateContainer) return;
 
-        // Check if this is Commuted Leave with a To Date
-        const isDateRange = (reason === 'Commuted Leave' && toDateValue);
+            const reason = reasonEl.value;
 
-        if (isDateRange) {
-            // MARK DATE RANGE
-            const fromDate = parseDate2(dateStr); // Use helper to parse DD.MM.YYYY
-            const toDate = new Date(toDateValue); // To Date is in YYYY-MM-DD format from input
-
-            if (toDate < fromDate) {
-                return alert("'To Date' must be after or equal to the selected date.");
+            // Show details field for OD, DL, Medical
+            if (['OD', 'DL', 'Medical'].includes(reason)) {
+                detailsContainer.classList.remove('hidden');
+            } else {
+                detailsContainer.classList.add('hidden');
             }
 
-            // Iterate through each date in the range
-            let currentDate = new Date(fromDate);
-            let markedDates = [];
+            // Show To Date field for Commuted Leave
+            if (reason === 'Commuted Leave') {
+                toDateContainer.classList.remove('hidden');
+            } else {
+                toDateContainer.classList.add('hidden');
+            }
+        }
+        // Export to window so HTML can call it
+        window.toggleUnavDetails = toggleUnavDetails;
 
-            while (currentDate <= toDate) {
-                // Skip Sundays (day 0)
-                if (currentDate.getDay() !== 0) {
-                    const dd = String(currentDate.getDate()).padStart(2, '0');
-                    const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
-                    const yyyy = currentDate.getFullYear();
-                    const iterDateStr = `${dd}.${mm}.${yyyy}`;
+        window.setAvailability = async function (key, email, isAvailable) {
+            if (isAvailable) {
+                if (confirm("Mark available?")) {
+                    invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+                    logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
+                    await syncSlotsToCloud();
 
+                    // *** FIX: Update List Live ***
+                    if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+
+                    window.closeModal('day-detail-modal');
+                    renderStaffCalendar(email); // Update calendar colors
+                }
+            } else {
+                document.getElementById('unav-key').value = key;
+                document.getElementById('unav-email').value = email;
+                document.getElementById('unav-reason').value = "";
+                document.getElementById('unav-details').value = "";
+                document.getElementById('unav-todate').value = "";
+                document.getElementById('unav-details-container').classList.add('hidden');
+                document.getElementById('unav-todate-container').classList.add('hidden');
+                window.closeModal('day-detail-modal');
+                window.openModal('unavailable-modal');
+            }
+        }
+        window.confirmUnavailable = async function () {
+            const key = document.getElementById('unav-key').value;
+            const email = document.getElementById('unav-email').value;
+            const reason = document.getElementById('unav-reason').value;
+            const details = document.getElementById('unav-details').value.trim();
+            const toDateValue = document.getElementById('unav-todate').value; // Get To Date
+
+            if (!reason) return alert("Select a reason.");
+            if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
+
+            const entry = { email, reason, details: details || "" };
+
+            if (key.startsWith('ADVANCE|')) {
+                // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
+                const [_, dateStr, session] = key.split('|');
+
+                // Check if this is Commuted Leave with a To Date
+                const isDateRange = (reason === 'Commuted Leave' && toDateValue);
+
+                if (isDateRange) {
+                    // MARK DATE RANGE
+                    const fromDate = parseDate2(dateStr); // Use helper to parse DD.MM.YYYY
+                    const toDate = new Date(toDateValue); // To Date is in YYYY-MM-DD format from input
+
+                    if (toDate < fromDate) {
+                        return alert("'To Date' must be after or equal to the selected date.");
+                    }
+
+                    // Iterate through each date in the range
+                    let currentDate = new Date(fromDate);
+                    let markedDates = [];
+
+                    while (currentDate <= toDate) {
+                        // Skip Sundays (day 0)
+                        if (currentDate.getDay() !== 0) {
+                            const dd = String(currentDate.getDate()).padStart(2, '0');
+                            const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+                            const yyyy = currentDate.getFullYear();
+                            const iterDateStr = `${dd}.${mm}.${yyyy}`;
+
+                            // Ensure structure
+                            if (!advanceUnavailability[iterDateStr]) advanceUnavailability[iterDateStr] = { FN: [], AN: [] };
+                            if (!advanceUnavailability[iterDateStr].FN) advanceUnavailability[iterDateStr].FN = [];
+                            if (!advanceUnavailability[iterDateStr].AN) advanceUnavailability[iterDateStr].AN = [];
+
+                            if (session === 'WHOLE') {
+                                // Remove existing to avoid duplicates
+                                advanceUnavailability[iterDateStr].FN = advanceUnavailability[iterDateStr].FN.filter(u => u.email !== email);
+                                advanceUnavailability[iterDateStr].AN = advanceUnavailability[iterDateStr].AN.filter(u => u.email !== email);
+
+                                advanceUnavailability[iterDateStr].FN.push({ ...entry });
+                                advanceUnavailability[iterDateStr].AN.push({ ...entry });
+                            } else {
+                                // Single Session
+                                if (!advanceUnavailability[iterDateStr][session]) advanceUnavailability[iterDateStr][session] = [];
+                                advanceUnavailability[iterDateStr][session] = advanceUnavailability[iterDateStr][session].filter(u => u.email !== email);
+                                advanceUnavailability[iterDateStr][session].push({ ...entry });
+                            }
+
+                            markedDates.push(iterDateStr);
+                        }
+
+                        // Move to next day
+                        currentDate.setDate(currentDate.getDate() + 1);
+                    }
+
+                    logActivity("Commuted Leave Range", `Marked ${getNameFromEmail(email)} unavailable from ${dateStr} to ${toDateValue} (${markedDates.length} days). Reason: ${reason}`);
+
+                } else {
+                    // SINGLE DATE (Original logic)
                     // Ensure structure
-                    if (!advanceUnavailability[iterDateStr]) advanceUnavailability[iterDateStr] = { FN: [], AN: [] };
-                    if (!advanceUnavailability[iterDateStr].FN) advanceUnavailability[iterDateStr].FN = [];
-                    if (!advanceUnavailability[iterDateStr].AN) advanceUnavailability[iterDateStr].AN = [];
+                    if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+                    if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
+                    if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
 
                     if (session === 'WHOLE') {
                         // Remove existing to avoid duplicates
-                        advanceUnavailability[iterDateStr].FN = advanceUnavailability[iterDateStr].FN.filter(u => u.email !== email);
-                        advanceUnavailability[iterDateStr].AN = advanceUnavailability[iterDateStr].AN.filter(u => u.email !== email);
+                        advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
+                        advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
 
-                        advanceUnavailability[iterDateStr].FN.push({ ...entry });
-                        advanceUnavailability[iterDateStr].AN.push({ ...entry });
+                        advanceUnavailability[dateStr].FN.push(entry);
+                        advanceUnavailability[dateStr].AN.push(entry);
+
+                        logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
                     } else {
                         // Single Session
-                        if (!advanceUnavailability[iterDateStr][session]) advanceUnavailability[iterDateStr][session] = [];
-                        advanceUnavailability[iterDateStr][session] = advanceUnavailability[iterDateStr][session].filter(u => u.email !== email);
-                        advanceUnavailability[iterDateStr][session].push({ ...entry });
-                    }
+                        if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+                        advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
+                        advanceUnavailability[dateStr][session].push(entry);
 
-                    markedDates.push(iterDateStr);
+                        logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+                    }
                 }
 
-                // Move to next day
-                currentDate.setDate(currentDate.getDate() + 1);
-            }
+                await saveAdvanceUnavailability();
 
-            logActivity("Commuted Leave Range", `Marked ${getNameFromEmail(email)} unavailable from ${dateStr} to ${toDateValue} (${markedDates.length} days). Reason: ${reason}`);
+                // --- FIXES APPLIED HERE ---
+                window.closeModal('unavailable-modal');
+                window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+                renderStaffCalendar(email);
 
-        } else {
-            // SINGLE DATE (Original logic)
-            // Ensure structure
-            if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-            if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
-            if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
+                // 1. LIVE UPDATE LIST
+                if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+                // 2. DO NOT RE-OPEN MODAL (Issue 2 Fix)
+                // openDayModal(dateStr, email); <--- REMOVED
+                // --------------------------
 
-            if (session === 'WHOLE') {
-                // Remove existing to avoid duplicates
-                advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
-                advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
-
-                advanceUnavailability[dateStr].FN.push(entry);
-                advanceUnavailability[dateStr].AN.push(entry);
-
-                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
             } else {
-                // Single Session
-                if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
-                advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
-                advanceUnavailability[dateStr][session].push(entry);
+                // --- CASE B: SLOT SPECIFIC ---
+                if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
+                invigilationSlots[key].unavailable.push(entry);
 
-                logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+                logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
+
+                await syncSlotsToCloud();
+                window.closeModal('unavailable-modal');
+                window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+
+                renderStaffCalendar(email);
+                // 1. LIVE UPDATE LIST
+                if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
             }
         }
 
-        await saveAdvanceUnavailability();
+        window.waNotify = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
 
-        // --- FIXES APPLIED HERE ---
-        window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
-        renderStaffCalendar(email);
-
-        // 1. LIVE UPDATE LIST
-        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-        // 2. DO NOT RE-OPEN MODAL (Issue 2 Fix)
-        // openDayModal(dateStr, email); <--- REMOVED
-        // --------------------------
-
-    } else {
-        // --- CASE B: SLOT SPECIFIC ---
-        if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
-        invigilationSlots[key].unavailable.push(entry);
-
-        logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
-
-        await syncSlotsToCloud();
-        window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
-
-        renderStaffCalendar(email);
-        // 1. LIVE UPDATE LIST
-        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-    }
-}
-
-window.waNotify = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
-
-    // Get first valid phone with prefix
-    let phone = "";
-    for (const email of slot.assigned) {
-        const s = staffData.find(st => st.email === email);
-        if (s && s.phone) {
-            let p = s.phone.replace(/\D/g, '');
-            if (p.length === 10) p = "91" + p;
-            if (p.length >= 10) {
-                phone = p;
-                break;
-            }
-        }
-    }
-
-    if (!phone) return alert("No valid phone numbers found.");
-    const msg = encodeURIComponent(`Exam Duty: ${key}.`);
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-}
-window.calculateSlotsFromSchedule = async function () {
-    const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-    if (btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
-
-    try {
-        // 1. Fetch Data
-        const mainRef = doc(db, "colleges", currentCollegeId);
-        const mainSnap = await getDoc(mainRef);
-        if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
-
-        let fullData = mainSnap.data();
-        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-        const q = query(dataColRef, orderBy("index"));
-        const querySnapshot = await getDocs(q);
-        let fullPayload = "";
-        querySnapshot.forEach(doc => { if (doc.data().payload) fullPayload += doc.data().payload; });
-        if (fullPayload) fullData = { ...fullData, ...JSON.parse(fullPayload) };
-
-        const students = JSON.parse(fullData.examBaseData || '[]');
-        const scribeList = JSON.parse(fullData.examScribeList || '[]');
-        const scribeRegNos = new Set(scribeList.map(s => s.regNo));
-
-        if (students.length === 0) throw new Error("No exam data found.");
-
-        // 2. Advanced Calculation
-        const sessions = {};
-        students.forEach(s => {
-            const key = `${s.Date} | ${s.Time}`;
-            if (!sessions[key]) {
-                sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
-            }
-
-            sessions[key].totalStudents++;
-
-            if (scribeRegNos.has(s['Register Number'])) {
-                sessions[key].scribeCount++;
-            } else {
-                const strm = s.Stream || "Regular";
-                if (!sessions[key].streams[strm]) sessions[key].streams[strm] = 0;
-                sessions[key].streams[strm]++;
-            }
-        });
-
-        let changesLog = [];
-        let removalLog = [];
-        let newSlots = { ...invigilationSlots };
-        let hasChanges = false;
-
-        // --- A. CLEANUP LEGACY DATA (Remove 'courses' field) ---
-        Object.keys(newSlots).forEach(k => {
-            if (newSlots[k].courses) {
-                delete newSlots[k].courses; // Remove unwanted data
-                hasChanges = true; // Mark for save
-            }
-        });
-        // -------------------------------------------------------
-
-        Object.keys(sessions).forEach(key => {
-            const data = sessions[key];
-            const [datePart, timePart] = key.split(' | ');
-
-            // --- B. CALCULATE REQUIREMENTS ---
-            let calculatedReq = 0;
-
-            // 1. Regular Streams (1:30)
-            Object.values(data.streams).forEach(count => {
-                calculatedReq += Math.ceil(count / 30);
-            });
-
-            // 2. Scribes (1:5 RULE)
-            if (data.scribeCount > 0) {
-                calculatedReq += Math.ceil(data.scribeCount / 5);
-            }
-
-            // 3. Reserve (10% of base)
-            const reserve = Math.ceil(calculatedReq * 0.10);
-            const finalReq = calculatedReq + reserve;
-
-            // --- C. Fetch Official Exam Name (Robust Stream Check) ---
-            let officialExamName = "";
-            if (typeof window.getExamName === "function") {
-                // 1. Try streams actually present in this session
-                const streamsInSession = Object.keys(data.streams);
-                for (const strm of streamsInSession) {
-                    officialExamName = window.getExamName(datePart, timePart, strm);
-                    if (officialExamName) break; // Found a match!
-                }
-
-                // 2. Fallbacks
-                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
-                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
-            }
-
-            // --- D. Update Slot ---
-            if (!newSlots[key]) {
-                newSlots[key] = {
-                    required: finalReq,
-                    assigned: [],
-                    unavailable: [],
-                    isLocked: true,
-                    examName: officialExamName,
-                    scribeCount: data.scribeCount,
-                    studentCount: data.totalStudents
-                };
-                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
-                hasChanges = true;
-            } else {
-                // Update Metadata
-                if (newSlots[key].scribeCount !== data.scribeCount || newSlots[key].studentCount !== data.totalStudents) {
-                    newSlots[key].scribeCount = data.scribeCount;
-                    newSlots[key].studentCount = data.totalStudents;
-                    hasChanges = true;
-                }
-
-                if (officialExamName && newSlots[key].examName !== officialExamName) {
-                    newSlots[key].examName = officialExamName;
-                    hasChanges = true;
-                }
-
-                if (newSlots[key].required !== finalReq) {
-                    changesLog.push(`🔄 ${key}: ${newSlots[key].required} ➝ ${finalReq}`);
-                    hasChanges = true;
-                    newSlots[key].required = finalReq;
-
-                    if (finalReq < newSlots[key].assigned.length) {
-                        const excessCount = newSlots[key].assigned.length - finalReq;
-                        const removed = pruneAssignments(newSlots[key], excessCount);
-                        removed.forEach(r => removalLog.push({ session: key, ...r }));
+            // Get first valid phone with prefix
+            let phone = "";
+            for (const email of slot.assigned) {
+                const s = staffData.find(st => st.email === email);
+                if (s && s.phone) {
+                    let p = s.phone.replace(/\D/g, '');
+                    if (p.length === 10) p = "91" + p;
+                    if (p.length >= 10) {
+                        phone = p;
+                        break;
                     }
                 }
             }
-        });
 
-        // 3. Confirm
-        if (!hasChanges) {
-            alert("✅ Cloud data checked. No changes.");
-        } else {
-            let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
-            // --- Helper: Smart Removal (Lowest Priority First) ---
-            function pruneAssignments(slot, countToRemove) {
-                // 1. Map emails to staff objects with "Pending" score
-                // Higher pending = Higher priority to KEEP.
-                // Lower pending = Has done enough/more duties = Remove First.
+            if (!phone) return alert("No valid phone numbers found.");
+            const msg = encodeURIComponent(`Exam Duty: ${key}.`);
+            window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+        }
+        window.calculateSlotsFromSchedule = async function () {
+            const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
+            if (btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
 
-                let assignedStaff = slot.assigned.map(email => {
-                    const s = staffData.find(st => st.email === email);
-                    if (!s) return { email, pending: -999, name: email, phone: "" }; // Ghost user
-                    const target = calculateStaffTarget(s);
-                    const pending = target - (s.dutiesDone || 0);
-                    return { email, pending, name: s.name, phone: s.phone };
+            try {
+                // 1. Fetch Data
+                const mainRef = doc(db, "colleges", currentCollegeId);
+                const mainSnap = await getDoc(mainRef);
+                if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
+
+                let fullData = mainSnap.data();
+                const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                const q = query(dataColRef, orderBy("index"));
+                const querySnapshot = await getDocs(q);
+                let fullPayload = "";
+                querySnapshot.forEach(doc => { if (doc.data().payload) fullPayload += doc.data().payload; });
+                if (fullPayload) fullData = { ...fullData, ...JSON.parse(fullPayload) };
+
+                const students = JSON.parse(fullData.examBaseData || '[]');
+                const scribeList = JSON.parse(fullData.examScribeList || '[]');
+                const scribeRegNos = new Set(scribeList.map(s => s.regNo));
+
+                if (students.length === 0) throw new Error("No exam data found.");
+
+                // 2. Advanced Calculation
+                const sessions = {};
+                students.forEach(s => {
+                    const key = `${s.Date} | ${s.Time}`;
+                    if (!sessions[key]) {
+                        sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
+                    }
+
+                    sessions[key].totalStudents++;
+
+                    if (scribeRegNos.has(s['Register Number'])) {
+                        sessions[key].scribeCount++;
+                    } else {
+                        const strm = s.Stream || "Regular";
+                        if (!sessions[key].streams[strm]) sessions[key].streams[strm] = 0;
+                        sessions[key].streams[strm]++;
+                    }
                 });
 
-                // 2. Sort: Lowest Pending First (Ascending)
-                assignedStaff.sort((a, b) => a.pending - b.pending);
+                let changesLog = [];
+                let removalLog = [];
+                let newSlots = { ...invigilationSlots };
+                let hasChanges = false;
 
-                // 3. Pick victims
-                const toRemove = assignedStaff.slice(0, countToRemove);
-                const keep = assignedStaff.slice(countToRemove);
+                // --- A. CLEANUP LEGACY DATA (Remove 'courses' field) ---
+                Object.keys(newSlots).forEach(k => {
+                    if (newSlots[k].courses) {
+                        delete newSlots[k].courses; // Remove unwanted data
+                        hasChanges = true; // Mark for save
+                    }
+                });
+                // -------------------------------------------------------
 
-                // 4. Update Slot
-                slot.assigned = keep.map(s => s.email);
+                Object.keys(sessions).forEach(key => {
+                    const data = sessions[key];
+                    const [datePart, timePart] = key.split(' | ');
 
-                // 5. Return details for notification
-                return toRemove;
-            }
-            // --- Helper: Show Removal Notification ---
-            function showRemovalNotification(log) {
-                const list = document.getElementById('inconvenience-list');
-                const modalTitle = document.getElementById('inconvenience-modal-subtitle');
+                    // --- B. CALCULATE REQUIREMENTS ---
+                    let calculatedReq = 0;
 
-                if (list && modalTitle) {
-                    document.querySelector('#inconvenience-modal h3').textContent = "⚠️ Auto-Removal Notification";
-                    modalTitle.textContent = "The following staff were removed due to slot reduction. Please notify them.";
+                    // 1. Regular Streams (1:30)
+                    Object.values(data.streams).forEach(count => {
+                        calculatedReq += Math.ceil(count / 30);
+                    });
 
-                    list.innerHTML = '';
-                    log.forEach(item => {
-                        // Fix Phone Format
-                        let phone = item.phone ? item.phone.replace(/\D/g, '') : "";
-                        if (phone.length === 10) phone = "91" + phone;
-                        const hasValidPhone = phone.length >= 10;
+                    // 2. Scribes (1:5 RULE)
+                    if (data.scribeCount > 0) {
+                        calculatedReq += Math.ceil(data.scribeCount / 5);
+                    }
 
-                        const msg = encodeURIComponent(`Exam Duty Update: Your invigilation duty for ${item.session} has been CANCELLED due to a reduction in required slots.`);
-                        const waLink = hasValidPhone ? `https://wa.me/${phone}?text=${msg}` : "#";
+                    // 3. Reserve (10% of base)
+                    const reserve = Math.ceil(calculatedReq * 0.10);
+                    const finalReq = calculatedReq + reserve;
 
-                        list.innerHTML += `
+                    // --- C. Fetch Official Exam Name (Robust Stream Check) ---
+                    let officialExamName = "";
+                    if (typeof window.getExamName === "function") {
+                        // 1. Try streams actually present in this session
+                        const streamsInSession = Object.keys(data.streams);
+                        for (const strm of streamsInSession) {
+                            officialExamName = window.getExamName(datePart, timePart, strm);
+                            if (officialExamName) break; // Found a match!
+                        }
+
+                        // 2. Fallbacks
+                        if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
+                        if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
+                    }
+
+                    // --- D. Update Slot ---
+                    if (!newSlots[key]) {
+                        newSlots[key] = {
+                            required: finalReq,
+                            assigned: [],
+                            unavailable: [],
+                            isLocked: true,
+                            examName: officialExamName,
+                            scribeCount: data.scribeCount,
+                            studentCount: data.totalStudents
+                        };
+                        changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
+                        hasChanges = true;
+                    } else {
+                        // Update Metadata
+                        if (newSlots[key].scribeCount !== data.scribeCount || newSlots[key].studentCount !== data.totalStudents) {
+                            newSlots[key].scribeCount = data.scribeCount;
+                            newSlots[key].studentCount = data.totalStudents;
+                            hasChanges = true;
+                        }
+
+                        if (officialExamName && newSlots[key].examName !== officialExamName) {
+                            newSlots[key].examName = officialExamName;
+                            hasChanges = true;
+                        }
+
+                        if (newSlots[key].required !== finalReq) {
+                            changesLog.push(`🔄 ${key}: ${newSlots[key].required} ➝ ${finalReq}`);
+                            hasChanges = true;
+                            newSlots[key].required = finalReq;
+
+                            if (finalReq < newSlots[key].assigned.length) {
+                                const excessCount = newSlots[key].assigned.length - finalReq;
+                                const removed = pruneAssignments(newSlots[key], excessCount);
+                                removed.forEach(r => removalLog.push({ session: key, ...r }));
+                            }
+                        }
+                    }
+                });
+
+                // 3. Confirm
+                if (!hasChanges) {
+                    alert("✅ Cloud data checked. No changes.");
+                } else {
+                    let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
+                    // --- Helper: Smart Removal (Lowest Priority First) ---
+                    function pruneAssignments(slot, countToRemove) {
+                        // 1. Map emails to staff objects with "Pending" score
+                        // Higher pending = Higher priority to KEEP.
+                        // Lower pending = Has done enough/more duties = Remove First.
+
+                        let assignedStaff = slot.assigned.map(email => {
+                            const s = staffData.find(st => st.email === email);
+                            if (!s) return { email, pending: -999, name: email, phone: "" }; // Ghost user
+                            const target = calculateStaffTarget(s);
+                            const pending = target - (s.dutiesDone || 0);
+                            return { email, pending, name: s.name, phone: s.phone };
+                        });
+
+                        // 2. Sort: Lowest Pending First (Ascending)
+                        assignedStaff.sort((a, b) => a.pending - b.pending);
+
+                        // 3. Pick victims
+                        const toRemove = assignedStaff.slice(0, countToRemove);
+                        const keep = assignedStaff.slice(countToRemove);
+
+                        // 4. Update Slot
+                        slot.assigned = keep.map(s => s.email);
+
+                        // 5. Return details for notification
+                        return toRemove;
+                    }
+                    // --- Helper: Show Removal Notification ---
+                    function showRemovalNotification(log) {
+                        const list = document.getElementById('inconvenience-list');
+                        const modalTitle = document.getElementById('inconvenience-modal-subtitle');
+
+                        if (list && modalTitle) {
+                            document.querySelector('#inconvenience-modal h3').textContent = "⚠️ Auto-Removal Notification";
+                            modalTitle.textContent = "The following staff were removed due to slot reduction. Please notify them.";
+
+                            list.innerHTML = '';
+                            log.forEach(item => {
+                                // Fix Phone Format
+                                let phone = item.phone ? item.phone.replace(/\D/g, '') : "";
+                                if (phone.length === 10) phone = "91" + phone;
+                                const hasValidPhone = phone.length >= 10;
+
+                                const msg = encodeURIComponent(`Exam Duty Update: Your invigilation duty for ${item.session} has been CANCELLED due to a reduction in required slots.`);
+                                const waLink = hasValidPhone ? `https://wa.me/${phone}?text=${msg}` : "#";
+
+                                list.innerHTML += `
                 <div class="bg-orange-50 border border-orange-200 p-3 rounded-lg flex justify-between items-center">
                     <div>
                         <div class="font-bold text-gray-800 text-sm">${item.name}</div>
                         <div class="text-xs text-gray-500">${item.session}</div>
                     </div>
                     ${hasValidPhone ?
-                                `<a href="${waLink}" target="_blank" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-green-700 shadow-sm">Notify WA</a>` :
-                                `<span class="text-xs text-gray-400">No Phone</span>`
-                            }
+                                        `<a href="${waLink}" target="_blank" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-green-700 shadow-sm">Notify WA</a>` :
+                                        `<span class="text-xs text-gray-400">No Phone</span>`
+                                    }
                 </div>
             `;
-                    });
+                            });
 
-                    window.openModal('inconvenience-modal');
-                } else {
-                    alert("Staff removed: \n" + log.map(l => `${l.name} (${l.session})`).join('\n'));
-                }
+                            window.openModal('inconvenience-modal');
+                        } else {
+                            alert("Staff removed: \n" + log.map(l => `${l.name} (${l.session})`).join('\n'));
+                        }
+                    }
+
+                    // --- Execute Change Logic ---
+                    if (changesLog.length > 0) {
+                        if (typeof showRemovalNotification === 'function' && removalLog.length > 0) {
+                            showRemovalNotification(removalLog);
+                        }
+                    }
+
+                } // End Else (!hasChanges)
+
+            } catch (e) {
+                console.error("Auto-Calc Error:", e);
+                alert("Error during calculation: " + e.message);
+            } finally {
+                const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
+                if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
             }
-
-            // --- Execute Change Logic ---
-            if (changesLog.length > 0) {
-                if (typeof showRemovalNotification === 'function' && removalLog.length > 0) {
-                    showRemovalNotification(removalLog);
-                }
-            }
-
-        } // End Else (!hasChanges)
-
-    } catch (e) {
-        console.error("Auto-Calc Error:", e);
-        alert("Error during calculation: " + e.message);
-    } finally {
-        const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-        if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
-    }
-}
-
-// --- RESERVE LOGIC ---
-
-// --- HELPER: Get Slot Reserves (Excess of Required) ---
-window.getSlotReserves = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || !slot.assigned || slot.assigned.length <= slot.required) return [];
-
-    // The RESERVES are the ones AFTER the required count
-    // e.g. Required: 5, Assigned: 6 -> Index 5 is reserve.
-    const reserveEmails = slot.assigned.slice(slot.required);
-
-    return reserveEmails.map(e => staffData.find(s => s.email === e)).filter(s => s);
-}
-
-window.notifySlotReserves = async function (key) {
-    const reserves = getSlotReserves(key);
-    if (reserves.length === 0) return alert("No reserves identified (Assigned <= Required).");
-
-    const names = reserves.map(r => r.name).join(", ");
-    if (!confirm(`Send Notifications to ${reserves.length} Reserves?\n\n${names}`)) return;
-
-    updateSyncStatus("Sending...", "neutral");
-    // Email Logic Reuse
-    let sent = 0;
-    for (const r of reserves) {
-        try {
-            await sendSingleEmail(null, r.email, r.name, "Reserve Duty Alert", `You are on RESERVE duty for ${key}. Please be available.`);
-            sent++;
-        } catch (e) { }
-    }
-    updateSyncStatus("Done", "success");
-    alert(`Sent ${sent} notifications.`);
-}
-
-// --- REFINED AUTO-ALLOCATION (Session-Based Reserves) ---
-window.runAutoAllocation = async function () {
-    if (!confirm("⚡ Run SESSION-BASED Auto-Assignment?\n\nThis will fill slots to REQUIRED + 10% (Reserves).\n\nRules:\n1. Highest Pending First.\n2. Exclude Adjacent Days (Rules applied to EVERYONE).\n3. Dept Saturation (Exempt Single Faculty).\n\nAssign?")) return;
-
-    // 1. Identify Target Slots
-    const targetSlots = [];
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        if (!slot.isLocked) {
-            targetSlots.push({ key, date: parseDate(key), slot });
         }
-    });
 
-    if (targetSlots.length === 0) return alert("No unlocked slots found.");
+        // --- RESERVE LOGIC ---
 
-    targetSlots.sort((a, b) => a.date - b.date);
+        // --- HELPER: Get Slot Reserves (Excess of Required) ---
+        window.getSlotReserves = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || !slot.assigned || slot.assigned.length <= slot.required) return [];
 
-    // 2. Prepare Staff Stats
-    const deptCounts = {};
-    const singleFacultyDepts = new Set();
+            // The RESERVES are the ones AFTER the required count
+            // e.g. Required: 5, Assigned: 6 -> Index 5 is reserve.
+            const reserveEmails = slot.assigned.slice(slot.required);
 
-    // First Pass: Count Depts
-    staffData.forEach(s => {
-        if (s.status !== 'archived') {
-            deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+            return reserveEmails.map(e => staffData.find(s => s.email === e)).filter(s => s);
         }
-    });
 
-    Object.keys(deptCounts).forEach(d => {
-        if (deptCounts[d] === 1) singleFacultyDepts.add(d);
-    });
+        window.notifySlotReserves = async function (key) {
+            const reserves = getSlotReserves(key);
+            if (reserves.length === 0) return alert("No reserves identified (Assigned <= Required).");
 
-    let eligibleStaff = staffData.map(s => ({
-        ...s,
-        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-        weeklyLoad: {}
-    }));
+            const names = reserves.map(r => r.name).join(", ");
+            if (!confirm(`Send Notifications to ${reserves.length} Reserves?\n\n${names}`)) return;
 
-    // Pre-fill existing assignment load
-    Object.keys(invigilationSlots).forEach(k => {
-        const d = parseDate(k);
-        const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(d);
-        const weekKey = `${mStr}-${wNum}`;
-
-        invigilationSlots[k].assigned.forEach(email => {
-            const s = eligibleStaff.find(st => st.email === email);
-            if (s) {
-                if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
-                s.weeklyLoad[weekKey]++;
-            }
-        });
-    });
-
-    let assignedCount = 0;
-    const logEntries = [];
-
-    // 3. Process Slots
-    for (const target of targetSlots) {
-        const { key, date, slot } = target;
-
-        // TARGET: Required + 10%
-        const targetCount = Math.ceil(slot.required * 1.10);
-        const needed = targetCount - slot.assigned.length;
-
-        if (needed <= 0) continue;
-
-        const currentWeekKey = `${date.toLocaleString('default', { month: 'long', year: 'numeric' })}-${getWeekOfMonth(date)}`;
-
-        // Context for Adjacent Rule (Global Check)
-        const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
-        const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
-
-        const prevKeyStart = `${prevDate.getDate().toString().padStart(2, '0')}.${(prevDate.getMonth() + 1).toString().padStart(2, '0')}.${prevDate.getFullYear()}`;
-        const nextKeyStart = `${nextDate.getDate().toString().padStart(2, '0')}.${(nextDate.getMonth() + 1).toString().padStart(2, '0')}.${nextDate.getFullYear()}`;
-
-        // Lookup adjacent assignments
-        const adjacentAssigned = new Set();
-        Object.keys(invigilationSlots).forEach(k => {
-            if (k.startsWith(prevKeyStart) || k.startsWith(nextKeyStart)) {
-                invigilationSlots[k].assigned.forEach(e => adjacentAssigned.add(e));
-            }
-        });
-
-        // Dept Context
-        const slotDeptCounts = {};
-        slot.assigned.forEach(email => {
-            const s = staffData.find(st => st.email === email);
-            if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
-        });
-
-        // Score Candidates
-        const candidates = eligibleStaff.map(s => {
-            if (s.status === 'archived') return null;
-            if (slot.assigned.includes(s.email)) return null;
-            if (isUserUnavailable(slot, s.email, key)) return null;
-
-            // --- EXEMPTION LOGIC ---
-            const isSingleFaculty = singleFacultyDepts.has(s.dept);
-
-            // 1. Adjacent Day Rule (Applies to ALL, logic: Skip if adjacent)
-            if (adjacentAssigned.has(s.email)) return null;
-
-            // 2. Dept Saturation (Skip if > 50%, UNLESS Single Faculty)
-            const dTotal = deptCounts[s.dept] || 0;
-            if (!isSingleFaculty && dTotal > 1) {
-                const dAssigned = slotDeptCounts[s.dept] || 0;
-                if (dAssigned >= Math.ceil(dTotal * 0.5)) return null;
-            }
-
-            let score = s.pending * 100;
-            let warnings = [];
-
-            // Weekly Soft Limit
-            if (s.weeklyLoad[currentWeekKey] >= 3) {
-                score -= 5000;
-                warnings.push("Max 3/wk");
-            }
-
-            return { staff: s, score, warnings };
-        }).filter(c => c !== null);
-
-        // Sort: Highest Pending First
-        candidates.sort((a, b) => b.score - a.score);
-
-        // Take Top candidates
-        const toAssign = candidates.slice(0, needed);
-
-        toAssign.forEach(choice => {
-            slot.assigned.push(choice.staff.email);
-            choice.staff.pending--;
-            if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
-            choice.staff.weeklyLoad[currentWeekKey]++;
-
-            slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
-            assignedCount++;
-        });
-    }
-
-    // 5. Logging
-    if (assignedCount > 0) {
-        logActivity("Global Auto-Assign", `Admin ran session-based auto-assign. Filled ${assignedCount} slots.`);
-    }
-
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-
-    // --- NEW: Bulk Reserve Notification Check ---
-    const allReserves = [];
-    // Collect reserves from assigned slots
-    targetSlots.forEach(t => {
-        const r = getSlotReserves(t.key);
-        if (r.length > 0) {
-            allReserves.push({ key: t.key, reserves: r });
-        }
-    });
-
-    if (allReserves.length > 0) {
-        const totalR = allReserves.reduce((acc, curr) => acc + curr.reserves.length, 0);
-        if (confirm(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.\n\n⚠️ Reserves Identified: ${totalR} staff across ${allReserves.length} sessions.\n\nNotify them via Email?`)) {
-            updateSyncStatus("Sending Alerts...", "neutral");
-            let sentCount = 0;
-            for (const item of allReserves) {
-                for (const staff of item.reserves) {
-                    try {
-                        await sendSingleEmail(null, staff.email, staff.name, "Reserve Duty Alert", `You are on RESERVE duty for ${item.key}. Please be available.`);
-                        sentCount++;
-                    } catch (e) { }
-                }
+            updateSyncStatus("Sending...", "neutral");
+            // Email Logic Reuse
+            let sent = 0;
+            for (const r of reserves) {
+                try {
+                    await sendSingleEmail(null, r.email, r.name, "Reserve Duty Alert", `You are on RESERVE duty for ${key}. Please be available.`);
+                    sent++;
+                } catch (e) { }
             }
             updateSyncStatus("Done", "success");
-            alert(`Sent ${sentCount} reserve notifications.`);
+            alert(`Sent ${sent} notifications.`);
         }
-    } else {
-        alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
-    }
-}
-//-------------------
 
-window.saveNewStaff = async function () {
-    const indexStr = document.getElementById('stf-edit-index').value;
-    const isEditMode = (indexStr !== "");
-    const index = isEditMode ? parseInt(indexStr) : -1;
+        // --- REFINED AUTO-ALLOCATION (Session-Based Reserves) ---
+        window.runAutoAllocation = async function () {
+            if (!confirm("⚡ Run SESSION-BASED Auto-Assignment?\n\nThis will fill slots to REQUIRED + 10% (Reserves).\n\nRules:\n1. Highest Pending First.\n2. Exclude Adjacent Days (Rules applied to EVERYONE).\n3. Dept Saturation (Exempt Single Faculty).\n\nAssign?")) return;
 
-    const name = document.getElementById('stf-name').value.trim();
-    const email = document.getElementById('stf-email').value.trim();
-    const phone = document.getElementById('stf-phone').value.trim();
-    const dept = document.getElementById('stf-dept').value;
-    const designation = document.getElementById('stf-designation').value;
-    const date = document.getElementById('stf-join').value;
-
-    // --- LOGIC: Available Days ---
-    let availableDays = [1, 2, 3, 4, 5, 6]; // Default: Full Availability
-
-    if (designation === "Guest Lecturer") {
-        // Only respect checkboxes for Guest Faculty
-        availableDays = Array.from(document.querySelectorAll('.stf-day-chk:checked')).map(c => parseInt(c.value));
-    }
-    // -----------------------------
-
-    if (!name || !email) return alert("Name and Email are required.");
-
-    if (isEditMode) {
-        // --- UPDATE EXISTING STAFF ---
-        const oldData = staffData[index];
-        const oldEmail = oldData.email;
-
-        // 1. FULL EMAIL MIGRATION LOGIC
-        if (oldEmail !== email) {
-            if (staffData.some(s => s.email === email && s !== oldData)) {
-                return alert("This email is already used by another staff member.");
-            }
-            if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
-
-            await removeStaffAccess(oldEmail);
-            await addStaffAccess(email);
-
-            // Deep Find & Replace in Slots (Migration)
-            let slotsChanged = false;
+            // 1. Identify Target Slots
+            const targetSlots = [];
             Object.keys(invigilationSlots).forEach(key => {
                 const slot = invigilationSlots[key];
-                if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.supervision) { if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; } if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; } }
-                if (slot.unavailable) {
-                    let unavChanged = false;
-                    slot.unavailable = slot.unavailable.map(u => {
-                        if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
-                        if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
-                        return u;
-                    });
-                    if (unavChanged) slotsChanged = true;
+                if (!slot.isLocked) {
+                    targetSlots.push({ key, date: parseDate(key), slot });
                 }
             });
-            if (slotsChanged) await syncSlotsToCloud();
 
-            // Migrate Advance Unavailability
-            let advanceChanged = false;
-            Object.keys(advanceUnavailability).forEach(dateKey => {
-                ['FN', 'AN'].forEach(sess => {
-                    if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
-                        advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
-                            if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
-                            return u;
-                        });
+            if (targetSlots.length === 0) return alert("No unlocked slots found.");
+
+            targetSlots.sort((a, b) => a.date - b.date);
+
+            // 2. Prepare Staff Stats
+            const deptCounts = {};
+            const singleFacultyDepts = new Set();
+
+            // First Pass: Count Depts
+            staffData.forEach(s => {
+                if (s.status !== 'archived') {
+                    deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+                }
+            });
+
+            Object.keys(deptCounts).forEach(d => {
+                if (deptCounts[d] === 1) singleFacultyDepts.add(d);
+            });
+
+            let eligibleStaff = staffData.map(s => ({
+                ...s,
+                pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+                weeklyLoad: {}
+            }));
+
+            // Pre-fill existing assignment load
+            Object.keys(invigilationSlots).forEach(k => {
+                const d = parseDate(k);
+                const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(d);
+                const weekKey = `${mStr}-${wNum}`;
+
+                invigilationSlots[k].assigned.forEach(email => {
+                    const s = eligibleStaff.find(st => st.email === email);
+                    if (s) {
+                        if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
+                        s.weeklyLoad[weekKey]++;
                     }
                 });
             });
-            if (advanceChanged) await saveAdvanceUnavailability();
+
+            let assignedCount = 0;
+            const logEntries = [];
+
+            // 3. Process Slots
+            for (const target of targetSlots) {
+                const { key, date, slot } = target;
+
+                // TARGET: Required + 10%
+                const targetCount = Math.ceil(slot.required * 1.10);
+                const needed = targetCount - slot.assigned.length;
+
+                if (needed <= 0) continue;
+
+                const currentWeekKey = `${date.toLocaleString('default', { month: 'long', year: 'numeric' })}-${getWeekOfMonth(date)}`;
+
+                // Context for Adjacent Rule (Global Check)
+                const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
+                const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
+
+                const prevKeyStart = `${prevDate.getDate().toString().padStart(2, '0')}.${(prevDate.getMonth() + 1).toString().padStart(2, '0')}.${prevDate.getFullYear()}`;
+                const nextKeyStart = `${nextDate.getDate().toString().padStart(2, '0')}.${(nextDate.getMonth() + 1).toString().padStart(2, '0')}.${nextDate.getFullYear()}`;
+
+                // Lookup adjacent assignments
+                const adjacentAssigned = new Set();
+                Object.keys(invigilationSlots).forEach(k => {
+                    if (k.startsWith(prevKeyStart) || k.startsWith(nextKeyStart)) {
+                        invigilationSlots[k].assigned.forEach(e => adjacentAssigned.add(e));
+                    }
+                });
+
+                // Dept Context
+                const slotDeptCounts = {};
+                slot.assigned.forEach(email => {
+                    const s = staffData.find(st => st.email === email);
+                    if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
+                });
+
+                // Score Candidates
+                const candidates = eligibleStaff.map(s => {
+                    if (s.status === 'archived') return null;
+                    if (slot.assigned.includes(s.email)) return null;
+                    if (isUserUnavailable(slot, s.email, key)) return null;
+
+                    // --- EXEMPTION LOGIC ---
+                    const isSingleFaculty = singleFacultyDepts.has(s.dept);
+
+                    // 1. Adjacent Day Rule (Applies to ALL, logic: Skip if adjacent)
+                    if (adjacentAssigned.has(s.email)) return null;
+
+                    // 2. Dept Saturation (Skip if > 50%, UNLESS Single Faculty)
+                    const dTotal = deptCounts[s.dept] || 0;
+                    if (!isSingleFaculty && dTotal > 1) {
+                        const dAssigned = slotDeptCounts[s.dept] || 0;
+                        if (dAssigned >= Math.ceil(dTotal * 0.5)) return null;
+                    }
+
+                    let score = s.pending * 100;
+                    let warnings = [];
+
+                    // Weekly Soft Limit
+                    if (s.weeklyLoad[currentWeekKey] >= 3) {
+                        score -= 5000;
+                        warnings.push("Max 3/wk");
+                    }
+
+                    return { staff: s, score, warnings };
+                }).filter(c => c !== null);
+
+                // Sort: Highest Pending First
+                candidates.sort((a, b) => b.score - a.score);
+
+                // Take Top candidates
+                const toAssign = candidates.slice(0, needed);
+
+                toAssign.forEach(choice => {
+                    slot.assigned.push(choice.staff.email);
+                    choice.staff.pending--;
+                    if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
+                    choice.staff.weeklyLoad[currentWeekKey]++;
+
+                    slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+                    assignedCount++;
+                });
+            }
+
+            // 5. Logging
+            if (assignedCount > 0) {
+                logActivity("Global Auto-Assign", `Admin ran session-based auto-assign. Filled ${assignedCount} slots.`);
+            }
+
+            await syncSlotsToCloud();
+            renderSlotsGridAdmin();
+
+            // --- NEW: Bulk Reserve Notification Check ---
+            const allReserves = [];
+            // Collect reserves from assigned slots
+            targetSlots.forEach(t => {
+                const r = getSlotReserves(t.key);
+                if (r.length > 0) {
+                    allReserves.push({ key: t.key, reserves: r });
+                }
+            });
+
+            if (allReserves.length > 0) {
+                const totalR = allReserves.reduce((acc, curr) => acc + curr.reserves.length, 0);
+                if (confirm(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.\n\n⚠️ Reserves Identified: ${totalR} staff across ${allReserves.length} sessions.\n\nNotify them via Email?`)) {
+                    updateSyncStatus("Sending Alerts...", "neutral");
+                    let sentCount = 0;
+                    for (const item of allReserves) {
+                        for (const staff of item.reserves) {
+                            try {
+                                await sendSingleEmail(null, staff.email, staff.name, "Reserve Duty Alert", `You are on RESERVE duty for ${item.key}. Please be available.`);
+                                sentCount++;
+                            } catch (e) { }
+                        }
+                    }
+                    updateSyncStatus("Done", "success");
+                    alert(`Sent ${sentCount} reserve notifications.`);
+                }
+            } else {
+                alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
+            }
+        }
+        //-------------------
+
+        window.saveNewStaff = async function () {
+            const indexStr = document.getElementById('stf-edit-index').value;
+            const isEditMode = (indexStr !== "");
+            const index = isEditMode ? parseInt(indexStr) : -1;
+
+            const name = document.getElementById('stf-name').value.trim();
+            const email = document.getElementById('stf-email').value.trim();
+            const phone = document.getElementById('stf-phone').value.trim();
+            const dept = document.getElementById('stf-dept').value;
+            const designation = document.getElementById('stf-designation').value;
+            const date = document.getElementById('stf-join').value;
+
+            // --- LOGIC: Available Days ---
+            let availableDays = [1, 2, 3, 4, 5, 6]; // Default: Full Availability
+
+            if (designation === "Guest Lecturer") {
+                // Only respect checkboxes for Guest Faculty
+                availableDays = Array.from(document.querySelectorAll('.stf-day-chk:checked')).map(c => parseInt(c.value));
+            }
+            // -----------------------------
+
+            if (!name || !email) return alert("Name and Email are required.");
+
+            if (isEditMode) {
+                // --- UPDATE EXISTING STAFF ---
+                const oldData = staffData[index];
+                const oldEmail = oldData.email;
+
+                // 1. FULL EMAIL MIGRATION LOGIC
+                if (oldEmail !== email) {
+                    if (staffData.some(s => s.email === email && s !== oldData)) {
+                        return alert("This email is already used by another staff member.");
+                    }
+                    if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
+
+                    await removeStaffAccess(oldEmail);
+                    await addStaffAccess(email);
+
+                    // Deep Find & Replace in Slots (Migration)
+                    let slotsChanged = false;
+                    Object.keys(invigilationSlots).forEach(key => {
+                        const slot = invigilationSlots[key];
+                        if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                        if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                        if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                        if (slot.supervision) { if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; } if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; } }
+                        if (slot.unavailable) {
+                            let unavChanged = false;
+                            slot.unavailable = slot.unavailable.map(u => {
+                                if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
+                                if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
+                                return u;
+                            });
+                            if (unavChanged) slotsChanged = true;
+                        }
+                    });
+                    if (slotsChanged) await syncSlotsToCloud();
+
+                    // Migrate Advance Unavailability
+                    let advanceChanged = false;
+                    Object.keys(advanceUnavailability).forEach(dateKey => {
+                        ['FN', 'AN'].forEach(sess => {
+                            if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
+                                advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
+                                    if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
+                                    return u;
+                                });
+                            }
+                        });
+                    });
+                    if (advanceChanged) await saveAdvanceUnavailability();
+                }
+
+                // 2. Update Local Array
+                staffData[index] = {
+                    ...oldData,
+                    name, email, phone, dept, designation, joiningDate: date,
+                    preferredDays: availableDays // <--- SAVED HERE
+                };
+                alert("Staff profile updated successfully.");
+
+            } else {
+                // --- ADD NEW STAFF ---
+                if (staffData.some(s => s.email === email)) return alert("Staff with this email already exists.");
+
+                const newObj = {
+                    name, email, phone, dept, designation, joiningDate: date,
+                    dutiesDone: 0, roleHistory: [],
+                    preferredDays: availableDays
+                };
+                staffData.push(newObj);
+                await addStaffAccess(email);
+                alert("New staff added successfully.");
+            }
+
+            await syncStaffToCloud();
+            window.closeModal('add-staff-modal');
+
+            if (!isAdmin) window.location.reload();
+            else {
+                renderStaffTable();
+                updateAdminUI();
+            }
         }
 
-        // 2. Update Local Array
-        staffData[index] = {
-            ...oldData,
-            name, email, phone, dept, designation, joiningDate: date,
-            preferredDays: availableDays // <--- SAVED HERE
-        };
-        alert("Staff profile updated successfully.");
-
-    } else {
-        // --- ADD NEW STAFF ---
-        if (staffData.some(s => s.email === email)) return alert("Staff with this email already exists.");
-
-        const newObj = {
-            name, email, phone, dept, designation, joiningDate: date,
-            dutiesDone: 0, roleHistory: [],
-            preferredDays: availableDays
-        };
-        staffData.push(newObj);
-        await addStaffAccess(email);
-        alert("New staff added successfully.");
-    }
-
-    await syncStaffToCloud();
-    window.closeModal('add-staff-modal');
-
-    if (!isAdmin) window.location.reload();
-    else {
-        renderStaffTable();
-        updateAdminUI();
-    }
-}
 
 
 
 
+        window.deleteStaff = async function (index) {
+            const staff = staffData[index];
+            if (!staff) return;
 
-window.deleteStaff = async function (index) {
-    const staff = staffData[index];
-    if (!staff) return;
+            if (confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
+                // Soft Delete
+                staffData[index].status = 'archived';
+                await syncStaffToCloud();
+                await removeStaffAccess(staff.email); // Optional: Block login
+                renderStaffTable();
+                alert("Staff archived successfully.");
+            }
+        }
+        window.openRoleAssignmentModal = function (index) {
+            const staff = staffData[index];
+            const modal = document.getElementById('role-assignment-modal');
+            document.getElementById('role-assign-name').textContent = staff.name;
+            document.getElementById('role-assign-index').value = index;
+            const select = document.getElementById('assign-role-select');
+            select.innerHTML = Object.keys(rolesConfig).map(r => `<option value="${r}">${r}</option>`).join('');
+            const hist = document.getElementById('role-history-list');
+            hist.innerHTML = (staff.roleHistory || []).map((h, i) => `<div class="flex justify-between text-xs p-1 bg-gray-50 mb-1"><span>${h.role}</span> <button onclick="removeRoleFromStaff(${index},${i})" class="text-red-500">&times;</button></div>`).join('');
+            modal.classList.remove('hidden');
+        }
 
-    if (confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
-        // Soft Delete
-        staffData[index].status = 'archived';
-        await syncStaffToCloud();
-        await removeStaffAccess(staff.email); // Optional: Block login
-        renderStaffTable();
-        alert("Staff archived successfully.");
-    }
-}
-window.openRoleAssignmentModal = function (index) {
-    const staff = staffData[index];
-    const modal = document.getElementById('role-assignment-modal');
-    document.getElementById('role-assign-name').textContent = staff.name;
-    document.getElementById('role-assign-index').value = index;
-    const select = document.getElementById('assign-role-select');
-    select.innerHTML = Object.keys(rolesConfig).map(r => `<option value="${r}">${r}</option>`).join('');
-    const hist = document.getElementById('role-history-list');
-    hist.innerHTML = (staff.roleHistory || []).map((h, i) => `<div class="flex justify-between text-xs p-1 bg-gray-50 mb-1"><span>${h.role}</span> <button onclick="removeRoleFromStaff(${index},${i})" class="text-red-500">&times;</button></div>`).join('');
-    modal.classList.remove('hidden');
-}
+        window.saveRoleAssignment = async function () {
+            const idx = document.getElementById('role-assign-index').value;
+            const role = document.getElementById('assign-role-select').value;
+            const start = document.getElementById('assign-start-date').value;
+            const end = document.getElementById('assign-end-date').value;
+            if (!start) return alert("Dates required");
+            if (!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
+            staffData[idx].roleHistory.push({ role, start, end });
+            await syncStaffToCloud();
+            window.closeModal('role-assignment-modal');
+            renderStaffTable();
+        }
 
-window.saveRoleAssignment = async function () {
-    const idx = document.getElementById('role-assign-index').value;
-    const role = document.getElementById('assign-role-select').value;
-    const start = document.getElementById('assign-start-date').value;
-    const end = document.getElementById('assign-end-date').value;
-    if (!start) return alert("Dates required");
-    if (!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
-    staffData[idx].roleHistory.push({ role, start, end });
-    await syncStaffToCloud();
-    window.closeModal('role-assignment-modal');
-    renderStaffTable();
-}
-
-window.removeRoleFromStaff = async function (sIdx, rIdx) {
-    staffData[sIdx].roleHistory.splice(rIdx, 1);
-    await syncStaffToCloud();
-    window.closeModal('role-assignment-modal');
-    renderStaffTable();
-}
-
+        window.removeRoleFromStaff = async function (sIdx, rIdx) {
+            staffData[sIdx].roleHistory.splice(rIdx, 1);
+            await syncStaffToCloud();
+            window.closeModal('role-assignment-modal');
+            renderStaffTable();
+        }
 
 
-window.openInconvenienceModal = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || !slot.unavailable) return;
-    document.getElementById('inconvenience-modal-subtitle').textContent = key;
-    const list = document.getElementById('inconvenience-list');
-    list.innerHTML = '';
 
-    slot.unavailable.forEach(u => {
-        const email = (typeof u === 'string') ? u : u.email;
-        const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
-        const details = (typeof u === 'object' && u.details) ? u.details : "No details.";
-        const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
+        window.openInconvenienceModal = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || !slot.unavailable) return;
+            document.getElementById('inconvenience-modal-subtitle').textContent = key;
+            const list = document.getElementById('inconvenience-list');
+            list.innerHTML = '';
 
-        // Fix Phone Format
-        let phone = s.phone ? s.phone.replace(/\D/g, '') : "";
-        if (phone.length === 10) phone = "91" + phone;
-        const hasPhone = phone.length >= 10;
+            slot.unavailable.forEach(u => {
+                const email = (typeof u === 'string') ? u : u.email;
+                const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
+                const details = (typeof u === 'object' && u.details) ? u.details : "No details.";
+                const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
 
-        list.innerHTML += `<div class="bg-red-50 border border-red-100 p-3 rounded-lg"><div class="flex justify-between items-start mb-1"><div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div><span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span></div><div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div><div class="text-right">${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}</div></div>`;
-    });
-    window.openModal('inconvenience-modal');
-}
+                // Fix Phone Format
+                let phone = s.phone ? s.phone.replace(/\D/g, '') : "";
+                if (phone.length === 10) phone = "91" + phone;
+                const hasPhone = phone.length >= 10;
 
-// --- MISSING HELPER FUNCTIONS ---
+                list.innerHTML += `<div class="bg-red-50 border border-red-100 p-3 rounded-lg"><div class="flex justify-between items-start mb-1"><div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div><span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span></div><div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div><div class="text-right">${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}</div></div>`;
+            });
+            window.openModal('inconvenience-modal');
+        }
 
-// 0. Modal Helpers (Restored)
-window.openModal = function (id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('hidden');
-    else console.error("Modal not found:", id);
-}
+        // --- MISSING HELPER FUNCTIONS ---
 
-window.closeModal = function (id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
-}
+        // 0. Modal Helpers (Restored)
+        window.openModal = function (id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('hidden');
+            else console.error("Modal not found:", id);
+        }
 
-// 1. Get Name from Email (Fixes your console error)
-function getNameFromEmail(email) {
-    if (!staffData || staffData.length === 0) return email.split('@')[0];
-    const s = staffData.find(st => st.email === email);
-    return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
-}
+        window.closeModal = function (id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        }
 
-// 2. Calculate Academic Year (Needed for stats)
-function getCurrentAcademicYear() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-11
+        // 1. Get Name from Email (Fixes your console error)
+        function getNameFromEmail(email) {
+            if (!staffData || staffData.length === 0) return email.split('@')[0];
+            const s = staffData.find(st => st.email === email);
+            return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
+        }
 
-    // Academic Year starts June 1st (Month 5)
-    // If we are in Jan-May (0-4), the AY started in the previous year.
-    const startYear = (month < 5) ? year - 1 : year;
+        // 2. Calculate Academic Year (Needed for stats)
+        function getCurrentAcademicYear() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth(); // 0-11
 
-    return {
-        label: `${startYear}-${startYear + 1}`,
-        start: new Date(startYear, 5, 1), // June 1st
-        end: new Date(startYear + 1, 4, 31) // May 31st
-    };
-}
-// --- ROLE EDITOR FUNCTIONS ---
-window.openRoleConfigModal = function () {
-    // 1. Reset ALL Locks
-    isRoleLocked = true;
-    isDeptLocked = true;
-    isEmailConfigLocked = true;
-    isGlobalTargetLocked = true; // <--- NEW
+            // Academic Year starts June 1st (Month 5)
+            // If we are in Jan-May (0-4), the AY started in the previous year.
+            const startYear = (month < 5) ? year - 1 : year;
 
-    // 2. Update UI for Locks
-    updateLockIcon('role-lock-btn', true);
-    updateLockIcon('dept-lock-btn', true);
-    updateLockIcon('email-config-lock-btn', true);
-    updateLockIcon('global-target-lock-btn', true); // <--- NEW
+            return {
+                label: `${startYear}-${startYear + 1}`,
+                start: new Date(startYear, 5, 1), // June 1st
+                end: new Date(startYear + 1, 4, 31) // May 31st
+            };
+        }
+        // --- ROLE EDITOR FUNCTIONS ---
+        window.openRoleConfigModal = function () {
+            // 1. Reset ALL Locks
+            isRoleLocked = true;
+            isDeptLocked = true;
+            isEmailConfigLocked = true;
+            isGlobalTargetLocked = true; // <--- NEW
 
-    toggleInputVisibility('role-input-row', true);
-    toggleInputVisibility('dept-input-row', true);
+            // 2. Update UI for Locks
+            updateLockIcon('role-lock-btn', true);
+            updateLockIcon('dept-lock-btn', true);
+            updateLockIcon('email-config-lock-btn', true);
+            updateLockIcon('global-target-lock-btn', true); // <--- NEW
 
-    // 3. Configure Inputs (Locked by default)
-    const urlInput = document.getElementById('google-script-url');
-    if (urlInput) { urlInput.value = googleScriptUrl; urlInput.disabled = true; }
+            toggleInputVisibility('role-input-row', true);
+            toggleInputVisibility('dept-input-row', true);
 
-    const targetInput = document.getElementById('global-duty-target');
-    if (targetInput) {
-        targetInput.value = globalDutyTarget;
-        targetInput.disabled = true;
-    }
+            // 3. Configure Inputs (Locked by default)
+            const urlInput = document.getElementById('google-script-url');
+            if (urlInput) { urlInput.value = googleScriptUrl; urlInput.disabled = true; }
 
-    const guestInput = document.getElementById('guest-duty-target');
-    if (guestInput) {
-        guestInput.value = guestGlobalTarget;
-        guestInput.disabled = true;
-    }
+            const targetInput = document.getElementById('global-duty-target');
+            if (targetInput) {
+                targetInput.value = globalDutyTarget;
+                targetInput.disabled = true;
+            }
 
-    // 4. Render Lists
-    renderRolesList();
-    if (typeof renderDepartmentsList === "function") renderDepartmentsList();
+            const guestInput = document.getElementById('guest-duty-target');
+            if (guestInput) {
+                guestInput.value = guestGlobalTarget;
+                guestInput.disabled = true;
+            }
 
-    window.openModal('role-config-modal');
-}
+            // 4. Render Lists
+            renderRolesList();
+            if (typeof renderDepartmentsList === "function") renderDepartmentsList();
 
-function renderRolesList() {
-    const container = document.getElementById('roles-list-container');
-    if (!container) return;
+            window.openModal('role-config-modal');
+        }
 
-    container.innerHTML = '';
-    const sortedRoles = Object.entries(rolesConfig).sort((a, b) => a[0].localeCompare(b[0]));
+        function renderRolesList() {
+            const container = document.getElementById('roles-list-container');
+            if (!container) return;
 
-    if (sortedRoles.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-xs text-center py-2">No custom roles defined.</p>';
-        return;
-    }
+            container.innerHTML = '';
+            const sortedRoles = Object.entries(rolesConfig).sort((a, b) => a[0].localeCompare(b[0]));
 
-    sortedRoles.forEach(([role, target]) => {
-        // Check if this is a Protected System Role
-        const isSystemRole = SYSTEM_ROLES.includes(role);
+            if (sortedRoles.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-xs text-center py-2">No custom roles defined.</p>';
+                return;
+            }
 
-        let actionButtons = '';
+            sortedRoles.forEach(([role, target]) => {
+                // Check if this is a Protected System Role
+                const isSystemRole = SYSTEM_ROLES.includes(role);
 
-        if (!isRoleLocked) {
-            // If System Role -> Hide Delete Button
-            const deleteBtn = isSystemRole
-                ? `<span class="text-gray-300 text-[10px] cursor-not-allowed px-1.5" title="System Default">🚫</span>`
-                : `<button onclick="deleteRoleConfig('${role}')" class="text-red-500 hover:text-red-700 font-bold px-1.5">&times;</button>`;
+                let actionButtons = '';
 
-            actionButtons = `
+                if (!isRoleLocked) {
+                    // If System Role -> Hide Delete Button
+                    const deleteBtn = isSystemRole
+                        ? `<span class="text-gray-300 text-[10px] cursor-not-allowed px-1.5" title="System Default">🚫</span>`
+                        : `<button onclick="deleteRoleConfig('${role}')" class="text-red-500 hover:text-red-700 font-bold px-1.5">&times;</button>`;
+
+                    actionButtons = `
                 <div class="flex items-center gap-2">
                     <button onclick="editRoleConfig('${role}', ${target})" class="text-indigo-600 hover:text-indigo-900 text-[10px] font-bold bg-indigo-50 px-2 py-0.5 rounded">✎</button>
                     ${deleteBtn}
                 </div>`;
-        }
+                }
 
-        const tag = isSystemRole ? `<span class="ml-1 text-[8px] bg-gray-100 text-gray-500 px-1 rounded border">Sys</span>` : "";
+                const tag = isSystemRole ? `<span class="ml-1 text-[8px] bg-gray-100 text-gray-500 px-1 rounded border">Sys</span>` : "";
 
-        container.innerHTML += `
+                container.innerHTML += `
             <div class="flex justify-between items-center text-xs bg-white p-2 rounded border mb-1 border-gray-100">
                 <span class="font-bold text-gray-700 flex items-center">${role} ${tag}</span>
                 <div class="flex items-center gap-3">
@@ -2694,284 +2595,284 @@ function renderRolesList() {
                     ${actionButtons}
                 </div>
             </div>`;
-    });
-}
+            });
+        }
 
-window.addNewRoleConfig = function () {
-    const name = document.getElementById('new-role-name').value.trim();
-    const target = parseInt(document.getElementById('new-role-target').value);
+        window.addNewRoleConfig = function () {
+            const name = document.getElementById('new-role-name').value.trim();
+            const target = parseInt(document.getElementById('new-role-target').value);
 
-    if (!name) return alert("Enter a Role Name");
-    if (isNaN(target)) return alert("Enter a Target Number");
+            if (!name) return alert("Enter a Role Name");
+            if (isNaN(target)) return alert("Enter a Target Number");
 
-    rolesConfig[name] = target;
-    renderRolesList();
+            rolesConfig[name] = target;
+            renderRolesList();
 
-    document.getElementById('new-role-name').value = '';
-    document.getElementById('new-role-target').value = '';
-}
+            document.getElementById('new-role-name').value = '';
+            document.getElementById('new-role-target').value = '';
+        }
 
-window.editRoleConfig = function (role, currentTarget) {
-    const newTarget = prompt(`Update monthly duty target for "${role}":`, currentTarget);
+        window.editRoleConfig = function (role, currentTarget) {
+            const newTarget = prompt(`Update monthly duty target for "${role}":`, currentTarget);
 
-    if (newTarget === null) return; // Cancelled
+            if (newTarget === null) return; // Cancelled
 
-    const targetNum = parseInt(newTarget);
-    if (isNaN(targetNum) || targetNum < 0) {
-        alert("Please enter a valid number (0 or greater).");
-        return;
-    }
+            const targetNum = parseInt(newTarget);
+            if (isNaN(targetNum) || targetNum < 0) {
+                alert("Please enter a valid number (0 or greater).");
+                return;
+            }
 
-    // Update Config
-    rolesConfig[role] = targetNum;
+            // Update Config
+            rolesConfig[role] = targetNum;
 
-    // Refresh List
-    renderRolesList();
-}
+            // Refresh List
+            renderRolesList();
+        }
 
-window.deleteRoleConfig = function (role) {
-    if (SYSTEM_ROLES.includes(role)) {
-        return alert("⚠️ Cannot delete System Default roles (CS, SAS, Principal).");
-    }
-    if (confirm(`Delete role "${role}"? This will affect calculations for staff assigned this role.`)) {
-        delete rolesConfig[role];
-        renderRolesList();
-    }
-}
+        window.deleteRoleConfig = function (role) {
+            if (SYSTEM_ROLES.includes(role)) {
+                return alert("⚠️ Cannot delete System Default roles (CS, SAS, Principal).");
+            }
+            if (confirm(`Delete role "${role}"? This will affect calculations for staff assigned this role.`)) {
+                delete rolesConfig[role];
+                renderRolesList();
+            }
+        }
 
-window.saveRoleConfig = async function () {
-    const newGlobal = parseInt(document.getElementById('global-duty-target').value);
-    const newGuest = parseInt(document.getElementById('guest-duty-target').value);
+        window.saveRoleConfig = async function () {
+            const newGlobal = parseInt(document.getElementById('global-duty-target').value);
+            const newGuest = parseInt(document.getElementById('guest-duty-target').value);
 
-    if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
-    if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
+            if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
+            if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
 
-    globalDutyTarget = newGlobal;
-    guestGlobalTarget = newGuest;
+            globalDutyTarget = newGlobal;
+            guestGlobalTarget = newGuest;
 
-    // CAPTURE URL
-    const newUrl = document.getElementById('google-script-url').value.trim();
-    googleScriptUrl = newUrl;
+            // CAPTURE URL
+            const newUrl = document.getElementById('google-script-url').value.trim();
+            googleScriptUrl = newUrl;
 
-    // Save to Cloud
-    const ref = doc(db, "colleges", currentCollegeId);
-    await updateDoc(ref, {
-        invigRoles: JSON.stringify(rolesConfig),
-        invigDepartments: JSON.stringify(departmentsConfig),
-        invigGlobalTarget: globalDutyTarget,
-        invigGuestTarget: guestGlobalTarget, // <--- SAVED HERE
-        invigGoogleScriptUrl: googleScriptUrl
-    });
+            // Save to Cloud
+            const ref = doc(db, "colleges", currentCollegeId);
+            await updateDoc(ref, {
+                invigRoles: JSON.stringify(rolesConfig),
+                invigDepartments: JSON.stringify(departmentsConfig),
+                invigGlobalTarget: globalDutyTarget,
+                invigGuestTarget: guestGlobalTarget, // <--- SAVED HERE
+                invigGoogleScriptUrl: googleScriptUrl
+            });
 
-    window.closeModal('role-config-modal');
-    updateAdminUI();
-}
+            window.closeModal('role-config-modal');
+            updateAdminUI();
+        }
 
-// --- NEW: Open Norms Modal (Shows Roles & Global Target) ---
-window.openDutyNormsModal = function () {
-    // 1. Set Global Target
-    const globalTargetEl = document.getElementById('ref-global-target');
-    if (globalTargetEl) globalTargetEl.textContent = globalDutyTarget; // e.g. "2"
+        // --- NEW: Open Norms Modal (Shows Roles & Global Target) ---
+        window.openDutyNormsModal = function () {
+            // 1. Set Global Target
+            const globalTargetEl = document.getElementById('ref-global-target');
+            if (globalTargetEl) globalTargetEl.textContent = globalDutyTarget; // e.g. "2"
 
-    // 2. List Special Roles (Warden, VP, etc.)
-    const container = document.getElementById('ref-roles-list');
-    if (!container) return;
+            // 2. List Special Roles (Warden, VP, etc.)
+            const container = document.getElementById('ref-roles-list');
+            if (!container) return;
 
-    container.innerHTML = '';
+            container.innerHTML = '';
 
-    if (Object.keys(rolesConfig).length === 0) {
-        container.innerHTML = '<p class="text-gray-400 italic text-xs text-center py-2">No special roles defined.</p>';
-    } else {
-        // Sort alphabetically
-        const sortedRoles = Object.entries(rolesConfig).sort((a, b) => a[0].localeCompare(b[0]));
+            if (Object.keys(rolesConfig).length === 0) {
+                container.innerHTML = '<p class="text-gray-400 italic text-xs text-center py-2">No special roles defined.</p>';
+            } else {
+                // Sort alphabetically
+                const sortedRoles = Object.entries(rolesConfig).sort((a, b) => a[0].localeCompare(b[0]));
 
-        sortedRoles.forEach(([role, target]) => {
-            // Highlight exemptions (0 target)
-            const isExempt = target === 0;
-            const bgClass = isExempt ? "bg-green-50 border-green-100" : "bg-white border-gray-100";
-            const textClass = isExempt ? "text-green-700" : "text-gray-700";
-            const countDisplay = isExempt ? "EXEMPT" : `<b>${target}</b> / mo`;
+                sortedRoles.forEach(([role, target]) => {
+                    // Highlight exemptions (0 target)
+                    const isExempt = target === 0;
+                    const bgClass = isExempt ? "bg-green-50 border-green-100" : "bg-white border-gray-100";
+                    const textClass = isExempt ? "text-green-700" : "text-gray-700";
+                    const countDisplay = isExempt ? "EXEMPT" : `<b>${target}</b> / mo`;
 
-            container.innerHTML += `
+                    container.innerHTML += `
                 <div class="flex justify-between items-center text-xs p-2.5 rounded border ${bgClass} mb-1.5">
                     <span class="${textClass} font-bold">${role}</span>
                     <span class="text-gray-600 ${isExempt ? 'font-bold text-green-600 text-[10px]' : ''}">${countDisplay}</span>
                 </div>
             `;
-        });
-    }
+                });
+            }
 
-    window.openModal('norms-modal');
-}
-
-// --- ATTENDANCE MARKING LOGIC ---
-
-function populateAttendanceSessions() {
-    if (!ui.attSessionSelect) return;
-
-    // Sort Sessions: Latest Date/Time First (Descending)
-    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
-        const dateA = parseDate(a); // Uses the helper to get full Date object with time
-        const dateB = parseDate(b);
-        return dateB - dateA; // Descending (B - A)
-    });
-
-    ui.attSessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
-
-    sortedKeys.forEach(key => {
-        const slot = invigilationSlots[key];
-        // Add checkmark if attendance has been marked (array exists and not empty)
-        const mark = (slot.attendance && slot.attendance.length > 0) ? "✅ " : "";
-
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = `${mark}${key}`;
-        ui.attSessionSelect.appendChild(opt);
-    });
-}
-
-window.loadSessionAttendance = function () {
-    const key = ui.attSessionSelect.value;
-    if (!key) {
-        ui.attArea.classList.add('hidden');
-        ui.attPlaceholder.classList.remove('hidden');
-        return;
-    }
-
-    const slot = invigilationSlots[key];
-    const isLocked = slot.attendanceLocked || false;
-
-    ui.attArea.classList.remove('hidden');
-    ui.attPlaceholder.classList.add('hidden');
-    ui.attList.innerHTML = '';
-
-    // --- RESET SEARCH INPUTS ---
-    const inputs = ['att-substitute-search', 'att-cs-search', 'att-sas-search'];
-    inputs.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.value = "";
-            el.disabled = isLocked;
-            if (isLocked) el.classList.add('bg-gray-100', 'cursor-not-allowed');
-            else el.classList.remove('bg-gray-100', 'cursor-not-allowed');
+            window.openModal('norms-modal');
         }
-    });
 
-    // Clear Hidden IDs
-    document.getElementById('att-cs-email').value = "";
-    document.getElementById('att-sas-email').value = "";
-    currentSubstituteCandidate = null;
+        // --- ATTENDANCE MARKING LOGIC ---
 
-    // --- 1. SUPERVISION LOGIC (Robust & Date-Aware) ---
-    const sessionDate = parseDate(key);
-    const startOfDay = new Date(sessionDate); startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(sessionDate); endOfDay.setHours(23, 59, 59, 999);
+        function populateAttendanceSessions() {
+            if (!ui.attSessionSelect) return;
 
-    let defaultCS = "";
-    let defaultSAS = "";
-
-    // Helper for Role Matching
-    const isCS = (r) => { const s = r.toLowerCase().trim(); return s === "cs" || s.includes("chief"); };
-    const isSAS = (r) => { const s = r.toLowerCase().trim(); return s === "sas" || s.includes("senior"); };
-
-    staffData.forEach(s => {
-        if (s.roleHistory) {
-            const activeRole = s.roleHistory.find(r => {
-                const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
-                const rEnd = new Date(r.end); rEnd.setHours(23, 59, 59, 999);
-                return rStart <= endOfDay && rEnd >= startOfDay && (isCS(r.role) || isSAS(r.role));
+            // Sort Sessions: Latest Date/Time First (Descending)
+            const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
+                const dateA = parseDate(a); // Uses the helper to get full Date object with time
+                const dateB = parseDate(b);
+                return dateB - dateA; // Descending (B - A)
             });
 
-            if (activeRole) {
-                if (isCS(activeRole.role)) defaultCS = s.email;
-                if (isSAS(activeRole.role)) defaultSAS = s.email;
+            ui.attSessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
+
+            sortedKeys.forEach(key => {
+                const slot = invigilationSlots[key];
+                // Add checkmark if attendance has been marked (array exists and not empty)
+                const mark = (slot.attendance && slot.attendance.length > 0) ? "✅ " : "";
+
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${mark}${key}`;
+                ui.attSessionSelect.appendChild(opt);
+            });
+        }
+
+        window.loadSessionAttendance = function () {
+            const key = ui.attSessionSelect.value;
+            if (!key) {
+                ui.attArea.classList.add('hidden');
+                ui.attPlaceholder.classList.remove('hidden');
+                return;
             }
+
+            const slot = invigilationSlots[key];
+            const isLocked = slot.attendanceLocked || false;
+
+            ui.attArea.classList.remove('hidden');
+            ui.attPlaceholder.classList.add('hidden');
+            ui.attList.innerHTML = '';
+
+            // --- RESET SEARCH INPUTS ---
+            const inputs = ['att-substitute-search', 'att-cs-search', 'att-sas-search'];
+            inputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = "";
+                    el.disabled = isLocked;
+                    if (isLocked) el.classList.add('bg-gray-100', 'cursor-not-allowed');
+                    else el.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                }
+            });
+
+            // Clear Hidden IDs
+            document.getElementById('att-cs-email').value = "";
+            document.getElementById('att-sas-email').value = "";
+            currentSubstituteCandidate = null;
+
+            // --- 1. SUPERVISION LOGIC (Robust & Date-Aware) ---
+            const sessionDate = parseDate(key);
+            const startOfDay = new Date(sessionDate); startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(sessionDate); endOfDay.setHours(23, 59, 59, 999);
+
+            let defaultCS = "";
+            let defaultSAS = "";
+
+            // Helper for Role Matching
+            const isCS = (r) => { const s = r.toLowerCase().trim(); return s === "cs" || s.includes("chief"); };
+            const isSAS = (r) => { const s = r.toLowerCase().trim(); return s === "sas" || s.includes("senior"); };
+
+            staffData.forEach(s => {
+                if (s.roleHistory) {
+                    const activeRole = s.roleHistory.find(r => {
+                        const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
+                        const rEnd = new Date(r.end); rEnd.setHours(23, 59, 59, 999);
+                        return rStart <= endOfDay && rEnd >= startOfDay && (isCS(r.role) || isSAS(r.role));
+                    });
+
+                    if (activeRole) {
+                        if (isCS(activeRole.role)) defaultCS = s.email;
+                        if (isSAS(activeRole.role)) defaultSAS = s.email;
+                    }
+                }
+            });
+
+            const savedSup = slot.supervision || {};
+            const currentCS = savedSup.cs || defaultCS;
+            const currentSAS = savedSup.sas || defaultSAS;
+
+            // --- POPULATE SEARCH INPUTS ---
+            if (currentCS) {
+                const s = staffData.find(st => st.email === currentCS);
+                if (s) {
+                    document.getElementById('att-cs-search').value = s.name;
+                    document.getElementById('att-cs-email').value = s.email;
+                }
+            }
+            if (currentSAS) {
+                const s = staffData.find(st => st.email === currentSAS);
+                if (s) {
+                    document.getElementById('att-sas-search').value = s.name;
+                    document.getElementById('att-sas-email').value = s.email;
+                }
+            }
+
+            // --- 2. ATTENDANCE LIST ---
+            let presentSet = new Set(slot.attendance || slot.assigned || []);
+
+            // Auto-Mark CS/SAS as Present
+            if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
+            if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
+
+            presentSet.forEach(email => {
+                addAttendanceRow(email, isLocked);
+            });
+
+            // --- 3. LOCK STATE UI ---
+            const addBtn = document.getElementById('btn-att-add');
+            const saveBtn = document.getElementById('btn-att-save');
+            const lockBtn = document.getElementById('btn-att-lock');
+            const statusText = document.getElementById('att-lock-status');
+
+            if (isLocked) {
+                if (addBtn) { addBtn.disabled = true; addBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
+                if (saveBtn) {
+                    saveBtn.disabled = true;
+                    saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+                    saveBtn.innerHTML = `<span>✅ Saved & Locked</span>`;
+                }
+                if (lockBtn) {
+                    lockBtn.innerHTML = `<span>🔓</span> Unlock Register`;
+                    lockBtn.className = "bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded shadow-sm hover:bg-red-100 font-bold text-sm flex items-center gap-2 transition";
+                    lockBtn.onclick = () => window.toggleAttendanceLock(key, false);
+                }
+                if (statusText) statusText.textContent = "Attendance is finalized and locked.";
+            } else {
+                if (addBtn) { addBtn.disabled = false; addBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+                    saveBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Confirm & Update Counts`;
+                }
+                if (lockBtn) {
+                    lockBtn.innerHTML = `<span>🔒</span> Lock Register`;
+                    lockBtn.className = "bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-sm flex items-center gap-2 transition";
+                    lockBtn.onclick = () => window.toggleAttendanceLock(key, true);
+                }
+                if (statusText) statusText.textContent = "Editing allowed.";
+            }
+
+            updateAttCount();
         }
-    });
 
-    const savedSup = slot.supervision || {};
-    const currentCS = savedSup.cs || defaultCS;
-    const currentSAS = savedSup.sas || defaultSAS;
+        function addAttendanceRow(email, isLocked) {
+            const s = staffData.find(st => st.email === email);
+            if (!s) return;
 
-    // --- POPULATE SEARCH INPUTS ---
-    if (currentCS) {
-        const s = staffData.find(st => st.email === currentCS);
-        if (s) {
-            document.getElementById('att-cs-search').value = s.name;
-            document.getElementById('att-cs-email').value = s.email;
-        }
-    }
-    if (currentSAS) {
-        const s = staffData.find(st => st.email === currentSAS);
-        if (s) {
-            document.getElementById('att-sas-search').value = s.name;
-            document.getElementById('att-sas-email').value = s.email;
-        }
-    }
+            const div = document.createElement('div');
+            // Responsive Layout: Column on Mobile (Card), Row on Desktop
+            div.className = `group flex flex-col md:flex-row justify-between items-start md:items-center p-3 rounded-lg border shadow-sm transition mb-2 gap-2 md:gap-4 ${isLocked ? 'border-green-200 bg-green-50' : 'glass-card bg-white/70 backdrop-blur border-white/40'}`;
 
-    // --- 2. ATTENDANCE LIST ---
-    let presentSet = new Set(slot.attendance || slot.assigned || []);
+            // Checkbox State
+            const chkState = isLocked ? "disabled" : "onchange='window.updateAttCount()'";
 
-    // Auto-Mark CS/SAS as Present
-    if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
-    if (currentSAS && !presentSet.has(currentSAS)) presentSet.add(currentSAS);
-
-    presentSet.forEach(email => {
-        addAttendanceRow(email, isLocked);
-    });
-
-    // --- 3. LOCK STATE UI ---
-    const addBtn = document.getElementById('btn-att-add');
-    const saveBtn = document.getElementById('btn-att-save');
-    const lockBtn = document.getElementById('btn-att-lock');
-    const statusText = document.getElementById('att-lock-status');
-
-    if (isLocked) {
-        if (addBtn) { addBtn.disabled = true; addBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
-            saveBtn.innerHTML = `<span>✅ Saved & Locked</span>`;
-        }
-        if (lockBtn) {
-            lockBtn.innerHTML = `<span>🔓</span> Unlock Register`;
-            lockBtn.className = "bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded shadow-sm hover:bg-red-100 font-bold text-sm flex items-center gap-2 transition";
-            lockBtn.onclick = () => window.toggleAttendanceLock(key, false);
-        }
-        if (statusText) statusText.textContent = "Attendance is finalized and locked.";
-    } else {
-        if (addBtn) { addBtn.disabled = false; addBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
-            saveBtn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Confirm & Update Counts`;
-        }
-        if (lockBtn) {
-            lockBtn.innerHTML = `<span>🔒</span> Lock Register`;
-            lockBtn.className = "bg-gray-100 text-gray-600 border border-gray-300 px-4 py-2 rounded shadow-sm hover:bg-gray-200 font-bold text-sm flex items-center gap-2 transition";
-            lockBtn.onclick = () => window.toggleAttendanceLock(key, true);
-        }
-        if (statusText) statusText.textContent = "Editing allowed.";
-    }
-
-    updateAttCount();
-}
-
-function addAttendanceRow(email, isLocked) {
-    const s = staffData.find(st => st.email === email);
-    if (!s) return;
-
-    const div = document.createElement('div');
-    // Responsive Layout: Column on Mobile (Card), Row on Desktop
-    div.className = `group flex flex-col md:flex-row justify-between items-start md:items-center p-3 rounded-lg border shadow-sm transition mb-2 gap-2 md:gap-4 ${isLocked ? 'border-green-200 bg-green-50' : 'glass-card bg-white/70 backdrop-blur border-white/40'}`;
-
-    // Checkbox State
-    const chkState = isLocked ? "disabled" : "onchange='window.updateAttCount()'";
-
-    // Render Action Button (Full width on mobile, Auto on desktop)
-    let actionHtml = "";
-    if (!isLocked) {
-        actionHtml = `
+            // Render Action Button (Full width on mobile, Auto on desktop)
+            let actionHtml = "";
+            if (!isLocked) {
+                actionHtml = `
             <div class="w-full md:w-auto pt-2 md:pt-0 border-t md:border-0 border-gray-100 md:border-transparent">
                 <button class="text-xs font-bold px-3 py-1.5 rounded border transition w-full md:w-auto text-center flex items-center justify-center gap-1 bg-white text-red-600 border-red-200 hover:bg-red-50 cursor-pointer" 
                     onclick="this.closest('.group').remove(); window.updateAttCount();">
@@ -2980,9 +2881,9 @@ function addAttendanceRow(email, isLocked) {
                 </button>
             </div>
         `;
-    }
+            }
 
-    div.innerHTML = `
+            div.innerHTML = `
         <div class="flex items-center gap-3 w-full md:w-auto">
             <input type="checkbox" class="att-chk w-5 h-5 text-green-600 rounded focus:ring-green-500 shrink-0" value="${email}" checked ${chkState}>
             <div class="min-w-0 flex-1">
@@ -2992,112 +2893,128 @@ function addAttendanceRow(email, isLocked) {
         </div>
         ${actionHtml}
     `;
-    ui.attList.appendChild(div);
-}
+            ui.attList.appendChild(div);
+        }
 
-window.addSubstituteToAttendance = function () {
-    // Check if a user was selected from search
-    if (!currentSubstituteCandidate) {
-        return alert("Please search and select a faculty member first.");
-    }
+        window.addSubstituteToAttendance = function () {
+            // Check if a user was selected from search
+            if (!currentSubstituteCandidate) {
+                return alert("Please search and select a faculty member first.");
+            }
 
-    const email = currentSubstituteCandidate.email;
+            const email = currentSubstituteCandidate.email;
 
-    // Check duplicates
-    const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
-    if (existing.includes(email)) {
-        return alert("This person is already in the attendance list.");
-    }
+            // Check duplicates
+            const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+            if (existing.includes(email)) {
+                return alert("This person is already in the attendance list.");
+            }
 
-    addAttendanceRow(email);
+            addAttendanceRow(email);
 
-    // Reset Search
-    const searchInput = document.getElementById('att-substitute-search');
-    if (searchInput) searchInput.value = "";
-    currentSubstituteCandidate = null;
+            // Reset Search
+            const searchInput = document.getElementById('att-substitute-search');
+            if (searchInput) searchInput.value = "";
+            currentSubstituteCandidate = null;
 
-    updateAttCount();
-}
+            updateAttCount();
+        }
 
-window.updateAttCount = function () {
-    const count = document.querySelectorAll('.att-chk:checked').length;
-    document.getElementById('att-count-display').textContent = `${count} Present`;
-}
-window.saveAttendance = async function () {
-    const key = ui.attSessionSelect.value;
-    if (!key) return;
+        window.updateAttCount = function () {
+            const count = document.querySelectorAll('.att-chk:checked').length;
+            document.getElementById('att-count-display').textContent = `${count} Present`;
+        }
+        window.saveAttendance = async function () {
+            const key = ui.attSessionSelect.value;
+            if (!key) return;
 
-    // GET VALUES FROM HIDDEN INPUTS
-    const csVal = document.getElementById('att-cs-email').value;
-    const sasVal = document.getElementById('att-sas-email').value;
+            // GET VALUES FROM HIDDEN INPUTS
+            const csVal = document.getElementById('att-cs-email').value;
+            const sasVal = document.getElementById('att-sas-email').value;
 
-    // Validate
-    if (!csVal || !sasVal) {
-        alert("⚠️ Mandatory Fields Missing\n\nPlease search and select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS).");
-        return;
-    }
+            // Validate
+            if (!csVal || !sasVal) {
+                alert("⚠️ Mandatory Fields Missing\n\nPlease search and select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS).");
+                return;
+            }
 
-    if (!confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
+            if (!confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
 
-    const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
+            const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
 
-    // Update Cloud Data
-    invigilationSlots[key].attendance = presentEmails;
-    invigilationSlots[key].supervision = { cs: csVal, sas: sasVal };
+            // Update Cloud Data
+            invigilationSlots[key].attendance = presentEmails;
+            invigilationSlots[key].supervision = { cs: csVal, sas: sasVal };
 
-    // LOGGING
-    logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
+            // LOGGING
+            logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
 
-    await syncSlotsToCloud();
+            await syncSlotsToCloud();
 
-    populateAttendanceSessions();
-    renderStaffTable();
-    alert("Attendance & Supervision Saved!");
-}
+            populateAttendanceSessions();
+            renderStaffTable();
+            alert("Attendance & Supervision Saved!");
+        }
 
-window.toggleAttendanceLock = async function (key, lockState) {
-    if (lockState && !confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
+        window.toggleAttendanceLock = async function (key, lockState) {
+            if (lockState && !confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
 
-    if (!invigilationSlots[key]) return;
+            if (!invigilationSlots[key]) return;
 
-    // Save state
-    invigilationSlots[key].attendanceLocked = lockState;
+            // Save state
+            invigilationSlots[key].attendanceLocked = lockState;
 
-    // If locking, ensure we save the current list too, just in case
-    if (lockState) {
-        const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
-        invigilationSlots[key].attendance = presentEmails;
-    }
+            // If locking, ensure we save the current list too, just in case
+            if (lockState) {
+                const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
+                invigilationSlots[key].attendance = presentEmails;
+            }
 
-    await syncSlotsToCloud();
-    loadSessionAttendance(); // Refresh UI
-}
+            await syncSlotsToCloud();
+            loadSessionAttendance(); // Refresh UI
+        }
 
-// 3. Updated Volunteer (Handles Picking Up Exchange)
-async function volunteer(key, email) {
-    const slot = invigilationSlots[key];
-    const [datePart] = key.split(' | ');
+        // 3. Updated Volunteer (Handles Picking Up Exchange)
+        async function volunteer(key, email) {
+            const slot = invigilationSlots[key];
+            const [datePart] = key.split(' | ');
 
-    // Check conflicts
-    const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
-    const conflict = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
-    if (conflict && !confirm("🦸‍♂️ SUPERHERO ALERT! 🦸‍♀️\n\nYou are already on duty that day. Taking a double shift?\n\nWe appreciate your dedication! Click OK to confirm.")) return;
+            // Check conflicts
+            const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
+            const conflict = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
+            if (conflict && !confirm("🦸‍♂️ SUPERHERO ALERT! 🦸‍♀️\n\nYou are already on duty that day. Taking a double shift?\n\nWe appreciate your dedication! Click OK to confirm.")) return;
 
-    // CHECK IF TAKING AN EXCHANGE
-    if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
-        // Pick the first person offering
-        const originalOwner = slot.exchangeRequests[0];
+            // CHECK IF TAKING AN EXCHANGE
+            if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
+                // Pick the first person offering
+                const originalOwner = slot.exchangeRequests[0];
 
-        if (confirm(`Accept duty exchange from ${getNameFromEmail(originalOwner)}?`)) {
-            // Remove Original
-            slot.assigned = slot.assigned.filter(e => e !== originalOwner);
-            slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== originalOwner);
+                if (confirm(`Accept duty exchange from ${getNameFromEmail(originalOwner)}?`)) {
+                    // Remove Original
+                    slot.assigned = slot.assigned.filter(e => e !== originalOwner);
+                    slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== originalOwner);
 
-            // Update Original Owner Stats
-            const ownerObj = staffData.find(s => s.email === originalOwner);
-            if (ownerObj && ownerObj.dutiesAssigned > 0) ownerObj.dutiesAssigned--;
+                    // Update Original Owner Stats
+                    const ownerObj = staffData.find(s => s.email === originalOwner);
+                    if (ownerObj && ownerObj.dutiesAssigned > 0) ownerObj.dutiesAssigned--;
 
-            // Add New (You)
+                    // Add New (You)
+                    slot.assigned.push(email);
+                    const me = staffData.find(s => s.email === email);
+                    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+
+                    await syncSlotsToCloud();
+                    await syncStaffToCloud();
+                    window.closeModal('day-detail-modal');
+                    renderStaffCalendar(email);
+                    return;
+                } else {
+                    return; // Cancelled
+                }
+            }
+
+            // Standard Volunteer Logic
+            if (!confirm("Confirm duty?")) return;
             slot.assigned.push(email);
             const me = staffData.find(s => s.email === email);
             if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
@@ -3105,55 +3022,39 @@ async function volunteer(key, email) {
             await syncSlotsToCloud();
             await syncStaffToCloud();
             window.closeModal('day-detail-modal');
-            renderStaffCalendar(email);
-            return;
-        } else {
-            return; // Cancelled
         }
-    }
+        async function acceptExchange(key, buyerEmail, sellerEmail) {
+            const slot = invigilationSlots[key];
+            const sellerName = getNameFromEmail(sellerEmail);
 
-    // Standard Volunteer Logic
-    if (!confirm("Confirm duty?")) return;
-    slot.assigned.push(email);
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
+            if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
 
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
-}
-async function acceptExchange(key, buyerEmail, sellerEmail) {
-    const slot = invigilationSlots[key];
-    const sellerName = getNameFromEmail(sellerEmail);
+            // 1. Validation
+            if (!slot.assigned.includes(sellerEmail)) {
+                alert("This user is no longer assigned to this slot.");
+                renderExchangeMarket(buyerEmail);
+                return;
+            }
 
-    if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
+            // 2. Perform Swap
+            slot.assigned = slot.assigned.filter(e => e !== sellerEmail);
+            slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
+            slot.assigned.push(buyerEmail);
 
-    // 1. Validation
-    if (!slot.assigned.includes(sellerEmail)) {
-        alert("This user is no longer assigned to this slot.");
-        renderExchangeMarket(buyerEmail);
-        return;
-    }
+            // 3. Update Stats
+            const seller = staffData.find(s => s.email === sellerEmail);
+            const buyer = staffData.find(s => s.email === buyerEmail);
 
-    // 2. Perform Swap
-    slot.assigned = slot.assigned.filter(e => e !== sellerEmail);
-    slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
-    slot.assigned.push(buyerEmail);
+            if (seller && seller.dutiesAssigned > 0) seller.dutiesAssigned--;
+            if (buyer) buyer.dutiesAssigned = (buyer.dutiesAssigned || 0) + 1;
 
-    // 3. Update Stats
-    const seller = staffData.find(s => s.email === sellerEmail);
-    const buyer = staffData.find(s => s.email === buyerEmail);
+            // 4. LOGGING
+            logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
 
-    if (seller && seller.dutiesAssigned > 0) seller.dutiesAssigned--;
-    if (buyer) buyer.dutiesAssigned = (buyer.dutiesAssigned || 0) + 1;
-
-    // 4. LOGGING
-    logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
-
-    // --- NEW: SEND NOTIFICATION EMAIL TO SELLER ---
-    if (seller && seller.email && googleScriptUrl) {
-        const subject = `Duty Exchange Accepted: ${key}`;
-        const body = `
+            // --- NEW: SEND NOTIFICATION EMAIL TO SELLER ---
+            if (seller && seller.email && googleScriptUrl) {
+                const subject = `Duty Exchange Accepted: ${key}`;
+                const body = `
             <p>Dear ${seller.name},</p>
             <p>Good news! Your request to exchange the invigilation duty for <b>${key}</b> has been accepted by <b>${buyer.name}</b>.</p>
             <p>You have been removed from this duty assignment.</p>
@@ -3161,250 +3062,250 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
             <p style="font-size:12px; color:#666;">Exam Cell Notification</p>
         `;
 
-        // Non-blocking fetch (Fire and Forget)
-        fetch(googleScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                to: seller.email,
-                subject: subject,
-                body: body
-            })
-        }).then(() => console.log("Notification email triggered."))
-            .catch(e => console.error("Email failed", e));
-    }
-    // ----------------------------------------------
+                // Non-blocking fetch (Fire and Forget)
+                fetch(googleScriptUrl, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        to: seller.email,
+                        subject: subject,
+                        body: body
+                    })
+                }).then(() => console.log("Notification email triggered."))
+                    .catch(e => console.error("Email failed", e));
+            }
+            // ----------------------------------------------
 
-    // 5. Sync
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
+            // 5. Sync
+            await syncSlotsToCloud();
+            await syncStaffToCloud();
 
-    alert(`Success! You have accepted the duty from ${sellerName}. A notification has been sent to them.`);
+            alert(`Success! You have accepted the duty from ${sellerName}. A notification has been sent to them.`);
 
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(buyerEmail);
-    renderExchangeMarket(buyerEmail);
-    initStaffDashboard(buyer);
-}
-window.postForExchange = async function (key, email) {
-    // 1. Confirm Action
-    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
-
-    const slot = invigilationSlots[key];
-    if (!slot.exchangeRequests) slot.exchangeRequests = [];
-
-    if (!slot.exchangeRequests.includes(email)) {
-        // 2. Update Local Data
-        slot.exchangeRequests.push(email);
-
-        // 3. LOGGING
-        logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
-
-        // 4. IMMEDIATE UI UPDATES
-        try {
-            renderStaffCalendar(email);
-            if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
             window.closeModal('day-detail-modal');
-        } catch (e) { console.error("UI Update Error:", e); }
+            renderStaffCalendar(buyerEmail);
+            renderExchangeMarket(buyerEmail);
+            initStaffDashboard(buyer);
+        }
+        window.postForExchange = async function (key, email) {
+            // 1. Confirm Action
+            if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
 
-        // 5. Save to Cloud
-        await syncSlotsToCloud();
-    }
-}
+            const slot = invigilationSlots[key];
+            if (!slot.exchangeRequests) slot.exchangeRequests = [];
 
-window.withdrawExchange = async function (key, email) {
-    // 1. ADDED CONFIRMATION CHECK
-    if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
+            if (!slot.exchangeRequests.includes(email)) {
+                // 2. Update Local Data
+                slot.exchangeRequests.push(email);
 
-    const slot = invigilationSlots[key];
-    if (slot.exchangeRequests) {
-        // 2. Update Local Data
-        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
+                // 3. LOGGING
+                logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
 
-        // 3. LOGGING
-        logActivity("Exchange Withdrawn", `${getNameFromEmail(email)} withdrew request for ${key}.`);
+                // 4. IMMEDIATE UI UPDATES
+                try {
+                    renderStaffCalendar(email);
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+                    window.closeModal('day-detail-modal');
+                } catch (e) { console.error("UI Update Error:", e); }
 
-        // 4. IMMEDIATE UI UPDATES
-        try {
-            renderStaffCalendar(email);
-            if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-            window.closeModal('day-detail-modal');
-        } catch (e) { console.error("UI Update Error:", e); }
+                // 5. Save to Cloud
+                await syncSlotsToCloud();
+            }
+        }
 
-        // 5. Save to Cloud
-        await syncSlotsToCloud();
-    }
-}
+        window.withdrawExchange = async function (key, email) {
+            // 1. ADDED CONFIRMATION CHECK
+            if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
 
-// --- EXPOSE DUTY FUNCTIONS TO WINDOW FOR HTML ONCLICK ---
-window.volunteer = volunteer;
-window.acceptExchange = acceptExchange;
-window.postForExchange = postForExchange;
-window.withdrawExchange = withdrawExchange;
+            const slot = invigilationSlots[key];
+            if (slot.exchangeRequests) {
+                // 2. Update Local Data
+                slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
 
-// --- DEPARTMENT MANAGEMENT FUNCTIONS ---
+                // 3. LOGGING
+                logActivity("Exchange Withdrawn", `${getNameFromEmail(email)} withdrew request for ${key}.`);
 
-function populateDepartmentSelect() {
-    const select = document.getElementById('stf-dept');
-    if (!select) return;
+                // 4. IMMEDIATE UI UPDATES
+                try {
+                    renderStaffCalendar(email);
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+                    window.closeModal('day-detail-modal');
+                } catch (e) { console.error("UI Update Error:", e); }
 
-    // Convert & Sort
-    const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-    cleanDepts.sort((a, b) => a.name.localeCompare(b.name));
+                // 5. Save to Cloud
+                await syncSlotsToCloud();
+            }
+        }
 
-    select.innerHTML = `<option value="">Select Department...</option>` +
-        cleanDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
-}
+        // --- EXPOSE DUTY FUNCTIONS TO WINDOW FOR HTML ONCLICK ---
+        window.volunteer = volunteer;
+        window.acceptExchange = acceptExchange;
+        window.postForExchange = postForExchange;
+        window.withdrawExchange = withdrawExchange;
 
-function renderDepartmentsList() {
-    const container = document.getElementById('dept-list-container');
-    if (!container) return;
+        // --- DEPARTMENT MANAGEMENT FUNCTIONS ---
 
-    container.innerHTML = '';
+        function populateDepartmentSelect() {
+            const select = document.getElementById('stf-dept');
+            if (!select) return;
 
-    // Handle legacy string data (convert to object on fly if needed)
-    const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+            // Convert & Sort
+            const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+            cleanDepts.sort((a, b) => a.name.localeCompare(b.name));
 
-    cleanDepts.sort((a, b) => a.name.localeCompare(b.name));
+            select.innerHTML = `<option value="">Select Department...</option>` +
+                cleanDepts.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+        }
 
-    cleanDepts.forEach(dept => {
-        // If Locked: Hide 'x' button
-        const deleteBtn = isDeptLocked ? '' :
-            `<button onclick="deleteDepartment('${dept.name}')" class="text-red-400 hover:text-red-600 font-bold ml-1 hover:bg-red-50 rounded px-1">&times;</button>`;
+        function renderDepartmentsList() {
+            const container = document.getElementById('dept-list-container');
+            if (!container) return;
 
-        const emailBadge = dept.email ? `<span class="text-[9px] text-gray-400 ml-1">&lt;${dept.email}&gt;</span>` : "";
+            container.innerHTML = '';
 
-        container.innerHTML += `
+            // Handle legacy string data (convert to object on fly if needed)
+            const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+
+            cleanDepts.sort((a, b) => a.name.localeCompare(b.name));
+
+            cleanDepts.forEach(dept => {
+                // If Locked: Hide 'x' button
+                const deleteBtn = isDeptLocked ? '' :
+                    `<button onclick="deleteDepartment('${dept.name}')" class="text-red-400 hover:text-red-600 font-bold ml-1 hover:bg-red-50 rounded px-1">&times;</button>`;
+
+                const emailBadge = dept.email ? `<span class="text-[9px] text-gray-400 ml-1">&lt;${dept.email}&gt;</span>` : "";
+
+                container.innerHTML += `
             <div class="flex items-center gap-1 bg-white px-2 py-1 rounded text-xs border border-gray-200 shadow-sm" title="${dept.email || 'No Email'}">
                 <span class="font-bold text-gray-700">${dept.name}</span>
                 ${emailBadge}
                 ${deleteBtn}
             </div>`;
-    });
-}
+            });
+        }
 
-window.addNewDepartment = function () {
-    const nameInput = document.getElementById('new-dept-name');
-    const emailInput = document.getElementById('new-dept-email');
+        window.addNewDepartment = function () {
+            const nameInput = document.getElementById('new-dept-name');
+            const emailInput = document.getElementById('new-dept-email');
 
-    const name = nameInput.value.trim();
-    const email = emailInput.value.trim();
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
 
-    if (!name) return alert("Enter department name");
+            if (!name) return alert("Enter department name");
 
-    // Convert legacy strings if present
-    departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+            // Convert legacy strings if present
+            departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
 
-    if (departmentsConfig.some(d => d.name.toLowerCase() === name.toLowerCase())) {
-        return alert("Department already exists");
-    }
+            if (departmentsConfig.some(d => d.name.toLowerCase() === name.toLowerCase())) {
+                return alert("Department already exists");
+            }
 
-    departmentsConfig.push({ name: name, email: email });
-    renderDepartmentsList();
+            departmentsConfig.push({ name: name, email: email });
+            renderDepartmentsList();
 
-    nameInput.value = '';
-    emailInput.value = '';
-}
+            nameInput.value = '';
+            emailInput.value = '';
+        }
 
-window.deleteDepartment = function (name) {
-    if (confirm(`Delete department "${name}"?`)) {
-        departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-        departmentsConfig = departmentsConfig.filter(d => d.name !== name);
-        renderDepartmentsList();
-    }
-}
-window.toggleRoleLock = function () {
-    isRoleLocked = !isRoleLocked;
-    renderRolesList(); // Re-render list
-    toggleInputVisibility('role-input-row', isRoleLocked); // Hide/Show Inputs
-    updateLockIcon('role-lock-btn', isRoleLocked); // Update Icon
-}
-
-window.toggleDeptLock = function () {
-    isDeptLocked = !isDeptLocked;
-    renderDepartmentsList();
-    toggleInputVisibility('dept-input-row', isDeptLocked);
-    updateLockIcon('dept-lock-btn', isDeptLocked);
-}
-
-function toggleInputVisibility(id, isLocked) {
-    const el = document.getElementById(id);
-    if (el) isLocked ? el.classList.add('hidden') : el.classList.remove('hidden');
-}
-
-function updateLockIcon(btnId, isLocked) {
-    const btn = document.getElementById(btnId);
-    if (btn) btn.textContent = isLocked ? "🔒 Locked" : "🔓 Editing";
-    if (btn) btn.className = isLocked
-        ? "text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-200 transition"
-        : "text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-200 hover:bg-red-100 transition font-bold";
-}
-window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
-    if (!confirm(`${lockState ? '🔒 Lock' : '🔓 Unlock'} all slots in ${monthStr} - Week ${weekNum}?`)) return;
-
-    let changed = false;
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-
-        // Check if slot belongs to the target Week & Month
-        if (mStr === monthStr && wNum === weekNum) {
-            // Only update if state is different
-            if (invigilationSlots[key].isLocked !== lockState) {
-                invigilationSlots[key].isLocked = lockState;
-                changed = true;
+        window.deleteDepartment = function (name) {
+            if (confirm(`Delete department "${name}"?`)) {
+                departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+                departmentsConfig = departmentsConfig.filter(d => d.name !== name);
+                renderDepartmentsList();
             }
         }
-    });
+        window.toggleRoleLock = function () {
+            isRoleLocked = !isRoleLocked;
+            renderRolesList(); // Re-render list
+            toggleInputVisibility('role-input-row', isRoleLocked); // Hide/Show Inputs
+            updateLockIcon('role-lock-btn', isRoleLocked); // Update Icon
+        }
 
-    if (changed) {
-        await syncSlotsToCloud();
-        renderSlotsGridAdmin();
-        alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
-    } else {
-        alert("No slots needed updating in this week.");
-    }
-}
-window.printSessionReport = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot not found.");
+        window.toggleDeptLock = function () {
+            isDeptLocked = !isDeptLocked;
+            renderDepartmentsList();
+            toggleInputVisibility('dept-input-row', isDeptLocked);
+            updateLockIcon('dept-lock-btn', isDeptLocked);
+        }
 
-    const [datePart, timePart] = key.split(' | ');
-    const collegeName = collegeData.examCollegeName || "College Name";
-    const sessionName = (timePart.includes("AM") || timePart.startsWith("09") || timePart.startsWith("10")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
+        function toggleInputVisibility(id, isLocked) {
+            const el = document.getElementById(id);
+            if (el) isLocked ? el.classList.add('hidden') : el.classList.remove('hidden');
+        }
 
-    // 1. Exam Name
-    let examName = slot.examName;
-    if (!examName && typeof window.getExamName === "function") {
-        examName = window.getExamName(datePart, timePart, "Regular");
-    }
-    if (!examName) examName = "University Examinations";
+        function updateLockIcon(btnId, isLocked) {
+            const btn = document.getElementById(btnId);
+            if (btn) btn.textContent = isLocked ? "🔒 Locked" : "🔓 Editing";
+            if (btn) btn.className = isLocked
+                ? "text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-200 transition"
+                : "text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-200 hover:bg-red-100 transition font-bold";
+        }
+        window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
+            if (!confirm(`${lockState ? '🔒 Lock' : '🔓 Unlock'} all slots in ${monthStr} - Week ${weekNum}?`)) return;
 
-    // 2. CALCULATE ROWS (The 1:1 Math)
-    // Candidates need 1:30, Scribes need 1:1
-    const scribes = slot.scribeCount || 0;
-    const totalStudents = slot.studentCount || 0;
-    const regularStudents = Math.max(0, totalStudents - scribes);
+            let changed = false;
+            Object.keys(invigilationSlots).forEach(key => {
+                const date = parseDate(key);
+                const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(date);
 
-    const regularInvigs = Math.ceil(regularStudents / 30);
-    const scribeInvigs = scribes; // 1:1 Ratio
-    const theoreticalNeed = regularInvigs + scribeInvigs;
+                // Check if slot belongs to the target Week & Month
+                if (mStr === monthStr && wNum === weekNum) {
+                    // Only update if state is different
+                    if (invigilationSlots[key].isLocked !== lockState) {
+                        invigilationSlots[key].isLocked = lockState;
+                        changed = true;
+                    }
+                }
+            });
 
-    // Ensure we have enough rows for:
-    // A. Already assigned staff
-    // B. The theoretical 1:1 requirement
-    // C. Minimum of 20 (for standard A4)
-    const totalRowsToPrint = Math.max(slot.assigned.length + 3, theoreticalNeed + 2, 20);
+            if (changed) {
+                await syncSlotsToCloud();
+                renderSlotsGridAdmin();
+                alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
+            } else {
+                alert("No slots needed updating in this week.");
+            }
+        }
+        window.printSessionReport = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot) return alert("Error: Slot not found.");
 
-    // 3. Generate Rows
-    let rowsHtml = "";
+            const [datePart, timePart] = key.split(' | ');
+            const collegeName = collegeData.examCollegeName || "College Name";
+            const sessionName = (timePart.includes("AM") || timePart.startsWith("09") || timePart.startsWith("10")) ? "FORENOON SESSION" : "AFTERNOON SESSION";
 
-    // A. Assigned Staff
-    slot.assigned.forEach((email, index) => {
-        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "" };
-        rowsHtml += `
+            // 1. Exam Name
+            let examName = slot.examName;
+            if (!examName && typeof window.getExamName === "function") {
+                examName = window.getExamName(datePart, timePart, "Regular");
+            }
+            if (!examName) examName = "University Examinations";
+
+            // 2. CALCULATE ROWS (The 1:1 Math)
+            // Candidates need 1:30, Scribes need 1:1
+            const scribes = slot.scribeCount || 0;
+            const totalStudents = slot.studentCount || 0;
+            const regularStudents = Math.max(0, totalStudents - scribes);
+
+            const regularInvigs = Math.ceil(regularStudents / 30);
+            const scribeInvigs = scribes; // 1:1 Ratio
+            const theoreticalNeed = regularInvigs + scribeInvigs;
+
+            // Ensure we have enough rows for:
+            // A. Already assigned staff
+            // B. The theoretical 1:1 requirement
+            // C. Minimum of 20 (for standard A4)
+            const totalRowsToPrint = Math.max(slot.assigned.length + 3, theoreticalNeed + 2, 20);
+
+            // 3. Generate Rows
+            let rowsHtml = "";
+
+            // A. Assigned Staff
+            slot.assigned.forEach((email, index) => {
+                const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "" };
+                rowsHtml += `
             <tr>
                 <td style="text-align:center;">${index + 1}</td>
                 <td>${staff.name}</td>
@@ -3412,21 +3313,21 @@ window.printSessionReport = function (key) {
                 <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
             </tr>
         `;
-    });
+            });
 
-    // B. Blank Rows
-    for (let i = slot.assigned.length; i < totalRowsToPrint; i++) {
-        rowsHtml += `
+            // B. Blank Rows
+            for (let i = slot.assigned.length; i < totalRowsToPrint; i++) {
+                rowsHtml += `
             <tr>
                 <td style="text-align:center;">${i + 1}</td>
                 <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> <td></td> <td></td>
             </tr>
         `;
-    }
+            }
 
-    // 4. Print
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+            // 4. Print
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
         <html>
         <head>
             <title>Invigilation Report - ${datePart}</title>
@@ -3482,54 +3383,54 @@ window.printSessionReport = function (key) {
         </body>
         </html>
     `);
-    printWindow.document.close();
-    printWindow.print();
-}
+            printWindow.document.close();
+            printWindow.print();
+        }
 
 
 
 
-function renderAdminTodayStats() {
-    const container = document.getElementById('admin-today-container');
-    if (!container) return;
+        function renderAdminTodayStats() {
+            const container = document.getElementById('admin-today-container');
+            if (!container) return;
 
-    // 1. Calculate Dates
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
-    const todayStr = `${dd}.${mm}.${yyyy}`;
+            // 1. Calculate Dates
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            const todayStr = `${dd}.${mm}.${yyyy}`;
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    const ddT = String(tomorrow.getDate()).padStart(2, '0');
-    const mmT = String(tomorrow.getMonth() + 1).padStart(2, '0');
-    const yyyyT = tomorrow.getFullYear();
-    const tomorrowStr = `${ddT}.${mmT}.${yyyyT}`;
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            const ddT = String(tomorrow.getDate()).padStart(2, '0');
+            const mmT = String(tomorrow.getMonth() + 1).padStart(2, '0');
+            const yyyyT = tomorrow.getFullYear();
+            const tomorrowStr = `${ddT}.${mmT}.${yyyyT}`;
 
-    // 2. Find Sessions
-    const todaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(todayStr));
-    const tomorrowSessions = Object.keys(invigilationSlots).filter(k => k.startsWith(tomorrowStr));
+            // 2. Find Sessions
+            const todaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(todayStr));
+            const tomorrowSessions = Object.keys(invigilationSlots).filter(k => k.startsWith(tomorrowStr));
 
-    // 3. Hide if empty
-    if (todaySessions.length === 0 && tomorrowSessions.length === 0) {
-        container.classList.add('hidden');
-        container.innerHTML = '';
-        return;
-    }
+            // 3. Hide if empty
+            if (todaySessions.length === 0 && tomorrowSessions.length === 0) {
+                container.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
 
-    container.classList.remove('hidden');
-    container.innerHTML = '';
+            container.classList.remove('hidden');
+            container.innerHTML = '';
 
-    // --- PART 1: TODAY'S EXAMS (View & Bulk SMS) ---
-    if (todaySessions.length > 0) {
-        todaySessions.sort();
-        let buttonsHtml = '';
-        todaySessions.forEach(key => {
-            const timePart = key.split(' | ')[1];
+            // --- PART 1: TODAY'S EXAMS (View & Bulk SMS) ---
+            if (todaySessions.length > 0) {
+                todaySessions.sort();
+                let buttonsHtml = '';
+                todaySessions.forEach(key => {
+                    const timePart = key.split(' | ')[1];
 
-            // Grouped Container for Time + Buttons
-            buttonsHtml += `
+                    // Grouped Container for Time + Buttons
+                    buttonsHtml += `
                 <div class="flex items-center gap-2 bg-white/10 p-1.5 rounded-lg border border-white/20 w-full sm:w-auto justify-between sm:justify-start">
                     <span class="text-white text-xs font-bold mr-1 ml-1 whitespace-nowrap">${timePart}</span>
                     
@@ -3546,9 +3447,9 @@ function renderAdminTodayStats() {
                     </div>
                 </div>
             `;
-        });
+                });
 
-        container.innerHTML += `
+                container.innerHTML += `
             <div class="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-lg shadow-md p-4 text-white mb-4">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                     <div class="flex items-center gap-3">
@@ -3566,24 +3467,24 @@ function renderAdminTodayStats() {
                 </div>
             </div>
         `;
-    }
+            }
 
-    // --- PART 2: TOMORROW'S EXAMS (Unchanged) ---
-    if (tomorrowSessions.length > 0) {
-        tomorrowSessions.sort();
-        let buttonsHtml = '';
-        tomorrowSessions.forEach(key => {
-            const timePart = key.split(' | ')[1];
-            buttonsHtml += `
+            // --- PART 2: TOMORROW'S EXAMS (Unchanged) ---
+            if (tomorrowSessions.length > 0) {
+                tomorrowSessions.sort();
+                let buttonsHtml = '';
+                tomorrowSessions.forEach(key => {
+                    const timePart = key.split(' | ')[1];
+                    buttonsHtml += `
                 <div class="flex items-center gap-2 bg-white/10 p-2 rounded-lg border border-white/20">
                     <span class="text-white text-sm font-bold mr-1">${timePart}</span>
                     <button onclick="openSlotReminderModal('${key}')" class="bg-white text-orange-700 hover:bg-orange-50 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition">Notify</button>
                     <button onclick="printDutyNotification('${key}')" class="bg-blue-600 text-white hover:bg-blue-700 font-bold py-1.5 px-3 rounded shadow-sm text-xs flex items-center gap-1 transition">PDF</button>
                 </div>
             `;
-        });
+                });
 
-        container.innerHTML += `
+                container.innerHTML += `
             <div class="bg-gradient-to-r from-orange-500 to-red-500 rounded-lg shadow-md p-4 text-white">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                     <div class="flex items-center gap-3">
@@ -3601,64 +3502,64 @@ function renderAdminTodayStats() {
                 </div>
             </div>
         `;
-    }
-}
-
-
-
-
-
-// Updated: Show Completed Duties Modal (AY Filtered + Neat UI)
-window.openCompletedDutiesModal = function (email) {
-    const list = document.getElementById('completed-duties-list');
-    if (!list) return;
-
-    list.innerHTML = '';
-    const history = [];
-    const acYear = getCurrentAcademicYear();
-    const staffName = getNameFromEmail(email);
-
-    // Update Modal Header with Name & AY
-    const headerTitle = document.querySelector('#completed-duties-modal h3');
-    const headerSub = document.querySelector('#completed-duties-modal p');
-    if (headerTitle) headerTitle.innerHTML = `Duty History: <span class="text-indigo-700">${staffName}</span>`;
-    if (headerSub) headerSub.textContent = `Verified Records for AY ${acYear.label}`;
-
-    // 1. Scan for completed duties in current AY
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-
-        // Filter by Academic Year
-        if (dateObj < acYear.start || dateObj > acYear.end) return;
-
-        if (slot.attendance && slot.attendance.includes(email)) {
-            // Determine Role
-            let role = "Invigilator";
-            if (slot.supervision) {
-                if (slot.supervision.cs === email) role = "Chief Supt.";
-                else if (slot.supervision.sas === email) role = "Senior Asst.";
             }
-            history.push({ key, role, dateObj });
         }
-    });
 
-    // 2. Sort (Newest First)
-    history.sort((a, b) => b.dateObj - a.dateObj);
 
-    // 3. Render Neat List
-    if (history.length === 0) {
-        list.innerHTML = `
+
+
+
+        // Updated: Show Completed Duties Modal (AY Filtered + Neat UI)
+        window.openCompletedDutiesModal = function (email) {
+            const list = document.getElementById('completed-duties-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+            const history = [];
+            const acYear = getCurrentAcademicYear();
+            const staffName = getNameFromEmail(email);
+
+            // Update Modal Header with Name & AY
+            const headerTitle = document.querySelector('#completed-duties-modal h3');
+            const headerSub = document.querySelector('#completed-duties-modal p');
+            if (headerTitle) headerTitle.innerHTML = `Duty History: <span class="text-indigo-700">${staffName}</span>`;
+            if (headerSub) headerSub.textContent = `Verified Records for AY ${acYear.label}`;
+
+            // 1. Scan for completed duties in current AY
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+                const dateObj = parseDate(key);
+
+                // Filter by Academic Year
+                if (dateObj < acYear.start || dateObj > acYear.end) return;
+
+                if (slot.attendance && slot.attendance.includes(email)) {
+                    // Determine Role
+                    let role = "Invigilator";
+                    if (slot.supervision) {
+                        if (slot.supervision.cs === email) role = "Chief Supt.";
+                        else if (slot.supervision.sas === email) role = "Senior Asst.";
+                    }
+                    history.push({ key, role, dateObj });
+                }
+            });
+
+            // 2. Sort (Newest First)
+            history.sort((a, b) => b.dateObj - a.dateObj);
+
+            // 3. Render Neat List
+            if (history.length === 0) {
+                list.innerHTML = `
             <div class="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
                 <p class="text-gray-400 text-xs italic">No duties completed in this Academic Year.</p>
             </div>`;
-    } else {
-        history.forEach(item => {
-            const [date, time] = item.key.split(' | ');
-            const isSup = item.role !== "Invigilator";
+            } else {
+                history.forEach(item => {
+                    const [date, time] = item.key.split(' | ');
+                    const isSup = item.role !== "Invigilator";
 
-            // Neat styling for list items
-            const itemHtml = `
+                    // Neat styling for list items
+                    const itemHtml = `
                 <div class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-lg hover:bg-gray-50 transition shadow-sm mb-2">
                     <div class="flex items-center gap-3">
                         <div class="flex flex-col items-center justify-center w-10 h-10 bg-indigo-50 text-indigo-600 rounded-md border border-indigo-100">
@@ -3676,284 +3577,284 @@ window.openCompletedDutiesModal = function (email) {
                     </span>
                 </div>`;
 
-            list.innerHTML += itemHtml;
-        });
-    }
-
-    window.openModal('completed-duties-modal');
-}
-
-// --- WEEKLY AUTO-ASSIGN ALGORITHM (Generates Logic Reports) ---
-window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
-    // 1. CHECK: Confirm Intent
-    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
-
-    // 2. Identify Target Slots (MUST BE LOCKED)
-    const targetSlots = [];
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-        const slot = invigilationSlots[key];
-
-        if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
-            targetSlots.push({ key, date, slot });
-        }
-    });
-
-    if (targetSlots.length === 0) {
-        return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
-    }
-
-    // 3. Sort Slots Chronologically
-    targetSlots.sort((a, b) => a.date - b.date);
-
-    // 4. Prepare Staff Stats
-    const deptCounts = {};
-    let eligibleStaff = staffData.map(s => {
-        if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
-        return {
-            ...s,
-            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-            // Track weekly load dynamically
-            weeklyLoad: {} // Key: "Month-Week" -> count
-        };
-    });
-
-    // Pre-fill existing assignments into tracker
-    Object.keys(invigilationSlots).forEach(k => {
-        const d = parseDate(k);
-        const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(d);
-        const weekKey = `${mStr}-${wNum}`;
-
-        invigilationSlots[k].assigned.forEach(email => {
-            const s = eligibleStaff.find(st => st.email === email);
-            if (s) {
-                if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
-                s.weeklyLoad[weekKey]++;
+                    list.innerHTML += itemHtml;
+                });
             }
-        });
-    });
 
-    const logEntries = [];
-    let assignedCount = 0;
-    const timestamp = new Date().toLocaleString();
+            window.openModal('completed-duties-modal');
+        }
 
-    // 5. Process Each Slot
-    for (const target of targetSlots) {
-        const { key, date, slot } = target;
-        const needed = slot.required - slot.assigned.length;
+        // --- WEEKLY AUTO-ASSIGN ALGORITHM (Generates Logic Reports) ---
+        window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
+            // 1. CHECK: Confirm Intent
+            if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
 
-        if (needed <= 0) continue;
+            // 2. Identify Target Slots (MUST BE LOCKED)
+            const targetSlots = [];
+            Object.keys(invigilationSlots).forEach(key => {
+                const date = parseDate(key);
+                const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(date);
+                const slot = invigilationSlots[key];
 
-        // Contexts
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-        const currentWeekKey = `${mStr}-${wNum}`;
-
-        const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
-        const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
-
-        const slotDeptCounts = {};
-        slot.assigned.forEach(email => {
-            const s = staffData.find(st => st.email === email);
-            if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
-        });
-
-        // We need to run the selection loop 'needed' times
-        // For each pick, we re-evaluate because the context (dept count) changes
-        for (let i = 0; i < needed; i++) {
-
-            // Score Candidates
-            const candidates = eligibleStaff.map(s => {
-                let score = s.pending * 100;
-                let warnings = [];
-
-                // --- HARD CONSTRAINTS ---
-                if (slot.assigned.includes(s.email)) return null;
-                if (isUserUnavailable(slot, s.email, key)) return null;
-                if (s.status === 'archived') return null;
-
-                // --- SOFT CONSTRAINTS ---
-                // 1. Weekly Limit
-                const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) {
-                    score -= 5000;
-                    warnings.push("Max 3/wk");
+                if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
+                    targetSlots.push({ key, date, slot });
                 }
+            });
 
-                // 2. Same Day Conflict (Check DB directly for speed)
-                const sameDayKeys = targetSlots.filter(t =>
-                    t.date.toDateString() === date.toDateString() && t.key !== key
-                ).map(t => t.key);
+            if (targetSlots.length === 0) {
+                return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
+            }
 
-                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) {
-                    score -= 2000;
-                    warnings.push("Same Day");
-                }
+            // 3. Sort Slots Chronologically
+            targetSlots.sort((a, b) => a.date - b.date);
 
-                // 3. Dept Saturation
-                const dTotal = deptCounts[s.dept] || 0;
-                if (dTotal > 1) {
-                    const dAssigned = slotDeptCounts[s.dept] || 0;
-                    if (dAssigned >= Math.ceil(dTotal * 0.6)) {
-                        score -= 4000;
-                        warnings.push("Dept Saturation");
-                    }
-                }
+            // 4. Prepare Staff Stats
+            const deptCounts = {};
+            let eligibleStaff = staffData.map(s => {
+                if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+                return {
+                    ...s,
+                    pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+                    // Track weekly load dynamically
+                    weeklyLoad: {} // Key: "Month-Week" -> count
+                };
+            });
 
-                // 4. Adjacent Day (Check DB)
-                // Simplified check against current batch of target slots
-                let hasAdjacent = false;
-                targetSlots.forEach(t => {
-                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString())
-                        && t.slot.assigned.includes(s.email)) {
-                        hasAdjacent = true;
+            // Pre-fill existing assignments into tracker
+            Object.keys(invigilationSlots).forEach(k => {
+                const d = parseDate(k);
+                const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(d);
+                const weekKey = `${mStr}-${wNum}`;
+
+                invigilationSlots[k].assigned.forEach(email => {
+                    const s = eligibleStaff.find(st => st.email === email);
+                    if (s) {
+                        if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
+                        s.weeklyLoad[weekKey]++;
                     }
                 });
-                if (hasAdjacent) {
-                    score -= 1000;
-                    warnings.push("Adjacent");
-                }
+            });
 
-                return { staff: s, score, warnings };
-            }).filter(c => c !== null);
+            const logEntries = [];
+            let assignedCount = 0;
+            const timestamp = new Date().toLocaleString();
 
-            // Sort High to Low
-            candidates.sort((a, b) => b.score - a.score);
+            // 5. Process Each Slot
+            for (const target of targetSlots) {
+                const { key, date, slot } = target;
+                const needed = slot.required - slot.assigned.length;
 
-            if (candidates.length > 0) {
-                const choice = candidates[0];
+                if (needed <= 0) continue;
 
-                // Assign
-                slot.assigned.push(choice.staff.email);
+                // Contexts
+                const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(date);
+                const currentWeekKey = `${mStr}-${wNum}`;
 
-                // Update Tracker
-                choice.staff.pending--;
-                if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
-                choice.staff.weeklyLoad[currentWeekKey]++;
+                const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
+                const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
 
-                slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+                const slotDeptCounts = {};
+                slot.assigned.forEach(email => {
+                    const s = staffData.find(st => st.email === email);
+                    if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
+                });
 
-                assignedCount++;
+                // We need to run the selection loop 'needed' times
+                // For each pick, we re-evaluate because the context (dept count) changes
+                for (let i = 0; i < needed; i++) {
 
-                // --- GENERATE LOGIC REPORT FOR THIS SLOT ---
-                // We append this decision to the slot's log history
-                let logEntry = `
+                    // Score Candidates
+                    const candidates = eligibleStaff.map(s => {
+                        let score = s.pending * 100;
+                        let warnings = [];
+
+                        // --- HARD CONSTRAINTS ---
+                        if (slot.assigned.includes(s.email)) return null;
+                        if (isUserUnavailable(slot, s.email, key)) return null;
+                        if (s.status === 'archived') return null;
+
+                        // --- SOFT CONSTRAINTS ---
+                        // 1. Weekly Limit
+                        const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
+                        if (dutiesThisWeek >= 3) {
+                            score -= 5000;
+                            warnings.push("Max 3/wk");
+                        }
+
+                        // 2. Same Day Conflict (Check DB directly for speed)
+                        const sameDayKeys = targetSlots.filter(t =>
+                            t.date.toDateString() === date.toDateString() && t.key !== key
+                        ).map(t => t.key);
+
+                        if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) {
+                            score -= 2000;
+                            warnings.push("Same Day");
+                        }
+
+                        // 3. Dept Saturation
+                        const dTotal = deptCounts[s.dept] || 0;
+                        if (dTotal > 1) {
+                            const dAssigned = slotDeptCounts[s.dept] || 0;
+                            if (dAssigned >= Math.ceil(dTotal * 0.6)) {
+                                score -= 4000;
+                                warnings.push("Dept Saturation");
+                            }
+                        }
+
+                        // 4. Adjacent Day (Check DB)
+                        // Simplified check against current batch of target slots
+                        let hasAdjacent = false;
+                        targetSlots.forEach(t => {
+                            if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString())
+                                && t.slot.assigned.includes(s.email)) {
+                                hasAdjacent = true;
+                            }
+                        });
+                        if (hasAdjacent) {
+                            score -= 1000;
+                            warnings.push("Adjacent");
+                        }
+
+                        return { staff: s, score, warnings };
+                    }).filter(c => c !== null);
+
+                    // Sort High to Low
+                    candidates.sort((a, b) => b.score - a.score);
+
+                    if (candidates.length > 0) {
+                        const choice = candidates[0];
+
+                        // Assign
+                        slot.assigned.push(choice.staff.email);
+
+                        // Update Tracker
+                        choice.staff.pending--;
+                        if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
+                        choice.staff.weeklyLoad[currentWeekKey]++;
+
+                        slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+
+                        assignedCount++;
+
+                        // --- GENERATE LOGIC REPORT FOR THIS SLOT ---
+                        // We append this decision to the slot's log history
+                        let logEntry = `
                     <div class="text-xs border-b border-gray-100 pb-1 mb-1">
                         <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
                         <span class="text-gray-500">(Score: ${choice.score})</span>
                         ${choice.warnings.length > 0 ? `<span class="text-red-500 ml-1">[${choice.warnings.join(', ')}]</span>` : ""}
                     </div>`;
 
-                // Add Skipped Candidates context
-                const skipped = candidates.slice(1, 4); // Next 3 best
-                if (skipped.length > 0) {
-                    logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` +
-                        skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
-                }
+                        // Add Skipped Candidates context
+                        const skipped = candidates.slice(1, 4); // Next 3 best
+                        if (skipped.length > 0) {
+                            logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` +
+                                skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                        }
 
-                // Create/Append Log
-                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
-                slot.allocationLog += logEntry;
+                        // Create/Append Log
+                        if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
+                        slot.allocationLog += logEntry;
 
-                if (choice.warnings.length > 0) {
-                    logEntries.push({
-                        type: "WARN",
-                        msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}`
-                    });
+                        if (choice.warnings.length > 0) {
+                            logEntries.push({
+                                type: "WARN",
+                                msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}`
+                            });
+                        }
+                    }
                 }
             }
-        }
-    }
 
-    // 6. Save Global Log
-    if (logEntries.length > 0) {
-        const logRef = doc(db, "colleges", currentCollegeId);
-        const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
-        try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
-    }
+            // 6. Save Global Log
+            if (logEntries.length > 0) {
+                const logRef = doc(db, "colleges", currentCollegeId);
+                const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
+                try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
+            }
 
-    logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+            logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
 
-    // 7. Save Slots & Refresh
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
+            // 7. Save Slots & Refresh
+            await syncSlotsToCloud();
+            renderSlotsGridAdmin();
 
-    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
-    if (logEntries.length > 0) {
-        alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated (Rules Broken). Check Logs.`;
-    }
-    alert(alertMsg);
-}
-
-window.viewAutoAssignLogs = async function () {
-    const ref = doc(db, "colleges", currentCollegeId);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-        const logs = snap.data().autoAssignLogs || [];
-        if (logs.length === 0) return alert("No logs found.");
-
-        // Show in a simple modal or reuse 'inconvenience-modal'
-        const list = document.getElementById('inconvenience-list');
-        const title = document.getElementById('inconvenience-modal-subtitle');
-        document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
-        title.textContent = "History of automated decisions & overrides.";
-
-        list.innerHTML = logs.reverse().map(l => {
-            const isWarn = l.includes("WARN");
-            const isErr = l.includes("ERROR");
-            const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
-            return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
-        }).join('');
-
-        window.openModal('inconvenience-modal');
-    }
-}
-// --- ACTIVITY LOGGING SYSTEM (1MB Limit + FIFO) ---
-async function logActivity(action, details) {
-    try {
-        const userEmail = currentUser ? currentUser.email : "Unknown";
-        const timestamp = new Date().toISOString();
-
-        // Short keys to save space: t=time, u=user, a=action, d=details
-        const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
-
-        const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-        const snap = await getDoc(logRef);
-
-        let entries = [];
-        if (snap.exists()) {
-            entries = snap.data().entries || [];
+            let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
+            if (logEntries.length > 0) {
+                alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated (Rules Broken). Check Logs.`;
+            }
+            alert(alertMsg);
         }
 
-        entries.push(newEntry);
+        window.viewAutoAssignLogs = async function () {
+            const ref = doc(db, "colleges", currentCollegeId);
+            const snap = await getDoc(ref);
+            if (snap.exists()) {
+                const logs = snap.data().autoAssignLogs || [];
+                if (logs.length === 0) return alert("No logs found.");
 
-        // SIZE CHECK: Keep under ~1MB (approx 950k chars)
-        while (JSON.stringify(entries).length > 950000) {
-            entries.shift(); // Remove oldest
+                // Show in a simple modal or reuse 'inconvenience-modal'
+                const list = document.getElementById('inconvenience-list');
+                const title = document.getElementById('inconvenience-modal-subtitle');
+                document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
+                title.textContent = "History of automated decisions & overrides.";
+
+                list.innerHTML = logs.reverse().map(l => {
+                    const isWarn = l.includes("WARN");
+                    const isErr = l.includes("ERROR");
+                    const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
+                    return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
+                }).join('');
+
+                window.openModal('inconvenience-modal');
+            }
+        }
+        // --- ACTIVITY LOGGING SYSTEM (1MB Limit + FIFO) ---
+        async function logActivity(action, details) {
+            try {
+                const userEmail = currentUser ? currentUser.email : "Unknown";
+                const timestamp = new Date().toISOString();
+
+                // Short keys to save space: t=time, u=user, a=action, d=details
+                const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
+
+                const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+                const snap = await getDoc(logRef);
+
+                let entries = [];
+                if (snap.exists()) {
+                    entries = snap.data().entries || [];
+                }
+
+                entries.push(newEntry);
+
+                // SIZE CHECK: Keep under ~1MB (approx 950k chars)
+                while (JSON.stringify(entries).length > 950000) {
+                    entries.shift(); // Remove oldest
+                }
+
+                await setDoc(logRef, { entries: entries });
+
+            } catch (e) {
+                console.error("Logging Error:", e);
+            }
         }
 
-        await setDoc(logRef, { entries: entries });
+        // --- LIVE ACTIVITY LOG LOGIC ---
+        let activityLogUnsubscribe = null;
+        let currentLogData = [];
 
-    } catch (e) {
-        console.error("Logging Error:", e);
-    }
-}
+        window.viewActivityLogs = function () {
+            const list = document.getElementById('inconvenience-list');
+            const titleEl = document.querySelector('#inconvenience-modal h3');
+            const subtitleEl = document.getElementById('inconvenience-modal-subtitle');
 
-// --- LIVE ACTIVITY LOG LOGIC ---
-let activityLogUnsubscribe = null;
-let currentLogData = [];
-
-window.viewActivityLogs = function () {
-    const list = document.getElementById('inconvenience-list');
-    const titleEl = document.querySelector('#inconvenience-modal h3');
-    const subtitleEl = document.getElementById('inconvenience-modal-subtitle');
-
-    // 1. Setup Modal UI
-    titleEl.textContent = "🕒 Live Activity Feed";
-    subtitleEl.innerHTML = `
+            // 1. Setup Modal UI
+            titleEl.textContent = "🕒 Live Activity Feed";
+            subtitleEl.innerHTML = `
         <div class="flex gap-2 mt-2">
             <input type="text" id="act-search" placeholder="Search logs..." class="flex-1 p-2 border border-gray-300 rounded text-xs shadow-inner focus:outline-none focus:border-indigo-500">
             <div class="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2 rounded border border-green-100">
@@ -3966,84 +3867,84 @@ window.viewActivityLogs = function () {
         </div>
     `;
 
-    // 2. Attach Search Listener
-    const searchInput = document.getElementById('act-search');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => renderLiveLogs(e.target.value));
-    }
+            // 2. Attach Search Listener
+            const searchInput = document.getElementById('act-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => renderLiveLogs(e.target.value));
+            }
 
-    // 3. Open Modal & Show Loading
-    window.openModal('inconvenience-modal');
-    list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Connecting to live feed...</div>';
+            // 3. Open Modal & Show Loading
+            window.openModal('inconvenience-modal');
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Connecting to live feed...</div>';
 
-    // 4. Start Real-Time Listener
-    if (activityLogUnsubscribe) activityLogUnsubscribe(); // Clean up old listener
+            // 4. Start Real-Time Listener
+            if (activityLogUnsubscribe) activityLogUnsubscribe(); // Clean up old listener
 
-    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+            const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
 
-    activityLogUnsubscribe = onSnapshot(logRef, (snap) => {
-        if (snap.exists() && snap.data().entries) {
-            currentLogData = snap.data().entries.reverse(); // Newest first
+            activityLogUnsubscribe = onSnapshot(logRef, (snap) => {
+                if (snap.exists() && snap.data().entries) {
+                    currentLogData = snap.data().entries.reverse(); // Newest first
 
-            // Render with current search term (preserves filter updates)
-            const currentQuery = document.getElementById('act-search') ? document.getElementById('act-search').value : "";
-            renderLiveLogs(currentQuery);
-        } else {
-            currentLogData = [];
-            list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No activity logs found.</div>';
-        }
-    }, (error) => {
-        console.error("Log Sync Error:", error);
-        list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Connection lost. Logs will reappear when online.</div>';
-    });
-};
+                    // Render with current search term (preserves filter updates)
+                    const currentQuery = document.getElementById('act-search') ? document.getElementById('act-search').value : "";
+                    renderLiveLogs(currentQuery);
+                } else {
+                    currentLogData = [];
+                    list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No activity logs found.</div>';
+                }
+            }, (error) => {
+                console.error("Log Sync Error:", error);
+                list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Connection lost. Logs will reappear when online.</div>';
+            });
+        };
 
-// Helper to Render Logs
-function renderLiveLogs(query = "") {
-    const list = document.getElementById('inconvenience-list');
-    if (!list) return;
+        // Helper to Render Logs
+        function renderLiveLogs(query = "") {
+            const list = document.getElementById('inconvenience-list');
+            if (!list) return;
 
-    const q = query.toLowerCase();
-    const filtered = currentLogData.filter(e =>
-        (e.u && e.u.toLowerCase().includes(q)) ||
-        (e.a && e.a.toLowerCase().includes(q)) ||
-        (e.d && e.d.toLowerCase().includes(q))
-    );
+            const q = query.toLowerCase();
+            const filtered = currentLogData.filter(e =>
+                (e.u && e.u.toLowerCase().includes(q)) ||
+                (e.a && e.a.toLowerCase().includes(q)) ||
+                (e.d && e.d.toLowerCase().includes(q))
+            );
 
-    if (filtered.length === 0) {
-        list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No matching records found.</div>';
-        return;
-    }
+            if (filtered.length === 0) {
+                list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No matching records found.</div>';
+                return;
+            }
 
-    list.innerHTML = filtered.map(e => {
-        const dateObj = new Date(e.t);
-        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const dateStr = dateObj.toLocaleDateString();
+            list.innerHTML = filtered.map(e => {
+                const dateObj = new Date(e.t);
+                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateStr = dateObj.toLocaleDateString();
 
-        let borderClass = "border-l-4 border-gray-300";
-        let bgClass = "bg-white";
+                let borderClass = "border-l-4 border-gray-300";
+                let bgClass = "bg-white";
 
-        // Dynamic Coloring
-        if (e.a.includes("Assigned") || e.a.includes("Booked") || e.a.includes("Available")) {
-            borderClass = "border-l-4 border-green-500";
-            bgClass = "bg-green-50";
-        }
-        if (e.a.includes("Removed") || e.a.includes("Cancelled") || e.a.includes("Withdraw")) {
-            borderClass = "border-l-4 border-red-500";
-            bgClass = "bg-red-50";
-        }
-        if (e.a.includes("Unavailable") || e.a.includes("Exchange")) {
-            borderClass = "border-l-4 border-orange-500";
-            bgClass = "bg-orange-50";
-        }
-        if (e.a.includes("Auto")) {
-            borderClass = "border-l-4 border-blue-500";
-            bgClass = "bg-blue-50";
-        }
+                // Dynamic Coloring
+                if (e.a.includes("Assigned") || e.a.includes("Booked") || e.a.includes("Available")) {
+                    borderClass = "border-l-4 border-green-500";
+                    bgClass = "bg-green-50";
+                }
+                if (e.a.includes("Removed") || e.a.includes("Cancelled") || e.a.includes("Withdraw")) {
+                    borderClass = "border-l-4 border-red-500";
+                    bgClass = "bg-red-50";
+                }
+                if (e.a.includes("Unavailable") || e.a.includes("Exchange")) {
+                    borderClass = "border-l-4 border-orange-500";
+                    bgClass = "bg-orange-50";
+                }
+                if (e.a.includes("Auto")) {
+                    borderClass = "border-l-4 border-blue-500";
+                    bgClass = "bg-blue-50";
+                }
 
-        const userDisplay = e.u.includes('@') ? e.u.split('@')[0] : e.u;
+                const userDisplay = e.u.includes('@') ? e.u.split('@')[0] : e.u;
 
-        return `
+                return `
             <div class="p-3 mb-2 rounded shadow-sm border border-gray-200 ${borderClass} ${bgClass} text-xs transition-all hover:shadow-md">
                 <div class="flex justify-between text-gray-500 mb-1 border-b border-gray-200/50 pb-1">
                     <span class="font-bold text-gray-700 truncate" title="${e.u}">${userDisplay}</span>
@@ -4053,59 +3954,59 @@ function renderLiveLogs(query = "") {
                 <div class="text-gray-600 mt-0.5 leading-relaxed">${e.d}</div>
             </div>
         `;
-    }).join('');
-}
-// --- LISTENER FOR EXCHANGE SEARCH ---
-const exchangeSearch = document.getElementById('exchange-search-input');
-if (exchangeSearch) {
-    exchangeSearch.addEventListener('input', () => {
-        if (currentUser) renderExchangeMarket(currentUser.email);
-    });
-}
-
-// ==========================================
-// 📢 MESSAGING & ALERTS SYSTEM
-// ==========================================
-window.openWeeklyNotificationModal = function (monthStr, weekNum) {
-    const list = document.getElementById('notif-list-container');
-    const title = document.getElementById('notif-modal-title');
-    const subtitle = document.getElementById('notif-modal-subtitle');
-
-    title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
-    list.innerHTML = '';
-
-    currentEmailQueue = [];
-
-    // ... (Keep existing duty gathering logic) ...
-    // 1. Gather Duties
-    const facultyDuties = {};
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-        if (mStr === monthStr && wNum === weekNum) {
-            const slot = invigilationSlots[key];
-            const [dStr, tStr] = key.split(' | ');
-            const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
-            const sessionCode = isAN ? "AN" : "FN";
-            const dayName = date.toLocaleString('en-us', { weekday: 'short' });
-            slot.assigned.forEach(email => {
-                if (!facultyDuties[email]) facultyDuties[email] = [];
-                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
+            }).join('');
+        }
+        // --- LISTENER FOR EXCHANGE SEARCH ---
+        const exchangeSearch = document.getElementById('exchange-search-input');
+        if (exchangeSearch) {
+            exchangeSearch.addEventListener('input', () => {
+                if (currentUser) renderExchangeMarket(currentUser.email);
             });
         }
-    });
 
-    if (Object.keys(facultyDuties).length === 0) {
-        list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
-        window.openModal('notification-modal');
-        return;
-    }
-    // ... (End gathering logic) ...
+        // ==========================================
+        // 📢 MESSAGING & ALERTS SYSTEM
+        // ==========================================
+        window.openWeeklyNotificationModal = function (monthStr, weekNum) {
+            const list = document.getElementById('notif-list-container');
+            const title = document.getElementById('notif-modal-title');
+            const subtitle = document.getElementById('notif-modal-subtitle');
 
-    // 2. Add Bulk Buttons (WITH CANCEL BUTTON)
-    list.innerHTML = `
+            title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
+            subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
+            list.innerHTML = '';
+
+            currentEmailQueue = [];
+
+            // ... (Keep existing duty gathering logic) ...
+            // 1. Gather Duties
+            const facultyDuties = {};
+            Object.keys(invigilationSlots).forEach(key => {
+                const date = parseDate(key);
+                const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const wNum = getWeekOfMonth(date);
+                if (mStr === monthStr && wNum === weekNum) {
+                    const slot = invigilationSlots[key];
+                    const [dStr, tStr] = key.split(' | ');
+                    const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
+                    const sessionCode = isAN ? "AN" : "FN";
+                    const dayName = date.toLocaleString('en-us', { weekday: 'short' });
+                    slot.assigned.forEach(email => {
+                        if (!facultyDuties[email]) facultyDuties[email] = [];
+                        facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
+                    });
+                }
+            });
+
+            if (Object.keys(facultyDuties).length === 0) {
+                list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
+                window.openModal('notification-modal');
+                return;
+            }
+            // ... (End gathering logic) ...
+
+            // 2. Add Bulk Buttons (WITH CANCEL BUTTON)
+            list.innerHTML = `
         <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
             <div class="text-xs text-gray-500">
                 Queue: <b>${Object.keys(facultyDuties).length}</b> Faculty + Dept Copies.
@@ -4125,69 +4026,69 @@ window.openWeeklyNotificationModal = function (monthStr, weekNum) {
         </div>
     `;
 
-    // ... (Rest of the function: Sorting, Aggregating Depts, Rendering List) ...
-    // (Copy the rest of the logic from previous turn or your file here)
+            // ... (Rest of the function: Sorting, Aggregating Depts, Rendering List) ...
+            // (Copy the rest of the logic from previous turn or your file here)
 
-    // --- SHORTCUT FOR COPYING ---
-    // Just use the loop logic from the previous `openWeeklyNotificationModal`
-    // The only change was the `list.innerHTML = ...` block above.
+            // --- SHORTCUT FOR COPYING ---
+            // Just use the loop logic from the previous `openWeeklyNotificationModal`
+            // The only change was the `list.innerHTML = ...` block above.
 
-    const deptAggregator = {};
-    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+            const deptAggregator = {};
+            const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
-    sortedEmails.forEach((email, index) => {
-        const duties = facultyDuties[email];
-        duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
-        const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
-        const staff = staffData.find(s => s.email === email);
-        const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName);
-        const staffEmail = staff ? staff.email : "";
+            sortedEmails.forEach((email, index) => {
+                const duties = facultyDuties[email];
+                duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
+                const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
+                const staff = staffData.find(s => s.email === email);
+                const fullName = staff ? staff.name : email;
+                const firstName = getFirstName(fullName);
+                const staffEmail = staff ? staff.email : "";
 
-        let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, '');
-        if (phone.length === 10) phone = "91" + phone;
+                let phone = staff ? (staff.phone || "") : "";
+                phone = phone.replace(/\D/g, '');
+                if (phone.length === 10) phone = "91" + phone;
 
-        // Emails
-        const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
-        const btnId = `email-btn-${index}`;
+                // Emails
+                const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
+                const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
+                const btnId = `email-btn-${index}`;
 
-        if (staffEmail) {
-            currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
-        }
+                if (staffEmail) {
+                    currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
+                }
 
-        // Dept Aggregation
-        if (staff && staff.dept) {
-            if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
-            deptAggregator[staff.dept].push({ name: fullName, duties: duties });
-        }
+                // Dept Aggregation
+                if (staff && staff.dept) {
+                    if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
+                    deptAggregator[staff.dept].push({ name: fullName, duties: duties });
+                }
 
-        // WhatsApp (Elaborate & Detailed)
-        const waMsg = generateWeeklyWhatsApp(fullName, duties);
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
-        // SMS (Shortest Possible)
-        const smsMsg = generateWeeklySMS(firstName, duties);
-        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-        // *** NEW: Update Preview Box (Show 1st person's message) ***
-        if (index === 0) {
-            const previewEl = document.getElementById('notif-message-preview');
-            if (previewEl) {
-                previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
-            }
-        }
+                // WhatsApp (Elaborate & Detailed)
+                const waMsg = generateWeeklyWhatsApp(fullName, duties);
+                const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
+                // SMS (Shortest Possible)
+                const smsMsg = generateWeeklySMS(firstName, duties);
+                const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+                // *** NEW: Update Preview Box (Show 1st person's message) ***
+                if (index === 0) {
+                    const previewEl = document.getElementById('notif-message-preview');
+                    if (previewEl) {
+                        previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
+                    }
+                }
 
-        const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
+                const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
 
 
-        const phoneDisabled = phone ? "" : "disabled";
-        const emailDisabled = staffEmail ? "" : "disabled";
-        const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
+                const phoneDisabled = phone ? "" : "disabled";
+                const emailDisabled = staffEmail ? "" : "disabled";
+                const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
+                const safeName = fullName.replace(/'/g, "\\'");
+                const safeSubject = emailSubject.replace(/'/g, "\\'");
+                const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
 
-        list.innerHTML += `
+                list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
                     <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
@@ -4201,56 +4102,56 @@ window.openWeeklyNotificationModal = function (monthStr, weekNum) {
                 </div>
             </div>
         `;
-    });
-
-    // Dept Emails
-    const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-    Object.keys(deptAggregator).forEach(deptName => {
-        const deptObj = cleanDepts.find(d => d.name === deptName);
-        if (deptObj && deptObj.email) {
-            const facultyList = deptAggregator[deptName];
-            const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
-            const deptBody = generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr);
-            currentEmailQueue.push({ email: deptObj.email, name: `HOD ${deptName}`, subject: deptSubject, body: deptBody, btnId: null });
-            list.insertAdjacentHTML('beforeend', `<div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1"><span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})</div>`);
-        }
-    });
-
-    window.openModal('notification-modal');
-}
-
-window.openSlotReminderModal = function (key) {
-    const list = document.getElementById('notif-list-container');
-    const title = document.getElementById('notif-modal-title');
-    const subtitle = document.getElementById('notif-modal-subtitle');
-
-    // ... (Keep existing Date/Slot logic) ...
-    // Identify Date
-    const [targetDateStr] = key.split(' | ');
-    title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
-    subtitle.textContent = "Send reminders for ALL duties on this day.";
-    list.innerHTML = '';
-    currentEmailQueue = [];
-
-    // Find ALL Sessions for this Date
-    const dailyDuties = {};
-    Object.keys(invigilationSlots).forEach(slotKey => {
-        if (slotKey.startsWith(targetDateStr)) {
-            const slot = invigilationSlots[slotKey];
-            const [d, t] = slotKey.split(' | ');
-            const isAN = (t.includes("PM") || t.startsWith("12"));
-            const sessionCode = isAN ? "AN" : "FN";
-            slot.assigned.forEach(email => {
-                if (!dailyDuties[email]) dailyDuties[email] = [];
-                dailyDuties[email].push({ date: d, time: t, session: sessionCode });
             });
+
+            // Dept Emails
+            const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
+            Object.keys(deptAggregator).forEach(deptName => {
+                const deptObj = cleanDepts.find(d => d.name === deptName);
+                if (deptObj && deptObj.email) {
+                    const facultyList = deptAggregator[deptName];
+                    const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
+                    const deptBody = generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr);
+                    currentEmailQueue.push({ email: deptObj.email, name: `HOD ${deptName}`, subject: deptSubject, body: deptBody, btnId: null });
+                    list.insertAdjacentHTML('beforeend', `<div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1"><span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})</div>`);
+                }
+            });
+
+            window.openModal('notification-modal');
         }
-    });
 
-    if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
+        window.openSlotReminderModal = function (key) {
+            const list = document.getElementById('notif-list-container');
+            const title = document.getElementById('notif-modal-title');
+            const subtitle = document.getElementById('notif-modal-subtitle');
 
-    // ADD BULK BUTTONS (WITH CANCEL)
-    list.innerHTML = `
+            // ... (Keep existing Date/Slot logic) ...
+            // Identify Date
+            const [targetDateStr] = key.split(' | ');
+            title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
+            subtitle.textContent = "Send reminders for ALL duties on this day.";
+            list.innerHTML = '';
+            currentEmailQueue = [];
+
+            // Find ALL Sessions for this Date
+            const dailyDuties = {};
+            Object.keys(invigilationSlots).forEach(slotKey => {
+                if (slotKey.startsWith(targetDateStr)) {
+                    const slot = invigilationSlots[slotKey];
+                    const [d, t] = slotKey.split(' | ');
+                    const isAN = (t.includes("PM") || t.startsWith("12"));
+                    const sessionCode = isAN ? "AN" : "FN";
+                    slot.assigned.forEach(email => {
+                        if (!dailyDuties[email]) dailyDuties[email] = [];
+                        dailyDuties[email].push({ date: d, time: t, session: sessionCode });
+                    });
+                }
+            });
+
+            if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
+
+            // ADD BULK BUTTONS (WITH CANCEL)
+            list.innerHTML = `
         <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
             <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
             <div class="flex gap-2">
@@ -4266,58 +4167,58 @@ window.openSlotReminderModal = function (key) {
         </div>
     `;
 
-    // ... (Rest of the loop logic is same as previous) ...
-    // (Use the loop from the previous openSlotReminderModal)
-    const sortedEmails = Object.keys(dailyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+            // ... (Rest of the loop logic is same as previous) ...
+            // (Use the loop from the previous openSlotReminderModal)
+            const sortedEmails = Object.keys(dailyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
-    sortedEmails.forEach((email, index) => {
-        const duties = dailyDuties[email];
-        duties.sort((a, b) => a.time.localeCompare(b.time));
+            sortedEmails.forEach((email, index) => {
+                const duties = dailyDuties[email];
+                duties.sort((a, b) => a.time.localeCompare(b.time));
 
-        const staff = staffData.find(s => s.email === email);
-        const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName);
-        const staffEmail = staff ? staff.email : "";
+                const staff = staffData.find(s => s.email === email);
+                const fullName = staff ? staff.name : email;
+                const firstName = getFirstName(fullName);
+                const staffEmail = staff ? staff.email : "";
 
-        let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, '');
-        if (phone.length === 10) phone = "91" + phone;
+                let phone = staff ? (staff.phone || "") : "";
+                phone = phone.replace(/\D/g, '');
+                if (phone.length === 10) phone = "91" + phone;
 
-        const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Duty Reminder");
-        const btnId = `email-btn-${index}`;
+                const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
+                const emailBody = generateProfessionalEmail(fullName, duties, "Duty Reminder");
+                const btnId = `email-btn-${index}`;
 
-        if (staffEmail) {
-            currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
-        }
+                if (staffEmail) {
+                    currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
+                }
 
-        // *** UPDATED: Generate detailed daily message ***
-        // WhatsApp (Elaborate & Detailed)
-        const sessionsStr = duties.map(d => d.session).join(' & ');
-        const waMsg = generateDailyWhatsApp(fullName, targetDateStr, duties);
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
+                // *** UPDATED: Generate detailed daily message ***
+                // WhatsApp (Elaborate & Detailed)
+                const sessionsStr = duties.map(d => d.session).join(' & ');
+                const waMsg = generateDailyWhatsApp(fullName, targetDateStr, duties);
+                const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
 
-        // SMS (Shortest Possible)
-        const smsMsg = generateDailySMS(firstName, targetDateStr, duties);
-        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-        // *** NEW: Update Preview Box (Show 1st person's message) ***
-        if (index === 0) {
-            const previewEl = document.getElementById('notif-message-preview');
-            if (previewEl) {
-                previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
-            }
-        }
-        const shortDate = targetDateStr.slice(0, 5);
+                // SMS (Shortest Possible)
+                const smsMsg = generateDailySMS(firstName, targetDateStr, duties);
+                const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+                // *** NEW: Update Preview Box (Show 1st person's message) ***
+                if (index === 0) {
+                    const previewEl = document.getElementById('notif-message-preview');
+                    if (previewEl) {
+                        previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
+                    }
+                }
+                const shortDate = targetDateStr.slice(0, 5);
 
 
-        const phoneDisabled = phone ? "" : "disabled";
-        const emailDisabled = staffEmail ? "" : "disabled";
-        const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
+                const phoneDisabled = phone ? "" : "disabled";
+                const emailDisabled = staffEmail ? "" : "disabled";
+                const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
+                const safeName = fullName.replace(/'/g, "\\'");
+                const safeSubject = emailSubject.replace(/'/g, "\\'");
+                const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
 
-        list.innerHTML += `
+                list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
                     <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
@@ -4330,513 +4231,513 @@ window.openSlotReminderModal = function (key) {
                 </div>
             </div>
         `;
-    });
+            });
 
-    window.openModal('notification-modal');
-}
+            window.openModal('notification-modal');
+        }
 
 
-// --- MESSAGE GENERATORS ---
+        // --- MESSAGE GENERATORS ---
 
-// --- MESSAGE GENERATORS (Split for SMS & WhatsApp) ---
+        // --- MESSAGE GENERATORS (Split for SMS & WhatsApp) ---
 
-// 1. Weekly WhatsApp (Safe Emojis)
-function generateWeeklyWhatsApp(name, duties) {
-    const now = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
+        // 1. Weekly WhatsApp (Safe Emojis)
+        function generateWeeklyWhatsApp(name, duties) {
+            const now = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
 
-    let dutyList = "";
-    duties.forEach(d => {
-        const rTime = calculateReportTime(d.time);
-        // Using 🗓️ (Calendar) and ➡️ (Arrow)
-        dutyList += `\n🗓️ *${d.date}* (${d.day}) | ${d.session}\n   ➡️ Report by: *${rTime}*\n`;
-    });
+            let dutyList = "";
+            duties.forEach(d => {
+                const rTime = calculateReportTime(d.time);
+                // Using 🗓️ (Calendar) and ➡️ (Arrow)
+                dutyList += `\n🗓️ *${d.date}* (${d.day}) | ${d.session}\n   ➡️ Report by: *${rTime}*\n`;
+            });
 
-    return `⚠️ *${name}*: Invigilation Duty Update (${now})\n${dutyList}\n✅ *Instructions:* https://bit.ly/gvc-exam\n\n_Adjustments:_ http://www.gvc.ac.in/exam\n-Chief Supt.`;
-}
+            return `⚠️ *${name}*: Invigilation Duty Update (${now})\n${dutyList}\n✅ *Instructions:* https://bit.ly/gvc-exam\n\n_Adjustments:_ http://www.gvc.ac.in/exam\n-Chief Supt.`;
+        }
 
-// 2. Weekly SMS (Shortest)
-function generateWeeklySMS(firstName, duties) {
-    // Format: "John: Duties: 01.12(FN), 03.12(AN). Portal: gvc.ac.in/exam -CS"
-    const shortList = duties.map(d => {
-        const shortDate = d.date.slice(0, 5); // "01.12"
-        return `${shortDate}(${d.session})`;
-    }).join(', ');
+        // 2. Weekly SMS (Shortest)
+        function generateWeeklySMS(firstName, duties) {
+            // Format: "John: Duties: 01.12(FN), 03.12(AN). Portal: gvc.ac.in/exam -CS"
+            const shortList = duties.map(d => {
+                const shortDate = d.date.slice(0, 5); // "01.12"
+                return `${shortDate}(${d.session})`;
+            }).join(', ');
 
-    return `${firstName}: Duties: ${shortList}. Portal: gvc.ac.in/exam -CS`;
-}
+            return `${firstName}: Duties: ${shortList}. Portal: gvc.ac.in/exam -CS`;
+        }
 
-// 3. Daily WhatsApp (Elaborate & Formal - Safe Emojis)
-function generateDailyWhatsApp(name, dateStr, duties) {
-    let dutyList = "";
-    duties.forEach(d => {
-        const rTime = calculateReportTime(d.time);
-        // Using ▪️ (Square) and 🕒 (Clock) instead of complex emojis
-        dutyList += `\n▪️ *Session:* ${d.session} (${d.time})\n   🕒 *Report by:* ${rTime}\n`;
-    });
+        // 3. Daily WhatsApp (Elaborate & Formal - Safe Emojis)
+        function generateDailyWhatsApp(name, dateStr, duties) {
+            let dutyList = "";
+            duties.forEach(d => {
+                const rTime = calculateReportTime(d.time);
+                // Using ▪️ (Square) and 🕒 (Clock) instead of complex emojis
+                dutyList += `\n▪️ *Session:* ${d.session} (${d.time})\n   🕒 *Report by:* ${rTime}\n`;
+            });
 
-    // Using 🔔 (Bell) and ➡️ (Arrow) which are standard
-    return `🔔 *INVIGILATION DUTY REMINDER* 🔔\n\nDear *${name}*,\n\nThis is to inform you that you have invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n*Duty Details:*${dutyList}\n➡️ *Instructions:*\n1. Kindly abide by the rules and regulations of the University.\n2. Please report to the Chief Superintendent's office *before the stipulated time*.\n3. In case of any inconvenience/leave, you are strictly requested to *arrange a replacement* to ensure the examination is conducted uninterrupted.\n\nThank you for your cooperation.\n\n- Chief Superintendent\nExam Wing`;
-}
+            // Using 🔔 (Bell) and ➡️ (Arrow) which are standard
+            return `🔔 *INVIGILATION DUTY REMINDER* 🔔\n\nDear *${name}*,\n\nThis is to inform you that you have invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n*Duty Details:*${dutyList}\n➡️ *Instructions:*\n1. Kindly abide by the rules and regulations of the University.\n2. Please report to the Chief Superintendent's office *before the stipulated time*.\n3. In case of any inconvenience/leave, you are strictly requested to *arrange a replacement* to ensure the examination is conducted uninterrupted.\n\nThank you for your cooperation.\n\n- Chief Superintendent\nExam Wing`;
+        }
 
-// 4. Daily SMS (Shortest)
-function generateDailySMS(firstName, dateStr, duties) {
-    // Format: "John: Duty Tmrw 01.12 (FN). Report 9:00 AM. -CS"
-    const shortDate = dateStr.slice(0, 5);
-    const sessions = duties.map(d => d.session).join('&');
-    const firstTime = calculateReportTime(duties[0].time);
+        // 4. Daily SMS (Shortest)
+        function generateDailySMS(firstName, dateStr, duties) {
+            // Format: "John: Duty Tmrw 01.12 (FN). Report 9:00 AM. -CS"
+            const shortDate = dateStr.slice(0, 5);
+            const sessions = duties.map(d => d.session).join('&');
+            const firstTime = calculateReportTime(duties[0].time);
 
-    return `${firstName}: Duty Tmrw ${shortDate} (${sessions}). Report ${firstTime}. -CS`;
-}
+            return `${firstName}: Duty Tmrw ${shortDate} (${sessions}). Report ${firstTime}. -CS`;
+        }
 
-function calculateReportTime(timeStr) {
-    try {
-        let [time, mod] = timeStr.split(' ');
-        let [h, m] = time.split(':');
-        let date = new Date();
-        date.setHours(parseInt(h) + (mod === 'PM' && h !== '12' ? 12 : 0));
-        date.setMinutes(parseInt(m));
+        function calculateReportTime(timeStr) {
+            try {
+                let [time, mod] = timeStr.split(' ');
+                let [h, m] = time.split(':');
+                let date = new Date();
+                date.setHours(parseInt(h) + (mod === 'PM' && h !== '12' ? 12 : 0));
+                date.setMinutes(parseInt(m));
 
-        // Subtract 30 mins
-        date.setMinutes(date.getMinutes() - 30);
+                // Subtract 30 mins
+                date.setMinutes(date.getMinutes() - 30);
 
-        // Format back
-        let rh = date.getHours();
-        let rm = date.getMinutes();
-        let rMod = rh >= 12 ? 'PM' : 'AM';
-        rh = rh % 12;
-        rh = rh ? rh : 12;
-        return `${String(rh).padStart(2, '0')}:${String(rm).padStart(2, '0')} ${rMod}`;
-    } catch (e) { return timeStr; }
-}
+                // Format back
+                let rh = date.getHours();
+                let rm = date.getMinutes();
+                let rMod = rh >= 12 ? 'PM' : 'AM';
+                rh = rh % 12;
+                rh = rh ? rh : 12;
+                return `${String(rh).padStart(2, '0')}:${String(rm).padStart(2, '0')} ${rMod}`;
+            } catch (e) { return timeStr; }
+        }
 
-// --- UI Helper: Mark button as sent ---
-window.markAsSent = function (btn) {
-    btn.classList.remove('bg-blue-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-orange-700');
-    btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
-    btn.innerHTML = `
+        // --- UI Helper: Mark button as sent ---
+        window.markAsSent = function (btn) {
+            btn.classList.remove('bg-blue-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-orange-700');
+            btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
+            btn.innerHTML = `
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
         Sent
     `;
-    // Optional: Disable click after sending to prevent double-send? 
-    // User might want to re-send if it failed, so we keep it clickable but green.
-}
-window.sendSessionSMS = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
-
-    // 1. Get Data
-    const [dateStr, timeStr] = key.split(' | ');
-    const reportTime = calculateReportTime(timeStr);
-
-    // 2. Gather Phones (With Country Code)
-    const phones = [];
-    slot.assigned.forEach(email => {
-        const s = staffData.find(st => st.email === email);
-        if (s && s.phone) {
-            let p = s.phone.replace(/\D/g, '');
-            // Ensure 10 digit numbers get 91 prepended
-            if (p.length === 10) p = `91${p}`;
-            phones.push(p);
+            // Optional: Disable click after sending to prevent double-send? 
+            // User might want to re-send if it failed, so we keep it clickable but green.
         }
-    });
+        window.sendSessionSMS = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
 
-    if (phones.length === 0) return alert("No valid phone numbers found for assigned staff.");
+            // 1. Get Data
+            const [dateStr, timeStr] = key.split(' | ');
+            const reportTime = calculateReportTime(timeStr);
 
-    // 3. Create Short Message (Optimized for 1 SMS segment if possible)
-    // Format: "Duty: DD.MM.YY HH:MM. Report: HH:MM. -CS GVC"
-    const shortDate = dateStr.slice(0, 5); // DD.MM
-    const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. -CS GVC`;
-
-    // 4. Launch Native SMS App
-    // Note: Most phones allow selecting SIM card when the app opens.
-    // Android standard: comma separated numbers
-    window.location.href = `sms:${phones.join(',')}?body=${encodeURIComponent(msg)}`;
-}
-
-// --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
-window.downloadAttendanceCSV = function () {
-    if (!confirm("Download the full attendance register for the current Academic Year?")) return;
-
-    const acYear = getCurrentAcademicYear();
-    const rows = [];
-
-    // Header Row
-    rows.push(['Date', 'Session', 'Exam Name', 'Faculty Name', 'Department', 'Designation', 'Duty Status', 'Phone']);
-
-    // 1. Get Sorted Sessions
-    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
-        const dateA = parseDate(a);
-        const dateB = parseDate(b);
-        return dateA - dateB;
-    });
-
-    sortedKeys.forEach(key => {
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-
-        // Filter by Academic Year
-        if (dateObj < acYear.start || dateObj > acYear.end) return;
-
-        // Only process if attendance is marked
-        if (!slot.attendance || slot.attendance.length === 0) return;
-
-        const [dateStr, timeStr] = key.split(' | ');
-        const sessionType = (timeStr.includes("PM") || timeStr.startsWith("12")) ? "AN" : "FN";
-        const examName = slot.examName || "University Examination";
-
-        // Identify Supervision
-        const csEmail = slot.supervision ? slot.supervision.cs : "";
-        const sasEmail = slot.supervision ? slot.supervision.sas : "";
-
-        slot.attendance.forEach(email => {
-            const staff = staffData.find(s => s.email === email);
-            const name = staff ? staff.name : getNameFromEmail(email);
-            const dept = staff ? staff.dept : "N/A";
-            const desig = staff ? staff.designation : "N/A";
-            const phone = staff ? (staff.phone || "") : "";
-
-            // Determine Role (Updated Abbreviations)
-            let status = "Invigilator";
-            if (email === csEmail) status = "CS";
-            else if (email === sasEmail) status = "SAS";
-
-            // Add Row
-            rows.push([
-                dateStr,
-                sessionType,
-                `"${examName}"`,
-                `"${name}"`,
-                `"${dept}"`,
-                `"${desig}"`,
-                status,
-                phone
-            ]);
-        });
-    });
-
-    if (rows.length <= 1) {
-        return alert("No attendance records found for this Academic Year.");
-    }
-
-    // Generate CSV
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Attendance_Register_${acYear.label}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-// ==========================================
-// 📤 BULK STAFF UPLOAD LOGIC
-// ==========================================
-
-// 1. Download Template (Updated for DD-MM-YY)
-window.downloadStaffTemplate = function () {
-    // Header clearly indicates format
-    const headers = ["Name", "Email", "Phone", "Department", "Designation", "Joining Date (DD-MM-YY)"];
-    // Sample follows the format
-    const sample = ["John Doe,john@example.com,9876543210,Physics,Assistant Professor,01-06-23"];
-
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "Staff_Upload_Template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-// 2. Global Vars for Upload State
-let tempStaffData = [];
-let tempUniqueStaff = [];
-
-// 3. Handle File Selection
-window.handleStaffCSVUpload = function (input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const text = e.target.result;
-        processStaffCSV(text);
-        input.value = ''; // Reset
-    };
-    reader.readAsText(file);
-}
-
-// 4. Parse & Analyze CSV (Robust Date Parsing)
-function processStaffCSV(csvText) {
-    const lines = csvText.split('\n');
-    if (lines.length < 2) return alert("CSV is empty or invalid.");
-
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
-
-    // Column Mapping
-    const getIndex = (possibleNames) => headers.findIndex(h => possibleNames.some(name => h.includes(name)));
-
-    const nameIdx = getIndex(['name', 'staff name', 'faculty']);
-    const emailIdx = getIndex(['email', 'gmail', 'mail']);
-    const phoneIdx = getIndex(['phone', 'mobile', 'whatsapp']);
-    const deptIdx = getIndex(['dept', 'department']);
-    const desigIdx = getIndex(['designation', 'role']);
-    const joinIdx = getIndex(['joining date', 'join date', 'doj', 'date of joining']);
-
-    if (nameIdx === -1 || emailIdx === -1 || deptIdx === -1) {
-        alert(`Error: Missing required columns (Name, Email, Department).\nFound headers: ${headers.join(', ')}`);
-        return;
-    }
-
-    const parsedData = [];
-
-    // --- FIXED DATE HELPER (Handles DD-MM-YY & DD-MM-YYYY) ---
-    const formatDate = (dateStr) => {
-        if (!dateStr) return new Date().toISOString().split('T')[0];
-        try {
-            let cleanStr = dateStr.replace(/[./]/g, '-').trim();
-            let parts = cleanStr.split('-');
-
-            let y, m, d;
-            if (parts.length !== 3) return new Date().toISOString().split('T')[0];
-
-            // Case 1: YYYY-MM-DD
-            if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
-            // Case 2: DD-MM-YYYY
-            else if (parts[2].length === 4) { y = parts[2]; m = parts[1]; d = parts[0]; }
-            // Case 3: DD-MM-YY (Auto-add "20")
-            else if (parts[2].length === 2) { y = "20" + parts[2]; m = parts[1]; d = parts[0]; }
-            else { return new Date().toISOString().split('T')[0]; }
-
-            // Pad single digits (6 -> 06)
-            m = m.padStart(2, '0');
-            d = d.padStart(2, '0');
-
-            return `${y}-${m}-${d}`; // HTML5 Input Standard
-        } catch (e) {
-            return new Date().toISOString().split('T')[0];
-        }
-    };
-
-    // Parse Rows
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/; // Handle commas in quotes
-        const row = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-
-        const name = row[nameIdx];
-        const email = row[emailIdx];
-
-        if (name && email) {
-            parsedData.push({
-                name: name,
-                email: email,
-                phone: phoneIdx !== -1 ? row[phoneIdx] : "",
-                dept: deptIdx !== -1 ? row[deptIdx] : "",
-                designation: desigIdx !== -1 ? row[desigIdx] : "Assistant Professor",
-                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : new Date().toISOString().split('T')[0],
-                // Defaults
-                dutiesDone: 0,
-                roleHistory: [],
-                preferredDays: [1, 2, 3, 4, 5, 6] // Default Full Availability
+            // 2. Gather Phones (With Country Code)
+            const phones = [];
+            slot.assigned.forEach(email => {
+                const s = staffData.find(st => st.email === email);
+                if (s && s.phone) {
+                    let p = s.phone.replace(/\D/g, '');
+                    // Ensure 10 digit numbers get 91 prepended
+                    if (p.length === 10) p = `91${p}`;
+                    phones.push(p);
+                }
             });
+
+            if (phones.length === 0) return alert("No valid phone numbers found for assigned staff.");
+
+            // 3. Create Short Message (Optimized for 1 SMS segment if possible)
+            // Format: "Duty: DD.MM.YY HH:MM. Report: HH:MM. -CS GVC"
+            const shortDate = dateStr.slice(0, 5); // DD.MM
+            const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. -CS GVC`;
+
+            // 4. Launch Native SMS App
+            // Note: Most phones allow selecting SIM card when the app opens.
+            // Android standard: comma separated numbers
+            window.location.href = `sms:${phones.join(',')}?body=${encodeURIComponent(msg)}`;
         }
-    }
 
-    if (parsedData.length === 0) {
-        alert("No valid data found in CSV.");
-        return;
-    }
+        // --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
+        window.downloadAttendanceCSV = function () {
+            if (!confirm("Download the full attendance register for the current Academic Year?")) return;
 
-    // Analyze Conflicts
-    tempStaffData = parsedData;
-    const existingEmails = new Set(staffData.map(s => s.email.toLowerCase()));
-    tempUniqueStaff = parsedData.filter(s => !existingEmails.has(s.email.toLowerCase()));
+            const acYear = getCurrentAcademicYear();
+            const rows = [];
 
-    // Show Modal
-    document.getElementById('staff-existing-count').textContent = staffData.length;
-    document.getElementById('staff-new-count').textContent = parsedData.length;
-    document.getElementById('staff-unique-count').textContent = tempUniqueStaff.length;
+            // Header Row
+            rows.push(['Date', 'Session', 'Exam Name', 'Faculty Name', 'Department', 'Designation', 'Duty Status', 'Phone']);
 
-    window.openModal('staff-conflict-modal');
-}
+            // 1. Get Sorted Sessions
+            const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
+                const dateA = parseDate(a);
+                const dateB = parseDate(b);
+                return dateA - dateB;
+            });
 
-// 5. Modal Button Listeners
-document.getElementById('btn-staff-merge').addEventListener('click', async () => {
-    if (tempUniqueStaff.length === 0) {
-        alert("No new unique staff to add.");
-        window.closeModal('staff-conflict-modal');
-        return;
-    }
+            sortedKeys.forEach(key => {
+                const slot = invigilationSlots[key];
+                const dateObj = parseDate(key);
 
-    staffData = [...staffData, ...tempUniqueStaff];
-    await syncStaffToCloud();
+                // Filter by Academic Year
+                if (dateObj < acYear.start || dateObj > acYear.end) return;
 
-    // Optional: Grant access if using whitelist
-    if (typeof addStaffAccess === 'function') {
-        for (const s of tempUniqueStaff) { await addStaffAccess(s.email); }
-    }
+                // Only process if attendance is marked
+                if (!slot.attendance || slot.attendance.length === 0) return;
 
-    alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
-    window.closeModal('staff-conflict-modal');
-    renderStaffTable();
-    updateAdminUI();
-});
+                const [dateStr, timeStr] = key.split(' | ');
+                const sessionType = (timeStr.includes("PM") || timeStr.startsWith("12")) ? "AN" : "FN";
+                const examName = slot.examName || "University Examination";
 
-// 5. Replace Logic (Overwrite Database) - FIXED
-document.getElementById('btn-staff-replace').addEventListener('click', async () => {
-    if (confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
-        staffData = tempStaffData;
-        await syncStaffToCloud();
+                // Identify Supervision
+                const csEmail = slot.supervision ? slot.supervision.cs : "";
+                const sasEmail = slot.supervision ? slot.supervision.sas : "";
 
-        // *** FIX: Grant Access to New List ***
-        if (typeof addStaffAccess === 'function') {
-            // Optional: Clear old access list first if you want strict replacement
-            // For now, we just ensure new people get access
-            let count = 0;
-            for (const s of staffData) {
-                await addStaffAccess(s.email);
-                count++;
+                slot.attendance.forEach(email => {
+                    const staff = staffData.find(s => s.email === email);
+                    const name = staff ? staff.name : getNameFromEmail(email);
+                    const dept = staff ? staff.dept : "N/A";
+                    const desig = staff ? staff.designation : "N/A";
+                    const phone = staff ? (staff.phone || "") : "";
+
+                    // Determine Role (Updated Abbreviations)
+                    let status = "Invigilator";
+                    if (email === csEmail) status = "CS";
+                    else if (email === sasEmail) status = "SAS";
+
+                    // Add Row
+                    rows.push([
+                        dateStr,
+                        sessionType,
+                        `"${examName}"`,
+                        `"${name}"`,
+                        `"${dept}"`,
+                        `"${desig}"`,
+                        status,
+                        phone
+                    ]);
+                });
+            });
+
+            if (rows.length <= 1) {
+                return alert("No attendance records found for this Academic Year.");
             }
-            console.log(`Access granted to ${count} staff.`);
+
+            // Generate CSV
+            const csvContent = rows.map(e => e.join(",")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Attendance_Register_${acYear.label}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+        // ==========================================
+        // 📤 BULK STAFF UPLOAD LOGIC
+        // ==========================================
+
+        // 1. Download Template (Updated for DD-MM-YY)
+        window.downloadStaffTemplate = function () {
+            // Header clearly indicates format
+            const headers = ["Name", "Email", "Phone", "Department", "Designation", "Joining Date (DD-MM-YY)"];
+            // Sample follows the format
+            const sample = ["John Doe,john@example.com,9876543210,Physics,Assistant Professor,01-06-23"];
+
+            const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Staff_Upload_Template.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
-        // **************************************
 
-        alert("✅ Database replaced successfully & Permissions updated.");
-        window.closeModal('staff-conflict-modal');
-        renderStaffTable();
-        updateAdminUI();
-    }
-});
+        // 2. Global Vars for Upload State
+        let tempStaffData = [];
+        let tempUniqueStaff = [];
 
-// --- MAINTENANCE: CLEAR OLD DATA ---
-window.clearOldData = async function () {
-    const acYear = getCurrentAcademicYear();
-    const cutoffDate = acYear.start; // June 1st of Current AY
+        // 3. Handle File Selection
+        window.handleStaffCSVUpload = function (input) {
+            const file = input.files[0];
+            if (!file) return;
 
-    if (!confirm(`⚠️ MAINTENANCE: Clear Previous Year Data? ⚠️\n\nThis will DELETE all attendance slots and duty records BEFORE ${cutoffDate.toDateString()}.\n\n1. Please DOWNLOAD the Attendance Register (.csv) first as a backup.\n2. This action cannot be undone.`)) return;
-
-    if (!confirm("Are you absolutely sure you have a backup?")) return;
-
-    const newSlots = {};
-    let removedCount = 0;
-
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-
-        // Keep slots that are ON or AFTER the cutoff
-        if (date >= cutoffDate) {
-            newSlots[key] = invigilationSlots[key];
-        } else {
-            removedCount++;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const text = e.target.result;
+                processStaffCSV(text);
+                input.value = ''; // Reset
+            };
+            reader.readAsText(file);
         }
-    });
 
-    if (removedCount > 0) {
-        invigilationSlots = newSlots;
-        await syncSlotsToCloud();
-        renderSlotsGridAdmin();
-        alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
-    } else {
-        alert("No old data found to clear.");
-    }
-}
+        // 4. Parse & Analyze CSV (Robust Date Parsing)
+        function processStaffCSV(csvText) {
+            const lines = csvText.split('\n');
+            if (lines.length < 2) return alert("CSV is empty or invalid.");
 
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
 
-// --- STAFF MANAGEMENT: ADD & EDIT ---
+            // Column Mapping
+            const getIndex = (possibleNames) => headers.findIndex(h => possibleNames.some(name => h.includes(name)));
 
-// Helper to toggle weekly days visibility
-function toggleDaysVisibility() {
-    const desig = document.getElementById('stf-designation').value;
-    const wrapper = document.getElementById('weekly-availability-section');
-    if (wrapper) {
-        if (desig === "Guest Lecturer") {
-            wrapper.classList.remove('hidden');
-        } else {
-            wrapper.classList.add('hidden');
+            const nameIdx = getIndex(['name', 'staff name', 'faculty']);
+            const emailIdx = getIndex(['email', 'gmail', 'mail']);
+            const phoneIdx = getIndex(['phone', 'mobile', 'whatsapp']);
+            const deptIdx = getIndex(['dept', 'department']);
+            const desigIdx = getIndex(['designation', 'role']);
+            const joinIdx = getIndex(['joining date', 'join date', 'doj', 'date of joining']);
+
+            if (nameIdx === -1 || emailIdx === -1 || deptIdx === -1) {
+                alert(`Error: Missing required columns (Name, Email, Department).\nFound headers: ${headers.join(', ')}`);
+                return;
+            }
+
+            const parsedData = [];
+
+            // --- FIXED DATE HELPER (Handles DD-MM-YY & DD-MM-YYYY) ---
+            const formatDate = (dateStr) => {
+                if (!dateStr) return new Date().toISOString().split('T')[0];
+                try {
+                    let cleanStr = dateStr.replace(/[./]/g, '-').trim();
+                    let parts = cleanStr.split('-');
+
+                    let y, m, d;
+                    if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+
+                    // Case 1: YYYY-MM-DD
+                    if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
+                    // Case 2: DD-MM-YYYY
+                    else if (parts[2].length === 4) { y = parts[2]; m = parts[1]; d = parts[0]; }
+                    // Case 3: DD-MM-YY (Auto-add "20")
+                    else if (parts[2].length === 2) { y = "20" + parts[2]; m = parts[1]; d = parts[0]; }
+                    else { return new Date().toISOString().split('T')[0]; }
+
+                    // Pad single digits (6 -> 06)
+                    m = m.padStart(2, '0');
+                    d = d.padStart(2, '0');
+
+                    return `${y}-${m}-${d}`; // HTML5 Input Standard
+                } catch (e) {
+                    return new Date().toISOString().split('T')[0];
+                }
+            };
+
+            // Parse Rows
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/; // Handle commas in quotes
+                const row = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+
+                const name = row[nameIdx];
+                const email = row[emailIdx];
+
+                if (name && email) {
+                    parsedData.push({
+                        name: name,
+                        email: email,
+                        phone: phoneIdx !== -1 ? row[phoneIdx] : "",
+                        dept: deptIdx !== -1 ? row[deptIdx] : "",
+                        designation: desigIdx !== -1 ? row[desigIdx] : "Assistant Professor",
+                        joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : new Date().toISOString().split('T')[0],
+                        // Defaults
+                        dutiesDone: 0,
+                        roleHistory: [],
+                        preferredDays: [1, 2, 3, 4, 5, 6] // Default Full Availability
+                    });
+                }
+            }
+
+            if (parsedData.length === 0) {
+                alert("No valid data found in CSV.");
+                return;
+            }
+
+            // Analyze Conflicts
+            tempStaffData = parsedData;
+            const existingEmails = new Set(staffData.map(s => s.email.toLowerCase()));
+            tempUniqueStaff = parsedData.filter(s => !existingEmails.has(s.email.toLowerCase()));
+
+            // Show Modal
+            document.getElementById('staff-existing-count').textContent = staffData.length;
+            document.getElementById('staff-new-count').textContent = parsedData.length;
+            document.getElementById('staff-unique-count').textContent = tempUniqueStaff.length;
+
+            window.openModal('staff-conflict-modal');
         }
-    }
-}
 
-window.openAddStaffModal = function () {
-    // Clear Form
-    document.getElementById('stf-edit-index').value = "";
-    document.getElementById('stf-name').value = "";
-    document.getElementById('stf-email').value = "";
-    document.getElementById('stf-email').disabled = false;
-    document.getElementById('stf-phone').value = "";
-    document.getElementById('stf-dept').value = "";
-    document.getElementById('stf-designation').value = "";
-    document.getElementById('stf-join').value = "";
+        // 5. Modal Button Listeners
+        document.getElementById('btn-staff-merge').addEventListener('click', async () => {
+            if (tempUniqueStaff.length === 0) {
+                alert("No new unique staff to add.");
+                window.closeModal('staff-conflict-modal');
+                return;
+            }
 
-    // Reset Days
-    document.querySelectorAll('.stf-day-chk').forEach(c => c.checked = true);
+            staffData = [...staffData, ...tempUniqueStaff];
+            await syncStaffToCloud();
 
-    // Attach Listener for Designation Change
-    const desigSelect = document.getElementById('stf-designation');
-    if (desigSelect) {
-        desigSelect.onchange = toggleDaysVisibility;
-    }
-    toggleDaysVisibility(); // Run once to set initial state
+            // Optional: Grant access if using whitelist
+            if (typeof addStaffAccess === 'function') {
+                for (const s of tempUniqueStaff) { await addStaffAccess(s.email); }
+            }
 
-    document.getElementById('staff-modal-title').textContent = "Add New Invigilator";
-    window.openModal('add-staff-modal');
-}
+            alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
+            window.closeModal('staff-conflict-modal');
+            renderStaffTable();
+            updateAdminUI();
+        });
 
-window.editStaff = function (index) {
-    const staff = staffData[index];
-    if (!staff) return;
+        // 5. Replace Logic (Overwrite Database) - FIXED
+        document.getElementById('btn-staff-replace').addEventListener('click', async () => {
+            if (confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
+                staffData = tempStaffData;
+                await syncStaffToCloud();
 
-    // Populate Form
-    document.getElementById('stf-edit-index').value = index;
-    document.getElementById('stf-name').value = staff.name;
-    document.getElementById('stf-email').value = staff.email;
-    document.getElementById('stf-email').disabled = false;
-    document.getElementById('stf-phone').value = staff.phone || "";
-    document.getElementById('stf-dept').value = staff.dept;
-    document.getElementById('stf-designation').value = staff.designation;
-    document.getElementById('stf-join').value = staff.joiningDate || "";
+                // *** FIX: Grant Access to New List ***
+                if (typeof addStaffAccess === 'function') {
+                    // Optional: Clear old access list first if you want strict replacement
+                    // For now, we just ensure new people get access
+                    let count = 0;
+                    for (const s of staffData) {
+                        await addStaffAccess(s.email);
+                        count++;
+                    }
+                    console.log(`Access granted to ${count} staff.`);
+                }
+                // **************************************
 
-    // Populate Days
-    const days = staff.preferredDays || [1, 2, 3, 4, 5, 6];
-    document.querySelectorAll('.stf-day-chk').forEach(c => {
-        c.checked = days.includes(parseInt(c.value));
-    });
+                alert("✅ Database replaced successfully & Permissions updated.");
+                window.closeModal('staff-conflict-modal');
+                renderStaffTable();
+                updateAdminUI();
+            }
+        });
 
-    // Attach Listener
-    const desigSelect = document.getElementById('stf-designation');
-    if (desigSelect) {
-        desigSelect.onchange = toggleDaysVisibility;
-    }
-    toggleDaysVisibility(); // Run once to set correct state
+        // --- MAINTENANCE: CLEAR OLD DATA ---
+        window.clearOldData = async function () {
+            const acYear = getCurrentAcademicYear();
+            const cutoffDate = acYear.start; // June 1st of Current AY
 
-    document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
-    window.openModal('add-staff-modal');
-}
+            if (!confirm(`⚠️ MAINTENANCE: Clear Previous Year Data? ⚠️\n\nThis will DELETE all attendance slots and duty records BEFORE ${cutoffDate.toDateString()}.\n\n1. Please DOWNLOAD the Attendance Register (.csv) first as a backup.\n2. This action cannot be undone.`)) return;
+
+            if (!confirm("Are you absolutely sure you have a backup?")) return;
+
+            const newSlots = {};
+            let removedCount = 0;
+
+            Object.keys(invigilationSlots).forEach(key => {
+                const date = parseDate(key);
+
+                // Keep slots that are ON or AFTER the cutoff
+                if (date >= cutoffDate) {
+                    newSlots[key] = invigilationSlots[key];
+                } else {
+                    removedCount++;
+                }
+            });
+
+            if (removedCount > 0) {
+                invigilationSlots = newSlots;
+                await syncSlotsToCloud();
+                renderSlotsGridAdmin();
+                alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
+            } else {
+                alert("No old data found to clear.");
+            }
+        }
+
+
+        // --- STAFF MANAGEMENT: ADD & EDIT ---
+
+        // Helper to toggle weekly days visibility
+        function toggleDaysVisibility() {
+            const desig = document.getElementById('stf-designation').value;
+            const wrapper = document.getElementById('weekly-availability-section');
+            if (wrapper) {
+                if (desig === "Guest Lecturer") {
+                    wrapper.classList.remove('hidden');
+                } else {
+                    wrapper.classList.add('hidden');
+                }
+            }
+        }
+
+        window.openAddStaffModal = function () {
+            // Clear Form
+            document.getElementById('stf-edit-index').value = "";
+            document.getElementById('stf-name').value = "";
+            document.getElementById('stf-email').value = "";
+            document.getElementById('stf-email').disabled = false;
+            document.getElementById('stf-phone').value = "";
+            document.getElementById('stf-dept').value = "";
+            document.getElementById('stf-designation').value = "";
+            document.getElementById('stf-join').value = "";
+
+            // Reset Days
+            document.querySelectorAll('.stf-day-chk').forEach(c => c.checked = true);
+
+            // Attach Listener for Designation Change
+            const desigSelect = document.getElementById('stf-designation');
+            if (desigSelect) {
+                desigSelect.onchange = toggleDaysVisibility;
+            }
+            toggleDaysVisibility(); // Run once to set initial state
+
+            document.getElementById('staff-modal-title').textContent = "Add New Invigilator";
+            window.openModal('add-staff-modal');
+        }
+
+        window.editStaff = function (index) {
+            const staff = staffData[index];
+            if (!staff) return;
+
+            // Populate Form
+            document.getElementById('stf-edit-index').value = index;
+            document.getElementById('stf-name').value = staff.name;
+            document.getElementById('stf-email').value = staff.email;
+            document.getElementById('stf-email').disabled = false;
+            document.getElementById('stf-phone').value = staff.phone || "";
+            document.getElementById('stf-dept').value = staff.dept;
+            document.getElementById('stf-designation').value = staff.designation;
+            document.getElementById('stf-join').value = staff.joiningDate || "";
+
+            // Populate Days
+            const days = staff.preferredDays || [1, 2, 3, 4, 5, 6];
+            document.querySelectorAll('.stf-day-chk').forEach(c => {
+                c.checked = days.includes(parseInt(c.value));
+            });
+
+            // Attach Listener
+            const desigSelect = document.getElementById('stf-designation');
+            if (desigSelect) {
+                desigSelect.onchange = toggleDaysVisibility;
+            }
+            toggleDaysVisibility(); // Run once to set correct state
+
+            document.getElementById('staff-modal-title').textContent = "Edit Staff Profile";
+            window.openModal('add-staff-modal');
+        }
 
 
 
 
-// --- HELPER: Professional Email Template ---
-function generateProfessionalEmail(name, dutiesArray, title) {
-    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+        // --- HELPER: Professional Email Template ---
+        function generateProfessionalEmail(name, dutiesArray, title) {
+            const collegeName = collegeData.examCollegeName || "Government Victoria College";
 
-    let rows = dutiesArray.map(d => {
-        // Calculate Report Time
-        const reportTime = calculateReportTime(d.time);
-        return `
+            let rows = dutiesArray.map(d => {
+                // Calculate Report Time
+                const reportTime = calculateReportTime(d.time);
+                return `
         <tr>
             <td style="padding: 8px; border: 1px solid #ddd;">${d.date}</td>
             <td style="padding: 8px; border: 1px solid #ddd;">${d.session} (${d.time})</td>
             <td style="padding: 8px; border: 1px solid #ddd; color: #c0392b; font-weight: bold;">${reportTime}</td>
         </tr>`;
-    }).join('');
+            }).join('');
 
-    return `
+            return `
     <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px;">
         <p>Dear <b>${name}</b>,</p>
         <p>This is an official intimation regarding your ${title} at <b>${collegeName}</b>.</p>
@@ -4872,143 +4773,143 @@ function generateProfessionalEmail(name, dutiesArray, title) {
         </p>
     </div>
     `;
-}
-// --- HELPER: Convert WhatsApp Text to HTML for Email ---
-function formatMessageForEmail(text) {
-    if (!text) return "";
-    let html = text
-        .replace(/\n/g, '<br>')
-        .replace(/\*(.*?)\*/g, '<b>$1</b>')       // Bold *text*
-        .replace(/_(.*?)_/g, '<i>$1</i>');       // Italic _text_
-    return html;
-}
-// --- BULK EMAIL SENDER (With Cancel Option) ---
-window.sendBulkEmails = async function (btnId) {
-    const btn = document.getElementById(btnId);
-    const cancelBtn = document.getElementById('btn-cancel-bulk'); // Get the cancel button
-
-    if (!btn) return;
-
-    if (currentEmailQueue.length === 0) return alert("No valid emails found to send.");
-    if (!confirm(`Send detailed emails to ${currentEmailQueue.length} faculty members?`)) return;
-
-    // 1. Reset State
-    isBulkSendingCancelled = false;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-
-    // 2. Show Cancel Button
-    if (cancelBtn) {
-        cancelBtn.classList.remove('hidden');
-        cancelBtn.disabled = false;
-        cancelBtn.textContent = "Stop / Cancel";
-        cancelBtn.classList.remove('opacity-50');
-    }
-
-    let sentCount = 0;
-    let cancelled = false;
-
-    // 3. Process Queue
-    for (let i = 0; i < currentEmailQueue.length; i++) {
-
-        // --- CHECK FOR CANCELLATION ---
-        if (isBulkSendingCancelled) {
-            cancelled = true;
-            break; // Stop the loop
         }
-
-        const item = currentEmailQueue[i];
-
-        // Update Button Progress
-        btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Sending ${i + 1}/${currentEmailQueue.length}...`;
-
-        // Find individual button
-        const indBtn = document.getElementById(item.btnId);
-        if (indBtn) {
-            indBtn.innerHTML = "Sending...";
-            indBtn.classList.add('bg-gray-400');
+        // --- HELPER: Convert WhatsApp Text to HTML for Email ---
+        function formatMessageForEmail(text) {
+            if (!text) return "";
+            let html = text
+                .replace(/\n/g, '<br>')
+                .replace(/\*(.*?)\*/g, '<b>$1</b>')       // Bold *text*
+                .replace(/_(.*?)_/g, '<i>$1</i>');       // Italic _text_
+            return html;
         }
+        // --- BULK EMAIL SENDER (With Cancel Option) ---
+        window.sendBulkEmails = async function (btnId) {
+            const btn = document.getElementById(btnId);
+            const cancelBtn = document.getElementById('btn-cancel-bulk'); // Get the cancel button
 
-        try {
-            // Send via Google Script
-            await fetch(googleScriptUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    to: item.email,
-                    subject: item.subject,
-                    body: item.body
-                })
-            });
+            if (!btn) return;
 
-            // Success Update
-            if (indBtn) {
-                indBtn.innerHTML = "Sent";
-                indBtn.classList.remove('bg-gray-400', 'bg-gray-700');
-                indBtn.classList.add('bg-green-600', 'cursor-default');
+            if (currentEmailQueue.length === 0) return alert("No valid emails found to send.");
+            if (!confirm(`Send detailed emails to ${currentEmailQueue.length} faculty members?`)) return;
+
+            // 1. Reset State
+            isBulkSendingCancelled = false;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+
+            // 2. Show Cancel Button
+            if (cancelBtn) {
+                cancelBtn.classList.remove('hidden');
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = "Stop / Cancel";
+                cancelBtn.classList.remove('opacity-50');
             }
-            sentCount++;
 
-            // Delay to prevent rate limiting
-            await new Promise(r => setTimeout(r, 800)); // Increased to 800ms for safety
+            let sentCount = 0;
+            let cancelled = false;
 
-        } catch (e) {
-            console.error(`Failed to send to ${item.email}`, e);
-            if (indBtn) indBtn.innerHTML = "Failed";
+            // 3. Process Queue
+            for (let i = 0; i < currentEmailQueue.length; i++) {
+
+                // --- CHECK FOR CANCELLATION ---
+                if (isBulkSendingCancelled) {
+                    cancelled = true;
+                    break; // Stop the loop
+                }
+
+                const item = currentEmailQueue[i];
+
+                // Update Button Progress
+                btn.innerHTML = `<svg class="animate-spin h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Sending ${i + 1}/${currentEmailQueue.length}...`;
+
+                // Find individual button
+                const indBtn = document.getElementById(item.btnId);
+                if (indBtn) {
+                    indBtn.innerHTML = "Sending...";
+                    indBtn.classList.add('bg-gray-400');
+                }
+
+                try {
+                    // Send via Google Script
+                    await fetch(googleScriptUrl, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            to: item.email,
+                            subject: item.subject,
+                            body: item.body
+                        })
+                    });
+
+                    // Success Update
+                    if (indBtn) {
+                        indBtn.innerHTML = "Sent";
+                        indBtn.classList.remove('bg-gray-400', 'bg-gray-700');
+                        indBtn.classList.add('bg-green-600', 'cursor-default');
+                    }
+                    sentCount++;
+
+                    // Delay to prevent rate limiting
+                    await new Promise(r => setTimeout(r, 800)); // Increased to 800ms for safety
+
+                } catch (e) {
+                    console.error(`Failed to send to ${item.email}`, e);
+                    if (indBtn) indBtn.innerHTML = "Failed";
+                }
+            }
+
+            // 4. Cleanup
+            if (cancelBtn) cancelBtn.classList.add('hidden'); // Hide Cancel button
+
+            if (cancelled) {
+                btn.innerHTML = `⚠️ Stopped (${sentCount}/${currentEmailQueue.length})`;
+                btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                btn.classList.add('bg-orange-600', 'cursor-default');
+                alert(`Sending Cancelled.\nSuccessfully sent: ${sentCount}\nRemaining: ${currentEmailQueue.length - sentCount}`);
+            } else {
+                btn.innerHTML = `✅ Sent ${sentCount} Emails`;
+                btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                btn.classList.add('bg-green-600', 'cursor-default');
+
+                if (typeof logActivity === 'function') logActivity("Bulk Email", `Sent ${sentCount} automated emails to faculty.`);
+                alert(`Batch Complete! ${sentCount} emails sent.`);
+            }
         }
-    }
 
-    // 4. Cleanup
-    if (cancelBtn) cancelBtn.classList.add('hidden'); // Hide Cancel button
+        // --- HELPER: Consolidated Department Email Template ---
+        function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, monthStr) {
+            const collegeName = collegeData.examCollegeName || "Government Victoria College";
 
-    if (cancelled) {
-        btn.innerHTML = `⚠️ Stopped (${sentCount}/${currentEmailQueue.length})`;
-        btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-        btn.classList.add('bg-orange-600', 'cursor-default');
-        alert(`Sending Cancelled.\nSuccessfully sent: ${sentCount}\nRemaining: ${currentEmailQueue.length - sentCount}`);
-    } else {
-        btn.innerHTML = `✅ Sent ${sentCount} Emails`;
-        btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-        btn.classList.add('bg-green-600', 'cursor-default');
+            let tableRows = "";
 
-        if (typeof logActivity === 'function') logActivity("Bulk Email", `Sent ${sentCount} automated emails to faculty.`);
-        alert(`Batch Complete! ${sentCount} emails sent.`);
-    }
-}
+            // 1. Build Table Rows
+            // facultyData is an array of { name: "John", duties: [ {date, session, time}, ... ] }
+            facultyData.sort((a, b) => a.name.localeCompare(b.name));
 
-// --- HELPER: Consolidated Department Email Template ---
-function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, monthStr) {
-    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+            facultyData.forEach((f, index) => {
+                const bgClass = index % 2 === 0 ? "#ffffff" : "#f9fafb";
 
-    let tableRows = "";
+                // Rowspan for Faculty Name
+                const rowSpan = f.duties.length;
 
-    // 1. Build Table Rows
-    // facultyData is an array of { name: "John", duties: [ {date, session, time}, ... ] }
-    facultyData.sort((a, b) => a.name.localeCompare(b.name));
+                f.duties.forEach((d, dIndex) => {
+                    const nameCell = (dIndex === 0)
+                        ? `<td rowspan="${rowSpan}" style="padding: 8px; border: 1px solid #ddd; font-weight: bold; vertical-align: top; background-color: ${bgClass};">${f.name}</td>`
+                        : "";
 
-    facultyData.forEach((f, index) => {
-        const bgClass = index % 2 === 0 ? "#ffffff" : "#f9fafb";
-
-        // Rowspan for Faculty Name
-        const rowSpan = f.duties.length;
-
-        f.duties.forEach((d, dIndex) => {
-            const nameCell = (dIndex === 0)
-                ? `<td rowspan="${rowSpan}" style="padding: 8px; border: 1px solid #ddd; font-weight: bold; vertical-align: top; background-color: ${bgClass};">${f.name}</td>`
-                : "";
-
-            tableRows += `
+                    tableRows += `
             <tr style="background-color: ${bgClass};">
                 ${nameCell}
                 <td style="padding: 8px; border: 1px solid #ddd;">${d.date}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">${d.session}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; color: #555;">${d.time}</td>
             </tr>`;
-        });
-    });
+                });
+            });
 
-    return `
+            return `
     <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 800px;">
         <p>Dear Head of Department (<b>${deptName}</b>),</p>
         <p>Please find below the consolidated invigilation duty list for faculty members of your department for <b>Week ${weekNum} (${monthStr})</b>.</p>
@@ -5037,614 +4938,614 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
         </p>
     </div>
     `;
-}
-window.toggleStaffListLock = function () {
-    isStaffListLocked = !isStaffListLocked;
-    const btn = document.getElementById('btn-staff-list-lock');
-
-    if (btn) {
-        if (isStaffListLocked) {
-            btn.innerHTML = `<span>🔒</span> Locked`;
-            btn.className = "bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200";
-        } else {
-            btn.innerHTML = `<span>🔓</span> Editing`;
-            btn.className = "bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-red-100 animate-pulse";
         }
-    }
-    renderStaffTable();
-}
+        window.toggleStaffListLock = function () {
+            isStaffListLocked = !isStaffListLocked;
+            const btn = document.getElementById('btn-staff-list-lock');
 
-window.toggleEmailConfigLock = function () {
-    isEmailConfigLocked = !isEmailConfigLocked;
-    const input = document.getElementById('google-script-url');
-    const btn = document.getElementById('email-config-lock-btn');
-
-    if (input) input.disabled = isEmailConfigLocked;
-    if (btn) updateLockIcon('email-config-lock-btn', isEmailConfigLocked);
-}
-
-// --- SUBSTITUTE SEARCH LOGIC ---
-const subInput = document.getElementById('att-substitute-search');
-const subResults = document.getElementById('att-substitute-results');
-
-if (subInput) {
-    subInput.addEventListener('input', function () {
-        const query = this.value.toLowerCase();
-        currentSubstituteCandidate = null; // Reset selection on typing
-
-        if (query.length < 3) {
-            subResults.classList.add('hidden');
-            return;
+            if (btn) {
+                if (isStaffListLocked) {
+                    btn.innerHTML = `<span>🔒</span> Locked`;
+                    btn.className = "bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200";
+                } else {
+                    btn.innerHTML = `<span>🔓</span> Editing`;
+                    btn.className = "bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-red-100 animate-pulse";
+                }
+            }
+            renderStaffTable();
         }
 
-        // Get currently listed staff to exclude them
-        const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+        window.toggleEmailConfigLock = function () {
+            isEmailConfigLocked = !isEmailConfigLocked;
+            const input = document.getElementById('google-script-url');
+            const btn = document.getElementById('email-config-lock-btn');
 
-        const matches = staffData.filter(s =>
-            (s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query)) &&
-            !presentEmails.includes(s.email) &&
-            s.status !== 'archived'
-        );
+            if (input) input.disabled = isEmailConfigLocked;
+            if (btn) updateLockIcon('email-config-lock-btn', isEmailConfigLocked);
+        }
 
-        subResults.innerHTML = '';
-        if (matches.length === 0) {
-            subResults.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
-        } else {
-            matches.forEach(s => {
-                const div = document.createElement('div');
-                div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition";
-                div.innerHTML = `
+        // --- SUBSTITUTE SEARCH LOGIC ---
+        const subInput = document.getElementById('att-substitute-search');
+        const subResults = document.getElementById('att-substitute-results');
+
+        if (subInput) {
+            subInput.addEventListener('input', function () {
+                const query = this.value.toLowerCase();
+                currentSubstituteCandidate = null; // Reset selection on typing
+
+                if (query.length < 3) {
+                    subResults.classList.add('hidden');
+                    return;
+                }
+
+                // Get currently listed staff to exclude them
+                const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+
+                const matches = staffData.filter(s =>
+                    (s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query)) &&
+                    !presentEmails.includes(s.email) &&
+                    s.status !== 'archived'
+                );
+
+                subResults.innerHTML = '';
+                if (matches.length === 0) {
+                    subResults.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
+                } else {
+                    matches.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition";
+                        div.innerHTML = `
                     <div class="font-bold text-gray-800 text-xs">${s.name}</div>
                     <div class="text-[10px] text-gray-500 uppercase">${s.dept}</div>
                 `;
-                div.onclick = () => {
-                    subInput.value = s.name;
-                    currentSubstituteCandidate = s;
+                        div.onclick = () => {
+                            subInput.value = s.name;
+                            currentSubstituteCandidate = s;
+                            subResults.classList.add('hidden');
+                        };
+                        subResults.appendChild(div);
+                    });
+                }
+                subResults.classList.remove('hidden');
+            });
+
+            // Hide results on click outside
+            document.addEventListener('click', function (e) {
+                if (!subInput.contains(e.target) && !subResults.contains(e.target)) {
                     subResults.classList.add('hidden');
-                };
-                subResults.appendChild(div);
+                }
             });
         }
-        subResults.classList.remove('hidden');
-    });
-
-    // Hide results on click outside
-    document.addEventListener('click', function (e) {
-        if (!subInput.contains(e.target) && !subResults.contains(e.target)) {
-            subResults.classList.add('hidden');
-        }
-    });
-}
-window.toggleGlobalTargetLock = function () {
-    isGlobalTargetLocked = !isGlobalTargetLocked;
-    const input = document.getElementById('global-duty-target');
-    const guestInput = document.getElementById('guest-duty-target');
-    const btn = document.getElementById('global-target-lock-btn');
-
-    if (input) {
-        input.disabled = isGlobalTargetLocked;
-        // Visual feedback
-        if (!isGlobalTargetLocked) {
-            input.classList.remove('text-gray-600');
-            input.classList.add('text-black', 'bg-white');
-        } else {
-            input.classList.add('text-gray-600');
-            input.classList.remove('text-black', 'bg-white');
-        }
-    }
-
-    if (guestInput) {
-        guestInput.disabled = isGlobalTargetLocked;
-        if (!isGlobalTargetLocked) {
-            guestInput.classList.remove('text-gray-600');
-            guestInput.classList.add('text-black', 'bg-white');
-        } else {
-            guestInput.classList.add('text-gray-600');
-            guestInput.classList.remove('text-black', 'bg-white');
-        }
-    }
-
-    if (btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
-    if (!isGlobalTargetLocked && input) input.focus();
-}
-// ==========================================
-// 💾 MASTER BACKUP & RESTORE SYSTEM
-// ==========================================
-
-window.downloadMasterBackup = function () {
-    const collegeName = collegeData ? collegeData.examCollegeName : "Exam_System";
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-
-    const backup = {
-        meta: {
-            version: "1.0",
-            timestamp: new Date().toISOString(),
-            college: collegeName
-        },
-        data: {
-            staffData,
-            invigilationSlots,
-            advanceUnavailability,
-            rolesConfig,
-            designationsConfig,
-            departmentsConfig,
-            globalDutyTarget,
-            googleScriptUrl
-        }
-    };
-
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
-    const link = document.createElement('a');
-    link.setAttribute("href", dataStr);
-    link.setAttribute("download", `Invigilation_MASTER_BACKUP_${collegeName}_${timestamp}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-window.handleMasterRestore = function (input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    // 1. First Warning (Click OK)
-    if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current system data including:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Do you want to proceed?")) {
-        input.value = "";
-        return;
-    }
-
-    // 2. Second Warning (Type CONFIRM)
-    const check = prompt("🔴 FINAL SAFETY CHECK\n\nTo overwrite the database, please type 'CONFIRM' in the box below:");
-
-    if (check !== "CONFIRM") {
-        alert("❌ Restore Aborted.\nThe confirmation code was incorrect.");
-        input.value = "";
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async function (e) {
-        try {
-            const backup = JSON.parse(e.target.result);
-
-            // Validation
-            if (!backup.data || !backup.data.staffData) {
-                throw new Error("Invalid backup file: Missing core data.");
-            }
-
-            // 1. Update Local State
-            const d = backup.data;
-            staffData = d.staffData || [];
-            invigilationSlots = d.invigilationSlots || {};
-            advanceUnavailability = d.advanceUnavailability || {};
-            rolesConfig = d.rolesConfig || {};
-            designationsConfig = d.designationsConfig || {};
-            departmentsConfig = d.departmentsConfig || [];
-            globalDutyTarget = d.globalDutyTarget || 2;
-            googleScriptUrl = d.googleScriptUrl || "";
-
-            // 2. Save to Cloud (Atomic Update)
-            const ref = doc(db, "colleges", currentCollegeId);
-            await updateDoc(ref, {
-                examStaffData: JSON.stringify(staffData),
-                examInvigilationSlots: JSON.stringify(invigilationSlots),
-                invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
-                invigRoles: JSON.stringify(rolesConfig),
-                invigDesignations: JSON.stringify(designationsConfig),
-                invigDepartments: JSON.stringify(departmentsConfig),
-                invigGlobalTarget: globalDutyTarget,
-                invigGoogleScriptUrl: googleScriptUrl
-            });
-
-            // 3. Refresh UI
-            updateAdminUI();
-            renderSlotsGridAdmin();
-            alert("✅ System successfully restored from backup.");
-
-        } catch (err) {
-            console.error("Restore Error:", err);
-            alert("Restore Failed: " + err.message);
-        }
-        input.value = ""; // Reset input
-    };
-    reader.readAsText(file);
-}
-
-
-// ==========================================
-// 📥 BULK ATTENDANCE UPLOAD LOGIC
-// ==========================================
-
-// 1. Download Template
-window.downloadAttendanceTemplate = function () {
-    const headers = ["Date (DD-MM-YY)", "Session (FN/AN)", "Staff Email", "Duty Role (Invigilator/CS/SAS)"];
-    const sample = ["01-12-25,FN,teacher@gmail.com,Invigilator", "01-12-25,FN,chief@gmail.com,CS"];
-
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "Attendance_Upload_Template.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-// 2. Handle Upload
-window.handleAttendanceCSVUpload = function (input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        const text = e.target.result;
-        processAttendanceCSV(text);
-        input.value = '';
-    };
-    reader.readAsText(file);
-}
-
-// 3. Process CSV (Auto-Create Slots for Past Duties)
-async function processAttendanceCSV(csvText) {
-    const lines = csvText.split('\n');
-    if (lines.length < 2) return alert("CSV is empty or invalid.");
-
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const dateIdx = headers.findIndex(h => h.includes('date'));
-    const sessIdx = headers.findIndex(h => h.includes('session'));
-    const emailIdx = headers.findIndex(h => h.includes('email'));
-    const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('status'));
-
-    if (dateIdx === -1 || sessIdx === -1 || emailIdx === -1) {
-        return alert("Error: CSV must have Date, Session, and Staff Email columns.");
-    }
-
-    tempAttendanceBatch = {}; // Reset batch
-    let totalRecords = 0;
-    let createdSlots = 0;
-    const unknownEmails = new Set();
-
-    // --- DATE PARSER ---
-    const parseDateKey = (dateStr) => {
-        if (!dateStr) return null;
-        try {
-            let clean = dateStr.replace(/[./]/g, '-').trim();
-            let parts = clean.split('-');
-            let d, m, y;
-            if (parts.length !== 3) return null;
-
-            if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
-            else if (parts[2].length === 4) { d = parts[0]; m = parts[1]; y = parts[2]; }
-            else if (parts[2].length === 2) { d = parts[0]; m = parts[1]; y = "20" + parts[2]; }
-            else return null;
-
-            d = d.padStart(2, '0');
-            m = m.padStart(2, '0');
-            return `${d}.${m}.${y}`;
-        } catch (e) { return null; }
-    };
-
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        const row = line.split(',').map(v => v.trim());
-        const rawDate = row[dateIdx];
-        const sessionType = row[sessIdx] ? row[sessIdx].toUpperCase() : "FN";
-        const email = row[emailIdx];
-        const role = roleIdx !== -1 ? row[roleIdx].toUpperCase() : "INVIGILATOR";
-        // Update Role (Robust CSV Matching)
-        if (role === "CS" || role === "CHIEF" || role === "CHIEF SUPERINTENDENT") {
-            slot.supervision.cs = email;
-        }
-        if (role === "SAS" || role === "SENIOR" || role === "SENIOR ASST. SUPERINTENDENT" || role === "SAS") {
-            slot.supervision.sas = email;
-        }
-        if (!rawDate || !email) continue;
-
-        const dateStr = parseDateKey(rawDate);
-        if (!dateStr) continue;
-
-        // 1. Try to Find Existing Slot
-        let matchingKey = Object.keys(invigilationSlots).find(key => {
-            if (!key.startsWith(dateStr)) return false;
-            const tStr = key.split(' | ')[1].toUpperCase();
-            const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
-            const slotSession = isAN ? "AN" : "FN";
-            return slotSession === sessionType;
-        });
-
-        // 2. If Not Found, CREATE VIRTUAL SLOT
-        if (!matchingKey) {
-            // Default Times: FN = 09:30 AM, AN = 01:30 PM
-            const defaultTime = (sessionType === "AN" || sessionType.includes("PM")) ? "01:30 PM" : "09:30 AM";
-            matchingKey = `${dateStr} | ${defaultTime}`;
-
-            // Add to System immediately (so next row finds it)
-            if (!invigilationSlots[matchingKey]) {
-                invigilationSlots[matchingKey] = {
-                    required: 0, // No requirement, just a record
-                    assigned: [],
-                    attendance: [], // Will fill below
-                    unavailable: [],
-                    isLocked: true,
-                    isVirtual: true, // Mark as auto-created
-                    examName: "Previous Duty Record"
-                };
-                createdSlots++;
-            }
-        }
-
-        // 3. Add to Batch
-        if (!tempAttendanceBatch[matchingKey]) {
-            tempAttendanceBatch[matchingKey] = { attendance: [], supervision: { cs: "", sas: "" } };
-        }
-
-        tempAttendanceBatch[matchingKey].attendance.push(email);
-        if (role === "CS" || role === "CHIEF") tempAttendanceBatch[matchingKey].supervision.cs = email;
-        if (role === "SAS" || role === "SENIOR") tempAttendanceBatch[matchingKey].supervision.sas = email;
-
-        if (!staffData.some(s => s.email.toLowerCase() === email.toLowerCase())) {
-            unknownEmails.add(email);
-        }
-
-        totalRecords++;
-    }
-
-    if (totalRecords === 0) {
-        return alert("No valid records found in CSV.");
-    }
-
-    if (unknownEmails.size > 0) {
-        alert(`⚠️ Warning: ${unknownEmails.size} emails are not in your Staff Database.\nThey will be marked present, but details will be missing in reports.`);
-    }
-
-    // Show Conflict Modal
-    document.getElementById('att-csv-count').textContent = totalRecords;
-    document.getElementById('att-session-count').textContent = Object.keys(tempAttendanceBatch).length;
-
-    // Add note about created slots
-    if (createdSlots > 0) {
-        const note = document.createElement('p');
-        note.className = "text-xs text-indigo-600 font-bold mt-2";
-        note.textContent = `ℹ️ ${createdSlots} new 'Virtual Slots' will be created for past dates.`;
-        document.getElementById('att-session-count').parentNode.appendChild(note);
-    }
-
-    window.openModal('att-conflict-modal');
-}
-
-// 4. Merge Logic (Add Missing)
-document.getElementById('btn-att-merge').addEventListener('click', async () => {
-    let updatedCount = 0;
-
-    Object.keys(tempAttendanceBatch).forEach(key => {
-        const slot = invigilationSlots[key];
-        const batch = tempAttendanceBatch[key];
-
-        if (!slot.attendance) slot.attendance = [];
-        if (!slot.supervision) slot.supervision = { cs: "", sas: "" };
-
-        // Add unique emails
-        batch.attendance.forEach(email => {
-            if (!slot.attendance.includes(email)) {
-                slot.attendance.push(email);
-                updatedCount++;
-            }
-        });
-
-        // Update Supervision (Overwrite if present in CSV)
-        if (batch.supervision.cs) slot.supervision.cs = batch.supervision.cs;
-        if (batch.supervision.sas) slot.supervision.sas = batch.supervision.sas;
-    });
-
-    await finishAttendanceUpload(updatedCount, "Merged");
-});
-
-// 5. Replace Logic (Overwrite Lists)
-document.getElementById('btn-att-replace').addEventListener('click', async () => {
-    if (!confirm("⚠️ This will OVERWRITE the attendance lists for the affected sessions with data from the CSV.\n\nAre you sure?")) return;
-
-    let updatedCount = 0;
-
-    Object.keys(tempAttendanceBatch).forEach(key => {
-        const slot = invigilationSlots[key];
-        const batch = tempAttendanceBatch[key];
-
-        // Overwrite
-        slot.attendance = batch.attendance; // Replaces entire array
-        updatedCount += batch.attendance.length;
-
-        if (!slot.supervision) slot.supervision = { cs: "", sas: "" };
-        if (batch.supervision.cs) slot.supervision.cs = batch.supervision.cs;
-        if (batch.supervision.sas) slot.supervision.sas = batch.supervision.sas;
-    });
-
-    await finishAttendanceUpload(updatedCount, "Replaced");
-});
-
-async function finishAttendanceUpload(count, action) {
-    await syncSlotsToCloud();
-    window.closeModal('att-conflict-modal');
-    alert(`✅ Success! ${action} attendance records for ${count} entries.`);
-    populateAttendanceSessions();
-    if (ui.attSessionSelect && ui.attSessionSelect.value) {
-        loadSessionAttendance();
-    }
-}
-// --- MANUAL ALLOCATION SEARCH ---
-window.filterManualStaff = function () {
-    const query = document.getElementById('manual-staff-search').value.toLowerCase();
-    const rows = document.querySelectorAll('#manual-available-list tr');
-    const noResults = document.getElementById('manual-no-results');
-    let hasVisible = false;
-
-    rows.forEach(row => {
-        // The Name is in the second column (index 1), inside a div
-        // The Dept is in the same cell, inside a div with text-[10px]
-        const textContent = row.innerText.toLowerCase(); // Simple check of all text in row
-
-        if (textContent.includes(query)) {
-            row.classList.remove('hidden');
-            hasVisible = true;
-        } else {
-            row.classList.add('hidden');
-        }
-    });
-
-    if (noResults) {
-        if (hasVisible) noResults.classList.add('hidden');
-        else noResults.classList.remove('hidden');
-    }
-}
-// --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
-window.openManualAllocationModal = function (key) {
-    const slot = invigilationSlots[key];
-
-    // 1. Lock Check
-    if (!slot.isLocked) {
-        alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
-        return;
-    }
-
-    // 2. Reset Search
-    const searchInput = document.getElementById('manual-staff-search');
-    if (searchInput) searchInput.value = "";
-    const noResults = document.getElementById('manual-no-results');
-    if (noResults) noResults.classList.add('hidden');
-
-    // 3. Setup Modal Header
-    document.getElementById('manual-session-key').value = key;
-    document.getElementById('manual-modal-title').textContent = key;
-
-    // Force Integer for Requirement
-    const requiredCount = parseInt(slot.required) || 0;
-    document.getElementById('manual-modal-req').textContent = requiredCount;
-
-    // --- 4. SMART SORTING ---
-    const targetDate = parseDate(key);
-    const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-    const weekNum = getWeekOfMonth(targetDate);
-    const targetDateString = targetDate.toDateString();
-    const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
-    const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
-    const prevDateStr = prevDate.toDateString();
-    const nextDateStr = nextDate.toDateString();
-
-    const staffContext = {};
-    staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
-
-    Object.keys(invigilationSlots).forEach(k => {
-        if (k === key) return;
-        const sSlot = invigilationSlots[k];
-        const sDate = parseDate(k);
-        const sDateString = sDate.toDateString();
-
-        const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const sWeek = getWeekOfMonth(sDate);
-        const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
-        const isSameDay = (sDateString === targetDateString);
-        const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
-
-        (sSlot.assigned || []).forEach(email => {
-            if (staffContext[email]) {
-                if (isSameWeek) staffContext[email].weekCount++;
-                if (isSameDay) staffContext[email].hasSameDay = true;
-                if (isAdjacent) staffContext[email].hasAdjacent = true;
-            }
-        });
-    });
-
-    // Score Staff
-    const rankedStaff = staffData
-        .filter(s => s.status !== 'archived')
-        .map(s => {
-            const done = getDutiesDoneCount(s.email);
-            const target = calculateStaffTarget(s);
-            const pending = Math.max(0, target - done);
-
-            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
-
-            // Base Score: Pending Duty Priority
-            let score = pending * 100;
-            let badges = [];
-
-            // Penalties (Push to bottom)
-            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
-            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
-            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
-
-            // --- DEPT SATURATION CHECK ---
-            // Calculate hypothetical saturation if we add this person
-            const assignedList = slot.assigned || [];
-            const totalAssigned = assignedList.length;
-            const myDeptCount = assignedList.filter(email => {
-                const member = staffData.find(st => st.email === email);
-                return member && member.dept === s.dept;
-            }).length;
-
-            // Exemption: Depts with only 1 person total
-            const totalInDept = staffData.filter(st => st.dept === s.dept).length;
-            const isExempt = (totalInDept === 1);
-
-            if (!isExempt) {
-                // If I am added, count becomes myDeptCount + 1
-                // Total becomes totalAssigned + 1
-                const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
-
-                // Warn if saturation > 50%
-                if (potentialRatio > 0.5) {
-                    score -= 500; // soft penalty
-                    badges.push("Dept Saturation");
+        window.toggleGlobalTargetLock = function () {
+            isGlobalTargetLocked = !isGlobalTargetLocked;
+            const input = document.getElementById('global-duty-target');
+            const guestInput = document.getElementById('guest-duty-target');
+            const btn = document.getElementById('global-target-lock-btn');
+
+            if (input) {
+                input.disabled = isGlobalTargetLocked;
+                // Visual feedback
+                if (!isGlobalTargetLocked) {
+                    input.classList.remove('text-gray-600');
+                    input.classList.add('text-black', 'bg-white');
+                } else {
+                    input.classList.add('text-gray-600');
+                    input.classList.remove('text-black', 'bg-white');
                 }
             }
-            // -----------------------------
 
-            return { ...s, pending, score, badges };
-        })
-        .sort((a, b) => b.score - a.score); // Highest Score First
-
-    // Capture Snapshot
-    if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
-
-    // --- 5. RENDER & AUTO-SELECT ---
-    const availList = document.getElementById('manual-available-list');
-    availList.innerHTML = '';
-
-    // AUTO-SELECT LOGIC
-    const assignedList = slot.assigned || [];
-    const isFreshAllocation = (assignedList.length === 0);
-    let slotsToFill = isFreshAllocation ? requiredCount : 0;
-    let currentSelectionCount = 0;
-
-    rankedStaff.forEach(s => {
-        // 1. Check Availability (If unavailable, skip and never select)
-        if (isUserUnavailable(slot, s.email, key)) return;
-
-        let isChecked = false;
-
-        if (isFreshAllocation) {
-            // Auto-select if we still need people
-            if (slotsToFill > 0) {
-                isChecked = true;
-                slotsToFill--;
+            if (guestInput) {
+                guestInput.disabled = isGlobalTargetLocked;
+                if (!isGlobalTargetLocked) {
+                    guestInput.classList.remove('text-gray-600');
+                    guestInput.classList.add('text-black', 'bg-white');
+                } else {
+                    guestInput.classList.add('text-gray-600');
+                    guestInput.classList.remove('text-black', 'bg-white');
+                }
             }
-        } else {
-            // Keep existing assignments
-            if (assignedList.includes(s.email)) {
-                isChecked = true;
+
+            if (btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
+            if (!isGlobalTargetLocked && input) input.focus();
+        }
+        // ==========================================
+        // 💾 MASTER BACKUP & RESTORE SYSTEM
+        // ==========================================
+
+        window.downloadMasterBackup = function () {
+            const collegeName = collegeData ? collegeData.examCollegeName : "Exam_System";
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+            const backup = {
+                meta: {
+                    version: "1.0",
+                    timestamp: new Date().toISOString(),
+                    college: collegeName
+                },
+                data: {
+                    staffData,
+                    invigilationSlots,
+                    advanceUnavailability,
+                    rolesConfig,
+                    designationsConfig,
+                    departmentsConfig,
+                    globalDutyTarget,
+                    googleScriptUrl
+                }
+            };
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+            const link = document.createElement('a');
+            link.setAttribute("href", dataStr);
+            link.setAttribute("download", `Invigilation_MASTER_BACKUP_${collegeName}_${timestamp}.json`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        window.handleMasterRestore = function (input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            // 1. First Warning (Click OK)
+            if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current system data including:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Do you want to proceed?")) {
+                input.value = "";
+                return;
             }
+
+            // 2. Second Warning (Type CONFIRM)
+            const check = prompt("🔴 FINAL SAFETY CHECK\n\nTo overwrite the database, please type 'CONFIRM' in the box below:");
+
+            if (check !== "CONFIRM") {
+                alert("❌ Restore Aborted.\nThe confirmation code was incorrect.");
+                input.value = "";
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function (e) {
+                try {
+                    const backup = JSON.parse(e.target.result);
+
+                    // Validation
+                    if (!backup.data || !backup.data.staffData) {
+                        throw new Error("Invalid backup file: Missing core data.");
+                    }
+
+                    // 1. Update Local State
+                    const d = backup.data;
+                    staffData = d.staffData || [];
+                    invigilationSlots = d.invigilationSlots || {};
+                    advanceUnavailability = d.advanceUnavailability || {};
+                    rolesConfig = d.rolesConfig || {};
+                    designationsConfig = d.designationsConfig || {};
+                    departmentsConfig = d.departmentsConfig || [];
+                    globalDutyTarget = d.globalDutyTarget || 2;
+                    googleScriptUrl = d.googleScriptUrl || "";
+
+                    // 2. Save to Cloud (Atomic Update)
+                    const ref = doc(db, "colleges", currentCollegeId);
+                    await updateDoc(ref, {
+                        examStaffData: JSON.stringify(staffData),
+                        examInvigilationSlots: JSON.stringify(invigilationSlots),
+                        invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
+                        invigRoles: JSON.stringify(rolesConfig),
+                        invigDesignations: JSON.stringify(designationsConfig),
+                        invigDepartments: JSON.stringify(departmentsConfig),
+                        invigGlobalTarget: globalDutyTarget,
+                        invigGoogleScriptUrl: googleScriptUrl
+                    });
+
+                    // 3. Refresh UI
+                    updateAdminUI();
+                    renderSlotsGridAdmin();
+                    alert("✅ System successfully restored from backup.");
+
+                } catch (err) {
+                    console.error("Restore Error:", err);
+                    alert("Restore Failed: " + err.message);
+                }
+                input.value = ""; // Reset input
+            };
+            reader.readAsText(file);
         }
 
-        if (isChecked) currentSelectionCount++;
 
-        const checkState = isChecked ? 'checked' : '';
-        const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
-        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+        // ==========================================
+        // 📥 BULK ATTENDANCE UPLOAD LOGIC
+        // ==========================================
 
-        const warningHtml = s.badges.map(b =>
-            `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
-        ).join('');
+        // 1. Download Template
+        window.downloadAttendanceTemplate = function () {
+            const headers = ["Date (DD-MM-YY)", "Session (FN/AN)", "Staff Email", "Duty Role (Invigilator/CS/SAS)"];
+            const sample = ["01-12-25,FN,teacher@gmail.com,Invigilator", "01-12-25,FN,chief@gmail.com,CS"];
 
-        availList.innerHTML += `
+            const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + sample.join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Attendance_Upload_Template.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 2. Handle Upload
+        window.handleAttendanceCSVUpload = function (input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const text = e.target.result;
+                processAttendanceCSV(text);
+                input.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        // 3. Process CSV (Auto-Create Slots for Past Duties)
+        async function processAttendanceCSV(csvText) {
+            const lines = csvText.split('\n');
+            if (lines.length < 2) return alert("CSV is empty or invalid.");
+
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const dateIdx = headers.findIndex(h => h.includes('date'));
+            const sessIdx = headers.findIndex(h => h.includes('session'));
+            const emailIdx = headers.findIndex(h => h.includes('email'));
+            const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('status'));
+
+            if (dateIdx === -1 || sessIdx === -1 || emailIdx === -1) {
+                return alert("Error: CSV must have Date, Session, and Staff Email columns.");
+            }
+
+            tempAttendanceBatch = {}; // Reset batch
+            let totalRecords = 0;
+            let createdSlots = 0;
+            const unknownEmails = new Set();
+
+            // --- DATE PARSER ---
+            const parseDateKey = (dateStr) => {
+                if (!dateStr) return null;
+                try {
+                    let clean = dateStr.replace(/[./]/g, '-').trim();
+                    let parts = clean.split('-');
+                    let d, m, y;
+                    if (parts.length !== 3) return null;
+
+                    if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
+                    else if (parts[2].length === 4) { d = parts[0]; m = parts[1]; y = parts[2]; }
+                    else if (parts[2].length === 2) { d = parts[0]; m = parts[1]; y = "20" + parts[2]; }
+                    else return null;
+
+                    d = d.padStart(2, '0');
+                    m = m.padStart(2, '0');
+                    return `${d}.${m}.${y}`;
+                } catch (e) { return null; }
+            };
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const row = line.split(',').map(v => v.trim());
+                const rawDate = row[dateIdx];
+                const sessionType = row[sessIdx] ? row[sessIdx].toUpperCase() : "FN";
+                const email = row[emailIdx];
+                const role = roleIdx !== -1 ? row[roleIdx].toUpperCase() : "INVIGILATOR";
+                // Update Role (Robust CSV Matching)
+                if (role === "CS" || role === "CHIEF" || role === "CHIEF SUPERINTENDENT") {
+                    slot.supervision.cs = email;
+                }
+                if (role === "SAS" || role === "SENIOR" || role === "SENIOR ASST. SUPERINTENDENT" || role === "SAS") {
+                    slot.supervision.sas = email;
+                }
+                if (!rawDate || !email) continue;
+
+                const dateStr = parseDateKey(rawDate);
+                if (!dateStr) continue;
+
+                // 1. Try to Find Existing Slot
+                let matchingKey = Object.keys(invigilationSlots).find(key => {
+                    if (!key.startsWith(dateStr)) return false;
+                    const tStr = key.split(' | ')[1].toUpperCase();
+                    const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
+                    const slotSession = isAN ? "AN" : "FN";
+                    return slotSession === sessionType;
+                });
+
+                // 2. If Not Found, CREATE VIRTUAL SLOT
+                if (!matchingKey) {
+                    // Default Times: FN = 09:30 AM, AN = 01:30 PM
+                    const defaultTime = (sessionType === "AN" || sessionType.includes("PM")) ? "01:30 PM" : "09:30 AM";
+                    matchingKey = `${dateStr} | ${defaultTime}`;
+
+                    // Add to System immediately (so next row finds it)
+                    if (!invigilationSlots[matchingKey]) {
+                        invigilationSlots[matchingKey] = {
+                            required: 0, // No requirement, just a record
+                            assigned: [],
+                            attendance: [], // Will fill below
+                            unavailable: [],
+                            isLocked: true,
+                            isVirtual: true, // Mark as auto-created
+                            examName: "Previous Duty Record"
+                        };
+                        createdSlots++;
+                    }
+                }
+
+                // 3. Add to Batch
+                if (!tempAttendanceBatch[matchingKey]) {
+                    tempAttendanceBatch[matchingKey] = { attendance: [], supervision: { cs: "", sas: "" } };
+                }
+
+                tempAttendanceBatch[matchingKey].attendance.push(email);
+                if (role === "CS" || role === "CHIEF") tempAttendanceBatch[matchingKey].supervision.cs = email;
+                if (role === "SAS" || role === "SENIOR") tempAttendanceBatch[matchingKey].supervision.sas = email;
+
+                if (!staffData.some(s => s.email.toLowerCase() === email.toLowerCase())) {
+                    unknownEmails.add(email);
+                }
+
+                totalRecords++;
+            }
+
+            if (totalRecords === 0) {
+                return alert("No valid records found in CSV.");
+            }
+
+            if (unknownEmails.size > 0) {
+                alert(`⚠️ Warning: ${unknownEmails.size} emails are not in your Staff Database.\nThey will be marked present, but details will be missing in reports.`);
+            }
+
+            // Show Conflict Modal
+            document.getElementById('att-csv-count').textContent = totalRecords;
+            document.getElementById('att-session-count').textContent = Object.keys(tempAttendanceBatch).length;
+
+            // Add note about created slots
+            if (createdSlots > 0) {
+                const note = document.createElement('p');
+                note.className = "text-xs text-indigo-600 font-bold mt-2";
+                note.textContent = `ℹ️ ${createdSlots} new 'Virtual Slots' will be created for past dates.`;
+                document.getElementById('att-session-count').parentNode.appendChild(note);
+            }
+
+            window.openModal('att-conflict-modal');
+        }
+
+        // 4. Merge Logic (Add Missing)
+        document.getElementById('btn-att-merge').addEventListener('click', async () => {
+            let updatedCount = 0;
+
+            Object.keys(tempAttendanceBatch).forEach(key => {
+                const slot = invigilationSlots[key];
+                const batch = tempAttendanceBatch[key];
+
+                if (!slot.attendance) slot.attendance = [];
+                if (!slot.supervision) slot.supervision = { cs: "", sas: "" };
+
+                // Add unique emails
+                batch.attendance.forEach(email => {
+                    if (!slot.attendance.includes(email)) {
+                        slot.attendance.push(email);
+                        updatedCount++;
+                    }
+                });
+
+                // Update Supervision (Overwrite if present in CSV)
+                if (batch.supervision.cs) slot.supervision.cs = batch.supervision.cs;
+                if (batch.supervision.sas) slot.supervision.sas = batch.supervision.sas;
+            });
+
+            await finishAttendanceUpload(updatedCount, "Merged");
+        });
+
+        // 5. Replace Logic (Overwrite Lists)
+        document.getElementById('btn-att-replace').addEventListener('click', async () => {
+            if (!confirm("⚠️ This will OVERWRITE the attendance lists for the affected sessions with data from the CSV.\n\nAre you sure?")) return;
+
+            let updatedCount = 0;
+
+            Object.keys(tempAttendanceBatch).forEach(key => {
+                const slot = invigilationSlots[key];
+                const batch = tempAttendanceBatch[key];
+
+                // Overwrite
+                slot.attendance = batch.attendance; // Replaces entire array
+                updatedCount += batch.attendance.length;
+
+                if (!slot.supervision) slot.supervision = { cs: "", sas: "" };
+                if (batch.supervision.cs) slot.supervision.cs = batch.supervision.cs;
+                if (batch.supervision.sas) slot.supervision.sas = batch.supervision.sas;
+            });
+
+            await finishAttendanceUpload(updatedCount, "Replaced");
+        });
+
+        async function finishAttendanceUpload(count, action) {
+            await syncSlotsToCloud();
+            window.closeModal('att-conflict-modal');
+            alert(`✅ Success! ${action} attendance records for ${count} entries.`);
+            populateAttendanceSessions();
+            if (ui.attSessionSelect && ui.attSessionSelect.value) {
+                loadSessionAttendance();
+            }
+        }
+        // --- MANUAL ALLOCATION SEARCH ---
+        window.filterManualStaff = function () {
+            const query = document.getElementById('manual-staff-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#manual-available-list tr');
+            const noResults = document.getElementById('manual-no-results');
+            let hasVisible = false;
+
+            rows.forEach(row => {
+                // The Name is in the second column (index 1), inside a div
+                // The Dept is in the same cell, inside a div with text-[10px]
+                const textContent = row.innerText.toLowerCase(); // Simple check of all text in row
+
+                if (textContent.includes(query)) {
+                    row.classList.remove('hidden');
+                    hasVisible = true;
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+
+            if (noResults) {
+                if (hasVisible) noResults.classList.add('hidden');
+                else noResults.classList.remove('hidden');
+            }
+        }
+        // --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
+        window.openManualAllocationModal = function (key) {
+            const slot = invigilationSlots[key];
+
+            // 1. Lock Check
+            if (!slot.isLocked) {
+                alert("⚠️ Please LOCK this slot first.\n\nManual allocation is only allowed in Locked mode to prevent conflicts.");
+                return;
+            }
+
+            // 2. Reset Search
+            const searchInput = document.getElementById('manual-staff-search');
+            if (searchInput) searchInput.value = "";
+            const noResults = document.getElementById('manual-no-results');
+            if (noResults) noResults.classList.add('hidden');
+
+            // 3. Setup Modal Header
+            document.getElementById('manual-session-key').value = key;
+            document.getElementById('manual-modal-title').textContent = key;
+
+            // Force Integer for Requirement
+            const requiredCount = parseInt(slot.required) || 0;
+            document.getElementById('manual-modal-req').textContent = requiredCount;
+
+            // --- 4. SMART SORTING ---
+            const targetDate = parseDate(key);
+            const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+            const weekNum = getWeekOfMonth(targetDate);
+            const targetDateString = targetDate.toDateString();
+            const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
+            const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
+            const prevDateStr = prevDate.toDateString();
+            const nextDateStr = nextDate.toDateString();
+
+            const staffContext = {};
+            staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
+
+            Object.keys(invigilationSlots).forEach(k => {
+                if (k === key) return;
+                const sSlot = invigilationSlots[k];
+                const sDate = parseDate(k);
+                const sDateString = sDate.toDateString();
+
+                const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const sWeek = getWeekOfMonth(sDate);
+                const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
+                const isSameDay = (sDateString === targetDateString);
+                const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
+
+                (sSlot.assigned || []).forEach(email => {
+                    if (staffContext[email]) {
+                        if (isSameWeek) staffContext[email].weekCount++;
+                        if (isSameDay) staffContext[email].hasSameDay = true;
+                        if (isAdjacent) staffContext[email].hasAdjacent = true;
+                    }
+                });
+            });
+
+            // Score Staff
+            const rankedStaff = staffData
+                .filter(s => s.status !== 'archived')
+                .map(s => {
+                    const done = getDutiesDoneCount(s.email);
+                    const target = calculateStaffTarget(s);
+                    const pending = Math.max(0, target - done);
+
+                    const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+
+                    // Base Score: Pending Duty Priority
+                    let score = pending * 100;
+                    let badges = [];
+
+                    // Penalties (Push to bottom)
+                    if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
+                    if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
+                    if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+
+                    // --- DEPT SATURATION CHECK ---
+                    // Calculate hypothetical saturation if we add this person
+                    const assignedList = slot.assigned || [];
+                    const totalAssigned = assignedList.length;
+                    const myDeptCount = assignedList.filter(email => {
+                        const member = staffData.find(st => st.email === email);
+                        return member && member.dept === s.dept;
+                    }).length;
+
+                    // Exemption: Depts with only 1 person total
+                    const totalInDept = staffData.filter(st => st.dept === s.dept).length;
+                    const isExempt = (totalInDept === 1);
+
+                    if (!isExempt) {
+                        // If I am added, count becomes myDeptCount + 1
+                        // Total becomes totalAssigned + 1
+                        const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
+
+                        // Warn if saturation > 50%
+                        if (potentialRatio > 0.5) {
+                            score -= 500; // soft penalty
+                            badges.push("Dept Saturation");
+                        }
+                    }
+                    // -----------------------------
+
+                    return { ...s, pending, score, badges };
+                })
+                .sort((a, b) => b.score - a.score); // Highest Score First
+
+            // Capture Snapshot
+            if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
+
+            // --- 5. RENDER & AUTO-SELECT ---
+            const availList = document.getElementById('manual-available-list');
+            availList.innerHTML = '';
+
+            // AUTO-SELECT LOGIC
+            const assignedList = slot.assigned || [];
+            const isFreshAllocation = (assignedList.length === 0);
+            let slotsToFill = isFreshAllocation ? requiredCount : 0;
+            let currentSelectionCount = 0;
+
+            rankedStaff.forEach(s => {
+                // 1. Check Availability (If unavailable, skip and never select)
+                if (isUserUnavailable(slot, s.email, key)) return;
+
+                let isChecked = false;
+
+                if (isFreshAllocation) {
+                    // Auto-select if we still need people
+                    if (slotsToFill > 0) {
+                        isChecked = true;
+                        slotsToFill--;
+                    }
+                } else {
+                    // Keep existing assignments
+                    if (assignedList.includes(s.email)) {
+                        isChecked = true;
+                    }
+                }
+
+                if (isChecked) currentSelectionCount++;
+
+                const checkState = isChecked ? 'checked' : '';
+                const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
+                const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+
+                const warningHtml = s.badges.map(b =>
+                    `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
+                ).join('');
+
+                availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition">
                 <td class="px-3 py-2 text-center w-10">
                     <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
@@ -5660,77 +5561,77 @@ window.openManualAllocationModal = function (key) {
                     ${s.pending}
                 </td>
             </tr>`;
-    });
+            });
 
-    if (availList.innerHTML === "") {
-        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
-    }
-
-    // 6. Render Unavailable List
-    const unavList = document.getElementById('manual-unavailable-list');
-    unavList.innerHTML = '';
-
-    const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
-
-    const [dateStr, timeStr] = key.split(' | ');
-    let session = "FN";
-    const t = timeStr ? timeStr.toUpperCase() : "";
-    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
-
-    if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-        advanceUnavailability[dateStr][session].forEach(u => {
-            if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
-                allUnavailable.push(u);
+            if (availList.innerHTML === "") {
+                availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
             }
-        });
-    }
 
-    if (allUnavailable.length > 0) {
-        allUnavailable.forEach(u => {
-            const email = (typeof u === 'string') ? u : u.email;
-            const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
-            const s = staffData.find(st => st.email === email) || { name: email };
+            // 6. Render Unavailable List
+            const unavList = document.getElementById('manual-unavailable-list');
+            unavList.innerHTML = '';
 
-            unavList.innerHTML += `
+            const allUnavailable = [];
+            if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
+
+            const [dateStr, timeStr] = key.split(' | ');
+            let session = "FN";
+            const t = timeStr ? timeStr.toUpperCase() : "";
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+
+            if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+                advanceUnavailability[dateStr][session].forEach(u => {
+                    if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
+                        allUnavailable.push(u);
+                    }
+                });
+            }
+
+            if (allUnavailable.length > 0) {
+                allUnavailable.forEach(u => {
+                    const email = (typeof u === 'string') ? u : u.email;
+                    const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
+                    const s = staffData.find(st => st.email === email) || { name: email };
+
+                    unavList.innerHTML += `
                 <div class="bg-white p-2 rounded border border-red-200 text-xs shadow-sm mb-1">
                     <div class="font-bold text-red-700">${s.name}</div>
                     <div class="text-gray-600 font-medium mt-0.5">${reason}</div>
                 </div>`;
-        });
-    } else {
-        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
-    }
+                });
+            } else {
+                unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
+            }
 
-    // 7. Update Counters & Open
-    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
-    // *** FIX: Update the Required count in the footer as well ***
-    const reqCountEl = document.getElementById('manual-req-count');
-    if (reqCountEl) reqCountEl.textContent = requiredCount;
-    // ************************************************************
-    window.openModal('manual-allocation-modal');
-}
+            // 7. Update Counters & Open
+            document.getElementById('manual-sel-count').textContent = currentSelectionCount;
+            // *** FIX: Update the Required count in the footer as well ***
+            const reqCountEl = document.getElementById('manual-req-count');
+            if (reqCountEl) reqCountEl.textContent = requiredCount;
+            // ************************************************************
+            window.openModal('manual-allocation-modal');
+        }
 
 
-window.updateManualCounts = function () {
-    const count = document.querySelectorAll('.manual-chk:checked').length;
-    document.getElementById('manual-sel-count').textContent = count;
-}
-window.saveManualAllocation = async function () {
-    const key = document.getElementById('manual-session-key').value;
-    const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
+        window.updateManualCounts = function () {
+            const count = document.querySelectorAll('.manual-chk:checked').length;
+            document.getElementById('manual-sel-count').textContent = count;
+        }
+        window.saveManualAllocation = async function () {
+            const key = document.getElementById('manual-session-key').value;
+            const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
 
-    if (invigilationSlots[key]) {
-        // --- 1. GENERATE LOGIC REPORT ---
-        const timestamp = new Date().toLocaleString();
-        const adminName = currentUser ? currentUser.email : "Admin";
+            if (invigilationSlots[key]) {
+                // --- 1. GENERATE LOGIC REPORT ---
+                const timestamp = new Date().toLocaleString();
+                const adminName = currentUser ? currentUser.email : "Admin";
 
-        // We use the 'lastManualRanking' global variable we captured when opening the modal
-        // If it's empty (e.g. page reload), we can't generate a detailed log, so we skip.
-        let logHtml = "";
+                // We use the 'lastManualRanking' global variable we captured when opening the modal
+                // If it's empty (e.g. page reload), we can't generate a detailed log, so we skip.
+                let logHtml = "";
 
-        if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
-            logHtml = `
+                if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
+                    logHtml = `
                 <div class="mb-3 pb-2 border-b border-gray-200">
                     <div class="font-bold text-gray-800">Assignment Logic Report</div>
                     <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
@@ -5739,350 +5640,350 @@ window.saveManualAllocation = async function () {
                     <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>
             `;
 
-            // Details of Assigned
-            selectedEmails.forEach((email, i) => {
-                const rankData = lastManualRanking.find(s => s.email === email);
-                if (rankData) {
-                    const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
-                    logHtml += `<div class="text-xs mb-1">${i + 1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
+                    // Details of Assigned
+                    selectedEmails.forEach((email, i) => {
+                        const rankData = lastManualRanking.find(s => s.email === email);
+                        if (rankData) {
+                            const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
+                            logHtml += `<div class="text-xs mb-1">${i + 1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
+                        } else {
+                            logHtml += `<div class="text-xs mb-1">${i + 1}. ${getNameFromEmail(email)} (Manually Added)</div>`;
+                        }
+                    });
+
+                    // Details of Top Skipped (Why were they ignored?)
+                    const skipped = lastManualRanking.filter(s => !selectedEmails.includes(s.email)).slice(0, 3); // Top 3 skipped
+
+                    if (skipped.length > 0) {
+                        logHtml += `</div><div class="mb-2"><div class="text-xs font-bold text-orange-700 uppercase mb-1">Top Candidates Skipped</div>`;
+                        skipped.forEach(s => {
+                            const warnings = s.badges.length > 0 ? `[${s.badges.join(', ')}]` : "[No Conflicts]";
+                            logHtml += `<div class="text-xs mb-1 text-gray-600"><b>${s.name}</b> (Score: ${s.score}) - ${warnings}</div>`;
+                        });
+                    }
+
+                    logHtml += `</div><div class="text-[10px] text-gray-400 italic mt-2 border-t pt-1">Score = Pending Duty * 100 - Penalties.</div>`;
                 } else {
-                    logHtml += `<div class="text-xs mb-1">${i + 1}. ${getNameFromEmail(email)} (Manually Added)</div>`;
+                    logHtml = `<div class="text-gray-500 italic">Log not available (Session reloaded).</div>`;
+                }
+
+                // Save to Slot
+                invigilationSlots[key].allocationLog = logHtml;
+                invigilationSlots[key].assigned = selectedEmails;
+
+                // --- 2. STANDARD LOGGING & SAVE ---
+                if (typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${selectedEmails.length} staff to session ${key}`);
+
+                await syncSlotsToCloud();
+                window.closeModal('manual-allocation-modal');
+                renderSlotsGridAdmin();
+
+                // --- NEW: Trigger Reserve Notification ---
+                const reserves = getSlotReserves(key);
+                if (reserves.length > 0) {
+                    if (confirm(`✅ Allocation Saved.\n\n⚠️ Reserves Identified: ${reserves.length}\n(These are staff assigned beyond the required count).\n\nNotify them now?`)) {
+                        await notifySlotReserves(key);
+                    }
+                }
+            }
+        }
+        window.switchAdminTab = function (tabName) {
+            const tabs = ['staff', 'slots', 'attendance'];
+
+            tabs.forEach(t => {
+                const content = document.getElementById(`tab-content-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+
+                if (t === tabName) {
+                    // --- ACTIVE STATE (White Card + Shadow) ---
+                    if (content) content.classList.remove('hidden');
+                    if (btn) {
+                        btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center";
+                    }
+                } else {
+                    // --- INACTIVE STATE (Gray + No Shadow) ---
+                    if (content) content.classList.add('hidden');
+                    if (btn) {
+                        btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center";
+                    }
                 }
             });
-
-            // Details of Top Skipped (Why were they ignored?)
-            const skipped = lastManualRanking.filter(s => !selectedEmails.includes(s.email)).slice(0, 3); // Top 3 skipped
-
-            if (skipped.length > 0) {
-                logHtml += `</div><div class="mb-2"><div class="text-xs font-bold text-orange-700 uppercase mb-1">Top Candidates Skipped</div>`;
-                skipped.forEach(s => {
-                    const warnings = s.badges.length > 0 ? `[${s.badges.join(', ')}]` : "[No Conflicts]";
-                    logHtml += `<div class="text-xs mb-1 text-gray-600"><b>${s.name}</b> (Score: ${s.score}) - ${warnings}</div>`;
-                });
-            }
-
-            logHtml += `</div><div class="text-[10px] text-gray-400 italic mt-2 border-t pt-1">Score = Pending Duty * 100 - Penalties.</div>`;
-        } else {
-            logHtml = `<div class="text-gray-500 italic">Log not available (Session reloaded).</div>`;
         }
 
-        // Save to Slot
-        invigilationSlots[key].allocationLog = logHtml;
-        invigilationSlots[key].assigned = selectedEmails;
+        // --- MANUAL ALLOCATION HELPER: Unselect All ---
+        window.unselectAllManualStaff = function () {
+            const checkboxes = document.querySelectorAll('.manual-chk');
+            checkboxes.forEach(chk => {
+                chk.checked = false;
+            });
+            // Update the "Selected/Required" counter immediately
+            window.updateManualCounts();
+        }
 
-        // --- 2. STANDARD LOGGING & SAVE ---
-        if (typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${selectedEmails.length} staff to session ${key}`);
-
-        await syncSlotsToCloud();
-        window.closeModal('manual-allocation-modal');
-        renderSlotsGridAdmin();
-
-        // --- NEW: Trigger Reserve Notification ---
-        const reserves = getSlotReserves(key);
-        if (reserves.length > 0) {
-            if (confirm(`✅ Allocation Saved.\n\n⚠️ Reserves Identified: ${reserves.length}\n(These are staff assigned beyond the required count).\n\nNotify them now?`)) {
-                await notifySlotReserves(key);
+        // --- BULK CANCEL FUNCTION ---
+        window.cancelBulkSending = function () {
+            if (confirm("Stop sending remaining emails?")) {
+                isBulkSendingCancelled = true;
+                const btn = document.getElementById('btn-cancel-bulk');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = "Stopping...";
+                    btn.classList.add('opacity-50');
+                }
             }
         }
-    }
-}
-window.switchAdminTab = function (tabName) {
-    const tabs = ['staff', 'slots', 'attendance'];
 
-    tabs.forEach(t => {
-        const content = document.getElementById(`tab-content-${t}`);
-        const btn = document.getElementById(`tab-btn-${t}`);
+        // --- UNIFIED SEARCH HANDLER (CS, SAS, SUBSTITUTE) ---
+        function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
+            const input = document.getElementById(inputId);
+            const results = document.getElementById(resultsId);
+            const hidden = hiddenId ? document.getElementById(hiddenId) : null;
 
-        if (t === tabName) {
-            // --- ACTIVE STATE (White Card + Shadow) ---
-            if (content) content.classList.remove('hidden');
-            if (btn) {
-                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center";
-            }
-        } else {
-            // --- INACTIVE STATE (Gray + No Shadow) ---
-            if (content) content.classList.add('hidden');
-            if (btn) {
-                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center";
-            }
-        }
-    });
-}
+            if (!input || !results) return;
 
-// --- MANUAL ALLOCATION HELPER: Unselect All ---
-window.unselectAllManualStaff = function () {
-    const checkboxes = document.querySelectorAll('.manual-chk');
-    checkboxes.forEach(chk => {
-        chk.checked = false;
-    });
-    // Update the "Selected/Required" counter immediately
-    window.updateManualCounts();
-}
+            input.addEventListener('input', function () {
+                const query = this.value.toLowerCase();
 
-// --- BULK CANCEL FUNCTION ---
-window.cancelBulkSending = function () {
-    if (confirm("Stop sending remaining emails?")) {
-        isBulkSendingCancelled = true;
-        const btn = document.getElementById('btn-cancel-bulk');
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = "Stopping...";
-            btn.classList.add('opacity-50');
-        }
-    }
-}
+                // Clear hidden value on type (force re-selection)
+                if (hidden) hidden.value = "";
 
-// --- UNIFIED SEARCH HANDLER (CS, SAS, SUBSTITUTE) ---
-function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
-    const input = document.getElementById(inputId);
-    const results = document.getElementById(resultsId);
-    const hidden = hiddenId ? document.getElementById(hiddenId) : null;
+                if (query.length < 2) {
+                    results.classList.add('hidden');
+                    return;
+                }
 
-    if (!input || !results) return;
+                // Filter Logic
+                let matches = staffData.filter(s => s.status !== 'archived');
 
-    input.addEventListener('input', function () {
-        const query = this.value.toLowerCase();
+                // Exclude those already in attendance (Only for Substitute search)
+                if (excludeCurrentList) {
+                    const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+                    matches = matches.filter(s => !presentEmails.includes(s.email));
+                }
 
-        // Clear hidden value on type (force re-selection)
-        if (hidden) hidden.value = "";
+                // Search Name or Dept
+                matches = matches.filter(s => s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query));
 
-        if (query.length < 2) {
-            results.classList.add('hidden');
-            return;
-        }
+                // SORT ALPHABETICALLY
+                matches.sort((a, b) => a.name.localeCompare(b.name));
 
-        // Filter Logic
-        let matches = staffData.filter(s => s.status !== 'archived');
-
-        // Exclude those already in attendance (Only for Substitute search)
-        if (excludeCurrentList) {
-            const presentEmails = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
-            matches = matches.filter(s => !presentEmails.includes(s.email));
-        }
-
-        // Search Name or Dept
-        matches = matches.filter(s => s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query));
-
-        // SORT ALPHABETICALLY
-        matches.sort((a, b) => a.name.localeCompare(b.name));
-
-        results.innerHTML = '';
-        if (matches.length === 0) {
-            results.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
-        } else {
-            matches.forEach(s => {
-                const div = document.createElement('div');
-                div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
-                div.innerHTML = `
+                results.innerHTML = '';
+                if (matches.length === 0) {
+                    results.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
+                } else {
+                    matches.forEach(s => {
+                        const div = document.createElement('div');
+                        div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
+                        div.innerHTML = `
                     <span class="font-bold text-gray-800 text-xs">${s.name}</span>
                     <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
                 `;
 
-                div.onclick = () => {
-                    input.value = s.name;
-                    if (hidden) hidden.value = s.email;
+                        div.onclick = () => {
+                            input.value = s.name;
+                            if (hidden) hidden.value = s.email;
 
-                    // Special case for Substitute (Global Var)
-                    if (inputId === 'att-substitute-search') {
-                        currentSubstituteCandidate = s;
-                    }
+                            // Special case for Substitute (Global Var)
+                            if (inputId === 'att-substitute-search') {
+                                currentSubstituteCandidate = s;
+                            }
 
+                            results.classList.add('hidden');
+                        };
+                        results.appendChild(div);
+                    });
+                }
+                results.classList.remove('hidden');
+            });
+
+            // Hide on click outside
+            document.addEventListener('click', function (e) {
+                if (!input.contains(e.target) && !results.contains(e.target)) {
                     results.classList.add('hidden');
-                };
-                results.appendChild(div);
+                }
             });
         }
-        results.classList.remove('hidden');
-    });
+        window.viewSlotHistory = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || !slot.allocationLog) return alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
 
-    // Hide on click outside
-    document.addEventListener('click', function (e) {
-        if (!input.contains(e.target) && !results.contains(e.target)) {
-            results.classList.add('hidden');
+            const list = document.getElementById('inconvenience-list');
+            const title = document.getElementById('inconvenience-modal-subtitle');
+
+            // Reuse the Inconvenience Modal
+            document.querySelector('#inconvenience-modal h3').textContent = "📜 Allocation Logic";
+            title.textContent = `Justification for ${key}`;
+
+            list.innerHTML = slot.allocationLog;
+            window.openModal('inconvenience-modal');
         }
-    });
-}
-window.viewSlotHistory = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || !slot.allocationLog) return alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
 
-    const list = document.getElementById('inconvenience-list');
-    const title = document.getElementById('inconvenience-modal-subtitle');
+        // --- NEW: SYNC STAFF PERMISSIONS BUTTON ---
+        window.syncAllStaffPermissions = async function () {
+            if (!staffData || staffData.length === 0) return alert("No staff data to sync.");
 
-    // Reuse the Inconvenience Modal
-    document.querySelector('#inconvenience-modal h3').textContent = "📜 Allocation Logic";
-    title.textContent = `Justification for ${key}`;
+            if (!confirm(`🛡️ Sync Permissions?\n\nThis will iterate through all ${staffData.length} staff members in your database and ensure they have "Staff Access" in Firebase.\n\nUse this if people cannot log in.`)) return;
 
-    list.innerHTML = slot.allocationLog;
-    window.openModal('inconvenience-modal');
-}
+            const btn = document.getElementById('btn-sync-perms');
+            const originalText = btn ? btn.innerHTML : "Sync Permissions";
+            if (btn) { btn.disabled = true; btn.innerHTML = "Syncing..."; }
 
-// --- NEW: SYNC STAFF PERMISSIONS BUTTON ---
-window.syncAllStaffPermissions = async function () {
-    if (!staffData || staffData.length === 0) return alert("No staff data to sync.");
+            let count = 0;
+            try {
+                for (const staff of staffData) {
+                    if (staff.email && staff.email.includes('@')) {
+                        await addStaffAccess(staff.email);
+                        count++;
+                    }
+                }
+                alert(`✅ Success! Permissions verified/added for ${count} staff members.`);
+            } catch (e) {
+                console.error(e);
+                alert("Error syncing permissions: " + e.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
+            }
+        };
 
-    if (!confirm(`🛡️ Sync Permissions?\n\nThis will iterate through all ${staffData.length} staff members in your database and ensure they have "Staff Access" in Firebase.\n\nUse this if people cannot log in.`)) return;
+        // --- SYNC STATUS & NETWORK LOGIC ---
 
-    const btn = document.getElementById('btn-sync-perms');
-    const originalText = btn ? btn.innerHTML : "Sync Permissions";
-    if (btn) { btn.disabled = true; btn.innerHTML = "Syncing..."; }
+        function updateSyncStatus(msg, type) {
+            const el = document.getElementById('sync-status');
+            if (!el) return;
 
-    let count = 0;
-    try {
-        for (const staff of staffData) {
-            if (staff.email && staff.email.includes('@')) {
-                await addStaffAccess(staff.email);
-                count++;
+            let color = "bg-gray-400";
+            let textClass = "text-gray-500";
+
+            if (type === 'success') {
+                color = "bg-green-500";
+                textClass = "text-green-600";
+            } else if (type === 'error') {
+                color = "bg-red-500";
+                textClass = "text-red-600";
+            } else if (type === 'neutral') {
+                color = "bg-blue-500 animate-pulse";
+                textClass = "text-blue-600";
+            }
+
+            el.className = `text-[10px] font-bold ${textClass} flex items-center gap-1`;
+            el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span> ${msg}`;
+        }
+
+        // ==========================================
+        // 🗓️ RESCHEDULE & ALERT SYSTEM
+        // ==========================================
+
+        window.openRescheduleModal = function (key) {
+            if (!invigilationSlots[key]) return;
+
+            document.getElementById('reschedule-old-key').value = key;
+            document.getElementById('reschedule-current-key').textContent = key;
+
+            // Pre-fill current values for easier editing
+            const [datePart, timePart] = key.split(' | ');
+
+            // Convert DD.MM.YYYY -> YYYY-MM-DD for input
+            const [d, m, y] = datePart.split('.');
+            document.getElementById('reschedule-new-date').value = `${y}-${m}-${d}`;
+
+            // Convert Time (e.g., 09:30 AM -> 09:30)
+            // Basic parser (assuming standard format)
+            let time24 = "";
+            const match = timePart.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (match) {
+                let [_, h, min, p] = match;
+                h = parseInt(h);
+                if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+                if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+                time24 = `${String(h).padStart(2, '0')}:${min}`;
+            }
+            document.getElementById('reschedule-new-time').value = time24;
+
+            window.openModal('reschedule-modal');
+        }
+
+        window.executeReschedule = async function () {
+            const oldKey = document.getElementById('reschedule-old-key').value;
+            const dateInput = document.getElementById('reschedule-new-date').value;
+            const timeInput = document.getElementById('reschedule-new-time').value;
+
+            if (!dateInput || !timeInput) return alert("Please select new Date and Time.");
+
+            // 1. Generate New Key
+            const [y, m, d] = dateInput.split('-');
+            const formattedDate = `${d}.${m}.${y}`;
+
+            let [hours, minutes] = timeInput.split(':');
+            hours = parseInt(hours);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+
+            const newKey = `${formattedDate} | ${formattedTime}`;
+
+            if (newKey === oldKey) return alert("New time is the same as the old time.");
+            if (invigilationSlots[newKey]) {
+                if (!confirm(`Slot ${newKey} already exists! Merge staff into it?`)) return;
+            }
+
+            // 2. Move Data
+            const oldSlot = invigilationSlots[oldKey];
+            const affectedStaff = [...oldSlot.assigned]; // Copy list for notification
+
+            if (!invigilationSlots[newKey]) {
+                // Create new
+                invigilationSlots[newKey] = JSON.parse(JSON.stringify(oldSlot));
+            } else {
+                // Merge
+                const newSlot = invigilationSlots[newKey];
+                oldSlot.assigned.forEach(email => {
+                    if (!newSlot.assigned.includes(email)) newSlot.assigned.push(email);
+                });
+                // Merge Scribes/Counts if needed logic here...
+            }
+
+            // 3. Delete Old
+            delete invigilationSlots[oldKey];
+
+            // 4. Save & Close
+            await syncSlotsToCloud();
+            window.closeModal('reschedule-modal');
+            renderSlotsGridAdmin();
+
+            // 5. Trigger Notification Modal
+            if (affectedStaff.length > 0) {
+                setTimeout(() => openRescheduleNotification(affectedStaff, oldKey, newKey), 500);
+            } else {
+                alert(`✅ Session moved to ${newKey}. (No staff were assigned).`);
             }
         }
-        alert(`✅ Success! Permissions verified/added for ${count} staff members.`);
-    } catch (e) {
-        console.error(e);
-        alert("Error syncing permissions: " + e.message);
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
-    }
-};
-
-// --- SYNC STATUS & NETWORK LOGIC ---
-
-function updateSyncStatus(msg, type) {
-    const el = document.getElementById('sync-status');
-    if (!el) return;
-
-    let color = "bg-gray-400";
-    let textClass = "text-gray-500";
-
-    if (type === 'success') {
-        color = "bg-green-500";
-        textClass = "text-green-600";
-    } else if (type === 'error') {
-        color = "bg-red-500";
-        textClass = "text-red-600";
-    } else if (type === 'neutral') {
-        color = "bg-blue-500 animate-pulse";
-        textClass = "text-blue-600";
-    }
-
-    el.className = `text-[10px] font-bold ${textClass} flex items-center gap-1`;
-    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span> ${msg}`;
-}
-
-// ==========================================
-// 🗓️ RESCHEDULE & ALERT SYSTEM
-// ==========================================
-
-window.openRescheduleModal = function (key) {
-    if (!invigilationSlots[key]) return;
-
-    document.getElementById('reschedule-old-key').value = key;
-    document.getElementById('reschedule-current-key').textContent = key;
-
-    // Pre-fill current values for easier editing
-    const [datePart, timePart] = key.split(' | ');
-
-    // Convert DD.MM.YYYY -> YYYY-MM-DD for input
-    const [d, m, y] = datePart.split('.');
-    document.getElementById('reschedule-new-date').value = `${y}-${m}-${d}`;
-
-    // Convert Time (e.g., 09:30 AM -> 09:30)
-    // Basic parser (assuming standard format)
-    let time24 = "";
-    const match = timePart.match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (match) {
-        let [_, h, min, p] = match;
-        h = parseInt(h);
-        if (p.toUpperCase() === 'PM' && h < 12) h += 12;
-        if (p.toUpperCase() === 'AM' && h === 12) h = 0;
-        time24 = `${String(h).padStart(2, '0')}:${min}`;
-    }
-    document.getElementById('reschedule-new-time').value = time24;
-
-    window.openModal('reschedule-modal');
-}
-
-window.executeReschedule = async function () {
-    const oldKey = document.getElementById('reschedule-old-key').value;
-    const dateInput = document.getElementById('reschedule-new-date').value;
-    const timeInput = document.getElementById('reschedule-new-time').value;
-
-    if (!dateInput || !timeInput) return alert("Please select new Date and Time.");
-
-    // 1. Generate New Key
-    const [y, m, d] = dateInput.split('-');
-    const formattedDate = `${d}.${m}.${y}`;
-
-    let [hours, minutes] = timeInput.split(':');
-    hours = parseInt(hours);
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    const formattedTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-
-    const newKey = `${formattedDate} | ${formattedTime}`;
-
-    if (newKey === oldKey) return alert("New time is the same as the old time.");
-    if (invigilationSlots[newKey]) {
-        if (!confirm(`Slot ${newKey} already exists! Merge staff into it?`)) return;
-    }
-
-    // 2. Move Data
-    const oldSlot = invigilationSlots[oldKey];
-    const affectedStaff = [...oldSlot.assigned]; // Copy list for notification
-
-    if (!invigilationSlots[newKey]) {
-        // Create new
-        invigilationSlots[newKey] = JSON.parse(JSON.stringify(oldSlot));
-    } else {
-        // Merge
-        const newSlot = invigilationSlots[newKey];
-        oldSlot.assigned.forEach(email => {
-            if (!newSlot.assigned.includes(email)) newSlot.assigned.push(email);
-        });
-        // Merge Scribes/Counts if needed logic here...
-    }
-
-    // 3. Delete Old
-    delete invigilationSlots[oldKey];
-
-    // 4. Save & Close
-    await syncSlotsToCloud();
-    window.closeModal('reschedule-modal');
-    renderSlotsGridAdmin();
-
-    // 5. Trigger Notification Modal
-    if (affectedStaff.length > 0) {
-        setTimeout(() => openRescheduleNotification(affectedStaff, oldKey, newKey), 500);
-    } else {
-        alert(`✅ Session moved to ${newKey}. (No staff were assigned).`);
-    }
-}
 
 
 
-// --- Reschedule Notification Modal ---
-function openRescheduleNotification(staffList, oldKey, newKey) {
-    const list = document.getElementById('notif-list-container');
-    const title = document.getElementById('notif-modal-title');
-    const subtitle = document.getElementById('notif-modal-subtitle');
-    const previewEl = document.getElementById('notif-message-preview');
+        // --- Reschedule Notification Modal ---
+        function openRescheduleNotification(staffList, oldKey, newKey) {
+            const list = document.getElementById('notif-list-container');
+            const title = document.getElementById('notif-modal-title');
+            const subtitle = document.getElementById('notif-modal-subtitle');
+            const previewEl = document.getElementById('notif-message-preview');
 
-    title.textContent = "⚠️ Send Reschedule Alerts";
-    subtitle.textContent = `Notify ${staffList.length} staff about the time change.`;
-    list.innerHTML = '';
-    currentEmailQueue = [];
+            title.textContent = "⚠️ Send Reschedule Alerts";
+            subtitle.textContent = `Notify ${staffList.length} staff about the time change.`;
+            list.innerHTML = '';
+            currentEmailQueue = [];
 
-    staffList.forEach((email, index) => {
-        const staff = staffData.find(s => s.email === email);
-        const fullName = staff ? staff.name : email;
-        const phone = staff ? (staff.phone || "").replace(/\D/g, '') : "";
-        const validPhone = phone.length >= 10 ? (phone.length === 10 ? "91" + phone : phone) : "";
-        const staffEmail = staff ? staff.email : "";
+            staffList.forEach((email, index) => {
+                const staff = staffData.find(s => s.email === email);
+                const fullName = staff ? staff.name : email;
+                const phone = staff ? (staff.phone || "").replace(/\D/g, '') : "";
+                const validPhone = phone.length >= 10 ? (phone.length === 10 ? "91" + phone : phone) : "";
+                const staffEmail = staff ? staff.email : "";
 
-        // --- GENERATE MESSAGES ---
-        const waMsg = `⚠️ *URGENT: EXAM RESCHEDULED* ⚠️\n\nDear *${fullName}*,\n\nThe exam session originally scheduled for:\n❌ *${oldKey}*\n\nHas been moved to:\n✅ *${newKey}*\n\nYour invigilation duty has been transferred to this new time. Please adjust your calendar accordingly.\n\n- Exam Wing`;
+                // --- GENERATE MESSAGES ---
+                const waMsg = `⚠️ *URGENT: EXAM RESCHEDULED* ⚠️\n\nDear *${fullName}*,\n\nThe exam session originally scheduled for:\n❌ *${oldKey}*\n\nHas been moved to:\n✅ *${newKey}*\n\nYour invigilation duty has been transferred to this new time. Please adjust your calendar accordingly.\n\n- Exam Wing`;
 
-        const emailBody = `
+                const emailBody = `
             <div style="font-family:Arial,sans-serif; color:#333;">
                 <h2 style="color:#c0392b;">⚠️ Exam Reschedule Alert</h2>
                 <p>Dear <b>${fullName}</b>,</p>
@@ -6096,25 +5997,25 @@ function openRescheduleNotification(staffList, oldKey, newKey) {
             </div>
         `;
 
-        const waLink = validPhone ? `https://wa.me/${validPhone}?text=${encodeURIComponent(waMsg)}` : "#";
-        const btnId = `email-btn-${index}`;
+                const waLink = validPhone ? `https://wa.me/${validPhone}?text=${encodeURIComponent(waMsg)}` : "#";
+                const btnId = `email-btn-${index}`;
 
-        if (staffEmail) {
-            currentEmailQueue.push({
-                email: staffEmail,
-                name: fullName,
-                subject: "URGENT: Invigilation Duty Rescheduled",
-                body: emailBody,
-                btnId: btnId
-            });
-        }
+                if (staffEmail) {
+                    currentEmailQueue.push({
+                        email: staffEmail,
+                        name: fullName,
+                        subject: "URGENT: Invigilation Duty Rescheduled",
+                        body: emailBody,
+                        btnId: btnId
+                    });
+                }
 
-        // Show preview for first user
-        if (index === 0 && previewEl) {
-            previewEl.textContent = waMsg;
-        }
+                // Show preview for first user
+                if (index === 0 && previewEl) {
+                    previewEl.textContent = waMsg;
+                }
 
-        list.innerHTML += `
+                list.innerHTML += `
             <div class="flex justify-between items-center bg-orange-50 border border-orange-200 p-3 rounded-lg shadow-sm mb-2">
                 <div>
                     <div class="font-bold text-gray-800">${fullName}</div>
@@ -6126,10 +6027,10 @@ function openRescheduleNotification(staffList, oldKey, newKey) {
                 </div>
             </div>
         `;
-    });
+            });
 
-    // Add Bulk Button Logic
-    list.insertAdjacentHTML('afterbegin', `
+            // Add Bulk Button Logic
+            list.insertAdjacentHTML('afterbegin', `
         <div class="mb-3 flex justify-end">
             <button onclick="sendBulkEmails('btn-bulk-reschedule')" id="btn-bulk-reschedule" class="bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded shadow hover:bg-orange-700 transition flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -6138,40 +6039,40 @@ function openRescheduleNotification(staffList, oldKey, newKey) {
         </div>
     `);
 
-    window.openModal('notification-modal');
-}
+            window.openModal('notification-modal');
+        }
 
-// ==========================================
-// 📄 DUTY NOTIFICATION PREVIEW (No Signature, No Blank Page)
-// ==========================================
+        // ==========================================
+        // 📄 DUTY NOTIFICATION PREVIEW (No Signature, No Blank Page)
+        // ==========================================
 
-window.printDutyNotification = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
+        window.printDutyNotification = function (key) {
+            const slot = invigilationSlots[key];
+            if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
 
-    // 1. DATA PREPARATION
-    const [dateStr, timeStr] = key.split(' | ');
-    const [d, m, y] = dateStr.split('.');
-    const examDate = new Date(`${y}-${m}-${d}`);
+            // 1. DATA PREPARATION
+            const [dateStr, timeStr] = key.split(' | ');
+            const [d, m, y] = dateStr.split('.');
+            const examDate = new Date(`${y}-${m}-${d}`);
 
-    const excelBaseDate = new Date(1899, 11, 30);
-    const dayDiff = Math.floor((examDate - excelBaseDate) / (1000 * 60 * 60 * 24));
+            const excelBaseDate = new Date(1899, 11, 30);
+            const dayDiff = Math.floor((examDate - excelBaseDate) / (1000 * 60 * 60 * 24));
 
-    const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
-    const sessionCode = isAN ? "AN" : "FN";
-    const reportTime = calculateReportTime(timeStr);
-    const logoUrl = "logo.png";
+            const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
+            const sessionCode = isAN ? "AN" : "FN";
+            const reportTime = calculateReportTime(timeStr);
+            const logoUrl = "logo.png";
 
-    // 2. LAYOUT LOGIC (Limit 20)
-    const totalStaff = slot.assigned.length;
-    const useTwoColumns = totalStaff > 20;
+            // 2. LAYOUT LOGIC (Limit 20)
+            const totalStaff = slot.assigned.length;
+            const useTwoColumns = totalStaff > 20;
 
-    const generateRow = (email, idx) => {
-        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "" };
-        let phone = staff.phone || "-";
-        let nameDisplay = staff.name.length > 28 ? staff.name.substring(0, 26) + ".." : staff.name;
+            const generateRow = (email, idx) => {
+                const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "" };
+                let phone = staff.phone || "-";
+                let nameDisplay = staff.name.length > 28 ? staff.name.substring(0, 26) + ".." : staff.name;
 
-        return `
+                return `
             <tr>
                 <td style="text-align: center;">${idx + 1}</td>
                 <td>
@@ -6181,17 +6082,17 @@ window.printDutyNotification = function (key) {
                 <td style="text-align: center; font-size: 9pt;">${phone}</td>
             </tr>
         `;
-    };
+            };
 
-    let tableContentHtml = "";
+            let tableContentHtml = "";
 
-    if (useTwoColumns) {
-        // --- 2 COLUMN LAYOUT (No Signature) ---
-        const mid = Math.ceil(totalStaff / 2);
-        const leftList = slot.assigned.slice(0, mid);
-        const rightList = slot.assigned.slice(mid);
+            if (useTwoColumns) {
+                // --- 2 COLUMN LAYOUT (No Signature) ---
+                const mid = Math.ceil(totalStaff / 2);
+                const leftList = slot.assigned.slice(0, mid);
+                const rightList = slot.assigned.slice(mid);
 
-        const renderMiniTable = (list, startIdx) => `
+                const renderMiniTable = (list, startIdx) => `
             <table class="staff-table" style="width: 100%; font-size: 9pt;">
                 <thead>
                     <tr>
@@ -6206,7 +6107,7 @@ window.printDutyNotification = function (key) {
             </table>
         `;
 
-        tableContentHtml = `
+                tableContentHtml = `
             <div style="display: flex; gap: 15px; align-items: flex-start;">
                 <div style="flex: 1;">
                     ${renderMiniTable(leftList, 0)}
@@ -6216,9 +6117,9 @@ window.printDutyNotification = function (key) {
                 </div>
             </div>
         `;
-    } else {
-        // --- 1 COLUMN LAYOUT (No Signature) ---
-        tableContentHtml = `
+            } else {
+                // --- 1 COLUMN LAYOUT (No Signature) ---
+                tableContentHtml = `
             <table class="staff-table" style="width: 100%; margin-top: 10px;">
                 <thead>
                     <tr>
@@ -6232,11 +6133,11 @@ window.printDutyNotification = function (key) {
                 </tbody>
             </table>
         `;
-    }
+            }
 
-    // 3. OPEN PREVIEW WINDOW
-    const w = window.open('', '_blank');
-    w.document.write(`
+            // 3. OPEN PREVIEW WINDOW
+            const w = window.open('', '_blank');
+            w.document.write(`
         <html>
         <head>
             <title>Notification_${dateStr}_${sessionCode}</title>
@@ -6368,128 +6269,128 @@ window.printDutyNotification = function (key) {
         </body>
         </html>
     `);
-    w.document.close();
-}
-
-
-// Network Listeners
-window.addEventListener('online', () => {
-    updateSyncStatus("Back Online", "success");
-    // Optional: Trigger a re-fetch if needed, or just let Firestore reconnect automatically
-});
-
-window.addEventListener('offline', () => {
-    updateSyncStatus("No Internet", "error");
-});
-
-// ==========================================
-// 📋 STAFF UPCOMING SCHEDULE (Interactive & Auto-Height)
-// ==========================================
-
-function renderStaffUpcomingSummary(email) {
-    const viewStaff = document.getElementById('view-staff');
-    if (!viewStaff) return;
-
-    // 1. Cleanup Old
-    const oldBox = document.getElementById('my-upcoming-duties');
-    if (oldBox) oldBox.remove();
-
-    // 2. Create/Find Container
-    let container = document.getElementById('staff-upcoming-summary');
-    if (!container) {
-        const statsGrid = viewStaff.querySelector('.grid');
-        container = document.createElement('div');
-        container.id = 'staff-upcoming-summary';
-        // Removed 'min-h' and fixed height classes. Now using flex-col for structure.
-        container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col";
-
-        if (statsGrid && statsGrid.nextSibling) {
-            statsGrid.parentNode.insertBefore(container, statsGrid.nextSibling);
-        } else {
-            viewStaff.appendChild(container);
+            w.document.close();
         }
-    }
 
-    // 3. Gather Data
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    const upcomingDuties = [];
-    const unavailableDates = [];
+        // Network Listeners
+        window.addEventListener('online', () => {
+            updateSyncStatus("Back Online", "success");
+            // Optional: Trigger a re-fetch if needed, or just let Firestore reconnect automatically
+        });
 
-    // A. Gather Assignments
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        const date = parseDate(key);
+        window.addEventListener('offline', () => {
+            updateSyncStatus("No Internet", "error");
+        });
 
-        if (date >= today && slot.assigned.includes(email)) {
-            const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(email);
-            const label = isPosted ? "⏳ Posted" : "✅ Duty";
-            const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-100 text-green-700 border-green-200";
+        // ==========================================
+        // 📋 STAFF UPCOMING SCHEDULE (Interactive & Auto-Height)
+        // ==========================================
 
-            // Determine Action based on status
-            // If Posted -> Click to Withdraw. If Duty -> Click to Post.
-            const action = isPosted ? `withdrawExchange('${key}', '${email}')` : `postForExchange('${key}', '${email}')`;
-            const hint = isPosted ? "Click to Withdraw Request" : "Click to Post for Exchange";
+        function renderStaffUpcomingSummary(email) {
+            const viewStaff = document.getElementById('view-staff');
+            if (!viewStaff) return;
 
-            upcomingDuties.push({
-                date: date,
-                key: key,
-                label: label,
-                style: style,
-                details: slot.examName || "University Exam",
-                action: action,
-                hint: hint,
-                isDuty: true
-            });
-        }
-    });
+            // 1. Cleanup Old
+            const oldBox = document.getElementById('my-upcoming-duties');
+            if (oldBox) oldBox.remove();
 
-    // B. Gather Inconveniences (Slot Specific)
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        const date = parseDate(key);
-        const isUnav = slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
+            // 2. Create/Find Container
+            let container = document.getElementById('staff-upcoming-summary');
+            if (!container) {
+                const statsGrid = viewStaff.querySelector('.grid');
+                container = document.createElement('div');
+                container.id = 'staff-upcoming-summary';
+                // Removed 'min-h' and fixed height classes. Now using flex-col for structure.
+                container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col";
 
-        if (date >= today && isUnav) {
-            const [dStr, tStr] = key.split(' | ');
-            const sess = tStr.includes("PM") || tStr.startsWith("12") ? "AN" : "FN";
-            unavailableDates.push(`${dStr} (${sess})`);
-        }
-    });
-
-    // C. Gather Inconveniences (Advance)
-    Object.keys(advanceUnavailability).forEach(dateStr => {
-        const d = parseDate(dateStr + " | 00:00 AM");
-        if (d >= today) {
-            const entry = advanceUnavailability[dateStr];
-            const sessions = [];
-            if (entry.FN && entry.FN.some(u => u.email === email)) sessions.push("FN");
-            if (entry.AN && entry.AN.some(u => u.email === email)) sessions.push("AN");
-
-            if (sessions.length === 2) {
-                unavailableDates.push(`${dateStr} (Whole Day)`);
-            } else if (sessions.length > 0) {
-                unavailableDates.push(`${dateStr} (${sessions.join(',')})`);
+                if (statsGrid && statsGrid.nextSibling) {
+                    statsGrid.parentNode.insertBefore(container, statsGrid.nextSibling);
+                } else {
+                    viewStaff.appendChild(container);
+                }
             }
-        }
-    });
 
-    // 4. Sort
-    upcomingDuties.sort((a, b) => a.date - b.date);
-    const uniqueUnav = [...new Set(unavailableDates)];
+            // 3. Gather Data
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-    // 5. Render HTML
-    let htmlContent = `
+            const upcomingDuties = [];
+            const unavailableDates = [];
+
+            // A. Gather Assignments
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+                const date = parseDate(key);
+
+                if (date >= today && slot.assigned.includes(email)) {
+                    const isPosted = slot.exchangeRequests && slot.exchangeRequests.includes(email);
+                    const label = isPosted ? "⏳ Posted" : "✅ Duty";
+                    const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-100 text-green-700 border-green-200";
+
+                    // Determine Action based on status
+                    // If Posted -> Click to Withdraw. If Duty -> Click to Post.
+                    const action = isPosted ? `withdrawExchange('${key}', '${email}')` : `postForExchange('${key}', '${email}')`;
+                    const hint = isPosted ? "Click to Withdraw Request" : "Click to Post for Exchange";
+
+                    upcomingDuties.push({
+                        date: date,
+                        key: key,
+                        label: label,
+                        style: style,
+                        details: slot.examName || "University Exam",
+                        action: action,
+                        hint: hint,
+                        isDuty: true
+                    });
+                }
+            });
+
+            // B. Gather Inconveniences (Slot Specific)
+            Object.keys(invigilationSlots).forEach(key => {
+                const slot = invigilationSlots[key];
+                const date = parseDate(key);
+                const isUnav = slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
+
+                if (date >= today && isUnav) {
+                    const [dStr, tStr] = key.split(' | ');
+                    const sess = tStr.includes("PM") || tStr.startsWith("12") ? "AN" : "FN";
+                    unavailableDates.push(`${dStr} (${sess})`);
+                }
+            });
+
+            // C. Gather Inconveniences (Advance)
+            Object.keys(advanceUnavailability).forEach(dateStr => {
+                const d = parseDate(dateStr + " | 00:00 AM");
+                if (d >= today) {
+                    const entry = advanceUnavailability[dateStr];
+                    const sessions = [];
+                    if (entry.FN && entry.FN.some(u => u.email === email)) sessions.push("FN");
+                    if (entry.AN && entry.AN.some(u => u.email === email)) sessions.push("AN");
+
+                    if (sessions.length === 2) {
+                        unavailableDates.push(`${dateStr} (Whole Day)`);
+                    } else if (sessions.length > 0) {
+                        unavailableDates.push(`${dateStr} (${sessions.join(',')})`);
+                    }
+                }
+            });
+
+            // 4. Sort
+            upcomingDuties.sort((a, b) => a.date - b.date);
+            const uniqueUnav = [...new Set(unavailableDates)];
+
+            // 5. Render HTML
+            let htmlContent = `
         <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-800 text-sm flex justify-between items-center sticky top-0 z-20 shadow-sm">
             <span class="flex items-center gap-2">📋 Your Upcoming Schedule</span>
             <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full shadow-sm">${upcomingDuties.length}</span>
         </div>
     `;
 
-    // Unavailability Warning (Compact)
-    if (uniqueUnav.length > 0) {
-        htmlContent += `
+            // Unavailability Warning (Compact)
+            if (uniqueUnav.length > 0) {
+                htmlContent += `
             <div class="bg-red-50 px-4 py-3 border-b border-red-100 flex items-start gap-2">
                 <span class="text-xs font-bold text-red-600 shrink-0 mt-0.5">⛔ Unavailable:</span>
                 <div class="text-xs text-red-700 leading-relaxed font-medium">
@@ -6497,33 +6398,33 @@ function renderStaffUpcomingSummary(email) {
                 </div>
             </div>
         `;
-    }
+            }
 
-    // Duty List Container
-    // - max-height: 60vh (Limits tall lists)
-    // - h-auto (Shrinks for short lists)
-    // - overflow-y-auto (Scrolls only when needed)
-    htmlContent += `<div class="overflow-y-auto custom-scroll bg-white" style="max-height: 60vh; height: auto;">`;
+            // Duty List Container
+            // - max-height: 60vh (Limits tall lists)
+            // - h-auto (Shrinks for short lists)
+            // - overflow-y-auto (Scrolls only when needed)
+            htmlContent += `<div class="overflow-y-auto custom-scroll bg-white" style="max-height: 60vh; height: auto;">`;
 
-    if (upcomingDuties.length === 0) {
-        htmlContent += `
+            if (upcomingDuties.length === 0) {
+                htmlContent += `
             <div class="flex flex-col items-center justify-center py-8 text-center text-gray-400 text-sm italic">
                 <svg class="w-10 h-10 mb-2 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                 No upcoming duties assigned.
             </div>`;
-    } else {
-        htmlContent += `<div class="divide-y divide-gray-100">`;
-        upcomingDuties.forEach(item => {
-            let title = item.key;
-            if (item.key.includes('|')) {
-                title = item.key.split('|')[1].trim();
-            }
+            } else {
+                htmlContent += `<div class="divide-y divide-gray-100">`;
+                upcomingDuties.forEach(item => {
+                    let title = item.key;
+                    if (item.key.includes('|')) {
+                        title = item.key.split('|')[1].trim();
+                    }
 
-            const isToday = item.date.toDateString() === new Date().toDateString();
-            const rowBg = isToday ? "bg-blue-50/50" : "hover:bg-indigo-50";
+                    const isToday = item.date.toDateString() === new Date().toDateString();
+                    const rowBg = isToday ? "bg-blue-50/50" : "hover:bg-indigo-50";
 
-            // Added cursor-pointer and onclick handler
-            htmlContent += `
+                    // Added cursor-pointer and onclick handler
+                    htmlContent += `
                 <div class="p-3 flex items-center justify-between transition cursor-pointer group ${rowBg}" 
                      onclick="${item.action}" title="${item.hint}">
                     
@@ -6549,201 +6450,201 @@ function renderStaffUpcomingSummary(email) {
                     </div>
                 </div>
             `;
-        });
-        htmlContent += `</div>`;
-    }
-
-    htmlContent += `</div>`;
-    container.innerHTML = htmlContent;
-}
-
-// --- STAFF PAGINATION LISTENERS ---
-const btnStaffPrev = document.getElementById('btn-staff-prev');
-const btnStaffNext = document.getElementById('btn-staff-next');
-
-if (btnStaffPrev) {
-    btnStaffPrev.addEventListener('click', () => {
-        if (currentStaffPage > 1) {
-            currentStaffPage--;
-            renderStaffTable();
-        }
-    });
-}
-
-if (btnStaffNext) {
-    btnStaffNext.addEventListener('click', () => {
-        // Logic to check max page is inside renderStaffTable, 
-        // but we simply re-render and let it handle boundaries or just increment here
-        // To be safe, we increment and render, the function handles bounds.
-        currentStaffPage++;
-        renderStaffTable();
-    });
-}
-
-// --- INSTANT SEARCH LISTENER ---
-const staffSearchInput = document.getElementById('staff-search');
-if (staffSearchInput) {
-    staffSearchInput.addEventListener('input', () => {
-        currentStaffPage = 1; // Always reset to Page 1 on new search
-        renderStaffTable();
-    });
-}
-
-
-// --- HoD MONITORING LOGIC (Day & Session Wise) ---
-window.openHodMonitorModal = function () {
-    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-    if (!me) return;
-
-    const dept = me.dept;
-    document.getElementById('hod-dept-name').textContent = `${dept} Department Schedule (Upcoming)`;
-
-    const list = document.getElementById('hod-monitor-list');
-    list.innerHTML = '<div class="text-center py-10"><span class="animate-spin text-2xl inline-block">⏳</span> <span class="block mt-2 text-sm text-gray-500">Processing schedule...</span></div>';
-
-    window.openModal('hod-monitor-modal');
-
-    setTimeout(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // 1. Identify Dept Staff Emails
-        const deptStaffEmails = new Set(
-            staffData.filter(s => s.dept === dept && s.status !== 'archived').map(s => s.email)
-        );
-
-        if (deptStaffEmails.size === 0) {
-            list.innerHTML = '<div class="text-center text-gray-400 py-8 italic">No staff found in this department.</div>';
-            return;
-        }
-
-        // 2. Aggregate Data by Day & Session
-        // Structure: { "YYYY-MM-DD": { dateObj, dateStr, FN: { assigned: [], posted: [], unavailable: [] }, AN: { ... } } }
-        const schedule = {};
-
-        const getDayEntry = (dateObj, dateStr) => {
-            const key = dateObj.toISOString().split('T')[0];
-            if (!schedule[key]) {
-                schedule[key] = {
-                    dateObj: dateObj,
-                    dateStr: dateStr,
-                    FN: { assigned: [], posted: [], unavailable: [] },
-                    AN: { assigned: [], posted: [], unavailable: [] }
-                };
+                });
+                htmlContent += `</div>`;
             }
-            return schedule[key];
-        };
 
-        // A. Process Invigilation Slots (Duties & Slot-Specific Leaves)
-        Object.keys(invigilationSlots).forEach(key => {
-            const date = parseDate(key);
-            if (date < today) return; // Filter Past
+            htmlContent += `</div>`;
+            container.innerHTML = htmlContent;
+        }
 
-            const [dStr, tStr] = key.split(' | ');
-            const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
-            const sess = isAN ? "AN" : "FN";
+        // --- STAFF PAGINATION LISTENERS ---
+        const btnStaffPrev = document.getElementById('btn-staff-prev');
+        const btnStaffNext = document.getElementById('btn-staff-next');
 
-            const dayEntry = getDayEntry(date, dStr);
-            const slot = invigilationSlots[key];
-
-            // Assigned & Posted (Exchange)
-            slot.assigned.forEach(email => {
-                if (deptStaffEmails.has(email)) {
-                    dayEntry[sess].assigned.push(email);
-                    // Check if they posted it for exchange
-                    if (slot.exchangeRequests && slot.exchangeRequests.includes(email)) {
-                        dayEntry[sess].posted.push(email);
-                    }
+        if (btnStaffPrev) {
+            btnStaffPrev.addEventListener('click', () => {
+                if (currentStaffPage > 1) {
+                    currentStaffPage--;
+                    renderStaffTable();
                 }
             });
+        }
 
-            // Slot Unavailable
-            if (slot.unavailable) {
-                slot.unavailable.forEach(u => {
-                    const email = (typeof u === 'string' ? u : u.email);
-                    const reason = (typeof u === 'object' ? u.reason : "Unspecified");
-                    if (deptStaffEmails.has(email)) {
-                        dayEntry[sess].unavailable.push({ email, reason });
+        if (btnStaffNext) {
+            btnStaffNext.addEventListener('click', () => {
+                // Logic to check max page is inside renderStaffTable, 
+                // but we simply re-render and let it handle boundaries or just increment here
+                // To be safe, we increment and render, the function handles bounds.
+                currentStaffPage++;
+                renderStaffTable();
+            });
+        }
+
+        // --- INSTANT SEARCH LISTENER ---
+        const staffSearchInput = document.getElementById('staff-search');
+        if (staffSearchInput) {
+            staffSearchInput.addEventListener('input', () => {
+                currentStaffPage = 1; // Always reset to Page 1 on new search
+                renderStaffTable();
+            });
+        }
+
+
+        // --- HoD MONITORING LOGIC (Day & Session Wise) ---
+        window.openHodMonitorModal = function () {
+            const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+            if (!me) return;
+
+            const dept = me.dept;
+            document.getElementById('hod-dept-name').textContent = `${dept} Department Schedule (Upcoming)`;
+
+            const list = document.getElementById('hod-monitor-list');
+            list.innerHTML = '<div class="text-center py-10"><span class="animate-spin text-2xl inline-block">⏳</span> <span class="block mt-2 text-sm text-gray-500">Processing schedule...</span></div>';
+
+            window.openModal('hod-monitor-modal');
+
+            setTimeout(() => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                // 1. Identify Dept Staff Emails
+                const deptStaffEmails = new Set(
+                    staffData.filter(s => s.dept === dept && s.status !== 'archived').map(s => s.email)
+                );
+
+                if (deptStaffEmails.size === 0) {
+                    list.innerHTML = '<div class="text-center text-gray-400 py-8 italic">No staff found in this department.</div>';
+                    return;
+                }
+
+                // 2. Aggregate Data by Day & Session
+                // Structure: { "YYYY-MM-DD": { dateObj, dateStr, FN: { assigned: [], posted: [], unavailable: [] }, AN: { ... } } }
+                const schedule = {};
+
+                const getDayEntry = (dateObj, dateStr) => {
+                    const key = dateObj.toISOString().split('T')[0];
+                    if (!schedule[key]) {
+                        schedule[key] = {
+                            dateObj: dateObj,
+                            dateStr: dateStr,
+                            FN: { assigned: [], posted: [], unavailable: [] },
+                            AN: { assigned: [], posted: [], unavailable: [] }
+                        };
                     }
-                });
-            }
-        });
+                    return schedule[key];
+                };
 
-        // B. Process Advance Unavailability (General Leaves)
-        Object.keys(advanceUnavailability).forEach(dateStr => {
-            const [d, m, y] = dateStr.split('.');
-            const date = new Date(y, m - 1, d);
+                // A. Process Invigilation Slots (Duties & Slot-Specific Leaves)
+                Object.keys(invigilationSlots).forEach(key => {
+                    const date = parseDate(key);
+                    if (date < today) return; // Filter Past
 
-            if (date < today) return;
+                    const [dStr, tStr] = key.split(' | ');
+                    const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+                    const sess = isAN ? "AN" : "FN";
 
-            const dayEntry = getDayEntry(date, dateStr);
+                    const dayEntry = getDayEntry(date, dStr);
+                    const slot = invigilationSlots[key];
 
-            ['FN', 'AN'].forEach(sess => {
-                if (advanceUnavailability[dateStr][sess]) {
-                    advanceUnavailability[dateStr][sess].forEach(u => {
-                        if (deptStaffEmails.has(u.email)) {
-                            // Avoid duplicates if already caught in slot-specific above
-                            const exists = dayEntry[sess].unavailable.some(x => x.email === u.email);
-                            if (!exists) {
-                                dayEntry[sess].unavailable.push({ email: u.email, reason: u.reason });
+                    // Assigned & Posted (Exchange)
+                    slot.assigned.forEach(email => {
+                        if (deptStaffEmails.has(email)) {
+                            dayEntry[sess].assigned.push(email);
+                            // Check if they posted it for exchange
+                            if (slot.exchangeRequests && slot.exchangeRequests.includes(email)) {
+                                dayEntry[sess].posted.push(email);
                             }
                         }
                     });
-                }
-            });
-        });
 
-        // 3. Sort & Render
-        const sortedKeys = Object.keys(schedule).sort();
+                    // Slot Unavailable
+                    if (slot.unavailable) {
+                        slot.unavailable.forEach(u => {
+                            const email = (typeof u === 'string' ? u : u.email);
+                            const reason = (typeof u === 'object' ? u.reason : "Unspecified");
+                            if (deptStaffEmails.has(email)) {
+                                dayEntry[sess].unavailable.push({ email, reason });
+                            }
+                        });
+                    }
+                });
 
-        let html = "";
+                // B. Process Advance Unavailability (General Leaves)
+                Object.keys(advanceUnavailability).forEach(dateStr => {
+                    const [d, m, y] = dateStr.split('.');
+                    const date = new Date(y, m - 1, d);
 
-        sortedKeys.forEach(dateKey => {
-            const dayData = schedule[dateKey];
-            const dayName = dayData.dateObj.toLocaleString('en-us', { weekday: 'long' });
+                    if (date < today) return;
 
-            // Only render if there is data for this day
-            const hasFN = dayData.FN.assigned.length > 0 || dayData.FN.unavailable.length > 0;
-            const hasAN = dayData.AN.assigned.length > 0 || dayData.AN.unavailable.length > 0;
+                    const dayEntry = getDayEntry(date, dateStr);
 
-            if (!hasFN && !hasAN) return;
-
-            const renderSession = (sessName, data) => {
-                if (data.assigned.length === 0 && data.unavailable.length === 0) return "";
-
-                let assignedHtml = "";
-                if (data.assigned.length > 0) {
-                    assignedHtml = `<div class="mb-2"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned / Posted</span><div class="flex flex-wrap gap-1 mt-1">`;
-                    data.assigned.forEach(email => {
-                        const name = getNameFromEmail(email);
-                        const isPosted = data.posted.includes(email);
-                        const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-50 text-green-700 border-green-200";
-                        const icon = isPosted ? "⏳" : "✅";
-                        assignedHtml += `<span class="px-2 py-1 rounded border ${style} text-xs font-bold flex items-center gap-1">${icon} ${name}</span>`;
+                    ['FN', 'AN'].forEach(sess => {
+                        if (advanceUnavailability[dateStr][sess]) {
+                            advanceUnavailability[dateStr][sess].forEach(u => {
+                                if (deptStaffEmails.has(u.email)) {
+                                    // Avoid duplicates if already caught in slot-specific above
+                                    const exists = dayEntry[sess].unavailable.some(x => x.email === u.email);
+                                    if (!exists) {
+                                        dayEntry[sess].unavailable.push({ email: u.email, reason: u.reason });
+                                    }
+                                }
+                            });
+                        }
                     });
-                    assignedHtml += `</div></div>`;
-                }
+                });
 
-                let unavHtml = "";
-                if (data.unavailable.length > 0) {
-                    unavHtml = `<div><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Unavailable</span><div class="flex flex-wrap gap-1 mt-1">`;
-                    data.unavailable.forEach(u => {
-                        const name = getNameFromEmail(u.email);
-                        unavHtml += `<span class="px-2 py-1 rounded border bg-red-50 text-red-700 border-red-100 text-xs flex items-center gap-1" title="${u.reason}">⛔ ${name} <span class="text-[9px] opacity-75">(${u.reason})</span></span>`;
-                    });
-                    unavHtml += `</div></div>`;
-                }
+                // 3. Sort & Render
+                const sortedKeys = Object.keys(schedule).sort();
 
-                return `
+                let html = "";
+
+                sortedKeys.forEach(dateKey => {
+                    const dayData = schedule[dateKey];
+                    const dayName = dayData.dateObj.toLocaleString('en-us', { weekday: 'long' });
+
+                    // Only render if there is data for this day
+                    const hasFN = dayData.FN.assigned.length > 0 || dayData.FN.unavailable.length > 0;
+                    const hasAN = dayData.AN.assigned.length > 0 || dayData.AN.unavailable.length > 0;
+
+                    if (!hasFN && !hasAN) return;
+
+                    const renderSession = (sessName, data) => {
+                        if (data.assigned.length === 0 && data.unavailable.length === 0) return "";
+
+                        let assignedHtml = "";
+                        if (data.assigned.length > 0) {
+                            assignedHtml = `<div class="mb-2"><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned / Posted</span><div class="flex flex-wrap gap-1 mt-1">`;
+                            data.assigned.forEach(email => {
+                                const name = getNameFromEmail(email);
+                                const isPosted = data.posted.includes(email);
+                                const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-50 text-green-700 border-green-200";
+                                const icon = isPosted ? "⏳" : "✅";
+                                assignedHtml += `<span class="px-2 py-1 rounded border ${style} text-xs font-bold flex items-center gap-1">${icon} ${name}</span>`;
+                            });
+                            assignedHtml += `</div></div>`;
+                        }
+
+                        let unavHtml = "";
+                        if (data.unavailable.length > 0) {
+                            unavHtml = `<div><span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Unavailable</span><div class="flex flex-wrap gap-1 mt-1">`;
+                            data.unavailable.forEach(u => {
+                                const name = getNameFromEmail(u.email);
+                                unavHtml += `<span class="px-2 py-1 rounded border bg-red-50 text-red-700 border-red-100 text-xs flex items-center gap-1" title="${u.reason}">⛔ ${name} <span class="text-[9px] opacity-75">(${u.reason})</span></span>`;
+                            });
+                            unavHtml += `</div></div>`;
+                        }
+
+                        return `
                     <div class="flex-1 min-w-[250px] border-l-4 ${sessName.includes('Forenoon') ? 'border-indigo-400' : 'border-purple-400'} bg-white p-3 rounded shadow-sm border border-gray-100">
                         <h5 class="font-bold text-gray-800 text-sm mb-2 border-b border-gray-100 pb-1">${sessName}</h5>
                         ${assignedHtml}
                         ${unavHtml}
                     </div>
                 `;
-            };
+                    };
 
-            html += `
+                    html += `
                 <div class="mb-6 bg-gray-50/50 p-2 rounded-xl">
                     <div class="flex items-center gap-2 mb-2 ml-1">
                         <div class="bg-gray-800 text-white font-bold px-3 py-1 rounded text-xs uppercase tracking-wide shadow-sm">
@@ -6757,60 +6658,60 @@ window.openHodMonitorModal = function () {
                     </div>
                 </div>
             `;
-        });
+                });
 
-        list.innerHTML = html || '<div class="text-center text-gray-400 py-8 italic border-2 border-dashed border-gray-200 rounded-lg">No upcoming duties or leaves found for this department.</div>';
+                list.innerHTML = html || '<div class="text-center text-gray-400 py-8 italic border-2 border-dashed border-gray-200 rounded-lg">No upcoming duties or leaves found for this department.</div>';
 
-    }, 50);
-}
+            }, 50);
+        }
 
-// --- NEW: Open Dashboard Modal (Admin Side) ---
-window.openDashboardInvigModal = function (sessionKey) {
-    const slot = invigilationSlots[sessionKey];
-    if (!slot) return;
+        // --- NEW: Open Dashboard Modal (Admin Side) ---
+        window.openDashboardInvigModal = function (sessionKey) {
+            const slot = invigilationSlots[sessionKey];
+            if (!slot) return;
 
-    const [datePart, timePart] = sessionKey.split(' | ');
-    document.getElementById('dash-modal-title').textContent = timePart;
-    document.getElementById('dash-modal-subtitle').textContent = `${datePart} • ${slot.assigned.length} Staff Assigned`;
+            const [datePart, timePart] = sessionKey.split(' | ');
+            document.getElementById('dash-modal-title').textContent = timePart;
+            document.getElementById('dash-modal-subtitle').textContent = `${datePart} • ${slot.assigned.length} Staff Assigned`;
 
-    const listContainer = document.getElementById('dash-invig-list');
-    listContainer.innerHTML = '';
+            const listContainer = document.getElementById('dash-invig-list');
+            listContainer.innerHTML = '';
 
-    if (!slot.assigned || slot.assigned.length === 0) {
-        listContainer.innerHTML = `
+            if (!slot.assigned || slot.assigned.length === 0) {
+                listContainer.innerHTML = `
             <div class="flex flex-col items-center justify-center py-8 text-gray-400">
                 <svg class="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
                 <p class="text-sm">No invigilators assigned yet.</p>
             </div>`;
-    } else {
-        // Sort alphabetically by name
-        const sortedEmails = [...slot.assigned].sort((a, b) => {
-            const nameA = (staffData.find(s => s.email === a) || {}).name || a;
-            const nameB = (staffData.find(s => s.email === b) || {}).name || b;
-            return nameA.localeCompare(nameB);
-        });
+            } else {
+                // Sort alphabetically by name
+                const sortedEmails = [...slot.assigned].sort((a, b) => {
+                    const nameA = (staffData.find(s => s.email === a) || {}).name || a;
+                    const nameB = (staffData.find(s => s.email === b) || {}).name || b;
+                    return nameA.localeCompare(nameB);
+                });
 
-        sortedEmails.forEach(email => {
-            const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "Unknown", phone: "" };
+                sortedEmails.forEach(email => {
+                    const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "Unknown", phone: "" };
 
-            // Phone & WhatsApp Logic (Force +91)
-            let waLink = "#";
-            let waClass = "opacity-50 cursor-not-allowed grayscale";
+                    // Phone & WhatsApp Logic (Force +91)
+                    let waLink = "#";
+                    let waClass = "opacity-50 cursor-not-allowed grayscale";
 
-            if (staff.phone) {
-                let cleanNum = staff.phone.replace(/\D/g, '');
-                if (cleanNum.length === 10) cleanNum = '91' + cleanNum; // Add Prefix
+                    if (staff.phone) {
+                        let cleanNum = staff.phone.replace(/\D/g, '');
+                        if (cleanNum.length === 10) cleanNum = '91' + cleanNum; // Add Prefix
 
-                if (cleanNum.length >= 10) {
-                    waLink = `https://wa.me/${cleanNum}`;
-                    waClass = "hover:bg-green-600 hover:text-white text-green-600 bg-green-50 border-green-200";
-                }
-            }
+                        if (cleanNum.length >= 10) {
+                            waLink = `https://wa.me/${cleanNum}`;
+                            waClass = "hover:bg-green-600 hover:text-white text-green-600 bg-green-50 border-green-200";
+                        }
+                    }
 
-            const card = document.createElement('div');
-            card.className = "bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition";
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition";
 
-            card.innerHTML = `
+                    card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
                         ${staff.name.charAt(0)}
@@ -6829,114 +6730,114 @@ window.openDashboardInvigModal = function (sessionKey) {
                     </a>
                 </div>
             `;
-            listContainer.appendChild(card);
-        });
-    }
-
-    document.getElementById('dashboard-invig-modal').classList.remove('hidden');
-}
-
-
-
-
-
-
-// Initialize Listeners
-setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
-setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
-setupSearchHandler('att-substitute-search', 'att-substitute-results', null, true);
-
-window.filterStaffTable = function () {
-    currentStaffPage = 1; // Reset to first page on search
-    renderStaffTable();
-}
-window.switchAdminTab = function (tabName) {
-    // 1. Hide All Content
-    ['staff', 'slots', 'attendance'].forEach(t => {
-        document.getElementById(`tab-content-${t}`).classList.add('hidden');
-    });
-
-    // 2. Manage Button Styles
-    const tabs = ['staff', 'slots', 'attendance'];
-    const activeClasses = ['bg-white', 'text-indigo-600', 'shadow'];
-    const inactiveClasses = ['text-gray-500', 'hover:bg-gray-200'];
-
-    tabs.forEach(t => {
-        const btn = document.getElementById(`tab-btn-${t}`);
-        if (t === tabName) {
-            // activate
-            btn.classList.add(...activeClasses);
-            btn.classList.remove(...inactiveClasses);
-        } else {
-            // deactivate
-            btn.classList.remove(...activeClasses);
-            btn.classList.add(...inactiveClasses);
-        }
-    });
-
-    // 3. Show Target Content
-    document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
-}
-
-
-
-function showView(viewName) {
-    Object.values(views).forEach(el => el.classList.add('hidden'));
-    views[viewName].classList.remove('hidden');
-}
-
-
-
-// --- ATTENDANCE REPORT - PRINTABLE/PDF ---
-window.printAttendanceReport = function () {
-    const acYear = getCurrentAcademicYear();
-    const facultyMap = new Map();
-    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
-
-    sortedKeys.forEach(key => {
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-        if (dateObj < acYear.start || dateObj > acYear.end) return;
-        if (!slot.attendance || slot.attendance.length === 0) return;
-
-        const [dateStr, timeStr] = key.split(' | ');
-        const sessionType = (timeStr.includes("PM") || timeStr.startsWith("12")) ? "AN" : "FN";
-
-        slot.attendance.forEach(email => {
-            if (!facultyMap.has(email)) {
-                const staff = staffData.find(s => s.email === email);
-                facultyMap.set(email, {
-                    name: staff ? staff.name : getNameFromEmail(email),
-                    dept: staff ? staff.dept : "N/A",
-                    designation: staff ? staff.designation : "N/A",
-                    sessions: []
+                    listContainer.appendChild(card);
                 });
             }
-            facultyMap.get(email).sessions.push({ date: dateStr, session: sessionType });
-        });
-    });
 
-    const facultyData = Array.from(facultyMap.values()).sort((a, b) => {
-        if (a.dept !== b.dept) return a.dept.localeCompare(b.dept);
-        return a.name.localeCompare(b.name);
-    });
+            document.getElementById('dashboard-invig-modal').classList.remove('hidden');
+        }
 
-    if (facultyData.length === 0) {
-        return alert("No attendance records found for the current Academic Year.");
-    }
 
-    const collegeName = collegeData.examCollegeName || "Government Victoria College";
-    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-    let tableRows = '';
-    facultyData.forEach((faculty, index) => {
-        const sessionsList = faculty.sessions.map(s => `${s.date.split('.').slice(0, 2).join('.')} (${s.session})`).join(', ');
-        tableRows += `<tr class="report-row"><td class="text-center">${index + 1}</td><td><div class="font-semibold">${faculty.name}</div></td><td>${faculty.dept}</td><td class="text-center">${faculty.designation}</td><td class="text-center font-bold">${faculty.sessions.length}</td><td class="text-xs sessions-cell">${sessionsList}</td></tr>`;
-    });
 
-    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Faculty Attendance Report - ${acYear.label}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:20px;background:#f5f5f5}.report-container{max-width:1200px;margin:0 auto;background:white;padding:30px;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-radius:8px}.report-header{text-align:center;margin-bottom:30px;border-bottom:3px solid #4F46E5;padding-bottom:20px}.college-name{font-size:24px;font-weight:bold;color:#1F2937;margin-bottom:10px}.report-title{font-size:20px;font-weight:600;color:#4F46E5;margin-bottom:8px}.report-subtitle{font-size:14px;color:#6B7280}.report-table{width:100%;border-collapse:collapse;margin-top:20px}.report-table th{background:#4F46E5;color:white;padding:12px 10px;text-align:left;font-size:13px;font-weight:600;border:1px solid #4338CA}.report-table td{padding:10px;border:1px solid #E5E7EB;font-size:12px;color:#374151}.report-row:nth-child(even){background:#F9FAFB}.report-row:hover{background:#EEF2FF}.sessions-cell{line-height:1.6;color:#6B7280;white-space:normal;word-wrap:break-word}.report-footer{margin-top:30px;padding-top:20px;border-top:1px solid #E5E7EB;text-align:center;font-size:11px;color:#9CA3AF}.control-panel{position:sticky;top:10px;background:white;padding:15px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);margin-bottom:20px;text-align:center;z-index:1000}.print-btn{background:#4F46E5;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 2px 4px rgba(79,70,229,0.3)}.print-btn:hover{background:#4338CA}@media print{body{background:white;padding:0}.control-panel{display:none!important}.report-container{box-shadow:none;border-radius:0;padding:10mm;max-width:100%}.report-table{page-break-inside:auto}.report-table td{font-size:10px}.sessions-cell{font-size:9px;line-height:1.4}.report-row{page-break-inside:avoid;page-break-after:auto}.report-table thead{display:table-header-group}.report-table tfoot{display:table-footer-group}@page{margin:15mm;size:A4}}</style></head><body><div class="control-panel"><button onclick="window.print()" class="print-btn">🖨️ Print / Save as PDF</button></div><div class="report-container"><div class="report-header"><div class="college-name">${collegeName}</div><div class="report-title">FACULTY ATTENDANCE REPORT</div><div class="report-subtitle">Academic Year: ${acYear.label} | Generated: ${today}</div></div><table class="report-table"><thead><tr><th style="width:50px;">#</th><th style="width:200px;">Name</th><th style="width:150px;">Department</th><th style="width:150px;">Designation</th><th style="width:80px;text-align:center;">Duties</th><th>Sessions</th></tr></thead><tbody>${tableRows}</tbody></table><div class="report-footer"><div>Total Faculty: ${facultyData.length} | Total Duty Records: ${facultyData.reduce((sum, f) => sum + f.sessions.length, 0)}</div><div>Generated by Invigilation Management System | ${collegeName}</div></div></div></body></html>`;
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(html);
-    printWindow.document.close();
-};
+
+        // Initialize Listeners
+        setupSearchHandler('att-cs-search', 'att-cs-results', 'att-cs-email', false);
+        setupSearchHandler('att-sas-search', 'att-sas-results', 'att-sas-email', false);
+        setupSearchHandler('att-substitute-search', 'att-substitute-results', null, true);
+
+        window.filterStaffTable = function () {
+            currentStaffPage = 1; // Reset to first page on search
+            renderStaffTable();
+        }
+        window.switchAdminTab = function (tabName) {
+            // 1. Hide All Content
+            ['staff', 'slots', 'attendance'].forEach(t => {
+                document.getElementById(`tab-content-${t}`).classList.add('hidden');
+            });
+
+            // 2. Manage Button Styles
+            const tabs = ['staff', 'slots', 'attendance'];
+            const activeClasses = ['bg-white', 'text-indigo-600', 'shadow'];
+            const inactiveClasses = ['text-gray-500', 'hover:bg-gray-200'];
+
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tabName) {
+                    // activate
+                    btn.classList.add(...activeClasses);
+                    btn.classList.remove(...inactiveClasses);
+                } else {
+                    // deactivate
+                    btn.classList.remove(...activeClasses);
+                    btn.classList.add(...inactiveClasses);
+                }
+            });
+
+            // 3. Show Target Content
+            document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
+        }
+
+
+
+        function showView(viewName) {
+            Object.values(views).forEach(el => el.classList.add('hidden'));
+            views[viewName].classList.remove('hidden');
+        }
+
+
+
+        // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
+        window.printAttendanceReport = function () {
+            const acYear = getCurrentAcademicYear();
+            const facultyMap = new Map();
+            const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
+
+            sortedKeys.forEach(key => {
+                const slot = invigilationSlots[key];
+                const dateObj = parseDate(key);
+                if (dateObj < acYear.start || dateObj > acYear.end) return;
+                if (!slot.attendance || slot.attendance.length === 0) return;
+
+                const [dateStr, timeStr] = key.split(' | ');
+                const sessionType = (timeStr.includes("PM") || timeStr.startsWith("12")) ? "AN" : "FN";
+
+                slot.attendance.forEach(email => {
+                    if (!facultyMap.has(email)) {
+                        const staff = staffData.find(s => s.email === email);
+                        facultyMap.set(email, {
+                            name: staff ? staff.name : getNameFromEmail(email),
+                            dept: staff ? staff.dept : "N/A",
+                            designation: staff ? staff.designation : "N/A",
+                            sessions: []
+                        });
+                    }
+                    facultyMap.get(email).sessions.push({ date: dateStr, session: sessionType });
+                });
+            });
+
+            const facultyData = Array.from(facultyMap.values()).sort((a, b) => {
+                if (a.dept !== b.dept) return a.dept.localeCompare(b.dept);
+                return a.name.localeCompare(b.name);
+            });
+
+            if (facultyData.length === 0) {
+                return alert("No attendance records found for the current Academic Year.");
+            }
+
+            const collegeName = collegeData.examCollegeName || "Government Victoria College";
+            const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+            let tableRows = '';
+            facultyData.forEach((faculty, index) => {
+                const sessionsList = faculty.sessions.map(s => `${s.date.split('.').slice(0, 2).join('.')} (${s.session})`).join(', ');
+                tableRows += `<tr class="report-row"><td class="text-center">${index + 1}</td><td><div class="font-semibold">${faculty.name}</div></td><td>${faculty.dept}</td><td class="text-center">${faculty.designation}</td><td class="text-center font-bold">${faculty.sessions.length}</td><td class="text-xs sessions-cell">${sessionsList}</td></tr>`;
+            });
+
+            const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Faculty Attendance Report - ${acYear.label}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:20px;background:#f5f5f5}.report-container{max-width:1200px;margin:0 auto;background:white;padding:30px;box-shadow:0 2px 10px rgba(0,0,0,0.1);border-radius:8px}.report-header{text-align:center;margin-bottom:30px;border-bottom:3px solid #4F46E5;padding-bottom:20px}.college-name{font-size:24px;font-weight:bold;color:#1F2937;margin-bottom:10px}.report-title{font-size:20px;font-weight:600;color:#4F46E5;margin-bottom:8px}.report-subtitle{font-size:14px;color:#6B7280}.report-table{width:100%;border-collapse:collapse;margin-top:20px}.report-table th{background:#4F46E5;color:white;padding:12px 10px;text-align:left;font-size:13px;font-weight:600;border:1px solid #4338CA}.report-table td{padding:10px;border:1px solid #E5E7EB;font-size:12px;color:#374151}.report-row:nth-child(even){background:#F9FAFB}.report-row:hover{background:#EEF2FF}.sessions-cell{line-height:1.6;color:#6B7280;white-space:normal;word-wrap:break-word}.report-footer{margin-top:30px;padding-top:20px;border-top:1px solid #E5E7EB;text-align:center;font-size:11px;color:#9CA3AF}.control-panel{position:sticky;top:10px;background:white;padding:15px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);margin-bottom:20px;text-align:center;z-index:1000}.print-btn{background:#4F46E5;color:white;border:none;padding:12px 24px;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;box-shadow:0 2px 4px rgba(79,70,229,0.3)}.print-btn:hover{background:#4338CA}@media print{body{background:white;padding:0}.control-panel{display:none!important}.report-container{box-shadow:none;border-radius:0;padding:10mm;max-width:100%}.report-table{page-break-inside:auto}.report-table td{font-size:10px}.sessions-cell{font-size:9px;line-height:1.4}.report-row{page-break-inside:avoid;page-break-after:auto}.report-table thead{display:table-header-group}.report-table tfoot{display:table-footer-group}@page{margin:15mm;size:A4}}</style></head><body><div class="control-panel"><button onclick="window.print()" class="print-btn">🖨️ Print / Save as PDF</button></div><div class="report-container"><div class="report-header"><div class="college-name">${collegeName}</div><div class="report-title">FACULTY ATTENDANCE REPORT</div><div class="report-subtitle">Academic Year: ${acYear.label} | Generated: ${today}</div></div><table class="report-table"><thead><tr><th style="width:50px;">#</th><th style="width:200px;">Name</th><th style="width:150px;">Department</th><th style="width:150px;">Designation</th><th style="width:80px;text-align:center;">Duties</th><th>Sessions</th></tr></thead><tbody>${tableRows}</tbody></table><div class="report-footer"><div>Total Faculty: ${facultyData.length} | Total Duty Records: ${facultyData.reduce((sum, f) => sum + f.sessions.length, 0)}</div><div>Generated by Invigilation Management System | ${collegeName}</div></div></div></body></html>`;
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(html);
+            printWindow.document.close();
+        };
