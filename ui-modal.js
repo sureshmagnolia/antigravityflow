@@ -9,52 +9,6 @@ const UiModal = {
     _footerClass: "px-6 py-4 bg-gray-50 flex justify-end gap-3",
     _btnBase: "px-4 py-2 rounded-lg text-sm font-bold transition-transform active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-1",
 
-    // --- CORE CREATE FUNCTION ---
-    _create(contentHtml, buttons = []) {
-        return new Promise((resolve) => {
-            // 1. Create Overlay
-            const overlay = document.createElement('div');
-            overlay.className = this._overlayClass;
-
-            // 2. Create Modal Card
-            const card = document.createElement('div');
-            card.className = this._cardClass;
-            card.innerHTML = contentHtml;
-
-            // 3. Create Footer & Buttons
-            const footer = document.createElement('div');
-            footer.className = this._footerClass;
-
-            buttons.forEach(btn => {
-                const b = document.createElement('button');
-                b.className = `${this._btnBase} ${btn.classes}`;
-                b.textContent = btn.text;
-                if (btn.id) b.id = btn.id;
-                b.onclick = () => {
-                    const shouldClose = btn.onClick ? btn.onClick() : true;
-                    if (shouldClose !== false) {
-                        this._close(overlay, resolve, btn.value);
-                    }
-                };
-                footer.appendChild(b);
-            });
-
-            if (buttons.length > 0) card.appendChild(footer);
-            overlay.appendChild(card);
-            document.body.appendChild(overlay);
-
-            // 4. Animate In
-            requestAnimationFrame(() => {
-                overlay.classList.remove('opacity-0');
-                card.classList.remove('scale-95');
-                card.classList.add('scale-100');
-            });
-
-            // Focus first input if exists
-            const input = card.querySelector('input');
-            if (input) input.focus();
-        });
-    },
 
     _close(overlay, resolve, value) {
         // Animate Out
