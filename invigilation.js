@@ -184,6 +184,7 @@ function setupLiveSync(collegeId, mode) {
             // DATA
             staffData = JSON.parse(collegeData.examStaffData || '[]');
             invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots)); // Sync for Dashboard
             advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
 
             // LOAD GLOBAL TARGET
