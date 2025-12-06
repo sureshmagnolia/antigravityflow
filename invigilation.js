@@ -785,7 +785,7 @@ function renderSlotsGridAdmin() {
 
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
-    if (pageInfo) pageInfo.textContent = `Page ${ currentStaffPage } of ${ totalPages } (${ filteredItems.length } Staff)`;
+    if (pageInfo) pageInfo.textContent = "Page " + currentStaffPage + " of " + totalPages + " (" + filteredItems.length + " Staff)";
     const prevBtn = document.getElementById('btn-staff-prev');
     const nextBtn = document.getElementById('btn-staff-next');
     if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
@@ -820,11 +820,12 @@ function renderSlotsGridAdmin() {
             actionButtons = `< div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0" > <span class="text-gray-400 text-xs italic mr-2">Locked</span></div > `;
         } else {
             actionButtons = `
-            < div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0" >
+            actionButtons = `
+            <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
                     <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
                     <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
                     <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
-                </div >
+                </div>
             `;
         }
 
@@ -832,7 +833,7 @@ function renderSlotsGridAdmin() {
         row.className = "block md:table-row bg-white/80 backdrop-blur md:hover:bg-gray-50 border border-white/40 md:border-0 md:border-b md:border-gray-100 rounded-xl md:rounded-none shadow-sm md:shadow-none mb-4 md:mb-0 p-4 md:p-0";
 
         row.innerHTML = `
-            < td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto" >
+            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
                 
                 <div class="hidden md:flex items-center">
                     <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
@@ -878,7 +879,7 @@ function renderSlotsGridAdmin() {
                         </div>
                     </div>
                 </div>
-            </td >
+            </td>
 
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
 
@@ -942,7 +943,7 @@ function renderStaffRankList(myEmail) {
         if (s.roleHistory) {
             const today = new Date();
             const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) roleBadge = `< span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200" > ${ activeRole.role }</span > `;
+            if (activeRole) roleBadge = `< span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200" > ${activeRole.role}</span > `;
         }
 
         return `
@@ -1019,7 +1020,7 @@ function renderStaffCalendar(myEmail) {
     const month = currentCalDate.getMonth();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-    if (ui.calTitle) ui.calTitle.textContent = `${ monthNames[month] } ${ year } `;
+    if (ui.calTitle) ui.calTitle.textContent = `${monthNames[month]} ${year} `;
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1045,10 +1046,10 @@ function renderStaffCalendar(myEmail) {
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${ String(day).padStart(2, '0') }.${ String(month + 1).padStart(2, '0') }.${ year } `;
+        const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year} `;
         const slots = slotsByDate[day] || [];
 
-        let dayContent = `< div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400" > ${ day }</div > `;
+        let dayContent = `< div class="text-right font-bold text-xs md:text-sm p-0.5 text-gray-400" > ${day}</div > `;
         let bgClass = "bg-white";
         let borderClass = "border-gray-200";
 
@@ -1070,54 +1071,54 @@ function renderStaffCalendar(myEmail) {
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
 
                 let badgeColor = "bg-green-100 text-green-700 border-green-200";
-                let statusText = `${ available }/${needed}`;
+                let statusText = `${available}/${needed}`;
 
-        if (isCompleted) { badgeColor = "bg-green-600 text-white border-green-600"; statusText = "Done"; }
-        else if (isPostedByMe) { badgeColor = "bg-orange-100 text-orange-700 border-orange-300"; statusText = "⏳ Posted"; }
-        else if (isAssigned) { badgeColor = "bg-blue-600 text-white border-blue-600"; statusText = "Assigned"; }
-        else if (isMarketAvailable) { badgeColor = "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"; statusText = "♻️ Market"; }
-        else if (isUnavailable) { badgeColor = "bg-red-50 text-red-600 border-red-200"; statusText = "Unavail"; }
-        else if (slot.isLocked) { badgeColor = "bg-gray-100 text-gray-500 border-gray-300"; statusText = "Locked"; }
-        else if (filled >= needed) { badgeColor = "bg-gray-100 text-gray-400 border-gray-200"; statusText = "Full"; }
+                if (isCompleted) { badgeColor = "bg-green-600 text-white border-green-600"; statusText = "Done"; }
+                else if (isPostedByMe) { badgeColor = "bg-orange-100 text-orange-700 border-orange-300"; statusText = "⏳ Posted"; }
+                else if (isAssigned) { badgeColor = "bg-blue-600 text-white border-blue-600"; statusText = "Assigned"; }
+                else if (isMarketAvailable) { badgeColor = "bg-purple-100 text-purple-700 border-purple-300 animate-pulse"; statusText = "♻️ Market"; }
+                else if (isUnavailable) { badgeColor = "bg-red-50 text-red-600 border-red-200"; statusText = "Unavail"; }
+                else if (slot.isLocked) { badgeColor = "bg-gray-100 text-gray-500 border-gray-300"; statusText = "Locked"; }
+                else if (filled >= needed) { badgeColor = "bg-gray-100 text-gray-400 border-gray-200"; statusText = "Full"; }
 
-        dayContent += `
+                dayContent += `
                     <div class="text-[8px] md:text-[10px] font-bold p-0.5 rounded border ${badgeColor} flex flex-col md:flex-row justify-between items-center text-center md:text-left h-auto gap-0.5 shadow-sm leading-none">
                         <span>${slot.sessionType}</span>
                         <span class="whitespace-nowrap">${statusText}</span>
                     </div>`;
-    });
-    dayContent += `</div>`;
-    bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
-}
+            });
+            dayContent += `</div>`;
+            bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
+        }
         else {
-    // --- NO SLOTS: CHECK ADVANCE UNAVAILABILITY ---
-    const adv = advanceUnavailability[dateStr];
-    let advBadges = "";
+            // --- NO SLOTS: CHECK ADVANCE UNAVAILABILITY ---
+            const adv = advanceUnavailability[dateStr];
+            let advBadges = "";
 
-    if (adv) {
-        // UPDATED CHECKS: use .some()
-        if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
-            advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center mb-0.5">FN: Unavail</div>`;
+            if (adv) {
+                // UPDATED CHECKS: use .some()
+                if (adv.FN && adv.FN.some(u => u.email === myEmail)) {
+                    advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center mb-0.5">FN: Unavail</div>`;
+                }
+                if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
+                    advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center">AN: Unavail</div>`;
+                }
+            }
+
+            if (advBadges) {
+                dayContent += `<div class="flex flex-col px-0.5 mt-1">${advBadges}</div>`;
+                bgClass = "bg-red-50 hover:bg-red-100 cursor-pointer transition"; // Highlight day
+            } else {
+                // Empty day, but still clickable to add OD/DL
+                bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
+            }
         }
-        if (adv.AN && adv.AN.some(u => u.email === myEmail)) {
-            advBadges += `<div class="text-[8px] font-bold p-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-center">AN: Unavail</div>`;
-        }
-    }
 
-    if (advBadges) {
-        dayContent += `<div class="flex flex-col px-0.5 mt-1">${advBadges}</div>`;
-        bgClass = "bg-red-50 hover:bg-red-100 cursor-pointer transition"; // Highlight day
-    } else {
-        // Empty day, but still clickable to add OD/DL
-        bgClass = "bg-white hover:bg-gray-50 cursor-pointer transition";
+        // Always clickable now
+        const clickAction = `onclick="openDayModal('${dateStr}', '${myEmail}')"`;
+        html += `<div class="border min-h-[5rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
     }
-}
-
-// Always clickable now
-const clickAction = `onclick="openDayModal('${dateStr}', '${myEmail}')"`;
-html += `<div class="border min-h-[5rem] md:min-h-[7rem] h-auto ${borderClass} ${bgClass} flex flex-col relative" ${clickAction}>${dayContent}</div>`;
-    }
-if (ui.calGrid) ui.calGrid.innerHTML = html;
+    if (ui.calGrid) ui.calGrid.innerHTML = html;
 }
 
 function renderExchangeMarket(myEmail) {
