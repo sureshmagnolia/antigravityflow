@@ -69,6 +69,7 @@ const UiModal = {
             <div class="${this._bodyClass}">
                 <p class="mb-2">${message}</p>
                 <form onsubmit="return false;">
+                    ${inputType === 'password' ? '<input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true">' : ''}
                     <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}" autocomplete="${inputType === 'password' ? 'new-password' : 'off'}">
                 </form>
             </div>
