@@ -1614,87 +1614,105 @@ window.deleteSlot = async function (key) {
     }
 }
 
-window.toggleAdvance = async function (dateStr, email, session) {
+window.toggleAdvance = async function(dateStr, email, session) {
+    // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
     if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
 
     const list = advanceUnavailability[dateStr][session];
-    const existingEntry = list.find(u => u.email === email);
+    // Ensure we handle mixed data types (legacy strings vs objects)
+    const existingEntry = list.find(u => (typeof u === 'string' ? u === email : u.email === email));
 
     if (existingEntry) {
         // REMOVE (Simple Confirm)
-        if (confirm(`Remove 'Unavailable' status for ${session}?`)) {
-            advanceUnavailability[dateStr][session] = list.filter(u => u.email !== email);
-
-            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from ${dateStr} (${session}) unavailability list.`);
-
-            await saveAdvanceUnavailability();
-            renderStaffCalendar(email);
-
-            // 1. Update List Live
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
-            // 2. CLOSE MODAL (Updated)
-            window.closeModal('day-detail-modal');
+        if(confirm(`Remove 'Unavailable' status for ${session}?`)) {
+            try {
+                // Filter out the user (handle both string and object)
+                advanceUnavailability[dateStr][session] = list.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+                
+                // Safe Logging (Prevent crash if staffData is messy)
+                try {
+                    const staffName = getNameFromEmail(email);
+                    logActivity("Advance Unavailability Removed", `Removed ${staffName} from ${dateStr} (${session}) unavailability list.`);
+                } catch (logErr) { console.warn("Logging failed", logErr); }
+                
+                await saveAdvanceUnavailability();
+                
+                // Update UI safely
+                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if(typeof renderStaffUpcomingSummary === 'function') {
+                    try { renderStaffUpcomingSummary(email); } catch(e) { console.error("Summary update failed", e); }
+                }
+            } catch (err) {
+                console.error("Toggle Error:", err);
+                alert("An error occurred while updating status. Please try again.");
+            } finally {
+                // ALWAYS Close Modal
+                window.closeModal('day-detail-modal'); 
+            }
         }
     } else {
         // ADD (Open Modal for Reason)
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`;
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`; 
         document.getElementById('unav-email').value = email;
-
+        
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-
+        const detailsContainer = document.getElementById('unav-details-container');
+        if(detailsContainer) detailsContainer.classList.add('hidden');
+        
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
 }
 
-async function saveAdvanceUnavailability() {
-    updateSyncStatus("Saving...", "neutral");
-    try {
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
-        updateSyncStatus("Synced", "success");
-    } catch (e) {
-        console.error(e);
-        updateSyncStatus("Save Failed", "error");
-    }
-}
-window.toggleWholeDay = async function (dateStr, email) {
+window.toggleWholeDay = async function(dateStr, email) {
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-
+    
     const fnList = advanceUnavailability[dateStr].FN || [];
     const anList = advanceUnavailability[dateStr].AN || [];
-    const isFullDay = fnList.some(u => u.email === email) && anList.some(u => u.email === email);
+    
+    // Check if user is in BOTH lists
+    const isFn = fnList.some(u => (typeof u === 'string' ? u === email : u.email === email));
+    const isAn = anList.some(u => (typeof u === 'string' ? u === email : u.email === email));
+    const isFullDay = isFn && isAn;
 
     if (isFullDay) {
         // CLEAR BOTH
-        if (confirm("Clear unavailability for the WHOLE DAY?")) {
-            advanceUnavailability[dateStr].FN = fnList.filter(u => u.email !== email);
-            advanceUnavailability[dateStr].AN = anList.filter(u => u.email !== email);
+        if(confirm("Clear unavailability for the WHOLE DAY?")) {
+            try {
+                // Filter out the user
+                advanceUnavailability[dateStr].FN = fnList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+                advanceUnavailability[dateStr].AN = anList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+                
+                try {
+                    const staffName = getNameFromEmail(email);
+                    logActivity("Advance Unavailability Removed", `Removed ${staffName} from Whole Day ${dateStr}.`);
+                } catch (logErr) { console.warn("Logging failed", logErr); }
 
-            logActivity("Advance Unavailability Removed", `Removed ${getNameFromEmail(email)} from Whole Day ${dateStr}.`);
-
-            await saveAdvanceUnavailability();
-            renderStaffCalendar(email);
-
-            // 1. Update List Live
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
-            // 2. CLOSE MODAL (Updated)
-            window.closeModal('day-detail-modal');
+                await saveAdvanceUnavailability();
+                
+                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if(typeof renderStaffUpcomingSummary === 'function') {
+                    try { renderStaffUpcomingSummary(email); } catch(e) { console.error("Summary update failed", e); }
+                }
+            } catch (err) {
+                console.error("Toggle Whole Day Error:", err);
+            } finally {
+                // ALWAYS Close Modal
+                window.closeModal('day-detail-modal');
+            }
         }
     } else {
         // MARK BOTH
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`;
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`; 
         document.getElementById('unav-email').value = email;
-
+        
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-
+        const detailsContainer = document.getElementById('unav-details-container');
+        if(detailsContainer) detailsContainer.classList.add('hidden');
+        
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
