@@ -103,112 +103,82 @@ const UiModal = {
             { text: 'Confirm', classes: "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500", value: true }
         ]);
     },
+    // The logic in _create resolves with `btn.value` if onClick is undefined, OR with the return of onClick if defined (Wait, logic in _click was: if onClick returns !== false, call close(..., result)).
+    // Let's adjust _create logic slightly or trust the onClick return.
+    // Actually, my _create logic says: toggle close if onClick returns something other than false.
 
-    async prompt(title, message, placeholder = "", inputType = "text") {
-        const content = `
-             <div class="${this._headerClass}">
-                <h3 class="${this._titleClass}">${title}</h3>
-                <div class="p-2 bg-blue-100 rounded-full text-blue-500">
-                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
-                </div>
-            </div>
-            <div class="${this._bodyClass}">
-                <p class="mb-2">${message}</p>
-                <input type="${inputType}" id="ui-modal-input" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="${placeholder}">
-            </div>
-        `;
+    // Update logic:
+    // To capture input, I need to extract it in onClick.
+    // The simple implementation above might not pass the dynamic value.
 
-        let resolveFunc;
-
-        return await this._create(content, [
-            { text: 'Cancel', classes: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-300", value: null },
-            {
-                text: 'Submit',
-                classes: "bg-green-600 text-white hover:bg-green-700 focus:ring-green-500",
-                onClick: () => {
-                    const val = document.getElementById('ui-modal-input').value;
-                    return val; // This value is passed to resolve
-                },
-                value: true // Placeholder, overridden byonClick return
-            }
-        ]).then(result => {
-            // If result is strict boolean (cancel), return null. If it's the input value, return it.
-            // The logic in _create resolves with `btn.value` if onClick is undefined, OR with the return of onClick if defined (Wait, logic in _click was: if onClick returns !== false, call close(..., result)).
-            // Let's adjust _create logic slightly or trust the onClick return.
-            // Actually, my _create logic says: toggle close if onClick returns something other than false.
-
-            // Update logic:
-            // To capture input, I need to extract it in onClick.
-            // The simple implementation above might not pass the dynamic value.
-
-            return result;
-        });
+    return result;
+});
     },
 
-    // Override _create to handle dynamic values better
-    _create(contentHtml, buttons = []) {
-        return new Promise((resolve) => {
-            const overlay = document.createElement('div');
-            overlay.className = this._overlayClass;
-            const card = document.createElement('div');
-            card.className = this._cardClass;
-            card.innerHTML = contentHtml;
-            const footer = document.createElement('div');
-            footer.className = this._footerClass;
+// Override _create to handle dynamic values better
+_create(contentHtml, buttons = []) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = this._overlayClass;
+        const card = document.createElement('div');
+        card.className = this._cardClass;
+        card.innerHTML = contentHtml;
+        const footer = document.createElement('div');
+        footer.className = this._footerClass;
 
-            buttons.forEach(btn => {
-                const b = document.createElement('button');
-                b.className = `${this._btnBase} ${btn.classes}`;
-                b.textContent = btn.text;
-                b.onclick = () => {
-                    let finalValue = btn.value;
-                    if (btn.onClick) {
-                        const manualVal = btn.onClick();
-                        if (manualVal === false) return; // Don't close
-                        if (manualVal !== undefined) finalValue = manualVal;
-                    }
-                    this._close(overlay, resolve, finalValue);
-                };
-                footer.appendChild(b);
-            });
-
-            if (buttons.length > 0) card.appendChild(footer);
-            overlay.appendChild(card);
-            document.body.appendChild(overlay);
-
-            // Handle Enter key for prompts
-            const input = card.querySelector('input');
-            if (input) {
-                input.focus();
-                input.addEventListener('keyup', (e) => {
-                    if (e.key === 'Enter') footer.lastElementChild.click();
-                });
-            }
-
-            requestAnimationFrame(() => {
-                overlay.classList.remove('opacity-0');
-                card.classList.remove('scale-95');
-                card.classList.add('scale-100');
-            });
+        buttons.forEach(btn => {
+            const b = document.createElement('button');
+            b.className = `${this._btnBase} ${btn.classes}`;
+            b.textContent = btn.text;
+            b.onclick = () => {
+                let finalValue = btn.value;
+                if (btn.onClick) {
+                    const manualVal = btn.onClick();
+                    if (manualVal === false) return; // Don't close
+                    if (manualVal !== undefined) finalValue = manualVal;
+                }
+                this._close(overlay, resolve, finalValue);
+            };
+            footer.appendChild(b);
         });
-    },
 
-    // Toast Notification (Non-blocking)
-    toast(message, type = 'info') {
-        const toast = document.createElement('div');
-        const colors = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-gray-800');
-        toast.className = `fixed bottom-4 right-4 ${colors} text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-10 opacity-0 transition-all duration-300 z-[200] font-medium flex items-center gap-2`;
-        toast.innerHTML = `<span>${message}</span>`;
+        if (buttons.length > 0) card.appendChild(footer);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
 
-        document.body.appendChild(toast);
+        // Handle Enter key for prompts
+        const input = card.querySelector('input');
+        if (input) {
+            input.focus();
+            input.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') footer.lastElementChild.click();
+            });
+        }
+
         requestAnimationFrame(() => {
-            toast.classList.remove('translate-y-10', 'opacity-0');
+            overlay.classList.remove('opacity-0');
+            card.classList.remove('scale-95');
+            card.classList.add('scale-100');
         });
-        setTimeout(() => {
-            toast.classList.add('translate-y-10', 'opacity-0');
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
-    }
+    });
+},
+
+// Toast Notification (Non-blocking)
+toast(message, type = 'info') {
+    const toast = document.createElement('div');
+    const colors = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-gray-800');
+    toast.className = `fixed bottom-4 right-4 ${colors} text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-10 opacity-0 transition-all duration-300 z-[200] font-medium flex items-center gap-2`;
+    toast.innerHTML = `<span>${message}</span>`;
+
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-10', 'opacity-0');
+    });
+    setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
 };
 
 window.UiModal = UiModal;
