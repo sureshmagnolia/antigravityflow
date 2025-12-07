@@ -57,6 +57,9 @@ let rolesConfig = {};
 let currentCalDate = new Date();
 let isAdmin = false;
 let cloudUnsubscribe = null;
+let slotsUnsubscribe = null;
+let staffUnsubscribe = null;
+let allocUnsubscribe = null; // For invigilation mapping
 let advanceUnavailability = {}; // Stores { "DD.MM.YYYY": { FN: [], AN: [] } }
 let globalDutyTarget = 2; // Default
 let guestGlobalTarget = 2; // Default (Guest Lecturer Base)
@@ -189,10 +192,15 @@ async function handleLogin(user) {
 }
 
 function setupLiveSync(collegeId, mode) {
+    // 1. Clear Old Listeners
     if (cloudUnsubscribe) cloudUnsubscribe();
+    if (slotsUnsubscribe) slotsUnsubscribe();
+    if (staffUnsubscribe) staffUnsubscribe();
+    if (allocUnsubscribe) allocUnsubscribe();
 
     const docRef = doc(db, "colleges", collegeId);
 
+    // 2. LISTEN TO CONFIG (Main Doc) - Low Bandwidth
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             updateSyncStatus("Synced", "success");
@@ -204,78 +212,80 @@ function setupLiveSync(collegeId, mode) {
             rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
             googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
             departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
-
-            // DATA
-            staffData = JSON.parse(collegeData.examStaffData || '[]');
-            invigilationSlots = JSON.parse(collegeData.examInvigilationSlots || '{}');
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots)); // Sync for Dashboard
-            advanceUnavailability = JSON.parse(collegeData.invigAdvanceUnavailability || '{}');
-            // [ADD THIS BLOCK] -------------------
+            
+            // Vacation & Targets
             const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
             vacationStart = vacConfig.start || "";
             vacationEnd = vacConfig.end || "";
             vacationExtraHolidays = new Set(vacConfig.holidays || []);
-            // ------------------------------------
-            // LOAD GLOBAL TARGET
-            if (collegeData.invigGlobalTarget !== undefined) {
-                globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
-            } else {
-                globalDutyTarget = 2; // Default
-            }
+            
+            if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
+            if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
 
-            if (collegeData.invigGuestTarget !== undefined) {
-                guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
-            } else {
-                guestGlobalTarget = 2; // Default
-            }
-
-            googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
-
+            // UI Initializers (Run once scaffold is ready)
             if (mode === 'admin') {
-                // --- ADMIN MODE ---
                 if (document.getElementById('view-admin').classList.contains('hidden') &&
                     document.getElementById('view-staff').classList.contains('hidden')) {
                     initAdminDashboard();
-                } else {
-                    updateAdminUI();
-                    renderSlotsGridAdmin();
-                    renderAdminTodayStats();
-
-                    // Update "View as Staff" Live
-                    if (!document.getElementById('view-staff').classList.contains('hidden')) {
-                        const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                        if (me) {
-                            renderStaffCalendar(me.email);
-                            renderStaffRankList(me.email);
-                            if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                            if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
-                        }
-                    }
                 }
-            } else {
-                // --- STAFF MODE ---
+                updateAdminUI();
+            }
+        }
+    });
+
+    // 3. LISTEN TO SLOTS (Sub-collection) - High Updates
+    const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
+    slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            invigilationSlots = JSON.parse(data.examInvigilationSlots || '{}');
+            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+
+            // Reactively Render Grid/Calendar
+            if (mode === 'admin') {
+                renderSlotsGridAdmin();
+                renderAdminTodayStats();
+            } else if (currentUser) {
+                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                if (me) {
+                    renderStaffCalendar(me.email);
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
+                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
+                }
+            }
+        }
+    });
+
+    // 4. LISTEN TO STAFF (Sub-collection) - Medium Updates
+    const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
+    staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            staffData = JSON.parse(data.examStaffData || '[]');
+            // Load Mapping (Allocation)
+            const mappingData = JSON.parse(data.examInvigilatorMapping || '{}');
+            // We don't have a global var for mapping in this file yet, but let's persist it
+            localStorage.setItem('examInvigilatorMapping', JSON.stringify(mappingData));
+
+            if (mode === 'admin') {
+                renderStaffTable();
+                updateAdminUI();
+            } else if (currentUser) {
+                // Initialize Staff Dashboard if needed
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
                     if (document.getElementById('view-staff').classList.contains('hidden')) {
                         initStaffDashboard(me);
                     } else {
-                        // LIVE REFRESH
-                        renderStaffCalendar(me.email);
-                        renderStaffRankList(me.email);
-                        if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                        if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
-
-                        // UPDATE STATS
+                        // Refresh Stats
                         const done = getDutiesDoneCount(me.email);
                         const pending = Math.max(0, calculateStaffTarget(me) - done);
-
                         document.getElementById('staff-view-pending').textContent = pending;
                         const completedEl = document.getElementById('staff-view-completed');
                         if (completedEl) completedEl.textContent = done;
+                        renderStaffRankList(me.email);
                     }
-                } else {
-                    alert("Your staff profile was removed.");
-                    window.location.reload();
                 }
             }
         }
@@ -1548,21 +1558,28 @@ function switchToStaffView() {
 async function syncSlotsToCloud() {
     updateSyncStatus("Saving...", "neutral");
     try {
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { examInvigilationSlots: JSON.stringify(invigilationSlots) });
+        // Write to 'system_data/slots'
+        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        await setDoc(ref, { 
+            examInvigilationSlots: JSON.stringify(invigilationSlots) 
+        }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
         console.error(e);
         updateSyncStatus("Save Failed", "error");
-        alert("⚠️ Failed to save slots. Please check your internet connection.");
+        alert("⚠️ Failed to save slots.");
     }
 }
 
 async function syncStaffToCloud() {
     updateSyncStatus("Saving...", "neutral");
     try {
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { examStaffData: JSON.stringify(staffData) });
+        // Write to 'system_data/staff'
+        const ref = doc(db, "colleges", currentCollegeId, "system_data", "staff");
+        // Note: We only save staffData here. InvigMapping is saved separately or merged if needed.
+        await setDoc(ref, { 
+            examStaffData: JSON.stringify(staffData) 
+        }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
         console.error(e);
@@ -1678,16 +1695,17 @@ window.deleteSlot = async function (key) {
 async function saveAdvanceUnavailability() {
     updateSyncStatus("Saving...", "neutral");
     try {
-        // Ensure db and currentCollegeId are available in scope
-        const ref = doc(db, "colleges", currentCollegeId);
-        await updateDoc(ref, { invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) });
+        // Write to 'system_data/slots' (grouped with slots)
+        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        await setDoc(ref, { 
+            invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) 
+        }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
         console.error("Save Error:", e);
         updateSyncStatus("Save Failed", "error");
     }
 }
-
 // Function to toggle the "Details" box in the unavailability modal
 window.toggleUnavDetails = function() {
     const reasonEl = document.getElementById('unav-reason');
