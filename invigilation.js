@@ -4332,8 +4332,9 @@ function generateWeeklyWhatsApp(name, duties) {
 // 2. Weekly SMS (Shortest)
 function generateWeeklySMS(firstName, duties) {
     // Format: "John: Duties: 01.12(FN), 03.12(AN). Portal: gvc.ac.in/exam -CS"
-    const shortList = duties.map(d => {
-        const shortDate = d.date.slice(0, 5); // "01.12"
+   const shortList = duties.map(d => {
+        const [dd, mm, yyyy] = d.date.split('.');
+        const shortDate = `${dd}.${mm}.${yyyy.slice(-2)}`;
         return `${shortDate}(${d.session})`;
     }).join(', ');
 
@@ -4356,7 +4357,8 @@ function generateDailyWhatsApp(name, dateStr, duties) {
 // 4. Daily SMS (Shortest)
 function generateDailySMS(firstName, dateStr, duties) {
     // Format: "John: Duty Tmrw 01.12 (FN). Report 9:00 AM. -CS"
-    const shortDate = dateStr.slice(0, 5);
+    const [dd, mm, yyyy] = dateStr.split('.');
+    const shortDate = `${dd}.${mm}.${yyyy.slice(-2)}`;
     const sessions = duties.map(d => d.session).join('&');
     const firstTime = calculateReportTime(duties[0].time);
 
