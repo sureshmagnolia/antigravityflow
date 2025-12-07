@@ -1515,6 +1515,8 @@
         </div>
     </div>
 
+
+
 <div id="vacation-report-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
     <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4">
         <h3 class="text-lg font-bold text-gray-800 mb-2">Generate Vacation Duty Report</h3>
@@ -1532,19 +1534,34 @@
                 </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Additional Holidays (Optional)</label>
-                <p class="text-[10px] text-gray-400 mb-1">Saturday and Sunday are auto-detected. Add other holidays (comma separated DD.MM.YYYY).</p>
-                <textarea id="vac-extra-holidays" rows="2" placeholder="e.g. 14.04.2025, 01.05.2025" class="w-full p-2 border border-gray-300 rounded text-sm"></textarea>
+            <div class="border-t pt-3 border-gray-100">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Additional Holidays</label>
+                <p class="text-[10px] text-gray-400 mb-2">Saturday & Sunday are detected automatically. Add other specific holidays (e.g., Vishu, May 1st) below.</p>
+                
+                <div class="flex gap-2 mb-3">
+                    <input type="date" id="vac-holiday-input" class="flex-1 p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <button onclick="addVacationHoliday()" class="bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm transition">
+                        + Add Date
+                    </button>
+                </div>
+
+                <div id="vac-holiday-list" class="flex flex-wrap gap-2 min-h-[50px] max-h-[100px] overflow-y-auto p-2 border border-gray-200 rounded bg-gray-50">
+                    <span class="text-xs text-gray-400 italic self-center pl-1">No additional holidays added.</span>
+                </div>
             </div>
         </div>
 
-        <div class="mt-6 flex justify-end gap-2">
+        <div class="mt-6 flex justify-end gap-2 border-t pt-4">
             <button onclick="closeModal('vacation-report-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm font-bold hover:bg-gray-200">Cancel</button>
-            <button onclick="generateVacationReport()" class="px-4 py-2 bg-orange-600 text-white rounded text-sm font-bold hover:bg-orange-700 shadow">Generate Report</button>
+            <button onclick="generateVacationReport()" class="px-5 py-2 bg-orange-600 text-white rounded text-sm font-bold hover:bg-orange-700 shadow flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                Print A4 Report
+            </button>
         </div>
     </div>
 </div>
+
+    
 
     <script type="module" src="invigilation.js?v=v24">
     </script>
