@@ -2046,60 +2046,52 @@ window.calculateSlotsFromSchedule = async function () {
         Object.keys(sessions).forEach(key => {
             const data = sessions[key];
 
-            // --- B. CALCULATE REQUIREMENTS ---
+           // --- B. CALCULATE REQUIREMENTS ---
             let calculatedReq = 0;
-
+            
             // 1. Regular Streams (1:30)
             Object.values(data.streams).forEach(count => {
                 calculatedReq += Math.ceil(count / 30);
             });
-
             // 2. Scribes (1:5 RULE)
             if (data.scribeCount > 0) {
                 calculatedReq += Math.ceil(data.scribeCount / 5);
             }
 
-            // 3. Reserve (10% of base)
+            // 3. Reserve (10% of base, Rounded UP)
             const reserve = Math.ceil(calculatedReq * 0.10);
-            const finalReq = calculatedReq + reserve;
+            const finalReq = calculatedReq + reserve; // TOTAL Required
 
             // --- C. Update Slot ---
             if (!newSlots[key]) {
-                // NEW SLOT FOUND
                 newSlots[key] = {
-                    required: finalReq,
+                    required: finalReq,       // Total Needed
+                    reserveCount: reserve,    // <--- NEW: Store Reserve Count explicitly
                     assigned: [],
                     unavailable: [],
                     isLocked: true,
-                    examName: "Exam", // Default name
+                    examName: officialExamName || "Exam",
                     scribeCount: data.scribeCount,
                     studentCount: data.totalStudents
                 };
-                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
+                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq}, Res: ${reserve})`);
                 hasChanges = true;
             } else {
-                // EXISTING SLOT - CHECK FOR UPDATES
-                const existingReq = newSlots[key].required || 0;
-                
-                // Only update if requirement CHANGED based on student count
-                // (We don't overwrite if manual adjustments were made unless drastic difference?)
-                // Current logic: Always update to match student data
-                if (existingReq !== finalReq) {
-                     // Check if it's just a manual adjustment (e.g. user set to 6, calc says 5)
-                     // If manual > calc, keep manual? 
-                     // For now, let's notify.
-                     if(finalReq > existingReq) {
-                         newSlots[key].required = finalReq;
-                         changesLog.push(`🔄 ${key}: Requirement increased ${existingReq} ➝ ${finalReq}`);
-                         hasChanges = true;
-                     }
+                // Update existing requirement if it changed
+                if (newSlots[key].required !== finalReq) {
+                    if (finalReq > newSlots[key].required) {
+                        changesLog.push(`🔄 ${key}: Req increased ${newSlots[key].required} -> ${finalReq}`);
+                        newSlots[key].required = finalReq;
+                        newSlots[key].reserveCount = reserve; // Update reserve too
+                        hasChanges = true;
+                    }
                 }
-                
-                // Always update metadata
-                if (newSlots[key].studentCount !== data.totalStudents) {
-                    newSlots[key].studentCount = data.totalStudents;
-                    newSlots[key].scribeCount = data.scribeCount;
-                    hasChanges = true; // Silent metadata update
+                // Update Metadata
+                newSlots[key].studentCount = data.totalStudents;
+                newSlots[key].scribeCount = data.scribeCount;
+                if(newSlots[key].reserveCount === undefined) {
+                    newSlots[key].reserveCount = reserve; // Fix missing field
+                    hasChanges = true;
                 }
             }
         });
@@ -2132,15 +2124,29 @@ window.calculateSlotsFromSchedule = async function () {
 
 // --- RESERVE LOGIC ---
 
-// --- HELPER: Get Slot Reserves (Excess of Required) ---
+// --- HELPER: Get Slot Reserves (Last N assigned staff) ---
 window.getSlotReserves = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || !slot.assigned || slot.assigned.length <= slot.required) return [];
+    if (!slot || !slot.assigned) return [];
 
-    // The RESERVES are the ones AFTER the required count
-    // e.g. Required: 5, Assigned: 6 -> Index 5 is reserve.
-    const reserveEmails = slot.assigned.slice(slot.required);
+    // 1. Determine Reserve Count
+    let rCount = slot.reserveCount;
+    
+    // Fallback if 'reserveCount' missing (Legacy Data)
+    if (rCount === undefined) {
+        // Formula: Base = floor(Total / 1.1)
+        const estBase = Math.floor(slot.required / 1.1);
+        rCount = Math.max(0, slot.required - estBase);
+    }
 
+    // 2. Calculate Base Requirement (Active Duty)
+    const baseReq = slot.required - rCount;
+
+    // 3. Identification:
+    // Reserves are any staff assigned AFTER the Base Requirement is met.
+    if (slot.assigned.length <= baseReq) return []; // Slot not full enough to have reserves
+
+    const reserveEmails = slot.assigned.slice(baseReq);
     return reserveEmails.map(e => staffData.find(s => s.email === e)).filter(s => s);
 }
 
@@ -2226,7 +2232,7 @@ window.runAutoAllocation = async function () {
         const { key, date, slot } = target;
 
         // TARGET: Required + 10%
-        const targetCount = Math.ceil(slot.required * 1.10);
+        const targetCount = slot.required;
         const needed = targetCount - slot.assigned.length;
 
         if (needed <= 0) continue;
