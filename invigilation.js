@@ -1654,8 +1654,10 @@ window.toggleUnavDetails = function() {
 }
 
 
-
 window.toggleAdvance = async function(dateStr, email, session) {
+    // [VALIDATION CHECK]
+    if (!isActionAllowed(dateStr)) return;
+
     // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
     if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
@@ -1690,7 +1692,6 @@ window.toggleAdvance = async function(dateStr, email, session) {
                 await saveAdvanceUnavailability();
             } catch (err) {
                 console.error("Cloud Save Error:", err);
-                // Optional: Alert user if save failed, but UI is already updated
                 updateSyncStatus("Save Failed", "error");
             }
         }
@@ -1710,6 +1711,9 @@ window.toggleAdvance = async function(dateStr, email, session) {
 }
 
 window.toggleWholeDay = async function(dateStr, email) {
+    // [VALIDATION CHECK]
+    if (!isActionAllowed(dateStr)) return;
+
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
     
     const fnList = advanceUnavailability[dateStr].FN || [];
@@ -1763,6 +1767,7 @@ window.toggleWholeDay = async function(dateStr, email) {
         window.openModal('unavailable-modal');
     }
 }
+
 
 
 // --- STANDARD EXPORTS ---
@@ -1834,7 +1839,12 @@ function toggleUnavDetails() {
         container.classList.add('hidden');
     }
 }
+
 window.setAvailability = async function (key, email, isAvailable) {
+    // [VALIDATION CHECK]
+    const [dateStr] = key.split(' | ');
+    if (!isActionAllowed(dateStr)) return;
+
     if (isAvailable) {
         if (confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
@@ -1857,6 +1867,7 @@ window.setAvailability = async function (key, email, isAvailable) {
         window.openModal('unavailable-modal');
     }
 }
+
 window.confirmUnavailable = async function () {
     const key = document.getElementById('unav-key').value;
     const email = document.getElementById('unav-email').value;
