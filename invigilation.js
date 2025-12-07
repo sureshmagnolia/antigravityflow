@@ -129,19 +129,33 @@ async function handleLogin(user) {
         const docSnap = adminSnap.docs[0];
         currentCollegeId = docSnap.id;
         isAdmin = true;
+        
+        // --- NEW: Init Live Presence (Admin Mode = True) ---
+        if (typeof window.initLivePresence === 'function') {
+            window.initLivePresence(user.email, user.displayName || "Admin", true);
+        }
+        // --------------------------------------------------
+
         setupLiveSync(currentCollegeId, 'admin');
         return;
     }
 
-    // 2. Check Staff Access (staffAccessList) - NEW
+    // 2. Check Staff Access (staffAccessList)
     const qStaff = query(collegesRef, where("staffAccessList", "array-contains", user.email));
     const staffSnap = await getDocs(qStaff);
 
     if (!staffSnap.empty) {
-        // STAFF LOGIN (Auto Detected)
+        // STAFF LOGIN
         const docSnap = staffSnap.docs[0];
         currentCollegeId = docSnap.id;
         isAdmin = false;
+
+        // --- NEW: Init Live Presence (Staff Mode = False) ---
+        if (typeof window.initLivePresence === 'function') {
+            window.initLivePresence(user.email, user.displayName || "Staff", false);
+        }
+        // ---------------------------------------------------
+
         setupLiveSync(currentCollegeId, 'staff');
         return;
     }
@@ -158,6 +172,13 @@ async function handleLogin(user) {
             if (me) {
                 currentCollegeId = urlId;
                 isAdmin = false;
+                
+                // --- NEW: Init Live Presence (Staff Mode = False) ---
+                if (typeof window.initLivePresence === 'function') {
+                    window.initLivePresence(user.email, user.displayName || "Staff", false);
+                }
+                // ---------------------------------------------------
+
                 setupLiveSync(currentCollegeId, 'staff');
             } else { alert("Access Denied: Email not in staff list."); signOut(auth); }
         } else { alert("Invalid Link."); signOut(auth); }
