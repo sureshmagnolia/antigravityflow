@@ -187,7 +187,6 @@ let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
 let hasUnsavedAllotment = false; // Tracks if room changes need saving
 let isScribeAllotmentLocked = true; // Default to Locked
 // --- MAIN APP LOGIC ---
-let cloudSyncUnsubscribe = null; 
 // ADD THESE:
 let settingsUnsub = null;
 let opsUnsub = null;
