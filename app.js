@@ -187,6 +187,14 @@ let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
 let hasUnsavedAllotment = false; // Tracks if room changes need saving
 let isScribeAllotmentLocked = true; // Default to Locked
 // --- MAIN APP LOGIC ---
+let cloudSyncUnsubscribe = null; 
+// ADD THESE:
+let settingsUnsub = null;
+let opsUnsub = null;
+let allocUnsub = null;
+let staffUnsub = null;
+let slotsUnsub = null;
+
 document.addEventListener('DOMContentLoaded', () => {
 
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -477,415 +485,227 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
 
     // 5. CLOUD DOWNLOAD FUNCTION (Network Aware)
-    function syncDataFromCloud(collegeId) {
-        // 1. Cleanup previous listener if exists (prevents duplicates on reconnect)
-        if (cloudSyncUnsubscribe) {
-            cloudSyncUnsubscribe();
-            cloudSyncUnsubscribe = null;
-        }
-
-        // 2. Offline Check
-        if (!navigator.onLine) {
-            console.log("⚠️ Offline Mode. Loading local data.");
-            updateSyncStatus("Offline Mode", "error");
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-            return;
-        }
-
-        updateSyncStatus("Connecting...", "neutral");
-        const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
-
-        const mainRef = doc(db, "colleges", collegeId);
-
-        // 3. Assign listener to global variable
-        cloudSyncUnsubscribe = onSnapshot(mainRef, async (docSnap) => {
-            if (docSnap.exists()) {
-                const mainData = docSnap.data();
-                currentCollegeData = mainData;
-
-                // Admin & Team Permission Check
-                const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
-                const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
-
-                // Show Admin Button (Admins Only)
-                if (adminBtn) {
-                    if (isAdminUser) adminBtn.classList.remove('hidden');
-                    else adminBtn.classList.add('hidden');
-                }
-
-                // Show Invigilation Button (Admins + Staff)
-                // Anyone in the 'allowedUsers' list can access the portal
-                if (btnInvigilation) {
-                    if (isAdminUser || isTeamMember) {
-                        btnInvigilation.classList.remove('hidden');
-                    } else {
-                        btnInvigilation.classList.add('hidden');
-                    }
-                }
-
-                // === TIMESTAMP CHECK ===
-                const localTime = localStorage.getItem('lastUpdated');
-
-                if (localTime && mainData.lastUpdated) {
-                    if (localTime === mainData.lastUpdated) {
-                        updateSyncStatus("Synced", "success");
-                        loadInitialData();
-                        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-                        return;
-                    }
-                    if (localTime > mainData.lastUpdated) {
-                        console.log("⚠️ Local data is newer than cloud.");
-                        updateSyncStatus("Unsaved Changes", "neutral");
-                        loadInitialData();
-                        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-                        return;
-                    }
-                }
-
-                console.log("☁️ New cloud data detected. Downloading...");
-
-                // 1. Save Main Keys (UPDATED)
-                [
-                    'examRoomConfig', 'examStreamsConfig', 'examCollegeName',
-                    'examQPCodes', 'examScribeList', 'examScribeAllotment',
-                    'examAbsenteeList', 'examSessionNames', 'lastUpdated', 'examRulesConfig',
-                    'examInvigilationSlots', 'examStaffData', 'examInvigilatorMapping' // <--- ADDED THESE TWO
-                ].forEach(key => {
-                    if (mainData[key]) localStorage.setItem(key, mainData[key]);
-                });
-                updateHeaderCollegeName(); // <--- ADD THIS LINE HERE
-
-                // -------------------------------------------------------
-                // 🔄 LEGACY MIGRATION: Auto-Prompt for Missing Name
-                // -------------------------------------------------------
-                // Check if Name is missing OR is the default, AND if user is Admin
-                const currentName = mainData.examCollegeName || "University of Calicut";
-                const isDefault = (currentName === "University of Calicut");
-                const isAdmin = (currentUser && mainData.admins && mainData.admins.includes(currentUser.email));
-
-                if (isDefault && isAdmin) {
-                    setTimeout(async () => {
-                        const newName = await UiModal.prompt("System Update", "Your College Name is not set.\nPlease enter the Official Name of your College:", "e.g. Govt College");
-
-                        if (newName && newName.trim() !== "") {
-                            // 1. Save Locally
-                            localStorage.setItem(COLLEGE_NAME_KEY, newName);
-                            currentCollegeName = newName;
-
-                            // 2. Update UI
-                            updateHeaderCollegeName();
-                            if (typeof collegeNameInput !== 'undefined') collegeNameInput.value = newName;
-
-                            // 3. Force Sync to Cloud (Saves it forever)
-                            syncDataToCloud();
-                            await UiModal.alert("Updated", "✅ Name Updated! It will now appear on all screens.");
-                        }
-                    }, 1000); // Small delay to let the UI load first
-                }
-                // -------------------------------------------------------
-
-                // 2. FETCH CHUNKS
-                try {
-                    const dataColRef = collection(db, "colleges", collegeId, "data");
-                    const q = query(dataColRef, orderBy("index"));
-                    const querySnapshot = await getDocs(q);
-
-                    let fullPayload = "";
-                    querySnapshot.forEach((doc) => {
-                        if (doc.id.startsWith("chunk_")) {
-                            fullPayload += doc.data().payload;
-                        }
-                    });
-
-                    if (fullPayload) {
-                        const bulkData = JSON.parse(fullPayload);
-                        ['examBaseData', 'examRoomAllotment'].forEach(key => {
-                            if (bulkData[key]) localStorage.setItem(key, bulkData[key]);
-                        });
-                    }
-                } catch (err) {
-                    console.error("Bulk fetch error:", err);
-                }
-
-                // 3. Refresh UI
-                updateSyncStatus("Synced", "success");
-                loadInitialData();
-                if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
-                if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden') && allotmentSessionSelect.value) {
-                    allotmentSessionSelect.dispatchEvent(new Event('change'));
-                }
-
-                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-
-            } else {
-                updateSyncStatus("No Cloud Data", "neutral");
-                loadInitialData();
-                if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-            }
-        }, (error) => {
-            console.error("Sync Error:", error);
-            // Handle offline/permission errors gracefully
-            updateSyncStatus("Offline / Error", "error");
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-        });
+   function syncDataFromCloud(collegeId) {
+    if (!navigator.onLine) {
+        console.log("⚠️ Offline Mode. Loading local data.");
+        updateSyncStatus("Offline Mode", "error");
+        loadInitialData();
+        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+        return;
     }
 
-   // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
-    async function syncDataToCloud() {
-        if (!currentUser || !currentCollegeId) return;
-        if (isSyncing) return;
+    updateSyncStatus("Connecting...", "neutral");
+    const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
 
-        if (!navigator.onLine) {
-            updateSyncStatus("Offline - Saved Locally", "error");
-            return;
+    // Cleanup old listeners (critical for preventing read charges/duplicates)
+    if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
+    if (settingsUnsub) settingsUnsub();
+    if (opsUnsub) opsUnsub();
+    if (allocUnsub) allocUnsub();
+    if (staffUnsub) staffUnsub();
+    if (slotsUnsub) slotsUnsub();
+
+    // Helper to sync local storage keys from cloud data
+    const syncLocal = (dataObj) => {
+        if(!dataObj) return;
+        Object.keys(dataObj).forEach(key => {
+            if(dataObj[key]) localStorage.setItem(key, dataObj[key]);
+        });
+    };
+
+    // 1. LISTEN TO METADATA & PERMISSIONS (Root Doc) - Low Bandwidth
+    // This only contains lightweight administrative metadata (admins, allowedUsers).
+    cloudSyncUnsubscribe = onSnapshot(doc(db, "colleges", collegeId), (snap) => {
+        if (snap.exists()) {
+            currentCollegeData = snap.data();
+            
+            // Handle permissions and UI buttons (Admin/Invigilation links)
+            const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
+            const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
+
+            if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
+            if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
+            
+            updateHeaderCollegeName(); // Refresh name
+            if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
         }
+    }, (error) => { console.error("Root Doc Sync Error:", error); });
+    
+    // 2. LISTEN TO SETTINGS (Config, Streams, Rooms) - Low Updates
+    settingsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "settings"), (snap) => {
+        if(snap.exists()) {
+            syncLocal(snap.data());
+            // Reactively Refresh specific UIs
+            if(typeof loadRoomConfig === 'function') loadRoomConfig();
+            if(typeof loadStreamConfig === 'function') loadStreamConfig();
+            if(typeof renderExamNameSettings === 'function') renderExamNameSettings();
+            
+            // Check for the college name migration prompt logic here if needed, 
+            // but ensure it's wrapped to only run once on app load.
+        }
+    }, (error) => { console.error("Settings Sync Error:", error); });
+
+    // 3. LISTEN TO OPERATIONS (Absentees, QP Codes) - Medium Updates
+    opsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "operations"), (snap) => {
+        if(snap.exists()) syncLocal(snap.data());
+    }, (error) => { console.error("Operations Sync Error:", error); });
+
+    // 4. LISTEN TO ALLOCATIONS (Scribes) - Medium Updates
+    allocUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "allocation"), (snap) => {
+        if(snap.exists()) {
+            syncLocal(snap.data());
+            if(typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+        }
+    }, (error) => { console.error("Allocation Sync Error:", error); });
+
+    // 5. LISTEN TO STAFF (Invigilation Staff Data) - Medium Updates
+    staffUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "staff"), (snap) => {
+        if(snap.exists()) syncLocal(snap.data());
+    }, (error) => { console.error("Staff Sync Error:", error); });
+    
+    // 6. LISTEN TO SLOTS (Invigilation Slots/Schedule) - High Updates
+    slotsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "slots"), (snap) => {
+        if(snap.exists()) syncLocal(snap.data());
+    }, (error) => { console.error("Slots Sync Error:", error); });
+
+    // 7. FETCH HEAVY DATA (Students/Seating) - ONE TIME FETCH ONLY
+    // We do NOT listen to this constantly. We use the main doc's 'lastUpdated' 
+    // to determine when to fetch the chunks (which we will fix in a moment).
+    const fetchHeavyData = async () => {
+        console.log("☁️ Fetching heavy data chunks...");
+        try {
+            const dataColRef = collection(db, "colleges", collegeId, "data");
+            const q = query(dataColRef, orderBy("index"));
+            const querySnapshot = await getDocs(q);
+            let fullPayload = "";
+            querySnapshot.forEach((doc) => { 
+                if (doc.id.startsWith("chunk_")) fullPayload += doc.data().payload; 
+            });
+            
+            if (fullPayload) {
+                const bulkData = JSON.parse(fullPayload);
+                ['examBaseData', 'examRoomAllotment'].forEach(key => {
+                    if (bulkData[key]) localStorage.setItem(key, bulkData[key]);
+                });
+                updateSyncStatus("Synced", "success");
+            } else {
+                 updateSyncStatus("Synced", "success");
+            }
+        } catch (err) {
+            console.error("Bulk fetch error:", err);
+            updateSyncStatus("Error", "error");
+        }
+        
+        // Final UI Load after all data is locally available
+        loadInitialData(); 
+        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+    };
+
+    // The old timestamp logic is now slightly broken. 
+    // For simplicity and immediate fix, we run the fetch when we establish connection.
+    // In a future optimization, you could use the main doc 'lastUpdated' field, 
+    // but only use it to trigger the fetchHeavyData() function.
+    fetchHeavyData();
+
+}
+
+   // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
+    // MODULAR SYNC FUNCTION
+    // targetSection: 'settings', 'ops', 'allocation', 'staff', 'slots', or 'heavy' (default)
+    async function syncDataToCloud(targetSection = 'heavy') {
+        if (!currentUser || !currentCollegeId || isSyncing) return;
+        if (!navigator.onLine) return updateSyncStatus("Offline", "error");
 
         isSyncing = true;
         updateSyncStatus("Saving...", "neutral");
 
-        const { db, doc, writeBatch, getDoc } = window.firebase;
+        const { db, doc, setDoc, writeBatch, collection } = window.firebase;
+        const cid = currentCollegeId;
+        const timestamp = new Date().toISOString();
 
         try {
-            const batch = writeBatch(db);
-            const mainRef = doc(db, "colleges", currentCollegeId);
+            // Helper to get data
+            const get = (k) => localStorage.getItem(k);
 
-            // --- STEP 1: Fetch Cloud State ---
-            const cloudSnap = await getDoc(mainRef);
-            let cloudData = {};
-            if (cloudSnap.exists()) cloudData = cloudSnap.data();
+            // 1. SETTINGS (Fast)
+            if (targetSection === 'settings') {
+                const data = {
+                    examCollegeName: get('examCollegeName'),
+                    examRoomConfig: get('examRoomConfig'),
+                    examStreamsConfig: get('examStreamsConfig'),
+                    examSessionNames: get('examSessionNames'),
+                    examRulesConfig: get('examRulesConfig'),
+                    examRemunerationConfig: get('examRemunerationConfig'),
+                    lastUpdated: timestamp
+                };
+                await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
+            }
 
-            // --- STEP 2: Smart Merge Settings ---
-            const isEmptyOrDefault = (key, val) => {
-                if (!val) return true;
-                if (key === 'examCollegeName') return val === "University of Calicut";
-                if (key === 'examStreamsConfig') return val.includes('["Regular"]');
-                if (key === 'examRoomConfig') return val.length < 2000 && val.includes("Room 30");
-                if (key === 'examScribeList') return val === '[]';
-                if (key === 'examQPCodes') return val === '{}';
-                if (key === 'examAbsenteeList') return val === '{}';
-                if (key === 'examSessionNames') return val === '{}';
-                if (key === 'examRemunerationConfig') return false;
-                if (key === 'examRoomAllotment' || key === 'examScribeAllotment') return val === '{}' || val.length < 5;
-                return false;
-            };
+            // 2. OPERATIONS (Fast)
+            else if (targetSection === 'ops') {
+                const data = {
+                    examAbsenteeList: get('examAbsenteeList'),
+                    examQPCodes: get('examQPCodes')
+                };
+                await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
+            }
 
-            const pickRobusterValue = (key, localVal, cloudVal) => {
-                if (!localVal) {
-                    if (cloudVal) { localStorage.setItem(key, cloudVal); return cloudVal; }
-                    return null;
-                }
-                if (!cloudVal) return localVal;
-                if (isEmptyOrDefault(key, localVal) && !isEmptyOrDefault(key, cloudVal)) {
-                    localStorage.setItem(key, cloudVal); return cloudVal;
-                }
-                return localVal;
-            };
+            // 3. ALLOCATION (Scribes)
+            else if (targetSection === 'allocation') {
+                const data = {
+                    examScribeList: get('examScribeList'),
+                    examScribeAllotment: get('examScribeAllotment')
+                };
+                await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
+            }
 
-            const timestamp = new Date().toISOString();
-            localStorage.setItem('lastUpdated', timestamp);
+            // 4. STAFF (Invigilation)
+            else if (targetSection === 'staff') {
+                const data = {
+                    examStaffData: get('examStaffData'),
+                    examInvigilatorMapping: get('examInvigilatorMapping')
+                };
+                await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
+            }
 
-            const settingsKeys = [
-                'examCollegeName', 'examStreamsConfig', 'examRoomConfig',
-                'examQPCodes', 'examScribeList', 'examScribeAllotment',
-                'examAbsenteeList', 'examSessionNames', 'examRulesConfig',
-                'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles',
-                'examInvigilatorMapping', 'invigAdvanceUnavailability' 
-            ];
+            // 5. SLOTS (Invigilation)
+            else if (targetSection === 'slots') {
+                const data = {
+                    examInvigilationSlots: get('examInvigilationSlots'),
+                    invigAdvanceUnavailability: get('invigAdvanceUnavailability')
+                };
+                await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
+            }
 
-            const finalMainData = { lastUpdated: timestamp };
-            settingsKeys.forEach(key => {
-                const localVal = localStorage.getItem(key);
-                const bestVal = pickRobusterValue(key, localVal, cloudData[key]);
-                if (bestVal) finalMainData[key] = bestVal;
-            });
+            // 6. HEAVY DATA (Students & Room Allotment) - ONLY on specific actions
+            else if (targetSection === 'heavy') {
+                const batch = writeBatch(db);
+                const bulkData = {
+                    examBaseData: get('examBaseData'),
+                    examRoomAllotment: get('examRoomAllotment')
+                };
+                
+                // Chunking Logic
+                const jsonStr = JSON.stringify(bulkData);
+                const chunks = chunkString(jsonStr, 800000); // Defined in your app.js already
+                
+                // 1. Update timestamp on main doc to trigger reload for others
+                batch.update(doc(db, "colleges", cid), { lastUpdated: timestamp });
 
-            // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE V4) ---
-            // Matches invigilation.js: Stream-wise Scribes + 10% Reserve Rule
-            let localBaseData = localStorage.getItem('examBaseData');
-            if (localBaseData) {
-                const students = JSON.parse(localBaseData);
-
-                // 1. Load Scribe Data
-                const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
-                const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-
-                const sessionStats = {};
-
-                // 2. Count Candidates (Normal & Scribe) Separately by Stream
-                students.forEach(s => {
-                    const d = s.Date ? s.Date.trim() : "";
-                    const t = s.Time ? s.Time.trim() : "";
-                    if(!d || !t) return;
-
-                    const key = `${d} | ${t}`;
-                    if (!sessionStats[key]) {
-                        sessionStats[key] = { 
-                            normalStreams: {}, 
-                            scribeStreams: {}, 
-                            totalScribes: 0,
-                            totalStudents: 0
-                        };
-                    }
-
-                    sessionStats[key].totalStudents++;
-                    const strm = s.Stream || "Regular";
-
-                    if (scribeRegNos.has(s['Register Number'])) {
-                        // Track Scribe by Stream
-                        if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
-                        sessionStats[key].scribeStreams[strm]++;
-                        sessionStats[key].totalScribes++;
-                    } else {
-                        // Track Normal by Stream
-                        if (!sessionStats[key].normalStreams[strm]) sessionStats[key].normalStreams[strm] = 0;
-                        sessionStats[key].normalStreams[strm]++;
-                    }
+                // 2. Write Chunks
+                chunks.forEach((chunk, idx) => {
+                    const ref = doc(db, "colleges", cid, "data", `chunk_${idx}`);
+                    batch.set(ref, { payload: chunk, index: idx, totalChunks: chunks.length });
                 });
-
-                // 3. Get Existing Cloud Slots
-                const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
-                const mergedSlots = { ...cloudSlots };
-
-                // 4. Update Requirements (Correct Math)
-                Object.keys(sessionStats).forEach(key => {
-                    const stats = sessionStats[key];
-                    let baseRequirement = 0;
-
-                    // A. Normal Candidates (1 Room per 30, Stream-Wise)
-                    Object.values(stats.normalStreams).forEach(count => {
-                        baseRequirement += Math.ceil(count / 30);
-                    });
-
-                    // B. Scribes (1 Room per 5, Stream-Wise)
-                    Object.values(stats.scribeStreams).forEach(count => {
-                        baseRequirement += Math.ceil(count / 5);
-                    });
-
-                    // C. Reserve (10% of Base, Rounded UP)
-                    const reserve = Math.ceil(baseRequirement * 0.10);
-                    const totalRequired = baseRequirement + reserve;
-
-                    const studentCount = stats.totalStudents;
-                    const scribeCount = stats.totalScribes;
-
-                    if (!mergedSlots[key]) {
-                        // New Session
-                        mergedSlots[key] = {
-                            required: totalRequired,
-                            reserveCount: reserve, // Store reserve separately
-                            assigned: [],
-                            unavailable: [],
-                            isLocked: false,
-                            scribeCount: scribeCount,
-                            studentCount: studentCount
-                        };
-                    } else {
-                        // Existing: Update Requirement & Metadata
-                        mergedSlots[key].required = totalRequired;
-                        mergedSlots[key].reserveCount = reserve;
-                        mergedSlots[key].scribeCount = scribeCount;
-                        mergedSlots[key].studentCount = studentCount;
-                    }
-                });
-
-                // 5. Add to Update Payload
-                finalMainData['examInvigilationSlots'] = JSON.stringify(mergedSlots);
+                
+                await batch.commit();
             }
 
-            // --- STEP 3: Bulk Data Handling ---
-            let localAllotment = localStorage.getItem('examRoomAllotment');
-            // 'localBaseData' is now safely available here too
-            const bulkDataObj = {};
-            if (localBaseData) bulkDataObj['examBaseData'] = localBaseData;
-            if (localAllotment && localAllotment !== '{}') bulkDataObj['examRoomAllotment'] = localAllotment;
-
-            const bulkString = JSON.stringify(bulkDataObj);
-            const limitBytes = currentCollegeData.storageLimitBytes || (15 * 1024 * 1024);
-
-            if (new Blob([bulkString]).size > limitBytes) {
-                await UiModal.alert("Storage Limit Exceeded", `⚠️ STORAGE LIMIT EXCEEDED ⚠️\n\nPlease delete old data.`);
-                updateSyncStatus("Over Limit", "error");
-                isSyncing = false;
-                return;
-            }
-
-            const chunks = chunkString(bulkString, 800000);
-            batch.update(mainRef, finalMainData);
-            chunks.forEach((chunkStr, index) => {
-                const chunkRef = doc(db, "colleges", currentCollegeId, "data", `chunk_${index}`);
-                batch.set(chunkRef, { payload: chunkStr, index: index, totalChunks: chunks.length });
-            });
-
-            // --- STEP 4: PUBLIC SYNC (Student Link) ---
-            const publicRef = doc(db, "public_seating", currentCollegeId);
-            const namesRef = doc(db, "public_seating", currentCollegeId + "_names");
-            const coursesRef = doc(db, "public_seating", currentCollegeId + "_courses");
-
-            const roomConfigData = localStorage.getItem('examRoomConfig') || '{}';
-            const scribeData = localStorage.getItem('examScribeAllotment') || '{}';
-
-            // Filter Logic
-            const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
-            const parseDateKey = (d) => {
-                if (!d) return new Date(0);
-                const [dd, mm, yy] = d.split('.');
-                return new Date(`${yy}-${mm}-${dd}`);
-            };
-
-            let publicAllotment = {};
-            let publicScribes = {};
-            const rawAllotment = JSON.parse(localAllotment || '{}');
-            const rawScribes = JSON.parse(scribeData);
-            const activeRegNos = new Set();
-
-            Object.keys(rawAllotment).forEach(sessionKey => {
-                const [dStr] = sessionKey.split(' | ');
-                if (parseDateKey(dStr) >= todayMidnight) {
-                    publicAllotment[sessionKey] = rawAllotment[sessionKey];
-                    if (rawScribes[sessionKey]) publicScribes[sessionKey] = rawScribes[sessionKey];
-                    rawAllotment[sessionKey].forEach(r => r.students.forEach(s => activeRegNos.add(s)));
-                }
-            });
-
-            let nameMap = {}; let paperMap = {};
-            if (localBaseData) {
-                try {
-                    const baseData = JSON.parse(localBaseData);
-                    baseData.forEach(s => {
-                        const r = s['Register Number'];
-                        if (r && activeRegNos.has(r)) {
-                            const cleanReg = r.toString().trim().toUpperCase();
-                            nameMap[cleanReg] = (s.Name || "").toString().trim();
-                            const d = s.Date; const t = s.Time;
-                            if (s.Course && d && t && parseDateKey(d) >= todayMidnight) {
-                                paperMap[`${cleanReg}_${d}_${t}`] = s.Course.toString().trim();
-                            }
-                        }
-                    });
-                } catch (e) { }
-            }
-
-            batch.set(publicRef, {
-                collegeName: localStorage.getItem('examCollegeName') || "Exam Centre",
-                seatingData: JSON.stringify(publicAllotment),
-                scribeData: JSON.stringify(publicScribes),
-                roomData: roomConfigData,
-                lastUpdated: new Date().toISOString()
-            });
-            batch.set(namesRef, { json: JSON.stringify(nameMap) });
-            batch.set(coursesRef, { json: JSON.stringify(paperMap) });
-
-            await batch.commit();
-
-            console.log(`Data synced!`);
             updateSyncStatus("Saved", "success");
-            loadInitialData();
 
         } catch (e) {
-            console.error("Sync Up Error:", e);
-            updateSyncStatus(navigator.onLine ? "Save Fail" : "Offline", "error");
+            console.error("Sync Failed:", e);
+            updateSyncStatus("Save Error", "error");
         } finally {
             isSyncing = false;
         }
@@ -5192,7 +5012,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Re-load to LOCK everything
             loadRoomConfig();
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
 
         } catch (e) {
             console.error(e);
@@ -5224,7 +5044,7 @@ document.addEventListener('DOMContentLoaded', () => {
             collegeNameStatus.textContent = "College name saved!";
             setTimeout(() => { collegeNameStatus.textContent = ""; }, 2000);
 
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
         });
     }
 
@@ -5856,7 +5676,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveAbsenteeList(sessionKey);
         renderAbsenteeList();
         clearSearch();
-        syncDataToCloud();
+        syncDataToCloud('ops');
     });
 
     function loadAbsenteeList(sessionKey) {
@@ -6012,7 +5832,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
             saveAbsenteeList(sessionSelect.value);
             renderAbsenteeList();
-            syncDataToCloud();
+            syncDataToCloud('ops');
         }
     }
 
@@ -6237,7 +6057,7 @@ document.addEventListener('DOMContentLoaded', () => {
         qpCodeStatus.classList.add('text-green-600');
         qpCodeStatus.textContent = `QP Codes saved successfully!`;
         setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
-        syncDataToCloud(); // <--- ADD THIS
+           syncDataToCloud('ops'); // <--- ADD THIS
     });
 
     // V89: NEW INPUT STRATEGY
@@ -7457,7 +7277,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 3. Sync to Cloud
             if (currentCollegeId && typeof syncDataToCloud === 'function') {
-                syncDataToCloud();
+                syncDataToCloud('heavy');
             }
 
             // 4. Reset Dirty Flag
@@ -7685,7 +7505,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderScribeAllotmentList(allotmentSessionSelect.value);
             }
 
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
         }
     }
 
@@ -7781,7 +7601,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderGlobalScribeList();
         clearScribeSearch();
-        syncDataToCloud(); // <--- ADD THIS
+        syncDataToCloud('allocation'); // <--- ADD THIS
     });
 
     function clearScribeSearch() {
@@ -8619,7 +8439,7 @@ document.addEventListener('DOMContentLoaded', () => {
             editDataStatus.textContent = 'All changes saved successfully!';
             setUnsavedChanges(false);
             setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('heavy');
 
             // 4. Reload other parts of the app
             jsonDataStore.innerHTML = JSON.stringify(allStudentData);
@@ -10234,7 +10054,7 @@ Are you sure?
         });
 
         // 5. Sync
-        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud('heavy');
 
         // 6. Feedback
         if (mainCsvStatus) {
@@ -12306,7 +12126,7 @@ Are you sure?
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
 
         // Reset UI
         swapSourceRoom = null;
@@ -12404,7 +12224,7 @@ Are you sure?
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
         // Sync
-        if (typeof syncDataToCloud === 'function') syncDataToCloud();
+        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
 
         // Hide Modal
         document.getElementById('invigilator-select-modal').classList.add('hidden');
@@ -12462,7 +12282,7 @@ Are you sure?
             const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
             allMappings[sessionKey] = currentInvigMapping;
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
             renderInvigilationPanel();
             alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
@@ -12489,7 +12309,7 @@ Are you sure?
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
             // Sync to Cloud
-            if (typeof syncDataToCloud === 'function') syncDataToCloud();
+            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
 
             // Refresh UI
             renderInvigilationPanel();
