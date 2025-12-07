@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 'examQPCodes', 'examScribeList', 'examScribeAllotment',
                 'examAbsenteeList', 'examSessionNames', 'examRulesConfig',
                 'examRemunerationConfig', 'examStaffData', 'invigDesignations', 'invigRoles',
-                'examInvigilatorMapping' 
+                'examInvigilatorMapping', 'invigAdvanceUnavailability' 
             ];
 
             const finalMainData = { lastUpdated: timestamp };
