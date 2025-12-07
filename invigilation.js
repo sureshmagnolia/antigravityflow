@@ -1975,6 +1975,7 @@ window.waNotify = function (key) {
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 
+
 window.calculateSlotsFromSchedule = async function () {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
     if (btn) { btn.disabled = true; btn.innerText = "⏳ Analyzing..."; }
@@ -1990,7 +1991,7 @@ window.calculateSlotsFromSchedule = async function () {
 
         let fullData = mainSnap.data();
         
-        // Fetch Chunks (Large Data Support)
+        // Fetch Chunks
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
@@ -2015,7 +2016,7 @@ window.calculateSlotsFromSchedule = async function () {
             return;
         }
 
-        // 2. Calculate Active Sessions from Student Data
+        // 2. Calculate Active Sessions
         const activeSessions = {};
         students.forEach(s => {
             const date = s.Date ? s.Date.trim() : "";
@@ -2038,38 +2039,33 @@ window.calculateSlotsFromSchedule = async function () {
             }
         });
 
-        // 3. Compare with Existing Slots
+        // 3. Update Slots & Detect Ghosts
         let changesLog = [];
         let removalLog = []; 
         let newSlots = { ...invigilationSlots }; 
         let hasChanges = false;
 
-        // A. Cleanup Legacy Fields
+        // A. Cleanup Legacy Data
         Object.keys(newSlots).forEach(k => {
             if (newSlots[k].courses) { delete newSlots[k].courses; hasChanges = true; }
         });
 
-        // B. Add/Update Active Sessions
+        // B. Sync Active Sessions
         Object.keys(activeSessions).forEach(key => {
             const data = activeSessions[key];
             const [datePart, timePart] = key.split(' | ');
 
-            // Calculate Requirements
+            // Calculate Req
             let calculatedReq = 0;
-            
-            // 1 per 30 for Regular
             Object.values(data.streams).forEach(count => {
                 calculatedReq += Math.ceil(count / 30);
             });
-            // 1 per 5 for Scribes
-            if (data.scribeCount > 0) {
-                calculatedReq += Math.ceil(data.scribeCount / 5);
-            }
-            // 10% Reserve (Round UP)
+            if (data.scribeCount > 0) calculatedReq += Math.ceil(data.scribeCount / 5);
+            
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve; 
 
-            // Get Exam Name
+            // Exam Name
             let officialExamName = "";
             if (typeof window.getExamName === "function") {
                 const streams = Object.keys(data.streams);
@@ -2080,9 +2076,8 @@ window.calculateSlotsFromSchedule = async function () {
                 if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
             }
 
-            // Create or Update Slot
+            // Create/Update
             if (!newSlots[key]) {
-                // NEW SLOT
                 newSlots[key] = {
                     required: finalReq,
                     reserveCount: reserve,
@@ -2093,10 +2088,9 @@ window.calculateSlotsFromSchedule = async function () {
                     scribeCount: data.scribeCount,
                     studentCount: data.totalStudents
                 };
-                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq}, Res: ${reserve})`);
+                changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
                 hasChanges = true;
             } else {
-                // UPDATE EXISTING
                 if (newSlots[key].required !== finalReq) {
                     if (finalReq > newSlots[key].required) {
                         changesLog.push(`🔄 ${key}: Req increased ${newSlots[key].required} -> ${finalReq}`);
@@ -2105,7 +2099,6 @@ window.calculateSlotsFromSchedule = async function () {
                         hasChanges = true;
                     }
                 }
-                // Update Metadata
                 if(newSlots[key].studentCount !== data.totalStudents || newSlots[key].scribeCount !== data.scribeCount) {
                      newSlots[key].studentCount = data.totalStudents;
                      newSlots[key].scribeCount = data.scribeCount;
@@ -2119,18 +2112,14 @@ window.calculateSlotsFromSchedule = async function () {
             }
         });
 
-        // C. GHOST DETECTION (Remove Obsolete Sessions)
-        // Identify slots currently in the system that are NOT in the fresh student data
+        // C. GHOST DETECTION (With Virtual Slot Protection)
         Object.keys(newSlots).forEach(existingKey => {
             if (!activeSessions[existingKey]) {
-                // Ignore "Virtual" slots (attendance history) or manually created slots with 0 students?
-                // For now, if it has 0 students in the cloud data, it's a ghost.
-                
-                // Check if it was manually created (might not match student data)
-                // We'll list it for removal, user can cancel if they want to keep it.
+                // *** FIX: Ignore "Virtual" slots (Attendance History) ***
+                if (newSlots[existingKey].isVirtual) return;
+
                 removalLog.push({ 
-                    key: existingKey, 
-                    reason: "No students in cloud data" 
+                    key: existingKey 
                 });
             }
         });
@@ -2147,8 +2136,16 @@ window.calculateSlotsFromSchedule = async function () {
             }
             
             if (removalLog.length > 0) {
-                msg += "🗑️ OBSOLETE SESSIONS FOUND:\n";
-                removalLog.forEach(r => msg += `• ${r.key}\n`);
+                msg += `🗑️ OBSOLETE SESSIONS FOUND (${removalLog.length}):\n`;
+                
+                // *** FIX: Truncate List for Alert Box ***
+                const limit = 10;
+                removalLog.slice(0, limit).forEach(r => msg += `• ${r.key}\n`);
+                
+                if (removalLog.length > limit) {
+                    msg += `...and ${removalLog.length - limit} others.\n`;
+                }
+                
                 msg += "\nThese sessions have no students in the current data. They will be removed.";
             }
 
@@ -2173,7 +2170,6 @@ window.calculateSlotsFromSchedule = async function () {
         if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
     }
 }
-
 
 
 // --- HELPER: Get Slot Reserves (Last N assigned staff) ---
