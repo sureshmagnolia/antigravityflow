@@ -6940,6 +6940,220 @@ function isActionAllowed(dateInput) {
     return true;
 }
 
+// ==========================================
+// 🏖️ VACATION DUTY & SURRENDER REPORT LOGIC
+// ==========================================
+
+window.openVacationReportModal = function() {
+    // Set defaults (e.g., April-May of current year)
+    const today = new Date();
+    const year = today.getFullYear();
+    document.getElementById('vac-start').value = `${year}-04-01`;
+    document.getElementById('vac-end').value = `${year}-05-31`;
+    document.getElementById('vac-extra-holidays').value = "";
+    
+    window.openModal('vacation-report-modal');
+}
+
+window.generateVacationReport = function() {
+    const startStr = document.getElementById('vac-start').value;
+    const endStr = document.getElementById('vac-end').value;
+    const extraHolidaysStr = document.getElementById('vac-extra-holidays').value;
+
+    if (!startStr || !endStr) return alert("Please select start and end dates.");
+
+    const startDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    
+    // Parse Extra Holidays
+    const extraHolidays = new Set();
+    if (extraHolidaysStr) {
+        extraHolidaysStr.split(',').forEach(d => {
+            const parts = d.trim().split('.');
+            if (parts.length === 3) {
+                // DD.MM.YYYY to YYYY-MM-DD for comparison
+                extraHolidays.add(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            }
+        });
+    }
+
+    // Helper: Check if date is Holiday
+    const isHoliday = (d) => {
+        const day = d.getDay();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateString = `${yyyy}-${mm}-${dd}`;
+
+        // Saturday (6) or Sunday (0) OR in Extra List
+        return (day === 0 || day === 6 || extraHolidays.has(dateString));
+    };
+
+    const reportData = [];
+
+    // 1. ITERATE ALL STAFF
+    staffData.forEach(staff => {
+        if (staff.status === 'archived') return;
+
+        // 2. FIND DUTIES IN RANGE
+        const dutyDates = []; // Stores Date objects (Unique Days)
+        const dutySessions = []; // Stores formatted session strings
+
+        Object.keys(invigilationSlots).forEach(key => {
+            const slot = invigilationSlots[key];
+            const dateObj = parseDate(key);
+            
+            // Check Range & Attendance
+            if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
+                // Determine Session
+                const [dStr, tStr] = key.split(' | ');
+                const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+                const sessCode = isAN ? "AN" : "FN";
+                
+                dutySessions.push(`${dStr} (${sessCode})`);
+
+                // Add to unique date list
+                const dateKey = dateObj.toDateString();
+                if (!dutyDates.some(d => d.toDateString() === dateKey)) {
+                    dutyDates.push(dateObj);
+                }
+            }
+        });
+
+        if (dutyDates.length === 0) return; // Skip if no duty
+
+        // 3. SORT DATES
+        dutyDates.sort((a, b) => a - b);
+
+        // 4. CALCULATE INTERVENING HOLIDAYS
+        const interveningDates = [];
+        
+        for (let i = 0; i < dutyDates.length - 1; i++) {
+            const current = dutyDates[i];
+            const next = dutyDates[i+1];
+
+            // Get dates between
+            let temp = new Date(current);
+            temp.setDate(temp.getDate() + 1);
+
+            const gapDates = [];
+            let isGapValid = true;
+
+            while (temp < next) {
+                if (!isHoliday(temp)) {
+                    isGapValid = false; // Gap broken by a working day
+                    break; 
+                }
+                gapDates.push(new Date(temp));
+                temp.setDate(temp.getDate() + 1);
+            }
+
+            // If gap contains ONLY holidays, add them
+            if (isGapValid && gapDates.length > 0) {
+                gapDates.forEach(gd => interveningDates.push(gd));
+            }
+        }
+
+        // 5. PREPARE ROW DATA
+        const dutyDaysCount = dutyDates.length;
+        const interveningCount = interveningDates.length;
+        const totalEligible = dutyDaysCount + interveningCount;
+        
+        // Formats
+        const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
+        const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
+
+        reportData.push({
+            name: staff.name,
+            desig: staff.designation,
+            dept: staff.dept,
+            phone: staff.phone || "-",
+            sessions: dutySessions.join(', '),
+            dutyDates: dutyDatesStr,
+            interveningDates: interveningStr,
+            interveningCount: interveningCount,
+            totalEligible: totalEligible
+        });
+    });
+
+    if (reportData.length === 0) return alert("No duty records found for the selected period.");
+
+    printVacationReport(reportData, startStr, endStr);
+    window.closeModal('vacation-report-modal');
+}
+
+function printVacationReport(data, start, end) {
+    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+    const [y1, m1, d1] = start.split('-');
+    const [y2, m2, d2] = end.split('-');
+    const rangeStr = `${d1}.${m1}.${y1} to ${d2}.${m2}.${y2}`;
+
+    let rowsHtml = "";
+    data.forEach((row, i) => {
+        rowsHtml += `
+            <tr>
+                <td style="text-align:center;">${i+1}</td>
+                <td>
+                    <b>${row.name}</b><br>
+                    ${row.desig}<br>
+                    ${row.dept}<br>
+                    <span style="font-size:8pt">Ph: ${row.phone}</span>
+                </td>
+                <td>${row.sessions}</td>
+                <td>${row.dutyDates}</td>
+                <td>${row.interveningDates || "-"}</td>
+                <td style="text-align:center;">${row.interveningCount}</td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt;">${row.totalEligible}</td>
+            </tr>
+        `;
+    });
+
+    const w = window.open('', '_blank');
+    w.document.write(`
+        <html>
+        <head>
+            <title>Vacation_Duty_Report</title>
+            <style>
+                @page { size: A4 landscape; margin: 10mm; }
+                body { font-family: 'Times New Roman', serif; padding: 20px; }
+                h1, h2, h3 { text-align: center; margin: 5px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10pt; }
+                th, td { border: 1px solid black; padding: 6px; vertical-align: top; }
+                th { background-color: #f0f0f0; }
+            </style>
+        </head>
+        <body>
+            <h1>${collegeName}</h1>
+            <h2>Vacation Duty & Earned Leave Report</h2>
+            <h3>Period: ${rangeStr}</h3>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th width="3%">#</th>
+                        <th width="20%">Staff Details</th>
+                        <th width="20%">Sessions Attended</th>
+                        <th width="15%">Duty Dates (Unique)</th>
+                        <th width="25%">Intervening Holidays (Claimable)</th>
+                        <th width="7%">Hol. Count</th>
+                        <th width="10%">Total Eligible</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            
+            <div style="margin-top:50px; display:flex; justify-content:space-between; padding:0 50px;">
+                <div><b>Prepared By</b></div>
+                <div><b>Chief Superintendent</b></div>
+            </div>
+        </body>
+        </html>
+    `);
+    w.document.close();
+}
+
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
     const acYear = getCurrentAcademicYear();
