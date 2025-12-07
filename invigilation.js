@@ -7084,7 +7084,7 @@ window.generateVacationReport = function() {
 
         // 2. FIND DUTIES IN RANGE
         const dutyDates = []; // Stores Date objects (Unique Days)
-        const dutySessions = []; // Stores formatted session strings
+        const rawSessions = []; // Stores objects for sorting
 
         Object.keys(invigilationSlots).forEach(key => {
             const slot = invigilationSlots[key];
@@ -7097,7 +7097,12 @@ window.generateVacationReport = function() {
                 const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
                 const sessCode = isAN ? "AN" : "FN";
                 
-                dutySessions.push(`${dStr} (${sessCode})`);
+                // Store raw data for sorting
+                rawSessions.push({
+                    dateObj: dateObj,
+                    isAN: isAN,
+                    str: `${dStr} (${sessCode})`
+                });
 
                 // Add to unique date list
                 const dateKey = dateObj.toDateString();
@@ -7109,8 +7114,15 @@ window.generateVacationReport = function() {
 
         if (dutyDates.length === 0) return; // Skip if no duty
 
-        // 3. SORT DATES
+        // 3. SORT DATES & SESSIONS
         dutyDates.sort((a, b) => a - b);
+        
+        // Sort sessions: Date ASC, then FN before AN
+        rawSessions.sort((a, b) => {
+            const timeDiff = a.dateObj - b.dateObj;
+            if (timeDiff !== 0) return timeDiff;
+            return a.isAN ? 1 : -1;
+        });
 
         // 4. CALCULATE INTERVENING HOLIDAYS
         const interveningDates = [];
@@ -7148,6 +7160,7 @@ window.generateVacationReport = function() {
         
         // Formats
         const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
+        const sessionsStr = rawSessions.map(s => s.str).join(', ');
         const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
 
         reportData.push({
@@ -7155,7 +7168,7 @@ window.generateVacationReport = function() {
             desig: staff.designation,
             dept: staff.dept,
             phone: staff.phone || "-",
-            sessions: dutySessions.join(', '),
+            sessions: sessionsStr,
             dutyDates: dutyDatesStr,
             interveningDates: interveningStr,
             interveningCount: interveningCount,
@@ -7165,12 +7178,26 @@ window.generateVacationReport = function() {
 
     if (reportData.length === 0) return alert("No duty records found for the selected period.");
 
+    // --- SORT REPORT DATA BY DEPARTMENT THEN NAME ---
+    reportData.sort((a, b) => {
+        const deptA = (a.dept || "").toLowerCase();
+        const deptB = (b.dept || "").toLowerCase();
+        
+        // Primary Sort: Department
+        if (deptA < deptB) return -1;
+        if (deptA > deptB) return 1;
+        
+        // Secondary Sort: Name
+        return a.name.localeCompare(b.name);
+    });
+
     printVacationReport(reportData, startStr, endStr);
     window.closeModal('vacation-report-modal');
 }
 
+
 function printVacationReport(data, start, end) {
-    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+    const collegeName = collegeData.examCollegeName || "_______________ College";
     const [y1, m1, d1] = start.split('-');
     const [y2, m2, d2] = end.split('-');
     const rangeStr = `${d1}.${m1}.${y1} to ${d2}.${m2}.${y2}`;
@@ -7207,9 +7234,33 @@ function printVacationReport(data, start, end) {
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10pt; }
                 th, td { border: 1px solid black; padding: 6px; vertical-align: top; }
                 th { background-color: #f0f0f0; }
+                
+                .no-print {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+                .btn-print {
+                    background-color: #4F46E5; 
+                    color: white; 
+                    border: none; 
+                    padding: 10px 20px; 
+                    border-radius: 5px; 
+                    font-weight: bold; 
+                    cursor: pointer;
+                    font-size: 14px;
+                }
+                .btn-print:hover { background-color: #4338CA; }
+
+                @media print {
+                    .no-print { display: none; }
+                }
             </style>
         </head>
         <body>
+            <div class="no-print">
+                <button onclick="window.print()" class="btn-print">🖨️ Print Report</button>
+            </div>
+
             <h1>${collegeName}</h1>
             <h2>Vacation Duty & Earned Leave Report</h2>
             <h3>Period: ${rangeStr}</h3>
@@ -7231,8 +7282,7 @@ function printVacationReport(data, start, end) {
                 </tbody>
             </table>
             
-            <div style="margin-top:50px; display:flex; justify-content:space-between; padding:0 50px;">
-                <div><b>Prepared By</b></div>
+            <div style="margin-top:50px; display:flex; justify-content:flex-end; padding-right: 50px;">
                 <div><b>Chief Superintendent</b></div>
             </div>
         </body>
