@@ -1975,10 +1975,9 @@ window.waNotify = function (key) {
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 
+
 window.calculateSlotsFromSchedule = async function () {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-    const originalText = btn ? btn.innerText : "Sync Cloud";
-    
     if (btn) { btn.disabled = true; btn.innerText = "⏳ Checking Cloud..."; }
 
     try {
@@ -1994,11 +1993,13 @@ window.calculateSlotsFromSchedule = async function () {
         
         // Fetch Chunks if needed
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-        const q = query(dataColRef, orderBy("index"));
+        const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
         let fullPayload = "";
-        querySnapshot.forEach(doc => { if (doc.data().payload) fullPayload += doc.data().payload; });
-        
+        querySnapshot.forEach(doc => { 
+            if (doc.data().payload) fullPayload += doc.data().payload; 
+        });
+
         if (fullPayload) {
             try {
                 const bulkData = JSON.parse(fullPayload);
@@ -2018,12 +2019,11 @@ window.calculateSlotsFromSchedule = async function () {
         // 2. Advanced Calculation
         const sessions = {};
         students.forEach(s => {
-            // Normalize Date/Time (Trim spaces)
-            const d = s.Date ? s.Date.trim() : "";
-            const t = s.Time ? s.Time.trim() : "";
-            if(!d || !t) return;
+            const date = s.Date ? s.Date.trim() : "";
+            const time = s.Time ? s.Time.trim() : "";
+            if(!date || !time) return;
 
-            const key = `${d} | ${t}`;
+            const key = `${date} | ${time}`;
             if (!sessions[key]) {
                 sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
             }
@@ -2039,14 +2039,21 @@ window.calculateSlotsFromSchedule = async function () {
             }
         });
 
+        // 3. Update Slots
         let changesLog = [];
         let newSlots = { ...invigilationSlots };
         let hasChanges = false;
 
+        // Cleanup old schema
+        Object.keys(newSlots).forEach(k => {
+            if (newSlots[k].courses) { delete newSlots[k].courses; hasChanges = true; }
+        });
+
         Object.keys(sessions).forEach(key => {
             const data = sessions[key];
+            const [datePart, timePart] = key.split(' | ');
 
-           // --- B. CALCULATE REQUIREMENTS ---
+            // --- B. CALCULATE REQUIREMENTS ---
             let calculatedReq = 0;
             
             // 1. Regular Streams (1:30)
@@ -2062,11 +2069,23 @@ window.calculateSlotsFromSchedule = async function () {
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve; // TOTAL Required
 
+            // Get Exam Name
+            let officialExamName = "";
+            if (typeof window.getExamName === "function") {
+                const streams = Object.keys(data.streams);
+                for (const strm of streams) {
+                    officialExamName = window.getExamName(datePart, timePart, strm);
+                    if (officialExamName) break;
+                }
+                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
+            }
+
             // --- C. Update Slot ---
             if (!newSlots[key]) {
+                // NEW SLOT FOUND
                 newSlots[key] = {
                     required: finalReq,       // Total Needed
-                    reserveCount: reserve,    // <--- NEW: Store Reserve Count explicitly
+                    reserveCount: reserve,    // <--- NEW: Store Reserve Count
                     assigned: [],
                     unavailable: [],
                     isLocked: true,
@@ -2077,7 +2096,7 @@ window.calculateSlotsFromSchedule = async function () {
                 changesLog.push(`🆕 ${key}: Added (Req: ${finalReq}, Res: ${reserve})`);
                 hasChanges = true;
             } else {
-                // Update existing requirement if it changed
+                // UPDATE EXISTING
                 if (newSlots[key].required !== finalReq) {
                     if (finalReq > newSlots[key].required) {
                         changesLog.push(`🔄 ${key}: Req increased ${newSlots[key].required} -> ${finalReq}`);
@@ -2087,42 +2106,41 @@ window.calculateSlotsFromSchedule = async function () {
                     }
                 }
                 // Update Metadata
-                newSlots[key].studentCount = data.totalStudents;
-                newSlots[key].scribeCount = data.scribeCount;
-                if(newSlots[key].reserveCount === undefined) {
-                    newSlots[key].reserveCount = reserve; // Fix missing field
+                if(newSlots[key].studentCount !== data.totalStudents) {
+                     newSlots[key].studentCount = data.totalStudents;
+                     newSlots[key].scribeCount = data.scribeCount;
+                     if(newSlots[key].reserveCount === undefined) {
+                         newSlots[key].reserveCount = reserve; // Fix missing field
+                     }
+                     hasChanges = true;
+                }
+                if (officialExamName && newSlots[key].examName !== officialExamName) {
+                    newSlots[key].examName = officialExamName;
                     hasChanges = true;
                 }
             }
         });
 
-        // 3. Apply & Save
+        // 4. Finish
         if (!hasChanges) {
             updateSyncStatus("Synced", "success");
-            alert(`✅ Cloud Check Complete.\n\nAnalyzed ${students.length} students across ${Object.keys(sessions).length} sessions.\n\nNo new sessions or requirement changes found.`);
+            alert(`✅ Cloud Check Complete.\n\nAnalyzed ${students.length} students.\nNo new sessions or changes found.`);
         } else {
             invigilationSlots = newSlots;
             await syncSlotsToCloud();
             renderSlotsGridAdmin();
-            
-            let msg = `✅ SYNC COMPLETE\n\nFound ${students.length} students.\n\nUPDATES APPLIED:\n` + changesLog.join('\n');
-            if(changesLog.length > 10) msg = `✅ SYNC COMPLETE\n\nFound ${students.length} students.\n\n${changesLog.length} sessions were added or updated.`;
-            
-            alert(msg);
+            alert(`✅ Updates Applied!\n\n${changesLog.length} sessions updated based on cloud data.`);
         }
 
     } catch (e) {
-        console.error("Auto-Calc Error:", e);
-        alert("❌ Error checking cloud: " + e.message);
+        console.error("Sync Error:", e);
+        alert("❌ Sync Error: " + e.message);
         updateSyncStatus("Check Failed", "error");
     } finally {
         if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
     }
 }
 
-
-
-// --- RESERVE LOGIC ---
 
 // --- HELPER: Get Slot Reserves (Last N assigned staff) ---
 window.getSlotReserves = function (key) {
@@ -3649,10 +3667,9 @@ window.openCompletedDutiesModal = function (email) {
     window.openModal('completed-duties-modal');
 }
 
-// --- WEEKLY AUTO-ASSIGN ALGORITHM (Generates Logic Reports) ---
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     // 1. CHECK: Confirm Intent
-    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
+    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots.\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60%`)) return;
 
     // 2. Identify Target Slots (MUST BE LOCKED)
     const targetSlots = [];
@@ -3668,7 +3685,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     });
 
     if (targetSlots.length === 0) {
-        return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
+        return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.`);
     }
 
     // 3. Sort Slots Chronologically
@@ -3681,12 +3698,11 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         return {
             ...s,
             pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-            // Track weekly load dynamically
-            weeklyLoad: {} // Key: "Month-Week" -> count
+            weeklyLoad: {} 
         };
     });
 
-    // Pre-fill existing assignments into tracker
+    // Pre-fill existing assignments
     Object.keys(invigilationSlots).forEach(k => {
         const d = parseDate(k);
         const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -3704,12 +3720,15 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
     const logEntries = [];
     let assignedCount = 0;
-    const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+    const timestamp = new Date().toLocaleString('en-GB');
 
     // 5. Process Each Slot
     for (const target of targetSlots) {
         const { key, date, slot } = target;
-        const needed = slot.required - slot.assigned.length;
+        
+        // TARGET: Fill to Required (Already includes 10% reserve)
+        const targetCount = slot.required; 
+        const needed = targetCount - slot.assigned.length;
 
         if (needed <= 0) continue;
 
@@ -3717,7 +3736,6 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
         const currentWeekKey = `${mStr}-${wNum}`;
-
         const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
         const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
 
@@ -3727,114 +3745,63 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
             if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
         });
 
-        // We need to run the selection loop 'needed' times
-        // For each pick, we re-evaluate because the context (dept count) changes
+        // Loop 'needed' times to fill
         for (let i = 0; i < needed; i++) {
-
-            // Score Candidates
             const candidates = eligibleStaff.map(s => {
                 let score = s.pending * 100;
                 let warnings = [];
 
-                // --- HARD CONSTRAINTS ---
                 if (slot.assigned.includes(s.email)) return null;
                 if (isUserUnavailable(slot, s.email, key)) return null;
                 if (s.status === 'archived') return null;
 
-                // --- SOFT CONSTRAINTS ---
-                // 1. Weekly Limit
+                // Soft Constraints
                 const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) {
-                    score -= 5000;
-                    warnings.push("Max 3/wk");
-                }
+                if (dutiesThisWeek >= 3) { score -= 5000; warnings.push("Max 3/wk"); }
 
-                // 2. Same Day Conflict (Check DB directly for speed)
-                const sameDayKeys = targetSlots.filter(t =>
-                    t.date.toDateString() === date.toDateString() && t.key !== key
-                ).map(t => t.key);
+                const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
+                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) { score -= 2000; warnings.push("Same Day"); }
 
-                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) {
-                    score -= 2000;
-                    warnings.push("Same Day");
-                }
-
-                // 3. Dept Saturation
                 const dTotal = deptCounts[s.dept] || 0;
                 if (dTotal > 1) {
                     const dAssigned = slotDeptCounts[s.dept] || 0;
-                    if (dAssigned >= Math.ceil(dTotal * 0.6)) {
-                        score -= 4000;
-                        warnings.push("Dept Saturation");
-                    }
+                    if (dAssigned >= Math.ceil(dTotal * 0.6)) { score -= 4000; warnings.push("Dept Saturation"); }
                 }
 
-                // 4. Adjacent Day (Check DB)
-                // Simplified check against current batch of target slots
                 let hasAdjacent = false;
                 targetSlots.forEach(t => {
-                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString())
-                        && t.slot.assigned.includes(s.email)) {
+                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
                         hasAdjacent = true;
                     }
                 });
-                if (hasAdjacent) {
-                    score -= 1000;
-                    warnings.push("Adjacent");
-                }
+                if (hasAdjacent) { score -= 1000; warnings.push("Adjacent"); }
 
                 return { staff: s, score, warnings };
             }).filter(c => c !== null);
 
-            // Sort High to Low
             candidates.sort((a, b) => b.score - a.score);
 
             if (candidates.length > 0) {
                 const choice = candidates[0];
-
-                // Assign
                 slot.assigned.push(choice.staff.email);
-
-                // Update Tracker
+                
                 choice.staff.pending--;
                 if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
                 choice.staff.weeklyLoad[currentWeekKey]++;
-
                 slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
-
                 assignedCount++;
 
-                // --- GENERATE LOGIC REPORT FOR THIS SLOT ---
-                // We append this decision to the slot's log history
-                let logEntry = `
-                    <div class="text-xs border-b border-gray-100 pb-1 mb-1">
-                        <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
-                        <span class="text-gray-500">(Score: ${choice.score})</span>
-                        ${choice.warnings.length > 0 ? `<span class="text-red-500 ml-1">[${choice.warnings.join(', ')}]</span>` : ""}
-                    </div>`;
-
-                // Add Skipped Candidates context
-                const skipped = candidates.slice(1, 4); // Next 3 best
-                if (skipped.length > 0) {
-                    logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` +
-                        skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
-                }
-
-                // Create/Append Log
+                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1"><span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> <span class="text-gray-500">(Score: ${choice.score})</span></div>`;
                 if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
                 slot.allocationLog += logEntry;
 
                 if (choice.warnings.length > 0) {
-                    logEntries.push({
-                        type: "WARN",
-                        msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}`
-                    });
+                    logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
                 }
             }
         }
     }
 
-    // 6. Save Global Log
     if (logEntries.length > 0) {
         const logRef = doc(db, "colleges", currentCollegeId);
         const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
@@ -3842,16 +3809,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     }
 
     logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-
-    // 7. Save Slots & Refresh
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
-
-    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
-    if (logEntries.length > 0) {
-        alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated (Rules Broken). Check Logs.`;
-    }
-    alert(alertMsg);
+    alert(`✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 
 window.viewAutoAssignLogs = async function () {
