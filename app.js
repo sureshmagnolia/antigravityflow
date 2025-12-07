@@ -11628,7 +11628,7 @@ Are you sure?
         }
     }
 
-  // 2. Reschedule Logic (Smart Merge for Invigilators)
+ // 2. Reschedule Logic (Smart Merge for Invigilators - FIXED UNAVAILABILITY)
     if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
@@ -11658,7 +11658,7 @@ Are you sure?
 
             if (newSessionKey === currentSession) return alert("New date/time is the same as current.");
 
-            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Assigned Invigilators\n\nProceed?`;
+            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nThis will move:\n• Student Records\n• Room Allotments\n• Assigned Invigilators\n\n(Note: Unavailability records will be reset for this session as the date is changing.)\n\nProceed?`;
 
             if (!confirm(msg)) return;
 
@@ -11685,28 +11685,27 @@ Are you sure?
 
                     if (data[currentSession]) {
                         if (data[newSessionKey]) {
-                            // --- COLLISION HANDLING (MERGE) ---
+                            // --- COLLISION (MERGE) ---
                             if (type === 'array') {
                                 // Room Allotments / Absentees: Concat Arrays
                                 data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
                             } 
                             else if (storageKey === 'examInvigilationSlots') {
-                                // INVIGILATION SLOTS: Smart Merge Staff
+                                // INVIGILATION SLOTS: Smart Merge
                                 const target = data[newSessionKey];
                                 const source = data[currentSession];
                                 
                                 // Combine Assigned Staff (Unique)
                                 target.assigned = [...new Set([...target.assigned, ...source.assigned])];
                                 
-                                // Combine Unavailable
-                                if(source.unavailable) {
-                                    target.unavailable = [...(target.unavailable||[]), ...source.unavailable];
-                                }
+                                // *** CRITICAL FIX: DO NOT MERGE UNAVAILABILITY ***
+                                // Old unavailability reasons (e.g. "Dentist on Monday") don't apply to the new date (Tuesday)
+                                // So we leave target.unavailable as is, ignoring source.unavailable
                                 
                                 // Sum Counts
                                 target.studentCount = (target.studentCount || 0) + (source.studentCount || 0);
                                 target.scribeCount = (target.scribeCount || 0) + (source.scribeCount || 0);
-                                target.required = Math.max(target.required, source.required); // Keep highest req or recalculate later
+                                target.required = Math.max(target.required, source.required);
                             }
                             else {
                                 // Scribe Map / Others: Object Merge
@@ -11715,6 +11714,12 @@ Are you sure?
                         } else {
                             // --- NO COLLISION (SIMPLE MOVE) ---
                             data[newSessionKey] = data[currentSession];
+
+                            // *** CRITICAL FIX: RESET UNAVAILABILITY ***
+                            // If moving an Invigilation Slot to a fresh date, clear the old unavailability list
+                            if (storageKey === 'examInvigilationSlots') {
+                                data[newSessionKey].unavailable = [];
+                            }
                         }
                         
                         // Delete Old Key
@@ -11728,10 +11733,10 @@ Are you sure?
                 moveKeyInStorage('examScribeAllotment', 'object');
                 moveKeyInStorage('examAbsenteeList', 'array');
                 moveKeyInStorage('examInvigilatorMapping', 'object');
-                moveKeyInStorage('examInvigilationSlots', 'object'); // <--- NOW HANDLED SAFELY
+                moveKeyInStorage('examInvigilationSlots', 'object'); // Handled with fix
                 moveKeyInStorage('examQPCodes', 'object');
 
-                alert(`✅ Moved ${studentCount} students and assigned staff to ${newSessionKey}.`);
+                alert(`✅ Moved ${studentCount} students and assigned staff to ${newSessionKey}.\n(Unavailability flags have been reset for the new date).`);
 
                 if (typeof syncDataToCloud === 'function') await syncDataToCloud();
                 window.location.reload();
