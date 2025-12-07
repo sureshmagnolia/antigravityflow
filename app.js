@@ -7002,15 +7002,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 3. Remove Room from Allotment
-        currentSessionAllotment.splice(index, 1);
-
         // --- AUTO SAVE & SYNC ---
+        // 1. Save Room Allotment (Updates student seating and scribe cleanup)
         saveRoomAllotment(); // Update Local Storage (Room & Scribe)
 
         if (typeof syncDataToCloud === 'function') {
-            syncDataToCloud(); // Update Cloud (pushes the updated Invig Mapping too)
+    // 2. Sync 'heavy' to update the Room Allotment (Student Data Chunks)
+            await syncDataToCloud('heavy'); 
+    
+    // 3. Sync 'slots' to update the Invigilator Mapping (The NEW FIX)
+            await syncDataToCloud('slots'); 
         }
+// ------------------------
         // ------------------------
 
         updateAllotmentDisplay();
@@ -7205,7 +7208,11 @@ document.addEventListener('DOMContentLoaded', () => {
         saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
 
         if (typeof syncDataToCloud === 'function') {
-            syncDataToCloud(); // Push to Firebase
+    // 1. Sync Room Allotment (HEAVY bucket)
+        await syncDataToCloud('heavy'); 
+    
+    // 2. Sync Scribe Allotment (ALLOCATION bucket)
+        await syncDataToCloud('allocation'); 
         }
         // ------------------------
 
@@ -9507,7 +9514,11 @@ Are you sure?
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
 
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                if (typeof syncDataToCloud === 'function') {
+                // This pushes the updated allStudentData (which is now smaller)
+                // to the cloud chunks (the 'heavy' bucket).
+                await syncDataToCloud('heavy'); 
+                }
                 window.location.reload();
             }
         });
@@ -12723,7 +12734,14 @@ Are you sure?
                 fixStorageKeys('examInvigilationSlots', 'slot');   // Invigilation Duty Slots
 
                 // 4. Sync & Reload
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+                if (typeof syncDataToCloud === 'function') {
+                // Sync ALL buckets because times were changed everywhere
+                await syncDataToCloud('heavy');      // Student Data & Rooms
+                await syncDataToCloud('ops');        // Absentees & QP Codes
+                await syncDataToCloud('allocation'); // Scribes
+                await syncDataToCloud('staff');      // Invigilator Assignments
+                await syncDataToCloud('slots');      // Duty Slots
+                }
 
                 alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
                 window.location.reload();
@@ -12978,7 +12996,18 @@ Are you sure?
                     // Update UI immediately
                     updateSyncStatus("Saving...", "neutral");
                     // Trigger the save
-                    await syncDataToCloud();
+                    if (typeof syncDataToCloud === 'function') {
+                    // Update UI immediately
+                    updateSyncStatus("Saving...", "neutral");
+    
+                    // Trigger a FULL save of all sections
+                    await syncDataToCloud('settings');   // Configs, Streams, Rooms
+                    await syncDataToCloud('ops');        // QP Codes, Absentees
+                    await syncDataToCloud('allocation'); // Scribe Lists & Allotments
+                    await syncDataToCloud('staff');      // Invigilator Assignments
+                    await syncDataToCloud('slots');      // Duty Slots & Unavailability
+                    await syncDataToCloud('heavy');      // Student Data & Room Allotment
+                    }
                 } else {
                     alert("Sync function is not ready yet. Please wait.");
                 }
