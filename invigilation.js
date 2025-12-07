@@ -6944,49 +6944,90 @@ function isActionAllowed(dateInput) {
 // 🏖️ VACATION DUTY & SURRENDER REPORT LOGIC
 // ==========================================
 
+// State to store unique holiday dates (YYYY-MM-DD)
+let vacationExtraHolidays = new Set();
+
 window.openVacationReportModal = function() {
-    // Set defaults (e.g., April-May of current year)
     const today = new Date();
     const year = today.getFullYear();
     document.getElementById('vac-start').value = `${year}-04-01`;
     document.getElementById('vac-end').value = `${year}-05-31`;
-    document.getElementById('vac-extra-holidays').value = "";
+    
+    // Reset Holidays
+    vacationExtraHolidays.clear();
+    document.getElementById('vac-holiday-input').value = "";
+    renderVacationHolidays();
     
     window.openModal('vacation-report-modal');
+}
+
+window.addVacationHoliday = function() {
+    const input = document.getElementById('vac-holiday-input');
+    const dateVal = input.value; // YYYY-MM-DD
+    
+    if (!dateVal) return;
+
+    if (vacationExtraHolidays.has(dateVal)) {
+        alert("This date is already in the list.");
+        return;
+    }
+
+    vacationExtraHolidays.add(dateVal);
+    renderVacationHolidays();
+    input.value = ""; // Clear input for next entry
+}
+
+window.removeVacationHoliday = function(dateStr) {
+    vacationExtraHolidays.delete(dateStr);
+    renderVacationHolidays();
+}
+
+function renderVacationHolidays() {
+    const list = document.getElementById('vac-holiday-list');
+    list.innerHTML = '';
+
+    if (vacationExtraHolidays.size === 0) {
+        list.innerHTML = '<span class="text-xs text-gray-400 italic self-center pl-1">No additional holidays added.</span>';
+        return;
+    }
+
+    // Sort dates for display
+    const sortedDates = Array.from(vacationExtraHolidays).sort();
+
+    sortedDates.forEach(dateStr => {
+        // Format YYYY-MM-DD -> DD.MM.YYYY
+        const [y, m, d] = dateStr.split('-');
+        const displayDate = `${d}.${m}.${y}`;
+
+        const item = document.createElement('div');
+        item.className = "inline-flex items-center gap-2 bg-white border border-indigo-200 text-indigo-700 px-3 py-1 rounded-full shadow-sm text-xs font-bold";
+        item.innerHTML = `
+            <span>${displayDate}</span>
+            <button onclick="removeVacationHoliday('${dateStr}')" class="text-indigo-400 hover:text-red-500 font-black leading-none transition text-sm focus:outline-none">&times;</button>
+        `;
+        list.appendChild(item);
+    });
 }
 
 window.generateVacationReport = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
-    const extraHolidaysStr = document.getElementById('vac-extra-holidays').value;
 
     if (!startStr || !endStr) return alert("Please select start and end dates.");
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
     
-    // Parse Extra Holidays
-    const extraHolidays = new Set();
-    if (extraHolidaysStr) {
-        extraHolidaysStr.split(',').forEach(d => {
-            const parts = d.trim().split('.');
-            if (parts.length === 3) {
-                // DD.MM.YYYY to YYYY-MM-DD for comparison
-                extraHolidays.add(`${parts[2]}-${parts[1]}-${parts[0]}`);
-            }
-        });
-    }
-
     // Helper: Check if date is Holiday
     const isHoliday = (d) => {
         const day = d.getDay();
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
-        const dateString = `${yyyy}-${mm}-${dd}`;
+        const dateString = `${yyyy}-${mm}-${dd}`; // Check against YYYY-MM-DD format in Set
 
         // Saturday (6) or Sunday (0) OR in Extra List
-        return (day === 0 || day === 6 || extraHolidays.has(dateString));
+        return (day === 0 || day === 6 || vacationExtraHolidays.has(dateString));
     };
 
     const reportData = [];
