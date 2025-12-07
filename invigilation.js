@@ -2480,7 +2480,9 @@ window.runAutoAllocation = async function () {
 }
 //-------------------
 
+
 window.saveNewStaff = async function () {
+    // 1. Capture Inputs
     const indexStr = document.getElementById('stf-edit-index').value;
     const isEditMode = (indexStr !== "");
     const index = isEditMode ? parseInt(indexStr) : -1;
@@ -2496,96 +2498,129 @@ window.saveNewStaff = async function () {
     let availableDays = [1, 2, 3, 4, 5, 6]; // Default: Full Availability
 
     if (designation === "Guest Lecturer") {
-        // Only respect checkboxes for Guest Faculty
         availableDays = Array.from(document.querySelectorAll('.stf-day-chk:checked')).map(c => parseInt(c.value));
     }
-    // -----------------------------
 
+    // 2. Validation
     if (!name || !email) return alert("Name and Email are required.");
 
-    if (isEditMode) {
-        // --- UPDATE EXISTING STAFF ---
-        const oldData = staffData[index];
-        const oldEmail = oldData.email;
+    // Change Button to Loading State
+    const saveBtn = document.querySelector('#add-staff-modal button[onclick="saveNewStaff()"]');
+    const originalText = saveBtn ? saveBtn.innerText : "Save";
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Saving...";
+    }
 
-        // 1. FULL EMAIL MIGRATION LOGIC
-        if (oldEmail !== email) {
-            if (staffData.some(s => s.email === email && s !== oldData)) {
-                return alert("This email is already used by another staff member.");
-            }
-            if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) return;
+    try {
+        if (isEditMode) {
+            // --- UPDATE EXISTING STAFF ---
+            const oldData = staffData[index];
+            const oldEmail = oldData.email;
 
-            await removeStaffAccess(oldEmail);
-            await addStaffAccess(email);
-
-            // Deep Find & Replace in Slots (Migration)
-            let slotsChanged = false;
-            Object.keys(invigilationSlots).forEach(key => {
-                const slot = invigilationSlots[key];
-                if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                if (slot.supervision) { if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; } if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; } }
-                if (slot.unavailable) {
-                    let unavChanged = false;
-                    slot.unavailable = slot.unavailable.map(u => {
-                        if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
-                        if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
-                        return u;
-                    });
-                    if (unavChanged) slotsChanged = true;
+            // Email Migration Logic
+            if (oldEmail !== email) {
+                if (staffData.some(s => s.email === email && s !== oldData)) {
+                    throw new Error("This email is already used by another staff member.");
                 }
-            });
-            if (slotsChanged) await syncSlotsToCloud();
+                if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) {
+                    throw new Error("Cancelled by user.");
+                }
 
-            // Migrate Advance Unavailability
-            let advanceChanged = false;
-            Object.keys(advanceUnavailability).forEach(dateKey => {
-                ['FN', 'AN'].forEach(sess => {
-                    if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
-                        advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
-                            if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
+                await removeStaffAccess(oldEmail);
+                await addStaffAccess(email);
+
+                // Deep Find & Replace in Slots (Migration)
+                let slotsChanged = false;
+                Object.keys(invigilationSlots).forEach(key => {
+                    const slot = invigilationSlots[key];
+                    if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                    if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                    if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
+                    if (slot.supervision) {
+                        if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; }
+                        if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; }
+                    }
+                    if (slot.unavailable) {
+                        let unavChanged = false;
+                        slot.unavailable = slot.unavailable.map(u => {
+                            if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
+                            if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
                             return u;
                         });
+                        if (unavChanged) slotsChanged = true;
                     }
                 });
-            });
-            if (advanceChanged) await saveAdvanceUnavailability();
+                if (slotsChanged) await syncSlotsToCloud();
+
+                // Migrate Advance Unavailability
+                let advanceChanged = false;
+                Object.keys(advanceUnavailability).forEach(dateKey => {
+                    ['FN', 'AN'].forEach(sess => {
+                        if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
+                            advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
+                                if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
+                                return u;
+                            });
+                        }
+                    });
+                });
+                if (advanceChanged) await saveAdvanceUnavailability();
+            }
+
+            logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
+            
+            // Update Local Array
+            staffData[index] = {
+                ...oldData,
+                name, email, phone, dept, designation, joiningDate: date,
+                preferredDays: availableDays
+            };
+
+        } else {
+            // --- ADD NEW STAFF ---
+            if (staffData.some(s => s.email === email)) throw new Error("Staff with this email already exists.");
+
+            const newObj = {
+                name, email, phone, dept, designation, joiningDate: date,
+                dutiesDone: 0, roleHistory: [],
+                preferredDays: availableDays
+            };
+            
+            // 1. Update Permissions First
+            await addStaffAccess(email);
+            
+            // 2. Update Local Data
+            staffData.push(newObj);
+            logActivity("New Staff Added", `Admin added new staff: ${name} (${email}).`);
         }
-        logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
-        // 2. Update Local Array
-        staffData[index] = {
-            ...oldData,
-            name, email, phone, dept, designation, joiningDate: date,
-            preferredDays: availableDays // <--- SAVED HERE
-        };
-        alert("Staff profile updated successfully.");
 
-    } else {
-        // --- ADD NEW STAFF ---
-        if (staffData.some(s => s.email === email)) return alert("Staff with this email already exists.");
+        // --- CRITICAL FIX: SYNC BEFORE CLOSING ---
+        await syncStaffToCloud(); 
+        
+        // --- UI Updates ---
+        window.closeModal('add-staff-modal');
+        
+        if (!isAdmin) {
+            window.location.reload();
+        } else {
+            renderStaffTable();
+            updateAdminUI();
+            alert(isEditMode ? "Staff profile updated successfully." : "New staff added successfully.");
+        }
 
-        const newObj = {
-            name, email, phone, dept, designation, joiningDate: date,
-            dutiesDone: 0, roleHistory: [],
-            preferredDays: availableDays
-        };
-        logActivity("New Staff Added", `Admin added new staff: ${name} (${email}).`);
-        staffData.push(newObj);
-        await addStaffAccess(email);
-        alert("New staff added successfully.");
-    }
-
-    await syncStaffToCloud();
-    window.closeModal('add-staff-modal');
-
-    if (!isAdmin) window.location.reload();
-    else {
-        renderStaffTable();
-        updateAdminUI();
+    } catch (e) {
+        console.error(e);
+        if (e.message !== "Cancelled by user.") {
+            alert("❌ Error: " + e.message);
+        }
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerText = originalText;
+        }
     }
 }
-
 
 
 
