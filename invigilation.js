@@ -7358,32 +7358,49 @@ let presenceUnsubscribe = null;
 window.initLivePresence = function(myEmail, myName, isAdmin) {
     if (!currentCollegeId || !myEmail) return;
 
-    // REMOVED: const { ... } = window.firebase;  <-- This was causing the error
-    // We now use the 'serverTimestamp', 'doc', 'setDoc' imported at the top of the file.
-
+    const { doc, setDoc, serverTimestamp, onSnapshot, collection } = window.firebase;
+    
     // Sanitize Email for Doc ID
     const myRef = doc(db, "colleges", currentCollegeId, "live_presence", myEmail);
 
     // A. EVERYONE BROADCASTS (Writes)
     const platform = window.innerWidth < 768 ? "Mobile" : "Desktop";
     
-    const sendHeartbeat = () => {
-        if (document.visibilityState === 'visible') {
-            setDoc(myRef, {
-                name: myName,
-                email: myEmail,
-                lastSeen: serverTimestamp(), // Now uses the imported function
-                device: platform,
-                status: 'online'
-            }, { merge: true });
-        }
+    const sendHeartbeat = (statusOverride) => {
+        // Default to 'online' unless specified
+        const status = statusOverride || 'online';
+        
+        setDoc(myRef, {
+            name: myName,
+            email: myEmail,
+            lastSeen: serverTimestamp(),
+            device: platform,
+            status: status
+        }, { merge: true });
     };
 
-    // Send first heartbeat immediately
-    sendHeartbeat();
+    // 1. Send first heartbeat immediately
+    sendHeartbeat('online');
 
-    // Send heartbeat every 5 minutes
-    setInterval(sendHeartbeat, 5 * 60 * 1000); 
+    // 2. Regular Heartbeat (Every 5 mins)
+    setInterval(() => {
+        if (document.visibilityState === 'visible') sendHeartbeat('online');
+    }, 5 * 60 * 1000); 
+
+    // 3. EXIT HOOK (The Fix for "Ghost" Online Users)
+    // Triggers when user closes tab or browser
+    window.addEventListener('beforeunload', () => {
+        sendHeartbeat('offline');
+    });
+
+    // 4. IDLE HOOK (Optional: Mark idle when tab is hidden/minimized)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            sendHeartbeat('idle');
+        } else {
+            sendHeartbeat('online');
+        }
+    });
 
     // B. ONLY ADMINS LISTEN (Reads)
     if (isAdmin) {
@@ -7404,9 +7421,16 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
                 const lastSeenTime = data.lastSeen.toMillis ? data.lastSeen.toMillis() : Date.now();
                 const diffMinutes = (now - lastSeenTime) / 1000 / 60;
 
-                if (diffMinutes < 6) { 
-                    globalLiveUsers[data.email] = { status: 'online', device: data.device || 'Desktop' };
-                    onlineCount++;
+                // Priority: 
+                // 1. Explicit 'offline' status from database (The Fix)
+                // 2. Time-based timeout fallback
+                
+                if (data.status === 'offline') {
+                     globalLiveUsers[data.email] = { status: 'offline', device: data.device || 'Desktop' };
+                } else if (diffMinutes < 6) { 
+                    // If DB says online/idle AND time is recent
+                    globalLiveUsers[data.email] = { status: data.status || 'online', device: data.device || 'Desktop' };
+                    if (data.status !== 'idle') onlineCount++;
                 } else if (diffMinutes < 30) {
                     globalLiveUsers[data.email] = { status: 'idle', device: data.device || 'Desktop' };
                 } else {
