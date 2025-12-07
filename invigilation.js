@@ -3236,27 +3236,35 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     initStaffDashboard(buyer);
 }
 window.postForExchange = async function (key, email) {
-    // 1. Confirm Action
+    const slot = invigilationSlots[key];
+    
+    // 1. SECURITY CHECK: Lock Status
+    if (!slot.isLocked) {
+        alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked).\n\nIf you cannot do this duty, please use the 'Cancel Duty' button in the calendar detail view instead of posting it for exchange.");
+        return;
+    }
+
+    // 2. Confirm Action
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible (and assigned) until someone else accepts it.")) return;
 
-    const slot = invigilationSlots[key];
     if (!slot.exchangeRequests) slot.exchangeRequests = [];
 
     if (!slot.exchangeRequests.includes(email)) {
-        // 2. Update Local Data
+        // 3. Update Local Data
         slot.exchangeRequests.push(email);
 
-        // 3. LOGGING
+        // 4. LOGGING
         logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
 
-        // 4. IMMEDIATE UI UPDATES
+        // 5. IMMEDIATE UI UPDATES
         try {
             renderStaffCalendar(email);
             if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+            if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(email);
             window.closeModal('day-detail-modal');
         } catch (e) { console.error("UI Update Error:", e); }
 
-        // 5. Save to Cloud
+        // 6. Save to Cloud
         await syncSlotsToCloud();
     }
 }
@@ -6386,7 +6394,6 @@ window.addEventListener('offline', () => {
 // ==========================================
 // 📋 STAFF UPCOMING SCHEDULE (Interactive & Auto-Height)
 // ==========================================
-
 function renderStaffUpcomingSummary(email) {
     const viewStaff = document.getElementById('view-staff');
     if (!viewStaff) return;
@@ -6401,7 +6408,6 @@ function renderStaffUpcomingSummary(email) {
         const statsGrid = viewStaff.querySelector('.grid');
         container = document.createElement('div');
         container.id = 'staff-upcoming-summary';
-        // Removed 'min-h' and fixed height classes. Now using flex-col for structure.
         container.className = "mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col";
 
         if (statsGrid && statsGrid.nextSibling) {
@@ -6428,10 +6434,24 @@ function renderStaffUpcomingSummary(email) {
             const label = isPosted ? "⏳ Posted" : "✅ Duty";
             const style = isPosted ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-green-100 text-green-700 border-green-200";
 
-            // Determine Action based on status
-            // If Posted -> Click to Withdraw. If Duty -> Click to Post.
-            const action = isPosted ? `withdrawExchange('${key}', '${email}')` : `postForExchange('${key}', '${email}')`;
-            const hint = isPosted ? "Click to Withdraw Request" : "Click to Post for Exchange";
+            // --- FIXED ACTION LOGIC ---
+            let action = "";
+            let hint = "";
+
+            if (isPosted) {
+                action = `withdrawExchange('${key}', '${email}')`;
+                hint = "Click to Withdraw Request";
+            } else if (slot.isLocked) {
+                // Only allow exchange if locked
+                action = `postForExchange('${key}', '${email}')`;
+                hint = "Click to Post for Exchange";
+            } else {
+                // If unlocked, open details (to allow Cancel)
+                const [dStr] = key.split(' | ');
+                action = `openDayDetail('${dStr}', '${email}')`;
+                hint = "Slot Open: Click to View/Cancel";
+            }
+            // --------------------------
 
             upcomingDuties.push({
                 date: date,
@@ -6488,7 +6508,7 @@ function renderStaffUpcomingSummary(email) {
         </div>
     `;
 
-    // Unavailability Warning (Compact)
+    // Unavailability Warning
     if (uniqueUnav.length > 0) {
         htmlContent += `
             <div class="bg-red-50 px-4 py-3 border-b border-red-100 flex items-start gap-2">
@@ -6501,9 +6521,6 @@ function renderStaffUpcomingSummary(email) {
     }
 
     // Duty List Container
-    // - max-height: 60vh (Limits tall lists)
-    // - h-auto (Shrinks for short lists)
-    // - overflow-y-auto (Scrolls only when needed)
     htmlContent += `<div class="overflow-y-auto custom-scroll bg-white" style="max-height: 60vh; height: auto;">`;
 
     if (upcomingDuties.length === 0) {
@@ -6523,7 +6540,6 @@ function renderStaffUpcomingSummary(email) {
             const isToday = item.date.toDateString() === new Date().toDateString();
             const rowBg = isToday ? "bg-blue-50/50" : "hover:bg-indigo-50";
 
-            // Added cursor-pointer and onclick handler
             htmlContent += `
                 <div class="p-3 flex items-center justify-between transition cursor-pointer group ${rowBg}" 
                      onclick="${item.action}" title="${item.hint}">
@@ -6545,7 +6561,7 @@ function renderStaffUpcomingSummary(email) {
                             ${item.label}
                         </div>
                         <div class="text-[9px] text-gray-400 opacity-0 group-hover:opacity-100 transition">
-                            ${item.label.includes('Posted') ? 'Withdraw' : 'Exchange'} ➝
+                            ${item.label.includes('Posted') ? 'Withdraw' : (item.action.includes('postForExchange') ? 'Exchange ➝' : 'Details ➝')}
                         </div>
                     </div>
                 </div>
@@ -6557,6 +6573,7 @@ function renderStaffUpcomingSummary(email) {
     htmlContent += `</div>`;
     container.innerHTML = htmlContent;
 }
+
 
 // --- STAFF PAGINATION LISTENERS ---
 const btnStaffPrev = document.getElementById('btn-staff-prev');
