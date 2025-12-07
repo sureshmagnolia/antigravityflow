@@ -1127,12 +1127,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnDownloadReport = document.createElement('button');
     btnDownloadReport.id = 'download-report-pdf-btn';
     btnDownloadReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700";
-    btnDownloadReport.innerHTML = `⬇️ PRINT`;
+    btnDownloadReport.innerHTML = `⬇️ Download PDF`;
 
-    if (finalPrintButton && finalPrintButton.parentNode) {
-        // Insert only if not already there
+    // FIX: Anchor to 'Clear Report' button instead of 'Print' button (which might be deleted)
+    if (clearReportButton && clearReportButton.parentNode) {
         if (!document.getElementById('download-report-pdf-btn')) {
-            finalPrintButton.parentNode.insertBefore(btnDownloadReport, finalPrintButton.nextSibling);
+            // Insert "Download" BEFORE "Clear Report"
+            clearReportButton.parentNode.insertBefore(btnDownloadReport, clearReportButton);
         }
     }
 
@@ -8914,6 +8915,16 @@ Are you sure you want to update these records?
             generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
         }
     });
+   
+    // --- Event listener for the "Print" button ---
+    if (finalPrintButton) {
+        finalPrintButton.addEventListener('click', () => {
+            // This button now exclusively uses the native browser print function
+            window.print();
+        });
+    }
+    
+    
     // --- Event listener for "Generate Room Stickers" (V10: Dynamic RegNo Width) ---
     const generateStickerButton = document.getElementById('generate-sticker-button');
 
