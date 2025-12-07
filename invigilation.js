@@ -1020,6 +1020,7 @@ window.changeRankPage = function (delta) {
     renderStaffRankList(myEmail);
 }
 
+
 function renderStaffCalendar(myEmail) {
     const year = currentCalDate.getFullYear();
     const month = currentCalDate.getMonth();
@@ -1103,10 +1104,19 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Posted";
                 }
                 else if (isAssigned) {
-                    badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold";
-                    icon = "👮";
-                    statusText = "Duty";
-                    glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300";
+                    if (slot.isLocked) {
+                        // LOCKED DUTY: Light Blue + Lock Icon
+                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
+                        icon = "🔒";
+                        statusText = "Duty";
+                        glowClass = "shadow-sm shadow-blue-100";
+                    } else {
+                        // UNLOCKED DUTY: Deep Blue + Police Icon
+                        badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold";
+                        icon = "👮";
+                        statusText = "Duty";
+                        glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300";
+                    }
                 }
                 else if (isMarketAvailable) {
                     badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse";
@@ -1150,7 +1160,6 @@ function renderStaffCalendar(myEmail) {
                 let hasUnavail = false;
                 let unavailHtml = `<div class="flex flex-col gap-0.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
 
-                // *** FIX: Changed 'email' to 'myEmail' below ***
                 if (adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail))) {
                     hasUnavail = true;
                     unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ⛔</span><span class="hidden md:inline">FN ⛔ Unavail</span></div>`;
@@ -1177,7 +1186,6 @@ function renderStaffCalendar(myEmail) {
     }
     if (ui.calGrid) ui.calGrid.innerHTML = html;
 }
-
 
 
 function renderExchangeMarket(myEmail) {
