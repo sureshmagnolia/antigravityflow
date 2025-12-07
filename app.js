@@ -716,6 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // --- STEP 3: Bulk Data Handling ---
             let localAllotment = localStorage.getItem('examRoomAllotment');
+            let localBaseData = localStorage.getItem('examBaseData'); // <--- DEFINITION ADDED HERE
             const bulkDataObj = {};
             if (localBaseData) bulkDataObj['examBaseData'] = localBaseData;
             if (localAllotment && localAllotment !== '{}') bulkDataObj['examRoomAllotment'] = localAllotment;
