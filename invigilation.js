@@ -1114,22 +1114,16 @@ function renderStaffCalendar(myEmail) {
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${String(day).padStart(2, '0')}.${String(month + 1).padStart(2, '0')}.${year}`;
         const slots = slotsByDate[day] || [];
-
-        // Check if this is today
         const today = new Date();
         const isToday = (day === today.getDate() && month === today.getMonth() && year === today.getFullYear());
 
-        // Base Cell Style
         let cellClass = "relative bg-white/80 hover:bg-white border border-white/60 hover:border-indigo-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 min-h-[4.5rem] md:min-h-[8rem] rounded-md md:rounded-xl m-px md:m-0.5 overflow-hidden group flex flex-col shadow-sm backdrop-blur-md";
-
-        // Date Circle
         let dateClass = isToday
             ? "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-red-700 text-[10px] md:text-xs font-bold text-white transition-colors duration-300 shadow-lg border border-red-800 z-20"
             : "absolute top-1 md:top-2 left-1/2 -translate-x-1/2 w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full bg-white/90 text-[10px] md:text-xs font-bold text-gray-800 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300 shadow-md border border-gray-200 group-hover:border-indigo-400 z-20";
 
         let contentHtml = "";
 
-        // --- RENDER SLOTS ---
         if (slots.length > 0) {
             contentHtml += `<div class="flex flex-col gap-0.5 md:gap-1.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
             slots.sort((a, b) => a.sessionType === "FN" ? -1 : 1);
@@ -1139,7 +1133,6 @@ function renderStaffCalendar(myEmail) {
                 const needed = slot.required;
                 const available = Math.max(0, needed - filled);
 
-                // Logic
                 const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
                 const isAssigned = slot.assigned.includes(myEmail);
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
@@ -1147,14 +1140,11 @@ function renderStaffCalendar(myEmail) {
                 const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
                 const isAdminLocked = slot.isAdminLocked || false; // NEW
 
-                // Badge Styles (Default)
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
                 let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
                 let glowClass = "";
 
-                // --- PRIORITY LOGIC FOR DISPLAY ---
-                
                 if (isCompleted) {
                     badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
                     icon = "✅";
@@ -1167,7 +1157,11 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Posted";
                 }
                 else if (isAssigned) {
-                    if (slot.isLocked || isAdminLocked) {
+                    if (isAdminLocked) {
+                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-purple-300"; // Highlight admin lock on assigned
+                        icon = "🛡️"; // Show Shield
+                        statusText = "Duty";
+                    } else if (slot.isLocked) {
                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
                         icon = "🔒";
                         statusText = "Duty";
@@ -1192,10 +1186,9 @@ function renderStaffCalendar(myEmail) {
                 // --- NEW: ADMIN LOCK DISPLAY ---
                 else if (isAdminLocked) {
                     badgeClass = "bg-gradient-to-br from-purple-50 to-purple-100 text-purple-400 border-purple-200";
-                    icon = "🛡️";
-                    statusText = "Paused"; // 'Paused' or 'Admin' implies temporary restriction
+                    icon = "🛡️"; // Shield
+                    statusText = "Paused"; 
                 }
-                // -------------------------------
                 else if (slot.isLocked) {
                     badgeClass = "bg-gray-100 text-gray-400 border-gray-200";
                     icon = "🔒";
@@ -1207,7 +1200,6 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Full";
                 }
 
-                // Compact Card Layout
                 contentHtml += `
                     <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} p-0.5 md:p-1.5 shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
                         <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
@@ -1242,9 +1234,7 @@ function renderStaffCalendar(myEmail) {
             }
         }
 
-        // Add 'Empty' Click Handler
         let clickAttr = `onclick="openDayDetail('${dateStr}', '${myEmail}')"`;
-
         html += `
             <div class="${cellClass}" ${clickAttr}>
                 <div class="${dateClass}">${day}</div>
