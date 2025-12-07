@@ -219,6 +219,7 @@ function initializeSession(id, adminStatus, roleName) {
     setupLiveSync(currentCollegeId, isAdmin ? 'admin' : 'staff');
 }
 
+// OPTIMIZED: Uses LocalStorage to prevent waiting for Cloud
 function setupLiveSync(collegeId, mode) {
     // 1. Clear Old Listeners
     if (cloudUnsubscribe) cloudUnsubscribe();
@@ -228,40 +229,30 @@ function setupLiveSync(collegeId, mode) {
 
     const docRef = doc(db, "colleges", collegeId);
 
-    // 2. LISTEN TO CONFIG (Main Doc) - Low Bandwidth
+    // --- OPTIMIZATION: LOAD FROM CACHE FIRST ---
+    const cachedConfig = localStorage.getItem(`config_${collegeId}`);
+    if (cachedConfig) {
+        console.log("⚡ Loaded Config from Cache");
+        applyCollegeConfig(JSON.parse(cachedConfig), mode, false); // false = don't re-render everything yet
+    }
+
+    // 2. LISTEN TO CONFIG (Main Doc)
+    // This will update the cache if the cloud version is newer
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             updateSyncStatus("Synced", "success");
-            collegeData = docSnap.data();
-
-            // CONFIGS
-            designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
-            const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
-            rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
-            googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
-            departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
+            const data = docSnap.data();
             
-            // Vacation & Targets
-            const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
-            vacationStart = vacConfig.start || "";
-            vacationEnd = vacConfig.end || "";
-            vacationExtraHolidays = new Set(vacConfig.holidays || []);
-            
-            if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
-            if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
-
-            // UI Initializers (Run once scaffold is ready)
-            if (mode === 'admin') {
-                if (document.getElementById('view-admin').classList.contains('hidden') &&
-                    document.getElementById('view-staff').classList.contains('hidden')) {
-                    initAdminDashboard();
-                }
-                updateAdminUI();
+            // Only update if data actually changed (Basic check)
+            const currentCache = localStorage.getItem(`config_${collegeId}`);
+            if (currentCache !== JSON.stringify(data)) {
+                localStorage.setItem(`config_${collegeId}`, JSON.stringify(data));
+                applyCollegeConfig(data, mode, true);
             }
         }
     });
 
-    // 3. LISTEN TO SLOTS (Sub-collection) - High Updates
+    // 3. LISTEN TO SLOTS (Keep as is - high frequency)
     const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
     slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -270,11 +261,11 @@ function setupLiveSync(collegeId, mode) {
             advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
 
-            // Reactively Render Grid/Calendar
             if (mode === 'admin') {
                 renderSlotsGridAdmin();
                 renderAdminTodayStats();
             } else if (currentUser) {
+                // Refresh Staff UI
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
                     renderStaffCalendar(me.email);
@@ -285,28 +276,23 @@ function setupLiveSync(collegeId, mode) {
         }
     });
 
-    // 4. LISTEN TO STAFF (Sub-collection) - Medium Updates
+    // 4. LISTEN TO STAFF (Keep as is)
     const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
     staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             staffData = JSON.parse(data.examStaffData || '[]');
-            // Load Mapping (Allocation)
-            const mappingData = JSON.parse(data.examInvigilatorMapping || '{}');
-            // We don't have a global var for mapping in this file yet, but let's persist it
-            localStorage.setItem('examInvigilatorMapping', JSON.stringify(mappingData));
-
+            
             if (mode === 'admin') {
                 renderStaffTable();
                 updateAdminUI();
             } else if (currentUser) {
-                // Initialize Staff Dashboard if needed
                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                 if (me) {
                     if (document.getElementById('view-staff').classList.contains('hidden')) {
                         initStaffDashboard(me);
                     } else {
-                        // Refresh Stats
+                        // Refresh Stats Only
                         const done = getDutiesDoneCount(me.email);
                         const pending = Math.max(0, calculateStaffTarget(me) - done);
                         document.getElementById('staff-view-pending').textContent = pending;
@@ -318,6 +304,32 @@ function setupLiveSync(collegeId, mode) {
             }
         }
     });
+}
+
+// Helper to apply config (Shared by Cache & Live)
+function applyCollegeConfig(data, mode, triggerRender) {
+    collegeData = data;
+    designationsConfig = JSON.parse(collegeData.invigDesignations || JSON.stringify(DEFAULT_DESIGNATIONS));
+    const savedRoles = JSON.parse(collegeData.invigRoles || '{}');
+    rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
+    googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
+    departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
+    
+    const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
+    vacationStart = vacConfig.start || "";
+    vacationEnd = vacConfig.end || "";
+    vacationExtraHolidays = new Set(vacConfig.holidays || []);
+    
+    if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
+    if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
+
+    if (triggerRender && mode === 'admin') {
+        if (document.getElementById('view-admin').classList.contains('hidden') &&
+            document.getElementById('view-staff').classList.contains('hidden')) {
+            initAdminDashboard();
+        }
+        updateAdminUI();
+    }
 }
 
 function initAdminDashboard() {
@@ -3948,30 +3960,26 @@ window.viewAutoAssignLogs = async function () {
     }
 }
 // --- ACTIVITY LOGGING SYSTEM (1MB Limit + FIFO) ---
+// OPTIMIZED: Uses 'arrayUnion' to append without reading the document first
 async function logActivity(action, details) {
     try {
         const userEmail = currentUser ? currentUser.email : "Unknown";
         const timestamp = new Date().toISOString();
 
-        // Short keys to save space: t=time, u=user, a=action, d=details
         const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
-
         const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-        const snap = await getDoc(logRef);
 
-        let entries = [];
-        if (snap.exists()) {
-            entries = snap.data().entries || [];
-        }
-
-        entries.push(newEntry);
-
-        // SIZE CHECK: Keep under ~1MB (approx 950k chars)
-        while (JSON.stringify(entries).length > 950000) {
-            entries.shift(); // Remove oldest
-        }
-
-        await setDoc(logRef, { entries: entries });
+        // Use arrayUnion - This writes blindly (Cost: 1 Write, 0 Reads)
+        await updateDoc(logRef, {
+            entries: arrayUnion(newEntry)
+        }).catch(async (err) => {
+            // Fallback: If doc doesn't exist, create it (Cost: 1 Write)
+            if (err.code === 'not-found') {
+                await setDoc(logRef, { entries: [newEntry] });
+            } else {
+                console.error("Log Error:", err);
+            }
+        });
 
     } catch (e) {
         console.error("Logging Error:", e);
@@ -7406,61 +7414,52 @@ window.startNewAcademicYear = async function() {
 let globalLiveUsers = {}; 
 let presenceUnsubscribe = null;
 
-// 1. START TRACKING (Call this on Init)
+// OPTIMIZED: Only fetches users active in the last 24 hours
 window.initLivePresence = function(myEmail, myName, isAdmin) {
     if (!currentCollegeId || !myEmail) return;
 
-     
-    // Sanitize Email for Doc ID
     const myRef = doc(db, "colleges", currentCollegeId, "live_presence", myEmail);
-
-    // A. EVERYONE BROADCASTS (Writes)
     const platform = window.innerWidth < 768 ? "Mobile" : "Desktop";
     
     const sendHeartbeat = (statusOverride) => {
-        // Default to 'online' unless specified
         const status = statusOverride || 'online';
-        
         setDoc(myRef, {
             name: myName,
             email: myEmail,
-            lastSeen: serverTimestamp(),
+            lastSeen: serverTimestamp(), // Server-side time
             device: platform,
             status: status
         }, { merge: true });
     };
 
-    // 1. Send first heartbeat immediately
     sendHeartbeat('online');
-
-    // 2. Regular Heartbeat (Every 5 mins)
     setInterval(() => {
         if (document.visibilityState === 'visible') sendHeartbeat('online');
     }, 5 * 60 * 1000); 
 
-    // 3. EXIT HOOK (The Fix for "Ghost" Online Users)
-    // Triggers when user closes tab or browser
-    window.addEventListener('beforeunload', () => {
-        sendHeartbeat('offline');
-    });
-
-    // 4. IDLE HOOK (Optional: Mark idle when tab is hidden/minimized)
+    window.addEventListener('beforeunload', () => sendHeartbeat('offline'));
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            sendHeartbeat('idle');
-        } else {
-            sendHeartbeat('online');
-        }
+        if (document.visibilityState === 'hidden') sendHeartbeat('idle');
+        else sendHeartbeat('online');
     });
 
-    // B. ONLY ADMINS LISTEN (Reads)
+    // --- ADMIN LISTENER OPTIMIZATION ---
     if (isAdmin) {
-        console.log("🟢 Live Presence: Admin Mode (Listening enabled)");
+        console.log("🟢 Live Presence: Admin Mode (Optimized Listener)");
+        
+        // 1. Calculate Timestamp for "24 Hours Ago"
+        // We only want to download docs of people who have been active recently.
+        const yesterday = new Date();
+        yesterday.setHours(yesterday.getHours() - 24);
+
         const presenceCol = collection(db, "colleges", currentCollegeId, "live_presence");
         
+        // 2. Create Query: lastSeen > yesterday
+        const q = query(presenceCol, where("lastSeen", ">", yesterday));
+
         if (presenceUnsubscribe) presenceUnsubscribe();
         
-        presenceUnsubscribe = onSnapshot(presenceCol, (snapshot) => {
+        presenceUnsubscribe = onSnapshot(q, (snapshot) => {
             const now = Date.now();
             globalLiveUsers = {}; 
             let onlineCount = 0;
@@ -7469,17 +7468,13 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
                 const data = doc.data();
                 if (!data.lastSeen) return;
 
-                const lastSeenTime = data.lastSeen.toMillis ? data.lastSeen.toMillis() : Date.now();
+                // Handle Firestore Timestamp vs Date
+                const lastSeenTime = data.lastSeen.toMillis ? data.lastSeen.toMillis() : new Date(data.lastSeen).getTime();
                 const diffMinutes = (now - lastSeenTime) / 1000 / 60;
 
-                // Priority: 
-                // 1. Explicit 'offline' status from database (The Fix)
-                // 2. Time-based timeout fallback
-                
                 if (data.status === 'offline') {
                      globalLiveUsers[data.email] = { status: 'offline', device: data.device || 'Desktop' };
                 } else if (diffMinutes < 6) { 
-                    // If DB says online/idle AND time is recent
                     globalLiveUsers[data.email] = { status: data.status || 'online', device: data.device || 'Desktop' };
                     if (data.status !== 'idle') onlineCount++;
                 } else if (diffMinutes < 30) {
@@ -7491,9 +7486,12 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
 
             updateLiveStaffWidget(onlineCount);
             
-            // Refresh Grids
-            if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-            if (typeof renderStaffTable === 'function') renderStaffTable(); 
+            // Debounced Render (prevent spam updates)
+            if (window.renderTimeout) clearTimeout(window.renderTimeout);
+            window.renderTimeout = setTimeout(() => {
+                if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+                if (typeof renderStaffTable === 'function') renderStaffTable(); 
+            }, 500);
         });
 
     } else {
