@@ -813,9 +813,7 @@ function renderSlotsGridAdmin() {
     // Adds 32 (8rem / 128px) of empty space at the bottom so the last card scrolls above any mobile bars
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
-// Updated: Render Staff List with Clickable Done Count
-// Updated: Render Staff List with Live Status Icon
-// Updated: Render Staff List with Safety Checks
+// REPLACE your existing renderStaffTable function with this SAFE version
 function renderStaffTable() {
     if (!ui.staffTableBody) return;
     ui.staffTableBody.innerHTML = '';
@@ -824,37 +822,36 @@ function renderStaffTable() {
     const filter = filterInput ? filterInput.value.toLowerCase() : "";
     const today = new Date();
 
-    // 1. Filter & Map Data
+    // 1. Filter & Map Data (SAFE MODE)
     const filteredItems = staffData
         .map((staff, i) => ({ ...staff, originalIndex: i }))
         .filter(item => {
             if (item.status === 'archived') return false;
 
-            // Search Logic (SAFE VERSION)
+            // --- THE FIX: Handle missing data safely ---
             if (filter) {
-                // Fix: Add || "" to ensure we never call toLowerCase() on null/undefined
-                const safeName = (item.name || "").toLowerCase();
-                const safeDept = (item.dept || "").toLowerCase();
-                const safeDesig = (item.designation || "").toLowerCase();
-                
-                const matchName = safeName.includes(filter);
-                const matchDept = safeDept.includes(filter);
-                const matchDesig = safeDesig.includes(filter);
-                
-                if (!matchName && !matchDept && !matchDesig) return false;
+                const name = (item.name || "").toLowerCase();
+                const dept = (item.dept || "").toLowerCase();
+                const desig = (item.designation || "").toLowerCase();
+                const email = (item.email || "").toLowerCase(); // Also search email
+
+                if (!name.includes(filter) && 
+                    !dept.includes(filter) && 
+                    !desig.includes(filter) && 
+                    !email.includes(filter)) {
+                    return false;
+                }
             }
             return true;
         })
-        // Sort: Online Status First -> Dept -> Name
         .sort((a, b) => {
-            // Live Status Sort (Online users go to top)
+            // Sort Logic
             if (window.globalLiveUsers) {
                 const statusA = window.globalLiveUsers[a.email]?.status || 'offline';
                 const statusB = window.globalLiveUsers[b.email]?.status || 'offline';
                 if (statusA === 'online' && statusB !== 'online') return -1;
                 if (statusA !== 'online' && statusB === 'online') return 1;
             }
-
             const deptA = (a.dept || "").toLowerCase();
             const deptB = (b.dept || "").toLowerCase();
             if (deptA < deptB) return -1;
@@ -874,27 +871,20 @@ function renderStaffTable() {
     // Update Controls
     const pageInfo = document.getElementById('staff-page-info');
     if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
-    const prevBtn = document.getElementById('btn-staff-prev');
-    const nextBtn = document.getElementById('btn-staff-next');
-    if (prevBtn) prevBtn.disabled = (currentStaffPage === 1);
-    if (nextBtn) nextBtn.disabled = (currentStaffPage === totalPages);
-
+    
     // 3. Render Rows
     pageItems.forEach((staff) => {
         const index = staff.originalIndex;
-
-        // Ensure name is safe for display
-        const displayName = staff.name || "Unknown Name";
-        const displayDept = staff.dept || "No Dept";
+        // Fallback for missing names
+        const safeName = staff.name || staff.email.split('@')[0];
+        const safeDept = staff.dept || "General";
 
         const target = calculateStaffTarget(staff);
         const done = getDutiesDoneCount(staff.email);
         const pending = Math.max(0, target - done);
-
-        // --- NEW: LIVE STATUS ICON ---
         const liveIcon = window.getLiveStatusIcon ? window.getLiveStatusIcon(staff.email) : '';
+        const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
 
-        // Role Label
         let activeRoleLabel = "";
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRole = staff.roleHistory.find(r => {
@@ -902,14 +892,9 @@ function renderStaffTable() {
                 const end = new Date(r.end);
                 return start <= today && end >= today;
             });
-            if (activeRole) {
-                activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
-            }
+            if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
         }
 
-        const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
-
-        // Lock Logic for Buttons
         let actionButtons = "";
         if (isStaffListLocked) {
             actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
@@ -919,8 +904,7 @@ function renderStaffTable() {
                     <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
                     <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
                     <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
-                </div>
-            `;
+                </div>`;
         }
 
         const row = document.createElement('tr');
@@ -928,76 +912,34 @@ function renderStaffTable() {
 
         row.innerHTML = `
             <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
-                
                 <div class="hidden md:flex items-center">
-                    <div class="mr-2">${liveIcon}</div> <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">
-                        ${displayName.charAt(0)}
-                    </div>
+                    <div class="mr-2">${liveIcon}</div> 
+                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">${safeName.charAt(0)}</div>
                     <div>
-                        <div class="text-sm font-bold text-gray-800">${displayName}</div>
-                        <div class="text-xs text-gray-500 mt-0.5">
-                            <span class="font-semibold text-gray-600">${displayDept}</span> | ${staff.designation || ""} ${activeRoleLabel}
-                        </div>
+                        <div class="text-sm font-bold text-gray-800">${safeName}</div>
+                        <div class="text-xs text-gray-500 mt-0.5"><span class="font-semibold text-gray-600">${safeDept}</span> | ${staff.designation || ""} ${activeRoleLabel}</div>
                     </div>
                 </div>
-
                 <div class="md:hidden">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
-                             <div class="mr-1">${liveIcon}</div> <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">
-                                ${displayName.charAt(0)}
-                            </div>
+                             <div class="mr-1">${liveIcon}</div> 
+                             <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">${safeName.charAt(0)}</div>
                             <div>
-                                <div class="text-sm font-bold text-gray-900">${displayName}</div>
-                                <div class="text-xs text-gray-500 font-medium">${displayDept} ${activeRoleLabel}</div>
-                                <div class="text-[10px] text-gray-400">${staff.designation || ""}</div>
+                                <div class="text-sm font-bold text-gray-900">${safeName}</div>
+                                <div class="text-xs text-gray-500 font-medium">${safeDept} ${activeRoleLabel}</div>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="grid grid-cols-3 gap-2 mb-3 text-center bg-gray-50 p-2 rounded-lg border border-gray-100">
-                        <div>
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Target</div>
-                            <div class="font-mono text-sm font-bold text-gray-700">${target}</div>
-                        </div>
-                        <div class="border-l border-gray-200">
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Done</div>
-                            <div class="font-mono text-sm font-bold text-blue-600 cursor-pointer hover:underline hover:text-blue-800 transition-colors" 
-                                 onclick="openCompletedDutiesModal('${staff.email}')" title="Click to view history">
-                                ${done}
-                            </div>
-                        </div>
-                        <div class="border-l border-gray-200">
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Pending</div>
-                            <div class="font-mono text-sm font-bold ${statusColor}">${pending}</div>
                         </div>
                     </div>
                 </div>
             </td>
-
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
-
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">
-                <button onclick="openCompletedDutiesModal('${staff.email}')" 
-                        class="text-blue-600 hover:text-blue-800 hover:underline decoration-blue-400 underline-offset-2 transition-all cursor-pointer focus:outline-none" 
-                        title="View Duty History">
-                    ${done}
-                </button>
-            </td>
-
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
             <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
-
-            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">
-                ${actionButtons}
-            </td>
+            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">${actionButtons}</td>
         `;
         ui.staffTableBody.appendChild(row);
     });
-
-    const spacer = document.createElement('tr');
-    spacer.className = "block md:hidden h-32 border-none bg-transparent pointer-events-none";
-    spacer.innerHTML = `<td class="block border-none p-0"></td>`;
-    ui.staffTableBody.appendChild(spacer);
 }
 
 function renderStaffRankList(myEmail) {
