@@ -6326,7 +6326,7 @@ function updateLocalSlotsFromStudents() {
             }
 
             const reader = new FileReader();
-            reader.onload = (event) => {
+               reader.onload = async (event) => { //
                 try {
                     const jsonString = event.target.result;
                     const restoredData = JSON.parse(jsonString);
