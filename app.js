@@ -701,9 +701,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (bestVal) finalMainData[key] = bestVal;
             });
 
-            // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE) ---
-            // Calculates requirements locally but preserves cloud assignments
-            let localBaseData = localStorage.getItem('examBaseData'); // <--- DEFINED HERE
+            // --- NEW: INVIGILATION SLOT CALCULATOR (SMART MERGE V4) ---
+            // Matches invigilation.js: Stream-wise Scribes + 10% Reserve Rule
+            let localBaseData = localStorage.getItem('examBaseData');
             if (localBaseData) {
                 const students = JSON.parse(localBaseData);
 
@@ -713,24 +713,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const sessionStats = {};
 
-                // 2. Count Candidates (By Stream) vs Scribes per Session
+                // 2. Count Candidates (Normal & Scribe) Separately by Stream
                 students.forEach(s => {
-                    // Trim spaces for safety
                     const d = s.Date ? s.Date.trim() : "";
                     const t = s.Time ? s.Time.trim() : "";
                     if(!d || !t) return;
 
                     const key = `${d} | ${t}`;
                     if (!sessionStats[key]) {
-                        sessionStats[key] = { streams: {}, scribes: 0 };
+                        sessionStats[key] = { 
+                            normalStreams: {}, 
+                            scribeStreams: {}, 
+                            totalScribes: 0,
+                            totalStudents: 0
+                        };
                     }
 
+                    sessionStats[key].totalStudents++;
+                    const strm = s.Stream || "Regular";
+
                     if (scribeRegNos.has(s['Register Number'])) {
-                        sessionStats[key].scribes++;
+                        // Track Scribe by Stream
+                        if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
+                        sessionStats[key].scribeStreams[strm]++;
+                        sessionStats[key].totalScribes++;
                     } else {
-                        const strm = s.Stream || "Regular";
-                        if (!sessionStats[key].streams[strm]) sessionStats[key].streams[strm] = 0;
-                        sessionStats[key].streams[strm]++;
+                        // Track Normal by Stream
+                        if (!sessionStats[key].normalStreams[strm]) sessionStats[key].normalStreams[strm] = 0;
+                        sessionStats[key].normalStreams[strm]++;
                     }
                 });
 
@@ -738,44 +748,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cloudSlots = JSON.parse(cloudData.examInvigilationSlots || '{}');
                 const mergedSlots = { ...cloudSlots };
 
-                // 4. Update Requirements (Exact Match to Invigilation.js)
+                // 4. Update Requirements (Correct Math)
                 Object.keys(sessionStats).forEach(key => {
                     const stats = sessionStats[key];
+                    let baseRequirement = 0;
 
-                    // A. Candidates
-                    let candidateReq = 0;
-                    Object.values(stats.streams).forEach(count => {
-                        candidateReq += Math.ceil(count / 30);
+                    // A. Normal Candidates (1 Room per 30, Stream-Wise)
+                    Object.values(stats.normalStreams).forEach(count => {
+                        baseRequirement += Math.ceil(count / 30);
                     });
 
-                    // B. Scribes
-                    const scribeReq = Math.ceil(stats.scribes / 5);
+                    // B. Scribes (1 Room per 5, Stream-Wise)
+                    Object.values(stats.scribeStreams).forEach(count => {
+                        baseRequirement += Math.ceil(count / 5);
+                    });
 
-                    // C. Base
-                    const baseReq = candidateReq + scribeReq;
+                    // C. Reserve (10% of Base, Rounded UP)
+                    const reserve = Math.ceil(baseRequirement * 0.10);
+                    const totalRequired = baseRequirement + reserve;
 
-                    // D. Reserve: 10% of Base (Rounded Up)
-                    const reserve = Math.ceil(baseReq * 0.10);
-                    const totalRequired = baseReq + reserve;
-
-                    const studentCount = Object.values(stats.streams).reduce((a, b) => a + b, 0) + stats.scribes;
+                    const studentCount = stats.totalStudents;
+                    const scribeCount = stats.totalScribes;
 
                     if (!mergedSlots[key]) {
                         // New Session
                         mergedSlots[key] = {
                             required: totalRequired,
-                            reserveCount: reserve, // <--- SAVED HERE
+                            reserveCount: reserve, // Store reserve separately
                             assigned: [],
                             unavailable: [],
                             isLocked: false,
-                            scribeCount: stats.scribes,
+                            scribeCount: scribeCount,
                             studentCount: studentCount
                         };
                     } else {
                         // Existing: Update Requirement & Metadata
                         mergedSlots[key].required = totalRequired;
-                        mergedSlots[key].reserveCount = reserve; 
-                        mergedSlots[key].scribeCount = stats.scribes;
+                        mergedSlots[key].reserveCount = reserve;
+                        mergedSlots[key].scribeCount = scribeCount;
                         mergedSlots[key].studentCount = studentCount;
                     }
                 });
