@@ -7375,8 +7375,7 @@ let presenceUnsubscribe = null;
 window.initLivePresence = function(myEmail, myName, isAdmin) {
     if (!currentCollegeId || !myEmail) return;
 
-    const { doc, setDoc, serverTimestamp, onSnapshot, collection } = window.firebase;
-    
+     
     // Sanitize Email for Doc ID
     const myRef = doc(db, "colleges", currentCollegeId, "live_presence", myEmail);
 
