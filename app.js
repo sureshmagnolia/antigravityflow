@@ -13085,7 +13085,36 @@ Are you sure?
         roomSettingsModal.classList.add('hidden');
     }
 
+// ==========================================
+    // ☁️ FORCE CLOUD SYNC (Header Button)
+    // ==========================================
+    const headerSyncStatus = document.getElementById('sync-status');
+    
+    if (headerSyncStatus) {
+        // 1. Visual Cues
+        headerSyncStatus.style.cursor = "pointer";
+        headerSyncStatus.title = "Click to Force Save to Cloud";
+        headerSyncStatus.classList.add("hover:underline"); // Add underline on hover
 
+        // 2. Click Handler
+        headerSyncStatus.addEventListener('click', async () => {
+            const currentText = headerSyncStatus.textContent;
+            
+            // Prevent double-clicking if already saving
+            if (currentText === "Saving..." || currentText === "Connecting...") return;
+
+            if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
+                if (typeof syncDataToCloud === 'function') {
+                    // Update UI immediately
+                    updateSyncStatus("Saving...", "neutral");
+                    // Trigger the save
+                    await syncDataToCloud();
+                } else {
+                    alert("Sync function is not ready yet. Please wait.");
+                }
+            }
+        });
+    }
     // Initial Call (in case we start on settings page or refresh)
     updateStudentPortalLink();
     // --- NEW: Restore Last Active Tab ---
