@@ -955,33 +955,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 // --- TIME NORMALIZER (Fixes 2:00 vs 02:00 issue) ---
+    // --- UNIVERSAL TIME NORMALIZER (Handles :, ., 24h, 12h) ---
     function normalizeTime(timeStr) {
         if (!timeStr) return "";
         
-        let h, m, ampm;
         const t = timeStr.trim().toUpperCase();
+        
+        // Regex to find HH, MM, and optional AM/PM
+        // Allows ':' or '.' as separators
+        // Allows optional space before AM/PM
+        const match = t.match(/(\d{1,2})[:.](\d{2})\s*(AM|PM)?/);
 
-        // Check format: "14:30" (24h) OR "2:30 PM" / "02:30 PM" (12h)
-        if (t.includes("AM") || t.includes("PM")) {
-            // 12-Hour Format Parse
-            const match = t.match(/(\d+):(\d+)\s*(AM|PM)/);
-            if (!match) return timeStr; // Return original if parse fails
-            h = parseInt(match[1], 10);
-            m = match[2];
-            ampm = match[3];
-        } else {
-            // 24-Hour Format Parse (from HTML Inputs)
-            const parts = t.split(':');
-            if (parts.length < 2) return timeStr;
-            h = parseInt(parts[0], 10);
-            m = parts[1];
+        if (!match) return timeStr; // Return original if really weird
+
+        let h = parseInt(match[1], 10);
+        const m = match[2];
+        let ampm = match[3]; // Might be undefined if 24h format
+
+        // LOGIC A: If AM/PM is present (12-hour format input)
+        if (ampm) {
+            // Standardize 12-hour formatting (just padding)
+        } 
+        // LOGIC B: No AM/PM (24-hour format input, e.g. "14:30" or "09:30")
+        else {
             ampm = h >= 12 ? "PM" : "AM";
             h = h % 12;
-            h = h ? h : 12; // 0 becomes 12
+            h = h ? h : 12; // 0 or 12 becomes 12
         }
 
-        // FORMAT: HH:MM AM/PM (Always 2 digits for hour)
-        const hh = String(h).padStart(2, '0'); 
+        // Final Formatting: Always 02:00 PM
+        const hh = String(h).padStart(2, '0');
         return `${hh}:${m} ${ampm}`;
     }
     // Helper for status UI (Updates Desktop & Mobile)
@@ -12521,7 +12524,140 @@ Are you sure?
         w.document.close();
     }
 
+// ==========================================
+    // 🔧 DATA NORMALIZATION TOOL (Fixes Time Formats)
+    // ==========================================
+    const btnNormalizeTime = document.getElementById('btn-normalize-time');
+    
+    if (btnNormalizeTime) {
+        btnNormalizeTime.addEventListener('click', async () => {
+            if (!confirm("⚠️ MAINTENANCE: Fix Time Formats?\n\nThis will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
 
+            btnNormalizeTime.disabled = true;
+            btnNormalizeTime.textContent = "Processing...";
+
+            try {
+                // 1. Helper: Ensure 2-digit Hour (Reuse global if avail, else local)
+                const normTime = (tStr) => {
+                    if (!tStr) return "";
+                    const t = tStr.trim().toUpperCase();
+                    // Parse 12h or 24h
+                    const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/);
+                    if (!match) return tStr;
+                    
+                    let h = parseInt(match[1]);
+                    const m = match[2];
+                    const ap = match[3] || (h >= 12 ? "PM" : "AM");
+                    
+                    // Logic to handle 24h input conversion if needed
+                    if (!match[3] && h > 12) { 
+                        h -= 12; 
+                    } 
+                    
+                    // Format
+                    const hh = String(h).padStart(2, '0');
+                    return `${hh}:${m} ${ap}`;
+                };
+
+                // 2. Fix Student Data (Base Data)
+                let studentUpdateCount = 0;
+                if (allStudentData) {
+                    allStudentData.forEach(s => {
+                        const oldT = s.Time;
+                        const newT = normTime(oldT);
+                        if (oldT !== newT) {
+                            s.Time = newT;
+                            studentUpdateCount++;
+                        }
+                    });
+                    localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+                }
+
+                // 3. Fix Object Keys (Slots, Allotments, etc.)
+                // type: 'array' (Allotment), 'object' (Scribe/Mapping), 'slot' (Invig Slots)
+                const fixStorageKeys = (keyName, type) => {
+                    const raw = localStorage.getItem(keyName);
+                    if (!raw) return;
+                    
+                    let data = {};
+                    try { data = JSON.parse(raw); } catch(e){ return; }
+
+                    let changed = false;
+                    const newData = {};
+
+                    Object.keys(data).forEach(oldKey => {
+                        if (oldKey.includes('|')) {
+                            const [d, t] = oldKey.split('|');
+                            if (d && t) {
+                                const newT = normTime(t);
+                                const newKey = `${d.trim()} | ${newT}`;
+                                
+                                if (newKey !== oldKey) {
+                                    changed = true;
+                                    console.log(`Migrating: ${oldKey} -> ${newKey}`);
+                                }
+
+                                if (newData[newKey]) {
+                                    // MERGE COLLISION
+                                    if (type === 'array') {
+                                        // Concatenate arrays (Room Allotments, Absentees)
+                                        newData[newKey] = [...newData[newKey], ...data[oldKey]];
+                                    } else if (type === 'object') {
+                                        // Merge objects (Scribe Maps, Invig Maps)
+                                        newData[newKey] = { ...newData[newKey], ...data[oldKey] };
+                                    } else if (type === 'slot') {
+                                        // Invigilation Slots (Complex Merge)
+                                        const target = newData[newKey];
+                                        const source = data[oldKey];
+                                        // Merge Assigned Staff (Unique)
+                                        target.assigned = [...new Set([...target.assigned, ...source.assigned])];
+                                        // Merge Unavailable
+                                        target.unavailable = [...target.unavailable, ...source.unavailable];
+                                        // Sum Counts
+                                        target.studentCount += source.studentCount;
+                                        target.scribeCount += source.scribeCount;
+                                        // Keep strict lock if either was locked
+                                        target.isLocked = target.isLocked || source.isLocked;
+                                    }
+                                } else {
+                                    // No collision, just move
+                                    newData[newKey] = data[oldKey];
+                                }
+                            } else {
+                                newData[oldKey] = data[oldKey];
+                            }
+                        } else {
+                            newData[oldKey] = data[oldKey];
+                        }
+                    });
+
+                    if (changed) {
+                        localStorage.setItem(keyName, JSON.stringify(newData));
+                    }
+                };
+
+                // Run Fixers
+                fixStorageKeys('examRoomAllotment', 'array');      // Room Allotments
+                fixStorageKeys('examAbsenteeList', 'array');       // Absentee Lists
+                fixStorageKeys('examScribeAllotment', 'object');   // Scribe Allocations
+                fixStorageKeys('examInvigilatorMapping', 'object');// Invig Room Assignments
+                fixStorageKeys('examInvigilationSlots', 'slot');   // Invigilation Duty Slots
+
+                // 4. Sync & Reload
+                if (typeof syncDataToCloud === 'function') await syncDataToCloud();
+
+                alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
+                window.location.reload();
+
+            } catch (e) {
+                console.error(e);
+                alert("Error during normalization: " + e.message);
+            } finally {
+                btnNormalizeTime.disabled = false;
+                btnNormalizeTime.textContent = "Fix/Normalize Time Formats";
+            }
+        });
+    }
 
     // ==========================================
     // ☁️ SUPER ADMIN: STORAGE MONITOR
