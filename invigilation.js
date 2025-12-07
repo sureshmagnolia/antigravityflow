@@ -1974,34 +1974,56 @@ window.waNotify = function (key) {
     const msg = encodeURIComponent(`Exam Duty: ${key}.`);
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
+
 window.calculateSlotsFromSchedule = async function () {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-    if (btn) { btn.disabled = true; btn.innerText = "Checking Cloud..."; }
+    const originalText = btn ? btn.innerText : "Sync Cloud";
+    
+    if (btn) { btn.disabled = true; btn.innerText = "⏳ Checking Cloud..."; }
 
     try {
+        if(!currentCollegeId) throw new Error("You are not logged in or College ID is missing.");
+
         // 1. Fetch Data
+        updateSyncStatus("Downloading Data...", "neutral");
         const mainRef = doc(db, "colleges", currentCollegeId);
         const mainSnap = await getDoc(mainRef);
         if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
 
         let fullData = mainSnap.data();
+        
+        // Fetch Chunks if needed
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index"));
         const querySnapshot = await getDocs(q);
         let fullPayload = "";
         querySnapshot.forEach(doc => { if (doc.data().payload) fullPayload += doc.data().payload; });
-        if (fullPayload) fullData = { ...fullData, ...JSON.parse(fullPayload) };
+        
+        if (fullPayload) {
+            try {
+                const bulkData = JSON.parse(fullPayload);
+                fullData = { ...fullData, ...bulkData };
+            } catch(e) { console.error("Chunk parse error", e); }
+        }
 
         const students = JSON.parse(fullData.examBaseData || '[]');
         const scribeList = JSON.parse(fullData.examScribeList || '[]');
         const scribeRegNos = new Set(scribeList.map(s => s.regNo));
 
-        if (students.length === 0) throw new Error("No exam data found.");
+        if (students.length === 0) {
+            alert("⚠️ Cloud Check Complete: No student data found in the cloud.\n\nPlease upload a CSV/PDF in the main ExamFlow app and click 'Save to Cloud' first.");
+            return;
+        }
 
         // 2. Advanced Calculation
         const sessions = {};
         students.forEach(s => {
-            const key = `${s.Date} | ${s.Time}`;
+            // Normalize Date/Time (Trim spaces)
+            const d = s.Date ? s.Date.trim() : "";
+            const t = s.Time ? s.Time.trim() : "";
+            if(!d || !t) return;
+
+            const key = `${d} | ${t}`;
             if (!sessions[key]) {
                 sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
             }
@@ -2018,22 +2040,11 @@ window.calculateSlotsFromSchedule = async function () {
         });
 
         let changesLog = [];
-        let removalLog = [];
         let newSlots = { ...invigilationSlots };
         let hasChanges = false;
 
-        // --- A. CLEANUP LEGACY DATA (Remove 'courses' field) ---
-        Object.keys(newSlots).forEach(k => {
-            if (newSlots[k].courses) {
-                delete newSlots[k].courses; // Remove unwanted data
-                hasChanges = true; // Mark for save
-            }
-        });
-        // -------------------------------------------------------
-
         Object.keys(sessions).forEach(key => {
             const data = sessions[key];
-            const [datePart, timePart] = key.split(' | ');
 
             // --- B. CALCULATE REQUIREMENTS ---
             let calculatedReq = 0;
@@ -2052,149 +2063,72 @@ window.calculateSlotsFromSchedule = async function () {
             const reserve = Math.ceil(calculatedReq * 0.10);
             const finalReq = calculatedReq + reserve;
 
-            // --- C. Fetch Official Exam Name (Robust Stream Check) ---
-            let officialExamName = "";
-            if (typeof window.getExamName === "function") {
-                // 1. Try streams actually present in this session
-                const streamsInSession = Object.keys(data.streams);
-                for (const strm of streamsInSession) {
-                    officialExamName = window.getExamName(datePart, timePart, strm);
-                    if (officialExamName) break; // Found a match!
-                }
-
-                // 2. Fallbacks
-                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
-                if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "All Streams");
-            }
-
-            // --- D. Update Slot ---
+            // --- C. Update Slot ---
             if (!newSlots[key]) {
+                // NEW SLOT FOUND
                 newSlots[key] = {
                     required: finalReq,
                     assigned: [],
                     unavailable: [],
                     isLocked: true,
-                    examName: officialExamName,
+                    examName: "Exam", // Default name
                     scribeCount: data.scribeCount,
                     studentCount: data.totalStudents
                 };
                 changesLog.push(`🆕 ${key}: Added (Req: ${finalReq})`);
                 hasChanges = true;
             } else {
-                // Update Metadata
-                if (newSlots[key].scribeCount !== data.scribeCount || newSlots[key].studentCount !== data.totalStudents) {
-                    newSlots[key].scribeCount = data.scribeCount;
+                // EXISTING SLOT - CHECK FOR UPDATES
+                const existingReq = newSlots[key].required || 0;
+                
+                // Only update if requirement CHANGED based on student count
+                // (We don't overwrite if manual adjustments were made unless drastic difference?)
+                // Current logic: Always update to match student data
+                if (existingReq !== finalReq) {
+                     // Check if it's just a manual adjustment (e.g. user set to 6, calc says 5)
+                     // If manual > calc, keep manual? 
+                     // For now, let's notify.
+                     if(finalReq > existingReq) {
+                         newSlots[key].required = finalReq;
+                         changesLog.push(`🔄 ${key}: Requirement increased ${existingReq} ➝ ${finalReq}`);
+                         hasChanges = true;
+                     }
+                }
+                
+                // Always update metadata
+                if (newSlots[key].studentCount !== data.totalStudents) {
                     newSlots[key].studentCount = data.totalStudents;
-                    hasChanges = true;
-                }
-
-                if (officialExamName && newSlots[key].examName !== officialExamName) {
-                    newSlots[key].examName = officialExamName;
-                    hasChanges = true;
-                }
-
-                if (newSlots[key].required !== finalReq) {
-                    changesLog.push(`🔄 ${key}: ${newSlots[key].required} ➝ ${finalReq}`);
-                    hasChanges = true;
-                    newSlots[key].required = finalReq;
-
-                    if (finalReq < newSlots[key].assigned.length) {
-                        const excessCount = newSlots[key].assigned.length - finalReq;
-                        const removed = pruneAssignments(newSlots[key], excessCount);
-                        removed.forEach(r => removalLog.push({ session: key, ...r }));
-                    }
+                    newSlots[key].scribeCount = data.scribeCount;
+                    hasChanges = true; // Silent metadata update
                 }
             }
         });
 
-        // 3. Confirm
+        // 3. Apply & Save
         if (!hasChanges) {
-            alert("✅ Cloud data checked. No changes.");
+            updateSyncStatus("Synced", "success");
+            alert(`✅ Cloud Check Complete.\n\nAnalyzed ${students.length} students across ${Object.keys(sessions).length} sessions.\n\nNo new sessions or requirement changes found.`);
         } else {
-            let msg = "⚠️ UPDATES FOUND ⚠️\n\n" + changesLog.join('\n');
-            // --- Helper: Smart Removal (Lowest Priority First) ---
-            function pruneAssignments(slot, countToRemove) {
-                // 1. Map emails to staff objects with "Pending" score
-                // Higher pending = Higher priority to KEEP.
-                // Lower pending = Has done enough/more duties = Remove First.
-
-                let assignedStaff = slot.assigned.map(email => {
-                    const s = staffData.find(st => st.email === email);
-                    if (!s) return { email, pending: -999, name: email, phone: "" }; // Ghost user
-                    const target = calculateStaffTarget(s);
-                    const pending = target - (s.dutiesDone || 0);
-                    return { email, pending, name: s.name, phone: s.phone };
-                });
-
-                // 2. Sort: Lowest Pending First (Ascending)
-                assignedStaff.sort((a, b) => a.pending - b.pending);
-
-                // 3. Pick victims
-                const toRemove = assignedStaff.slice(0, countToRemove);
-                const keep = assignedStaff.slice(countToRemove);
-
-                // 4. Update Slot
-                slot.assigned = keep.map(s => s.email);
-
-                // 5. Return details for notification
-                return toRemove;
-            }
-            // --- Helper: Show Removal Notification ---
-            function showRemovalNotification(log) {
-                const list = document.getElementById('inconvenience-list');
-                const modalTitle = document.getElementById('inconvenience-modal-subtitle');
-
-                if (list && modalTitle) {
-                    document.querySelector('#inconvenience-modal h3').textContent = "⚠️ Auto-Removal Notification";
-                    modalTitle.textContent = "The following staff were removed due to slot reduction. Please notify them.";
-
-                    list.innerHTML = '';
-                    log.forEach(item => {
-                        // Fix Phone Format
-                        let phone = item.phone ? item.phone.replace(/\D/g, '') : "";
-                        if (phone.length === 10) phone = "91" + phone;
-                        const hasValidPhone = phone.length >= 10;
-
-                        const msg = encodeURIComponent(`Exam Duty Update: Your invigilation duty for ${item.session} has been CANCELLED due to a reduction in required slots.`);
-                        const waLink = hasValidPhone ? `https://wa.me/${phone}?text=${msg}` : "#";
-
-                        list.innerHTML += `
-                <div class="bg-orange-50 border border-orange-200 p-3 rounded-lg flex justify-between items-center">
-                    <div>
-                        <div class="font-bold text-gray-800 text-sm">${item.name}</div>
-                        <div class="text-xs text-gray-500">${item.session}</div>
-                    </div>
-                    ${hasValidPhone ?
-                                `<a href="${waLink}" target="_blank" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-green-700 shadow-sm">Notify WA</a>` :
-                                `<span class="text-xs text-gray-400">No Phone</span>`
-                            }
-                </div>
-            `;
-                    });
-
-                    window.openModal('inconvenience-modal');
-                } else {
-                    alert("Staff removed: \n" + log.map(l => `${l.name} (${l.session})`).join('\n'));
-                }
-            }
-
-            // --- Execute Change Logic ---
-            if (changesLog.length > 0) {
-                if (typeof showRemovalNotification === 'function' && removalLog.length > 0) {
-                    showRemovalNotification(removalLog);
-                }
-            }
-
-        } // End Else (!hasChanges)
+            invigilationSlots = newSlots;
+            await syncSlotsToCloud();
+            renderSlotsGridAdmin();
+            
+            let msg = `✅ SYNC COMPLETE\n\nFound ${students.length} students.\n\nUPDATES APPLIED:\n` + changesLog.join('\n');
+            if(changesLog.length > 10) msg = `✅ SYNC COMPLETE\n\nFound ${students.length} students.\n\n${changesLog.length} sessions were added or updated.`;
+            
+            alert(msg);
+        }
 
     } catch (e) {
         console.error("Auto-Calc Error:", e);
-        alert("Error during calculation: " + e.message);
+        alert("❌ Error checking cloud: " + e.message);
+        updateSyncStatus("Check Failed", "error");
     } finally {
-        const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
         if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
     }
 }
+
+
 
 // --- RESERVE LOGIC ---
 
