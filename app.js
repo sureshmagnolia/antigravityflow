@@ -12985,7 +12985,31 @@ Are you sure?
             window.openModal('danger-zone-modal');
         });
     }
-   
+
+// ==========================================
+    // 🛠️ MODAL HELPERS (Fixes the "not a function" error)
+    // ==========================================
+    window.openModal = function(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.remove('hidden');
+            // Animation handling (optional, matches your CSS)
+            modal.classList.remove('opacity-0'); 
+            modal.classList.add('opacity-100');
+        } else {
+            console.error("Modal not found:", modalId);
+        }
+    };
+
+    window.closeModal = function(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+        }
+    };
+    
     // --- ROOM SETTINGS MODAL LOGIC ---
     const roomSettingsModal = document.getElementById('room-settings-modal');
 
