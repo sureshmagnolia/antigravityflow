@@ -12950,7 +12950,42 @@ Are you sure?
         }
     }
 
+// ==========================================
+    // ☢️ CINEMATIC DANGER ZONE LOGIC
+    // ==========================================
+    
+    const btnEnterDanger = document.getElementById('btn-enter-danger-zone');
+    
+    if (btnEnterDanger) {
+        btnEnterDanger.addEventListener('click', async () => {
+            // 🎬 Cinematic Alert 1: The Gatekeeper
+            // Using standard confirm/alert for now, but phrasing it dramatically
+            
+            const step1 = confirm(
+                "⚠️ HOLD IT RIGHT THERE! ⚠️\n\n" +
+                "You are approaching the DANGER ZONE.\n" +
+                "Here lie the buttons of destruction, master resets, and the void.\n\n" +
+                "Do you have the courage to proceed?"
+            );
 
+            if (!step1) return;
+
+            // 🎬 Cinematic Alert 2: The Final Warning
+            // We use a small timeout to make it feel like a "system check"
+            await new Promise(r => setTimeout(r, 300));
+            
+            alert(
+                "☢️ ACCESS GRANTED... WITH A WARNING ☢️\n\n" +
+                "Some actions inside CANNOT be undone.\n" +
+                "We are not responsible for lost data, tears, or accidental timeline disruptions.\n\n" +
+                "YOU HAVE BEEN WARNED."
+            );
+
+            // Open the Modal
+            window.openModal('danger-zone-modal');
+        });
+    }
+   
     // --- ROOM SETTINGS MODAL LOGIC ---
     const roomSettingsModal = document.getElementById('room-settings-modal');
 
