@@ -6270,18 +6270,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 
-    // 1. Reset Student Data Only
+    // 1. Reset Student Data Only (Safe Wrapper + Cloud Wipe)
     if (resetStudentDataButton) {
-        resetStudentDataButton.addEventListener('click', () => {
-            const confirmReset = confirm('Are you sure you want to reset all student data? This will clear the main data, absentees, QP codes, and all room allotments. Your College Name and Room Settings will be kept.');
+        resetStudentDataButton.addEventListener('click', async () => {
+            // --- SAFETY PROMPT ---
+            if (confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.")) {
+                // Trigger Downloads
+                const csvBtn = document.getElementById('master-download-csv-btn');
+                const jsonBtn = document.getElementById('backup-data-button');
+                
+                if (csvBtn) {
+                    csvBtn.click();
+                }
+                await new Promise(r => setTimeout(r, 1500));
+                
+                if (jsonBtn) {
+                     jsonBtn.click();
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            // ---------------------
+
+            const confirmReset = confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
+            
             if (confirmReset) {
-                localStorage.removeItem(BASE_DATA_KEY);
-                localStorage.removeItem(ABSENTEE_LIST_KEY);
-                localStorage.removeItem(QP_CODE_LIST_KEY);
-                localStorage.removeItem(ROOM_ALLOTMENT_KEY);
-                localStorage.removeItem(SCRIBE_LIST_KEY);
-                localStorage.removeItem(SCRIBE_ALLOTMENT_KEY);
-                alert('All student data and allotments have been cleared. The app will now reload.');
+                // 1. Clear Local Storage
+                const keysToRemove = [
+                    BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
+                    SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY
+                ];
+                keysToRemove.forEach(k => localStorage.removeItem(k));
+
+                // 2. Wipe Cloud Data (The Fix)
+                if (currentCollegeId) {
+                    try {
+                        // Change button text to show activity
+                        const originalText = resetStudentDataButton.innerHTML;
+                        resetStudentDataButton.innerHTML = "☁️ Wiping Cloud...";
+                        resetStudentDataButton.disabled = true;
+
+                        const { db, doc, writeBatch, collection, getDocs } = window.firebase;
+                        const batch = writeBatch(db);
+                        const mainRef = doc(db, "colleges", currentCollegeId);
+
+                        // A. Reset fields in the main document
+                        batch.update(mainRef, {
+                            examQPCodes: "{}",
+                            examScribeAllotment: "{}",
+                            examScribeList: "[]",
+                            examAbsenteeList: "{}",
+                            lastUpdated: new Date().toISOString()
+                        });
+
+                        // B. Delete all data chunks (Where Student Data & Allotment live)
+                        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                        const chunkSnaps = await getDocs(dataColRef);
+                        chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+
+                        await batch.commit();
+                        console.log("Cloud data wiped successfully.");
+
+                    } catch (e) {
+                        console.error("Cloud Wipe Error:", e);
+                        alert("⚠️ Warning: Local data was cleared, but Cloud wipe failed.\nError: " + e.message);
+                    }
+                }
+                
+                alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 window.location.reload();
             }
         });
@@ -10643,11 +10698,29 @@ Are you sure?
     const restoreSettingsBtn = document.getElementById('restore-settings-btn');
     const restoreSettingsInput = document.getElementById('restore-settings-input');
 
-    // 1. NUKE IT ALL (Smart Choice + Funny Alerts)
+    // 2. NUKE IT ALL (Master Reset with Safety)
     if (nukeBtn) {
         nukeBtn.addEventListener('click', async () => {
+            // --- SAFETY PROMPT ---
+            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy everything...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\nClick OK to Backup & Continue.\nClick Cancel to Continue without Backup.")) {
+                // Trigger Downloads
+                const csvBtn = document.getElementById('master-download-csv-btn');
+                const jsonBtn = document.getElementById('backup-data-button');
+                
+                if (csvBtn) {
+                     csvBtn.click();
+                }
+                await new Promise(r => setTimeout(r, 1500));
+                
+                if (jsonBtn) {
+                     jsonBtn.click();
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            // ---------------------
+
             // Level 1: Initial Warning
-            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a destructive sequence that affects both Local and Cloud storage.\n\nAre you sure you want to proceed?")) {
+            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a DESTRUCTIVE sequence that affects both Local and Cloud storage.\n\nAre you sure you want to proceed?")) {
                 return;
             }
 
@@ -10671,7 +10744,6 @@ Are you sure?
             const confirmCode = prompt(`⚠ FINAL SECURITY CHECK ⚠\n\nTo authorize this ${mode} reset, type 'DELETE' in the box below:`);
 
             if (confirmCode !== 'DELETE') {
-                // *** THE FUNNY ABORT MESSAGE ***
                 alert("🚫 ACCESS DENIED 🚫\n\nIncorrect launch code entered.\nThe nuclear payload has been disarmed.\n\n(Phew, that was close!)");
                 return;
             }
@@ -10684,18 +10756,13 @@ Are you sure?
                 const { db, doc, writeBatch, setDoc, collection, getDocs } = window.firebase;
 
                 if (mode === 'DATA') {
-                    // -----------------------------------------
                     // OPTION A: TACTICAL STRIKE (Data Only)
-                    // -----------------------------------------
-
-                    // 1. Clear Local Data Keys
                     const keysToRemove = [
                         BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
                         ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY, 'examBaseData'
                     ];
                     keysToRemove.forEach(key => localStorage.removeItem(key));
 
-                    // 2. Force Wipe Cloud Data
                     if (currentCollegeId) {
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
@@ -10717,16 +10784,13 @@ Are you sure?
                     alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent data has been vaporized.\nInfrastructure (Settings) remains intact.");
 
                 } else if (mode === 'FULL') {
-                    // -----------------------------------------
                     // OPTION B: TOTAL ANNIHILATION (Full Reset)
-                    // -----------------------------------------
-
                     localStorage.clear();
 
                     if (currentCollegeId) {
                         const mainRef = doc(db, "colleges", currentCollegeId);
-
-                        // Overwrite with barebones data
+                        
+                        // Wipe & Reset Cloud
                         await setDoc(mainRef, {
                             admins: [currentUser.email],
                             allowedUsers: [currentUser.email],
