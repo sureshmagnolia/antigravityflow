@@ -6905,7 +6905,10 @@ window.printAttendanceReport = function () {
 
     let tableRows = '';
     facultyData.forEach((faculty, index) => {
-        const sessionsList = faculty.sessions.map(s => `${s.date.split('.').slice(0, 2).join('.')} (${s.session})`).join(', ');
+        const sessionsList = faculty.sessions.map(s => {
+        const [d, m, y] = s.date.split('.');
+        return `${d}.${m}.${y.slice(-2)} (${s.session})`;
+    }).join(' ');
         tableRows += `<tr class="report-row"><td class="text-center">${index + 1}</td><td><div class="font-semibold">${faculty.name}</div></td><td>${faculty.dept}</td><td class="text-center">${faculty.designation}</td><td class="text-center font-bold">${faculty.sessions.length}</td><td class="text-xs sessions-cell">${sessionsList}</td></tr>`;
     });
 
