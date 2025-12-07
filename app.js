@@ -1123,22 +1123,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleButton = document.getElementById('sidebar-toggle');
     const sidebar = document.getElementById('main-nav');
 
-    // --- INJECT DOWNLOAD BUTTON FOR REPORTS ---
-    const btnDownloadReport = document.createElement('button');
-    btnDownloadReport.id = 'download-report-pdf-btn';
-    btnDownloadReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700";
-    btnDownloadReport.innerHTML = `⬇️ Download PDF`;
+    // --- INJECT PRINT BUTTON FOR REPORTS (Replaces Download PDF) ---
+    const btnPrintReport = document.createElement('button');
+    btnPrintReport.id = 'print-generated-report-btn';
+    // Style: Gray/Dark to match Print actions
+    btnPrintReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-gray-700 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800";
+    btnPrintReport.innerHTML = `🖨️ Print Report`;
 
-    // FIX: Anchor to 'Clear Report' button instead of 'Print' button (which might be deleted)
+    // FIX: Anchor to 'clearReportButton' because 'finalPrintButton' was removed from HTML
     if (clearReportButton && clearReportButton.parentNode) {
-        if (!document.getElementById('download-report-pdf-btn')) {
-            // Insert "Download" BEFORE "Clear Report"
-            clearReportButton.parentNode.insertBefore(btnDownloadReport, clearReportButton);
+        if (!document.getElementById('print-generated-report-btn')) {
+            // Insert BEFORE the Clear button
+            clearReportButton.parentNode.insertBefore(btnPrintReport, clearReportButton);
         }
+        
+        // Cleanup: Remove the old download button if it exists
+        const oldBtn = document.getElementById('download-report-pdf-btn');
+        if (oldBtn) oldBtn.remove();
     }
 
-    // Attach Listener
-    btnDownloadReport.addEventListener('click', () => {
+    // Attach Listener (Opens the Print Preview Window)
+    btnPrintReport.addEventListener('click', () => {
         const content = document.getElementById('report-output-area').innerHTML;
         if (!content.trim()) return UiModal.alert("Info", "No report generated.");
 
