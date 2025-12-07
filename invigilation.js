@@ -7291,6 +7291,96 @@ function printVacationReport(data, start, end) {
     w.document.close();
 }
 
+// ==========================================
+// 🎓 NEW ACADEMIC YEAR LOGIC
+// ==========================================
+
+window.startNewAcademicYear = async function() {
+    // 1. Initial Warning
+    if(!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
+        return;
+    }
+
+    // 2. Trigger Backup
+    downloadMasterBackup();
+
+    // 3. Final Security Check
+    const check = prompt("🔴 FINAL CONFIRMATION\n\nTo reset duty data for the new year, please type 'RESET' in the box below:");
+    if (check !== "RESET") {
+        return alert("❌ Action Cancelled. Incorrect confirmation code.");
+    }
+
+    const btn = document.querySelector('button[onclick="startNewAcademicYear()"]');
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = "♻️ Resetting System...";
+    }
+    
+    updateSyncStatus("Wiping Session Data...", "neutral");
+
+    try {
+        // 4. Reset Local State (Preserving Profiles & Configs)
+        
+        // A. Calculate New Start Date (June 1st of Current Cycle)
+        const acYear = getCurrentAcademicYear();
+        const y = acYear.start.getFullYear();
+        const m = String(acYear.start.getMonth() + 1).padStart(2, '0');
+        const d = String(acYear.start.getDate()).padStart(2, '0');
+        const newJoinDate = `${y}-${m}-${d}`; // YYYY-MM-DD format
+
+        // B. Reset Staff Counters & Dates
+        staffData = staffData.map(s => ({
+            ...s,
+            dutiesDone: 0, 
+            dutiesAssigned: 0,
+            joiningDate: newJoinDate, // <--- RESET JOIN DATE
+            // Keep: name, email, phone, dept, designation, roleHistory, preferredDays
+        }));
+
+        // C. Wipe Transactional Data
+        invigilationSlots = {};
+        advanceUnavailability = {};
+        vacationStart = "";
+        vacationEnd = "";
+        vacationExtraHolidays.clear();
+
+        // 5. Update Main Cloud Document
+        const collegeRef = doc(db, "colleges", currentCollegeId);
+        
+        // Update specific fields (Configurations like Roles/Targets are PRESERVED automatically by updateDoc)
+        await updateDoc(collegeRef, {
+            examStaffData: JSON.stringify(staffData), // Save the reset staff list
+            examInvigilationSlots: "{}",              // Wipe slots
+            invigAdvanceUnavailability: "{}",         // Wipe leaves
+            invigVacationConfig: "{}",                // Wipe vacation settings
+            autoAssignLogs: []                        // Clear logic logs
+            // NOTE: We do NOT clear 'staffAccessList' so staff can still log in.
+        });
+
+        // 6. Clear Activity Log (Sub-collection)
+        const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
+        await setDoc(logRef, { entries: [] });
+
+        // 7. Log the Fresh Start (New Log Item)
+        await logActivity("System Reset", `Started New Academic Year. Reset duty counts and set all staff joining dates to ${newJoinDate}.`);
+
+        updateSyncStatus("Year Started", "success");
+        alert(`✅ New Academic Year Started Successfully.\n\n- All staff joining dates reset to ${newJoinDate}.\n- Duty counts reset to 0.\n- Previous sessions & logs cleared.`);
+        
+        window.location.reload();
+
+    } catch (e) {
+        console.error(e);
+        alert("Error resetting system: " + e.message);
+        updateSyncStatus("Reset Failed", "error");
+        if(btn) {
+            btn.disabled = false;
+            btn.innerHTML = "⚠️ Start New Academic Year";
+        }
+    }
+}
+
+
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
     const acYear = getCurrentAcademicYear();
