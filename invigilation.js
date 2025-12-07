@@ -7424,12 +7424,117 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
             
             // Refresh Grids to show Green Dots
             if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-            if (typeof renderStaffLoadTable === 'function') renderStaffLoadTable();
+            
+            // *** CORRECTED FUNCTION NAME HERE ***
+            if (typeof renderStaffTable === 'function') renderStaffTable(); 
         });
 
     } else {
         console.log("🟢 Live Presence: Staff Mode (Broadcasting only)");
         // Non-admins see nothing, saving reads.
+    }
+};
+
+// 2. HELPER: Get Status Dot for any Email
+window.getLiveStatusIcon = function(email) {
+    const user = globalLiveUsers[email];
+    if (!user) return `<span class="text-gray-300 opacity-20" title="Offline">⚪</span>`;
+
+    if (user.status === 'online') {
+        const icon = user.device === 'Mobile' ? '📱' : '🟢';
+        return `<span class="animate-pulse text-green-500 font-bold" title="Online now">${icon}</span>`;
+    } 
+    if (user.status === 'idle') {
+        return `<span class="text-yellow-500" title="Idle (>5m)">🟡</span>`;
+    }
+    return `<span class="text-gray-300 opacity-20" title="Offline">⚪</span>`;
+};
+
+// 3. UI: Floating Live Widget (Bottom Left)
+function updateLiveStaffWidget(count) {
+    let widget = document.getElementById('live-staff-widget');
+    
+    if (!widget) {
+        widget = document.createElement('div');
+        widget.id = 'live-staff-widget';
+        widget.className = "fixed bottom-4 left-4 bg-white/95 backdrop-blur border border-green-200 shadow-lg rounded-full px-4 py-2 flex items-center gap-2 z-50 cursor-pointer hover:scale-105 transition-transform group";
+        widget.onclick = showLiveStaffModal;
+        document.body.appendChild(widget);
+    }
+
+    if (count > 0) {
+        widget.innerHTML = `
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+            </span>
+            <span class="text-xs font-bold text-green-800">${count} Staff Online</span>
+            <div class="hidden group-hover:block absolute bottom-full left-0 mb-2 w-48 bg-white border border-gray-200 rounded-lg shadow-xl p-2 text-xs text-gray-600">
+                Click to see details
+            </div>
+        `;
+        widget.classList.remove('hidden');
+    } else {
+        widget.classList.add('hidden');
+    }
+}
+
+// 4. UI: Show List Modal
+window.showLiveStaffModal = function() {
+    // Generate List
+    const online = [];
+    const idle = [];
+    
+    Object.keys(globalLiveUsers).forEach(email => {
+        const u = globalLiveUsers[email];
+        // Try to find nice name from local data, fallback to email name
+        const staffRec = staffData.find(s => s.email === email);
+        const name = staffRec ? staffRec.name : (u.name || email.split('@')[0]);
+        
+        if (u.status === 'online') online.push({name, device: u.device, email});
+        if (u.status === 'idle') idle.push({name, device: u.device, email});
+    });
+
+    let html = `
+        <div class="space-y-4">
+            <div>
+                <h4 class="font-bold text-green-700 border-b border-green-100 mb-2 flex justify-between">
+                    <span>🟢 Active Now</span>
+                    <span class="bg-green-100 text-green-800 px-2 rounded-full text-xs">${online.length}</span>
+                </h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto">
+                    ${online.map(u => `
+                        <div class="flex items-center gap-2 text-sm p-1 hover:bg-green-50 rounded">
+                            <span class="text-base">${u.device === 'Mobile' ? '📱' : '💻'}</span>
+                            <span class="font-medium text-gray-800 truncate">${u.name}</span>
+                        </div>
+                    `).join('')}
+                    ${online.length === 0 ? '<div class="text-gray-400 italic text-xs p-2">No one active.</div>' : ''}
+                </div>
+            </div>
+            
+            ${idle.length > 0 ? `
+            <div>
+                <h4 class="font-bold text-yellow-700 border-b border-yellow-100 mb-2 flex justify-between">
+                    <span>🟡 Idle / Away</span>
+                    <span class="bg-yellow-100 text-yellow-800 px-2 rounded-full text-xs">${idle.length}</span>
+                </h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    ${idle.map(u => `
+                        <div class="flex items-center gap-2 text-xs text-gray-500 p-1">
+                            <span>🕑</span>
+                            <span class="truncate">${u.name}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>` : ''}
+        </div>
+    `;
+
+    if(typeof UiModal !== 'undefined') {
+        UiModal.show("Live Staff Status", html);
+    } else {
+        alert("Live Staff:\n\n" + online.map(o => o.name).join('\n'));
     }
 };
 
