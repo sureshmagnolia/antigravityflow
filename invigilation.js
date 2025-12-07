@@ -1975,23 +1975,22 @@ window.waNotify = function (key) {
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
 
-
 window.calculateSlotsFromSchedule = async function () {
     const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-    if (btn) { btn.disabled = true; btn.innerText = "⏳ Checking Cloud..."; }
+    if (btn) { btn.disabled = true; btn.innerText = "⏳ Analyzing..."; }
 
     try {
         if(!currentCollegeId) throw new Error("You are not logged in or College ID is missing.");
 
-        // 1. Fetch Data
-        updateSyncStatus("Downloading Data...", "neutral");
+        // 1. Fetch Cloud Data
+        updateSyncStatus("Downloading...", "neutral");
         const mainRef = doc(db, "colleges", currentCollegeId);
         const mainSnap = await getDoc(mainRef);
         if (!mainSnap.exists()) throw new Error("Cloud data unavailable.");
 
         let fullData = mainSnap.data();
         
-        // Fetch Chunks if needed
+        // Fetch Chunks (Large Data Support)
         const dataColRef = collection(db, "colleges", currentCollegeId, "data");
         const q = query(dataColRef, orderBy("index")); 
         const querySnapshot = await getDocs(q);
@@ -2012,62 +2011,63 @@ window.calculateSlotsFromSchedule = async function () {
         const scribeRegNos = new Set(scribeList.map(s => s.regNo));
 
         if (students.length === 0) {
-            alert("⚠️ Cloud Check Complete: No student data found in the cloud.\n\nPlease upload a CSV/PDF in the main ExamFlow app and click 'Save to Cloud' first.");
+            alert("⚠️ No student data found in the cloud.\n\nPlease go to the main ExamFlow app and click 'Save to Cloud' first.");
             return;
         }
 
-        // 2. Advanced Calculation
-        const sessions = {};
+        // 2. Calculate Active Sessions from Student Data
+        const activeSessions = {};
         students.forEach(s => {
             const date = s.Date ? s.Date.trim() : "";
             const time = s.Time ? s.Time.trim() : "";
             if(!date || !time) return;
 
             const key = `${date} | ${time}`;
-            if (!sessions[key]) {
-                sessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
+            if (!activeSessions[key]) {
+                activeSessions[key] = { streams: {}, scribeCount: 0, totalStudents: 0 };
             }
 
-            sessions[key].totalStudents++;
+            activeSessions[key].totalStudents++;
 
             if (scribeRegNos.has(s['Register Number'])) {
-                sessions[key].scribeCount++;
+                activeSessions[key].scribeCount++;
             } else {
                 const strm = s.Stream || "Regular";
-                if (!sessions[key].streams[strm]) sessions[key].streams[strm] = 0;
-                sessions[key].streams[strm]++;
+                if (!activeSessions[key].streams[strm]) activeSessions[key].streams[strm] = 0;
+                activeSessions[key].streams[strm]++;
             }
         });
 
-        // 3. Update Slots
+        // 3. Compare with Existing Slots
         let changesLog = [];
-        let newSlots = { ...invigilationSlots };
+        let removalLog = []; 
+        let newSlots = { ...invigilationSlots }; 
         let hasChanges = false;
 
-        // Cleanup old schema
+        // A. Cleanup Legacy Fields
         Object.keys(newSlots).forEach(k => {
             if (newSlots[k].courses) { delete newSlots[k].courses; hasChanges = true; }
         });
 
-        Object.keys(sessions).forEach(key => {
-            const data = sessions[key];
+        // B. Add/Update Active Sessions
+        Object.keys(activeSessions).forEach(key => {
+            const data = activeSessions[key];
             const [datePart, timePart] = key.split(' | ');
 
-            // --- B. CALCULATE REQUIREMENTS ---
+            // Calculate Requirements
             let calculatedReq = 0;
             
-            // 1. Regular Streams (1:30)
+            // 1 per 30 for Regular
             Object.values(data.streams).forEach(count => {
                 calculatedReq += Math.ceil(count / 30);
             });
-            // 2. Scribes (1:5 RULE)
+            // 1 per 5 for Scribes
             if (data.scribeCount > 0) {
                 calculatedReq += Math.ceil(data.scribeCount / 5);
             }
-
-            // 3. Reserve (10% of base, Rounded UP)
+            // 10% Reserve (Round UP)
             const reserve = Math.ceil(calculatedReq * 0.10);
-            const finalReq = calculatedReq + reserve; // TOTAL Required
+            const finalReq = calculatedReq + reserve; 
 
             // Get Exam Name
             let officialExamName = "";
@@ -2080,12 +2080,12 @@ window.calculateSlotsFromSchedule = async function () {
                 if (!officialExamName) officialExamName = window.getExamName(datePart, timePart, "Regular");
             }
 
-            // --- C. Update Slot ---
+            // Create or Update Slot
             if (!newSlots[key]) {
-                // NEW SLOT FOUND
+                // NEW SLOT
                 newSlots[key] = {
-                    required: finalReq,       // Total Needed
-                    reserveCount: reserve,    // <--- NEW: Store Reserve Count
+                    required: finalReq,
+                    reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
                     isLocked: true,
@@ -2101,17 +2101,15 @@ window.calculateSlotsFromSchedule = async function () {
                     if (finalReq > newSlots[key].required) {
                         changesLog.push(`🔄 ${key}: Req increased ${newSlots[key].required} -> ${finalReq}`);
                         newSlots[key].required = finalReq;
-                        newSlots[key].reserveCount = reserve; // Update reserve too
+                        newSlots[key].reserveCount = reserve;
                         hasChanges = true;
                     }
                 }
                 // Update Metadata
-                if(newSlots[key].studentCount !== data.totalStudents) {
+                if(newSlots[key].studentCount !== data.totalStudents || newSlots[key].scribeCount !== data.scribeCount) {
                      newSlots[key].studentCount = data.totalStudents;
                      newSlots[key].scribeCount = data.scribeCount;
-                     if(newSlots[key].reserveCount === undefined) {
-                         newSlots[key].reserveCount = reserve; // Fix missing field
-                     }
+                     if(newSlots[key].reserveCount === undefined) newSlots[key].reserveCount = reserve;
                      hasChanges = true;
                 }
                 if (officialExamName && newSlots[key].examName !== officialExamName) {
@@ -2121,15 +2119,50 @@ window.calculateSlotsFromSchedule = async function () {
             }
         });
 
-        // 4. Finish
-        if (!hasChanges) {
+        // C. GHOST DETECTION (Remove Obsolete Sessions)
+        // Identify slots currently in the system that are NOT in the fresh student data
+        Object.keys(newSlots).forEach(existingKey => {
+            if (!activeSessions[existingKey]) {
+                // Ignore "Virtual" slots (attendance history) or manually created slots with 0 students?
+                // For now, if it has 0 students in the cloud data, it's a ghost.
+                
+                // Check if it was manually created (might not match student data)
+                // We'll list it for removal, user can cancel if they want to keep it.
+                removalLog.push({ 
+                    key: existingKey, 
+                    reason: "No students in cloud data" 
+                });
+            }
+        });
+
+        // 4. Confirm & Apply
+        if (!hasChanges && removalLog.length === 0) {
             updateSyncStatus("Synced", "success");
-            alert(`✅ Cloud Check Complete.\n\nAnalyzed ${students.length} students.\nNo new sessions or changes found.`);
+            alert(`✅ Cloud Check Complete.\n\nAnalyzed ${students.length} students.\nData matches perfectly.`);
         } else {
-            invigilationSlots = newSlots;
-            await syncSlotsToCloud();
-            renderSlotsGridAdmin();
-            alert(`✅ Updates Applied!\n\n${changesLog.length} sessions updated based on cloud data.`);
+            let msg = "";
+            
+            if (changesLog.length > 0) {
+                msg += "⚠️ UPDATES FOUND:\n" + changesLog.join('\n') + "\n\n";
+            }
+            
+            if (removalLog.length > 0) {
+                msg += "🗑️ OBSOLETE SESSIONS FOUND:\n";
+                removalLog.forEach(r => msg += `• ${r.key}\n`);
+                msg += "\nThese sessions have no students in the current data. They will be removed.";
+            }
+
+            if (confirm(msg + "\n\nProceed with synchronization?")) {
+                // Apply Deletions
+                removalLog.forEach(r => {
+                    delete newSlots[r.key];
+                });
+
+                invigilationSlots = newSlots;
+                await syncSlotsToCloud();
+                renderSlotsGridAdmin();
+                alert("✅ Sync Complete. System updated.");
+            }
         }
 
     } catch (e) {
@@ -2140,6 +2173,7 @@ window.calculateSlotsFromSchedule = async function () {
         if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
     }
 }
+
 
 
 // --- HELPER: Get Slot Reserves (Last N assigned staff) ---
