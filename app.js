@@ -4925,12 +4925,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
     // downloadPdfButton.addEventListener('click', ... removed ...)
 
-    // --- Event listener for the "Print" button ---
-    finalPrintButton.addEventListener('click', () => {
-        // This button now exclusively uses the native browser print function
-        window.print();
-    });
-    // --- Event listener for the "Clear" button ---
+       // --- Event listener for the "Clear" button ---
     clearReportButton.addEventListener('click', clearReport);
 
     // --- Centralized logic for clearing reports ---
@@ -9504,10 +9499,13 @@ Are you sure?
 
     // 1. CHECK IF USER IS SUPER ADMIN
     function checkSuperAdminAccess(user) {
+        // FIX: Get element directly to avoid initialization errors
+        const btn = document.getElementById('super-admin-btn'); 
+        
         if (user.email === SUPER_ADMIN_EMAIL) {
-            if (superAdminBtn) superAdminBtn.classList.remove('hidden');
+            if (btn) btn.classList.remove('hidden');
         } else {
-            if (superAdminBtn) superAdminBtn.classList.add('hidden');
+            if (btn) btn.classList.add('hidden');
         }
     }
 
