@@ -11584,8 +11584,9 @@ Are you sure?
             window.location.reload();
         });
     }
-  // ==========================================
-    // 📄 GLOBAL PDF PREVIEW (FIXED PRINTING & THEME)
+  
+// ==========================================
+    // 📄 GLOBAL PDF PREVIEW (PRINT ONLY VERSION)
     // ==========================================
     window.openPdfPreview = function (contentHtml, filenamePrefix) {
         // 1. CLEAN CONTENT (Remove screen-specific and layout-breaking styles)
@@ -11604,7 +11605,7 @@ Are you sure?
             .replace(/border-2/g, 'border');
 
         const dateStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
-        const filename = `${filenamePrefix}_${dateStr}.pdf`;
+        const filename = `${filenamePrefix}_${dateStr}`;
 
         // 2. FILTER HEAD CONTENT (Remove app scripts to prevent re-init)
         let headContent = document.head.innerHTML;
@@ -11617,13 +11618,11 @@ Are you sure?
         <html lang="en">
         <head>
             ${headContent}
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+            <title>${filename}</title>
             <style>
                 /* SCREEN PREVIEW STYLES */
                 body { 
-                    /* Force Gray Background & Remove App Gradient */
-                    background: #525659 !important; 
-                    background-image: none !important;
+                    background-color: #525659; 
                     margin: 0; 
                     padding: 20px; 
                     display: flex; 
@@ -11632,10 +11631,11 @@ Are you sure?
                     font-family: sans-serif; 
                 }
                 
-                #pdf-controls {
+                #print-controls {
                     margin-bottom: 20px; background: white; padding: 10px 20px; 
                     border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                     position: sticky; top: 10px; z-index: 9999;
+                    display: flex; gap: 10px;
                 }
 
                 #pdf-wrapper {
@@ -11661,7 +11661,6 @@ Are you sure?
                     box-sizing: border-box;
                     page-break-after: always;
                     position: relative;
-                    background: white !important;
                 }
                 
                 .print-page:last-child { margin-bottom: 0 !important; page-break-after: auto; }
@@ -11685,15 +11684,14 @@ Are you sure?
 
                 ::-webkit-scrollbar { display: none; }
 
-                /* PRINT MEDIA QUERY (THE FIX) */
+                /* PRINT MEDIA QUERY (CRITICAL FIXES) */
                 @media print {
-                    #pdf-controls { display: none !important; }
+                    #print-controls { display: none !important; }
                     
                     body { 
                         display: block !important; 
                         padding: 0; margin: 0; 
-                        background: white !important; 
-                        background-image: none !important; /* Ensure no pink gradient prints */
+                        background: white; 
                         width: 100%; height: auto; 
                         overflow: visible; 
                     }
@@ -11701,16 +11699,12 @@ Are you sure?
                     #pdf-wrapper { 
                         width: 100%; box-shadow: none; margin: 0; 
                         overflow: visible; height: auto; 
-                        background: white !important;
                     }
 
                     .print-page {
-                        /* Ensure no flexbox remnants cause cutoff */
                         display: block !important; 
                         height: auto !important;
                         overflow: visible !important;
-                        margin: 0 !important;
-                        box-shadow: none !important;
                     }
 
                     @page { margin: 10mm; size: A4; } 
@@ -11718,47 +11712,25 @@ Are you sure?
             </style>
         </head>
         <body>
-            <div id="pdf-controls">
-                <button onclick="window.print()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold shadow hover:bg-gray-800">
-                    🖨️ Print Report (Browser)
-                </button>
-                <button onclick="downloadDoc()" class="bg-blue-600 text-white px-4 py-2 rounded font-bold shadow hover:bg-blue-700 ml-4">
-                    ⬇️ Save as PDF
+            <div id="print-controls">
+                <button onclick="window.print()" class="bg-gray-700 text-white px-6 py-2 rounded font-bold shadow hover:bg-gray-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print Report (Browser)
                 </button>
             </div>
 
             <div id="pdf-wrapper">
                 ${cleanContent}
             </div>
-
-            <script>
-                function downloadDoc() {
-                    const element = document.getElementById('pdf-wrapper');
-                    const btn = document.querySelector('button[onclick="downloadDoc()"]');
-                    btn.textContent = "Generating...";
-                    btn.disabled = true;
-
-                    const opt = {
-                        margin: [8, 8, 8, 8], 
-                        filename: '${filename}',
-                        image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 850 }, 
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                        pagebreak: { mode: 'css', before: '.print-page' }
-                    };
-
-                    html2pdf().set(opt).from(element).save().then(() => {
-                        btn.textContent = "✅ Downloaded";
-                        setTimeout(() => { btn.textContent = "⬇️ Save as PDF"; btn.disabled = false; }, 3000);
-                    });
-                }
-            <\/script>
         </body>
         </html>
         `);
         w.document.close();
     }
 
+    
     // --- NEW: Clear Scribe Room Assignment ---
     window.removeScribeRoom = function (regNo) {
         if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
