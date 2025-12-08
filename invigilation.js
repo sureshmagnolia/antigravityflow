@@ -147,91 +147,95 @@ document.getElementById('login-btn').addEventListener('click', () => signInWithP
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
-
 async function handleLogin(user) {
     document.getElementById('login-btn').innerText = "Verifying...";
     console.log("👤 Handling login for:", user.email);
 
-    // --- 1. PRIORITY: Check Link ID (Direct URL Access) ---
-    // We do this FIRST because it's the most reliable method and avoids broad permission errors.
+    // --- 1. CHECK URL ID (Highest Priority) ---
     const urlParams = new URLSearchParams(window.location.search);
     const urlId = urlParams.get('id');
 
     if (urlId) {
-        console.log("🔗 URL ID found:", urlId);
-        try {
-            const docRef = doc(db, "colleges", urlId);
-            const snap = await getDoc(docRef);
-
-            if (snap.exists()) {
-                const data = snap.data();
-                
-                // A. Check if Admin
-                if (data.allowedUsers && data.allowedUsers.includes(user.email)) {
-                    initializeSession(urlId, true, "Admin");
-                    return;
-                }
-
-                // B. Check if Staff
-                // Parse staff data safely (handle string or object)
-                const sList = JSON.parse(data.examStaffData || '[]');
-                const me = sList.find(s => s.email.toLowerCase() === user.email.toLowerCase());
-
-                // Also check the explicit access list if present
-                const hasAccess = (data.staffAccessList && data.staffAccessList.includes(user.email));
-
-                if (me || hasAccess) {
-                    initializeSession(urlId, false, "Staff");
-                    return;
-                }
-                
-                alert("⛔ Access Denied: Your email is not listed in this college's staff list.");
-                signOut(auth);
-                return;
-            } else {
-                alert("❌ Invalid Link: College not found.");
-            }
-        } catch (e) {
-            console.error("Link Login Error:", e);
-        }
+        // If URL has ID, we trust it and verify access
+        await verifyAndLaunch(urlId, user);
+        return;
     }
 
-    // --- 2. FALLBACK: Search for Admin Access ---
+    // --- 2. CHECK LOCAL STORAGE (Cache - The "Zero Read" Optimization) ---
+    // If user logged in before, we remember their college ID.
+    const cachedCollegeId = localStorage.getItem('my_college_id');
+    if (cachedCollegeId) {
+        console.log("⚡ Found cached College ID:", cachedCollegeId);
+        await verifyAndLaunch(cachedCollegeId, user);
+        return;
+    }
+
+    // --- 3. FALLBACK: Search Firebase (Only if first time) ---
+    // This costs reads, but happens only once per device.
     try {
         const collegesRef = collection(db, "colleges");
-        const qAdmin = query(collegesRef, where("allowedUsers", "array-contains", user.email));
-        const adminSnap = await getDocs(qAdmin);
+        
+        // Parallel Query: Check both Admin and Staff lists at once
+        const [adminSnap, staffSnap] = await Promise.all([
+            getDocs(query(collegesRef, where("allowedUsers", "array-contains", user.email))),
+            getDocs(query(collegesRef, where("staffAccessList", "array-contains", user.email)))
+        ]);
 
         if (!adminSnap.empty) {
-            const docSnap = adminSnap.docs[0];
-            initializeSession(docSnap.id, true, "Admin");
+            await verifyAndLaunch(adminSnap.docs[0].id, user);
             return;
         }
-    } catch (e) {
-        console.warn("Admin search skipped/failed (likely permissions):", e.message);
-        // Continue to staff check...
-    }
-
-    // --- 3. FALLBACK: Search for Staff Access ---
-    try {
-        const collegesRef = collection(db, "colleges");
-        const qStaff = query(collegesRef, where("staffAccessList", "array-contains", user.email));
-        const staffSnap = await getDocs(qStaff);
-
         if (!staffSnap.empty) {
-            const docSnap = staffSnap.docs[0];
-            initializeSession(docSnap.id, false, "Staff");
+            await verifyAndLaunch(staffSnap.docs[0].id, user);
             return;
         }
-    } catch (e) {
-        console.warn("Staff search failed:", e.message);
-    }
 
-    // --- 4. NO ACCESS FOUND ---
-    alert("⛔ Access Denied.\n\nYou are not listed as an Admin or Staff member.\nIf you are staff, please use the direct link provided by your admin.");
-    signOut(auth);
-    document.getElementById('login-btn').innerText = "Login with Google";
+        // No access found
+        alert("⛔ Access Denied.\n\nYou are not listed in any college system.");
+        signOut(auth);
+        document.getElementById('login-btn').innerText = "Login with Google";
+
+    } catch (e) {
+        console.error("Login Search Error:", e);
+        alert("Login Error: " + e.message);
+    }
 }
+
+// Helper to verify access and start session
+async function verifyAndLaunch(collegeId, user) {
+    try {
+        const docRef = doc(db, "colleges", collegeId);
+        const snap = await getDoc(docRef);
+
+        if (snap.exists()) {
+            const data = snap.data();
+            
+            // Determine Role
+            const isAdmin = data.allowedUsers?.includes(user.email);
+            const isStaff = data.staffAccessList?.includes(user.email); // Access List Check
+            const sList = JSON.parse(data.examStaffData || '[]');
+            const isStaffData = sList.some(s => s.email.toLowerCase() === user.email.toLowerCase());
+
+            if (isAdmin || isStaff || isStaffData) {
+                // SUCCESS: Save ID for next time to avoid search queries
+                localStorage.setItem('my_college_id', collegeId);
+                
+                const role = isAdmin ? "Admin" : "Staff";
+                initializeSession(collegeId, isAdmin, role);
+            } else {
+                alert("⛔ Access Revoked or Invalid.");
+                localStorage.removeItem('my_college_id'); // Clear invalid cache
+                signOut(auth);
+            }
+        } else {
+            alert("❌ College Database not found.");
+            localStorage.removeItem('my_college_id');
+        }
+    } catch (e) {
+        console.error("Launch Error:", e);
+    }
+}
+
 
 // --- Helper to start the session ---
 function initializeSession(id, adminStatus, roleName) {
@@ -248,40 +252,43 @@ function initializeSession(id, adminStatus, roleName) {
     setupLiveSync(currentCollegeId, isAdmin ? 'admin' : 'staff');
 }
 
-// OPTIMIZED: Uses LocalStorage to prevent waiting for Cloud
+/**
+ * Establishes real-time synchronization listeners for the current college.
+ * NOTE: Staff data is fetched once (getDoc) for staff users to save reads.
+ * @param {string} collegeId The ID of the current college.
+ * @param {string} mode The current role ('admin' or 'staff').
+ */
 function setupLiveSync(collegeId, mode) {
-    // 1. Clear Old Listeners
+    console.log(`📡 Setting up Live Sync in ${mode} mode for ${collegeId}`);
+    
+    // Clear any existing listeners to prevent leaks
     if (cloudUnsubscribe) cloudUnsubscribe();
     if (slotsUnsubscribe) slotsUnsubscribe();
-    if (staffUnsubscribe) staffUnsubscribe();
-    if (allocUnsubscribe) allocUnsubscribe();
+    if (staffUnsubscribe) staffUnsubscribe(); // Will only be set in admin mode
 
+    // --- 1. LISTEN TO COLLEGE CONFIG (Always Live) ---
+    // Essential for reading current settings (e.g., enable/disable features)
     const docRef = doc(db, "colleges", collegeId);
-
-    // --- OPTIMIZATION: LOAD FROM CACHE FIRST ---
-    const cachedConfig = localStorage.getItem(`config_${collegeId}`);
-    if (cachedConfig) {
-        console.log("⚡ Loaded Config from Cache");
-        applyCollegeConfig(JSON.parse(cachedConfig), mode, false); // false = don't re-render everything yet
-    }
-
-    // 2. LISTEN TO CONFIG (Main Doc)
-    // This will update the cache if the cloud version is newer
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
-            updateSyncStatus("Synced", "success");
             const data = docSnap.data();
+            collegeName = data.collegeName || 'N/A';
+            collegeSettings = data.settings || {};
             
-            // Only update if data actually changed (Basic check)
-            const currentCache = localStorage.getItem(`config_${collegeId}`);
-            if (currentCache !== JSON.stringify(data)) {
-                localStorage.setItem(`config_${collegeId}`, JSON.stringify(data));
-                applyCollegeConfig(data, mode, true);
+            // Re-render components that rely on settings/config
+            // This is especially important for the staff calendar, as it updates the view based on these settings.
+            if (currentUser) {
+                const staffView = document.getElementById('view-staff');
+                if (staffView && !staffView.classList.contains('hidden')) {
+                    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                    if (me) initStaffDashboard(me); // Re-initialize the staff view
+                }
             }
         }
     });
 
-    // 3. LISTEN TO SLOTS (Keep as is - high frequency)
+    // --- 2. LISTEN TO SLOTS (Always Live, High Priority) ---
+    // This needs to be live to ensure the Admin Grid and Staff Calendar update instantly
     const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
     slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
         if (docSnap.exists()) {
@@ -290,22 +297,19 @@ function setupLiveSync(collegeId, mode) {
             advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
 
-            // --- FIX START: Check VISIBLE View, not just 'mode' ---
             const adminView = document.getElementById('view-admin');
             const staffView = document.getElementById('view-staff');
 
-            // 1. If Admin View is active, update Admin Grid
+            // Update Admin Grid if visible
             if (adminView && !adminView.classList.contains('hidden')) {
                 renderSlotsGridAdmin();
                 renderAdminTodayStats();
             }
 
-            // 2. If Staff View is active (Staff user OR Admin viewing as staff), update Calendar
+            // Update Staff Calendar if visible
             if (staffView && !staffView.classList.contains('hidden')) {
-                // Determine which email to render
                 let emailToRender = currentUser ? currentUser.email : null;
                 
-                // If staffData is loaded, try to match correct casing
                 if (staffData.length > 0 && currentUser) {
                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                     if (me) emailToRender = me.email;
@@ -313,7 +317,6 @@ function setupLiveSync(collegeId, mode) {
 
                 if (emailToRender) {
                     renderStaffCalendar(emailToRender);
-                    // Also refresh associated staff components
                     if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
                     if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
                 }
@@ -321,34 +324,45 @@ function setupLiveSync(collegeId, mode) {
         }
     });
 
-    // 4. LISTEN TO STAFF (Keep as is)
+    // --- 3. STAFF DATA: OPTIMIZED FETCH ---
     const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
-    staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            staffData = JSON.parse(data.examStaffData || '[]');
-            
-            if (mode === 'admin') {
-                renderStaffTable();
-                updateAdminUI();
-            } else if (currentUser) {
-                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                if (me) {
-                    if (document.getElementById('view-staff').classList.contains('hidden')) {
-                        initStaffDashboard(me);
-                    } else {
-                        // Refresh Stats Only
-                        const done = getDutiesDoneCount(me.email);
-                        const pending = Math.max(0, calculateStaffTarget(me) - done);
-                        document.getElementById('staff-view-pending').textContent = pending;
-                        const completedEl = document.getElementById('staff-view-completed');
-                        if (completedEl) completedEl.textContent = done;
-                        renderStaffRankList(me.email);
+
+    if (mode === 'admin') {
+        // ADMIN MODE: Use live listener, as they need instant updates when adding new staff.
+        console.log("👥 Staff List: Using Live Listener (Admin Mode)");
+        staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                staffData = JSON.parse(data.examStaffData || '[]');
+                localStorage.setItem('examStaffData', data.examStaffData || '[]');
+                // Optionally re-render Admin tools that rely on staff list changes
+                // if (typeof renderStaffListAdmin === "function") renderStaffListAdmin();
+            }
+        });
+    } else {
+        // STAFF MODE: Fetch Once to save continuous read costs.
+        console.log("👥 Staff List: Using Fetch Once (Staff Mode)");
+        getDoc(staffRef).then((docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                staffData = JSON.parse(data.examStaffData || '[]');
+                localStorage.setItem('examStaffData', data.examStaffData || '[]');
+
+                // Immediate rendering of Staff Dashboard after fetching staff data
+                if (currentUser) {
+                    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                    if (me) {
+                         // Only initialize dashboard if the view is currently hidden (i.e., just logged in)
+                        if (document.getElementById('view-staff').classList.contains('hidden')) {
+                            initStaffDashboard(me);
+                        }
                     }
                 }
             }
-        }
-    });
+        }).catch(error => {
+            console.error("Error fetching staff data:", error);
+        });
+    }
 }
 
 // Helper to apply config (Shared by Cache & Live)
