@@ -663,8 +663,14 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
 window.toggleAdminLock = async function (key) {
     if (!invigilationSlots[key]) return;
     
-    // Toggle state
+    // Toggle Admin Lock state
     invigilationSlots[key].isAdminLocked = !invigilationSlots[key].isAdminLocked;
+    
+    // LOGIC CHANGE: If Admin Lock is ENABLED, enforce Standard Lock (isLocked) too.
+    // When Admin Lock is removed later, Standard Lock remains (enabling Exchange Market).
+    if (invigilationSlots[key].isAdminLocked) {
+        invigilationSlots[key].isLocked = true;
+    }
     
     const status = invigilationSlots[key].isAdminLocked ? "LOCKED" : "UNLOCKED";
     logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
@@ -683,8 +689,15 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
         const wNum = getWeekOfMonth(date);
 
         if (mStr === monthStr && wNum === weekNum) {
+            // Apply Admin Lock State
             if (!!invigilationSlots[key].isAdminLocked !== lockState) {
                 invigilationSlots[key].isAdminLocked = lockState;
+                
+                // LOGIC CHANGE: If Locking Admin, also enforce Standard Lock
+                if (lockState === true) {
+                    invigilationSlots[key].isLocked = true;
+                }
+                
                 changed = true;
             }
         }
