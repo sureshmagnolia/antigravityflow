@@ -2028,14 +2028,16 @@ window.setAvailability = async function (key, email, isAvailable) {
 
 window.confirmUnavailable = async function () {
     const key = document.getElementById('unav-key').value;
-    // NEW CHECK FOR SLOT KEY
-    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked) {
-        return alert("🚫 Posting Locked! Admin has locked this slot.");
-    }
     const email = document.getElementById('unav-email').value;
     const reason = document.getElementById('unav-reason').value;
     const details = document.getElementById('unav-details').value.trim();
 
+    // 1. Validation
+    // Check Admin Lock
+    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked) {
+        return alert("🚫 Posting Locked! Admin has locked this slot.");
+    }
+    
     if (!reason) return alert("Select a reason.");
     if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
 
@@ -2045,55 +2047,57 @@ window.confirmUnavailable = async function () {
         // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
         const [_, dateStr, session] = key.split('|');
 
-        // Ensure structure
         if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
         if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
         if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
 
         if (session === 'WHOLE') {
-            // Remove existing to avoid duplicates
+            // Clear both sessions first
             advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
             advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
-
+            
             advanceUnavailability[dateStr].FN.push(entry);
             advanceUnavailability[dateStr].AN.push(entry);
-
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}. Reason: ${reason}`);
+            
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);
         } else {
             // Single Session
             if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
+            
+            // Safety: Remove existing before pushing
             advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
             advanceUnavailability[dateStr][session].push(entry);
 
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}). Reason: ${reason}`);
+            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);
         }
 
         await saveAdvanceUnavailability();
-
-        // --- FIXES APPLIED HERE ---
+        
         window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+        window.closeModal('day-detail-modal'); 
         renderStaffCalendar(email);
-
-        // 1. LIVE UPDATE LIST
         if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-        // 2. DO NOT RE-OPEN MODAL (Issue 2 Fix)
-        // openDayModal(dateStr, email); <--- REMOVED
-        // --------------------------
 
     } else {
-        // --- CASE B: SLOT SPECIFIC ---
+        // --- CASE B: SLOT SPECIFIC (The Bug was Here) ---
         if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
+        
+        // *** FIX: Remove existing entry for this email before adding ***
+        invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => 
+            (typeof u === 'string' ? u !== email : u.email !== email)
+        );
+
+        // Now push the new entry (Guaranteed unique)
         invigilationSlots[key].unavailable.push(entry);
 
         logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
 
         await syncSlotsToCloud();
+        
         window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); // Ensure previous modal is closed
+        window.closeModal('day-detail-modal'); 
 
         renderStaffCalendar(email);
-        // 1. LIVE UPDATE LIST
         if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
     }
 }
