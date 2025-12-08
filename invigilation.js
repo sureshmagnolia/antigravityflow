@@ -1205,12 +1205,12 @@ function renderStaffCalendar(myEmail) {
                 // ... inside slots.forEach ...
 
                 if (isCompleted) {
-                    // FIX: "Cute" style for mobile (Flat, tiny), Rich style for Desktop
-                    badgeClass = "bg-green-100 text-green-700 border-green-200 md:bg-gradient-to-br md:from-green-500 md:to-green-600 md:text-white md:border-green-400 md:text-shadow-sm";
-                    icon = "✅";
-                    // Mobile: Tiny bold "DONE". Desktop: Normal "Done"
-                    statusText = `<span class="md:hidden text-[9px] font-black tracking-tighter leading-none">DONE</span><span class="hidden md:inline">Done</span>`;
-                    glowClass = "md:shadow-lg md:shadow-green-200"; // No heavy shadow on mobile
+                    // MODIFIED: Dark Green background, White Text
+                    badgeClass = "bg-green-800 text-white border-green-900 md:bg-gradient-to-br md:from-green-700 md:to-green-800 md:border-green-600";
+                    icon = "✅"; 
+                    // Empty status text so it just shows "FN ✅" (Prevents truncation)
+                    statusText = ""; 
+                    glowClass = "md:shadow-lg md:shadow-green-900";
                 }
                 else if (isPostedByMe) {
                     // ... (keep existing logic for other statuses) ...
