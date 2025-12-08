@@ -1147,7 +1147,8 @@ function renderStaffCalendar(myEmail) {
                 if (isCompleted) {
                     badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
                     icon = "✅";
-                    statusText = `<span class="md:hidden text-[8px] font-extrabold tracking-tight">DONE</span><span class="hidden md:inline">Done</span>`;
+                    // FIX: Tiny, crisp text for mobile. Normal text for desktop.
+                    statusText = `<span class="md:hidden text-[8px] font-extrabold tracking-widest">DONE</span><span class="hidden md:inline">Done</span>`;
                     glowClass = "shadow-lg shadow-green-200";
                 }
                 else if (isPostedByMe) {
