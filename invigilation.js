@@ -4246,43 +4246,44 @@ window.viewAutoAssignLogs = async function () {
         window.openModal('inconvenience-modal');
     }
 }
-// --- ACTIVITY LOGGING SYSTEM (1MB Limit + FIFO) ---
-// OPTIMIZED: Uses 'arrayUnion' to append without reading the document first
+// --- OPTIMIZED ACTIVITY LOGGING (Sub-Collection Strategy) ---
 async function logActivity(action, details) {
+    if (!currentCollegeId) return;
+
     try {
         const userEmail = currentUser ? currentUser.email : "Unknown";
         const timestamp = new Date().toISOString();
 
-        const newEntry = { t: timestamp, u: userEmail, a: action, d: details };
-        const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-
-        // Use arrayUnion - This writes blindly (Cost: 1 Write, 0 Reads)
-        await updateDoc(logRef, {
-            entries: arrayUnion(newEntry)
-        }).catch(async (err) => {
-            // Fallback: If doc doesn't exist, create it (Cost: 1 Write)
-            if (err.code === 'not-found') {
-                await setDoc(logRef, { entries: [newEntry] });
-            } else {
-                console.error("Log Error:", err);
-            }
+        // Create a new document reference in the 'logs' sub-collection
+        const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
+        
+        // Write a new document (Infinite scaling, no 1MB limit)
+        await setDoc(doc(logsColRef), {
+            t: timestamp,
+            u: userEmail,
+            a: action,
+            d: details
         });
 
     } catch (e) {
         console.error("Logging Error:", e);
+        // Optional: Alert user if permission denied (helps debug "missing users")
+        if (e.code === 'permission-denied') {
+            console.warn("User not authorized to log activity.");
+        }
     }
 }
 
-// --- LIVE ACTIVITY LOG LOGIC ---
+
+// --- UPDATED LIVE LOG VIEWER (Scalable Version) ---
 let activityLogUnsubscribe = null;
-let currentLogData = [];
 
 window.viewActivityLogs = function () {
     const list = document.getElementById('inconvenience-list');
     const titleEl = document.querySelector('#inconvenience-modal h3');
     const subtitleEl = document.getElementById('inconvenience-modal-subtitle');
 
-    // 1. Setup Modal UI
+    // 1. Setup UI
     titleEl.textContent = "🕒 Live Activity Feed";
     subtitleEl.innerHTML = `
         <div class="flex gap-2 mt-2">
@@ -4297,45 +4298,45 @@ window.viewActivityLogs = function () {
         </div>
     `;
 
+    window.openModal('inconvenience-modal');
+    list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Loading latest activities...</div>';
+
     // 2. Attach Search Listener
     const searchInput = document.getElementById('act-search');
     if (searchInput) {
-        searchInput.addEventListener('input', (e) => renderLiveLogs(e.target.value));
+        searchInput.addEventListener('input', (e) => filterDisplayedLogs(e.target.value));
     }
 
-    // 3. Open Modal & Show Loading
-    window.openModal('inconvenience-modal');
-    list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Connecting to live feed...</div>';
+    // 3. Start Listener (Query last 100 docs)
+    if (activityLogUnsubscribe) activityLogUnsubscribe();
 
-    // 4. Start Real-Time Listener
-    if (activityLogUnsubscribe) activityLogUnsubscribe(); // Clean up old listener
+    const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
+    // This query is much faster and safer than downloading the whole file
+    const q = query(logsColRef, orderBy("t", "desc"), limit(100)); 
 
-    const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-
-    activityLogUnsubscribe = onSnapshot(logRef, (snap) => {
-        if (snap.exists() && snap.data().entries) {
-            currentLogData = snap.data().entries.reverse(); // Newest first
-
-            // Render with current search term (preserves filter updates)
-            const currentQuery = document.getElementById('act-search') ? document.getElementById('act-search').value : "";
-            renderLiveLogs(currentQuery);
-        } else {
-            currentLogData = [];
-            list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No activity logs found.</div>';
-        }
+    activityLogUnsubscribe = onSnapshot(q, (snapshot) => {
+        const logs = [];
+        snapshot.forEach(doc => {
+            logs.push(doc.data());
+        });
+        
+        // Cache data for search filtering
+        window.cachedLogs = logs; 
+        filterDisplayedLogs(""); // Render all initially
+        
     }, (error) => {
-        console.error("Log Sync Error:", error);
-        list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Connection lost. Logs will reappear when online.</div>';
+        console.error("Log Read Error:", error);
+        list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Access Denied or Connection Lost.</div>';
     });
 };
 
-// Helper to Render Logs
-function renderLiveLogs(query = "") {
+// Helper to render the logs (Paste this below viewActivityLogs)
+function filterDisplayedLogs(query) {
     const list = document.getElementById('inconvenience-list');
-    if (!list) return;
+    if (!list || !window.cachedLogs) return;
 
     const q = query.toLowerCase();
-    const filtered = currentLogData.filter(e =>
+    const filtered = window.cachedLogs.filter(e =>
         (e.u && e.u.toLowerCase().includes(q)) ||
         (e.a && e.a.toLowerCase().includes(q)) ||
         (e.d && e.d.toLowerCase().includes(q))
@@ -4348,44 +4349,30 @@ function renderLiveLogs(query = "") {
 
     list.innerHTML = filtered.map(e => {
         const dateObj = new Date(e.t);
-        const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
-        const dateStr = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
+        const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+        
+        // Handle cases where email might be missing or short
+        const userDisplay = e.u ? e.u.split('@')[0] : "Unknown";
 
         let borderClass = "border-l-4 border-gray-300";
-        let bgClass = "bg-white";
-
-        // Dynamic Coloring
-        if (e.a.includes("Assigned") || e.a.includes("Booked") || e.a.includes("Available")) {
-            borderClass = "border-l-4 border-green-500";
-            bgClass = "bg-green-50";
-        }
-        if (e.a.includes("Removed") || e.a.includes("Cancelled") || e.a.includes("Withdraw")) {
-            borderClass = "border-l-4 border-red-500";
-            bgClass = "bg-red-50";
-        }
-        if (e.a.includes("Unavailable") || e.a.includes("Exchange")) {
-            borderClass = "border-l-4 border-orange-500";
-            bgClass = "bg-orange-50";
-        }
-        if (e.a.includes("Auto")) {
-            borderClass = "border-l-4 border-blue-500";
-            bgClass = "bg-blue-50";
-        }
-
-        const userDisplay = e.u.includes('@') ? e.u.split('@')[0] : e.u;
+        if (e.a.includes("Assigned")) borderClass = "border-l-4 border-green-500";
+        if (e.a.includes("Removed") || e.a.includes("Cancelled")) borderClass = "border-l-4 border-red-500";
+        if (e.a.includes("Unavailable")) borderClass = "border-l-4 border-orange-500";
 
         return `
-            <div class="p-3 mb-2 rounded shadow-sm border border-gray-200 ${borderClass} ${bgClass} text-xs transition-all hover:shadow-md">
-                <div class="flex justify-between text-gray-500 mb-1 border-b border-gray-200/50 pb-1">
-                    <span class="font-bold text-gray-700 truncate" title="${e.u}">${userDisplay}</span>
+            <div class="p-3 mb-2 rounded shadow-sm border border-gray-200 ${borderClass} bg-white text-xs">
+                <div class="flex justify-between text-gray-500 mb-1">
+                    <span class="font-bold text-gray-700">${userDisplay}</span>
                     <span class="font-mono text-[10px]">${dateStr} ${timeStr}</span>
                 </div>
-                <div class="font-bold text-gray-900 mt-1">${e.a}</div>
-                <div class="text-gray-600 mt-0.5 leading-relaxed">${e.d}</div>
+                <div class="font-bold text-gray-900">${e.a}</div>
+                <div class="text-gray-600 mt-0.5">${e.d}</div>
             </div>
         `;
     }).join('');
 }
+
 // --- LISTENER FOR EXCHANGE SEARCH ---
 const exchangeSearch = document.getElementById('exchange-search-input');
 if (exchangeSearch) {
