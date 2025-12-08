@@ -261,16 +261,32 @@ function setupLiveSync(collegeId, mode) {
             advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
 
-            if (mode === 'admin') {
+            // --- FIX START: Check VISIBLE View, not just 'mode' ---
+            const adminView = document.getElementById('view-admin');
+            const staffView = document.getElementById('view-staff');
+
+            // 1. If Admin View is active, update Admin Grid
+            if (adminView && !adminView.classList.contains('hidden')) {
                 renderSlotsGridAdmin();
                 renderAdminTodayStats();
-            } else if (currentUser) {
-                // Refresh Staff UI
-                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                if (me) {
-                    renderStaffCalendar(me.email);
-                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
-                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
+            }
+
+            // 2. If Staff View is active (Staff user OR Admin viewing as staff), update Calendar
+            if (staffView && !staffView.classList.contains('hidden')) {
+                // Determine which email to render
+                let emailToRender = currentUser ? currentUser.email : null;
+                
+                // If staffData is loaded, try to match correct casing
+                if (staffData.length > 0 && currentUser) {
+                    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                    if (me) emailToRender = me.email;
+                }
+
+                if (emailToRender) {
+                    renderStaffCalendar(emailToRender);
+                    // Also refresh associated staff components
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
+                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
                 }
             }
         }
@@ -1157,18 +1173,22 @@ function renderStaffCalendar(myEmail) {
                 let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
                 let glowClass = "";
 
+                // ... inside slots.forEach ...
+
                 if (isCompleted) {
-                    badgeClass = "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 text-shadow-sm";
+                    // FIX: "Cute" style for mobile (Flat, tiny), Rich style for Desktop
+                    badgeClass = "bg-green-100 text-green-700 border-green-200 md:bg-gradient-to-br md:from-green-500 md:to-green-600 md:text-white md:border-green-400 md:text-shadow-sm";
                     icon = "✅";
-                    // FIX: Tiny, crisp text for mobile. Normal text for desktop.
-                    statusText = `<span class="md:hidden text-[8px] font-extrabold tracking-widest">DONE</span><span class="hidden md:inline">Done</span>`;
-                    glowClass = "shadow-lg shadow-green-200";
+                    // Mobile: Tiny bold "DONE". Desktop: Normal "Done"
+                    statusText = `<span class="md:hidden text-[9px] font-black tracking-tighter leading-none">DONE</span><span class="hidden md:inline">Done</span>`;
+                    glowClass = "md:shadow-lg md:shadow-green-200"; // No heavy shadow on mobile
                 }
                 else if (isPostedByMe) {
+                    // ... (keep existing logic for other statuses) ...
                     if (isAdminLocked) {
                         badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300";
                         icon = "🛡️";
-                        statusText = "Frozen"; // Indicates market is paused
+                        statusText = "Frozen";
                     } else {
                         badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300";
                         icon = "⏳";
@@ -1176,9 +1196,9 @@ function renderStaffCalendar(myEmail) {
                     }
                 }
                 else if (isAssigned) {
-                    if (isAdminLocked) {
-                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; // Highlight admin lock on assigned
-                        icon = "🛡️"; // Show Shield
+                     if (isAdminLocked) {
+                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300";
+                        icon = "🛡️";
                         statusText = "Duty";
                     } else if (slot.isLocked) {
                         badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
@@ -1202,10 +1222,9 @@ function renderStaffCalendar(myEmail) {
                     icon = "⛔";
                     statusText = "Unavail";
                 }
-                // --- NEW: ADMIN LOCK DISPLAY ---
                 else if (isAdminLocked) {
                     badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200";
-                    icon = "🛡️"; // Shield
+                    icon = "🛡️"; 
                     statusText = "Paused"; 
                 }
                 else if (slot.isLocked) {
@@ -1219,14 +1238,17 @@ function renderStaffCalendar(myEmail) {
                     statusText = "Full";
                 }
 
+                // FIX: Dynamic Padding (Tight for 'Completed' on mobile, normal for others)
+                const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
+
                 contentHtml += `
-                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} p-0.5 md:p-1.5 shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer" onclick="openDayDetail('${dateStr}', '${myEmail}')">
-                        <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none"></div>
+                    <div class="relative overflow-hidden rounded md:rounded-lg border ${badgeClass} ${paddingClass} shadow-sm transition-transform active:scale-95 md:hover:scale-105 ${glowClass} flex items-center justify-center md:justify-between gap-0.5 md:gap-1 group/badge cursor-pointer min-h-[18px] md:min-h-0" onclick="openDayDetail('${dateStr}', '${myEmail}')">
+                        <div class="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent pointer-events-none hidden md:block"></div>
                         <div class="flex items-center gap-0.5 z-10">
                             <span class="text-[8px] md:text-[10px] uppercase font-black tracking-wider opacity-90">${slot.sessionType}</span>
                         </div>
                         <div class="flex items-center gap-0.5 md:gap-1 z-10">
-                            <span class="text-[9px] font-bold opacity-90 whitespace-normal break-words leading-tight">${statusText}</span>
+                            <span class="text-[9px] font-bold opacity-90 whitespace-nowrap leading-tight">${statusText}</span>
                             <span class="text-[8px] md:text-[10px] filter drop-shadow-sm flex-shrink-0">${icon}</span>
                         </div>
                     </div>`;
