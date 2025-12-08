@@ -1572,9 +1572,7 @@ window.openDayDetail = function (dateStr, email) {
                     if (!s) return '';
                     const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
                     const statusIcon = isExchanging ? "⏳" : "✅";
-                    const isReserve = reserveEmails.includes(st);
-                    const reserveBadge = isReserve ? `<span class="bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded ml-1 border border-yellow-200">Reserve</span>` : "";
-                    const rowClass = isReserve ? "bg-yellow-50/50" : "bg-white";
+                    const rowClass = "bg-white";
                     return `<div class="flex justify-between items-center text-xs ${rowClass} p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span>${reserveBadge}</span></div>`;
                 }).join('');
                 staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
@@ -2610,35 +2608,7 @@ window.runAutoAllocation = async function () {
     await syncSlotsToCloud();
     renderSlotsGridAdmin();
 
-    // --- NEW: Bulk Reserve Notification Check ---
-    const allReserves = [];
-    // Collect reserves from assigned slots
-    targetSlots.forEach(t => {
-        const r = getSlotReserves(t.key);
-        if (r.length > 0) {
-            allReserves.push({ key: t.key, reserves: r });
-        }
-    });
-
-    if (allReserves.length > 0) {
-        const totalR = allReserves.reduce((acc, curr) => acc + curr.reserves.length, 0);
-        if (confirm(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.\n\n⚠️ Reserves Identified: ${totalR} staff across ${allReserves.length} sessions.\n\nNotify them via Email?`)) {
-            updateSyncStatus("Sending Alerts...", "neutral");
-            let sentCount = 0;
-            for (const item of allReserves) {
-                for (const staff of item.reserves) {
-                    try {
-                        await sendSingleEmail(null, staff.email, staff.name, "Reserve Duty Alert", `You are on RESERVE duty for ${item.key}. Please be available.`);
-                        sentCount++;
-                    } catch (e) { }
-                }
-            }
-            updateSyncStatus("Done", "success");
-            alert(`Sent ${sentCount} reserve notifications.`);
-        }
-    } else {
-        alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
-    }
+   alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 //-------------------
 
@@ -4213,34 +4183,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     renderSlotsGridAdmin();
 
     // --- Bulk Reserve Notification Check (Unchanged) ---
-    const allReserves = [];
-    targetSlots.forEach(t => {
-        const r = getSlotReserves(t.key);
-        if (r.length > 0) {
-            allReserves.push({ key: t.key, reserves: r });
-        }
-    });
-
-    if (allReserves.length > 0) {
-        const totalR = allReserves.reduce((acc, curr) => acc + curr.reserves.length, 0);
-        if (confirm(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.\n\n⚠️ Reserves Identified: ${totalR} staff across ${allReserves.length} sessions.\n\nNotify them via Email?`)) {
-            updateSyncStatus("Sending Alerts...", "neutral");
-            let sentCount = 0;
-            for (const item of allReserves) {
-                for (const staff of item.reserves) {
-                    try {
-                        // Assuming sendSingleEmail is defined elsewhere
-                        await sendSingleEmail(null, staff.email, staff.name, "Reserve Duty Alert", `You are on RESERVE duty for ${item.key}. Please be available.`);
-                        sentCount++;
-                    } catch (e) { }
-                }
-            }
-            updateSyncStatus("Done", "success");
-            alert(`Sent ${sentCount} reserve notifications.`);
-        }
-    } else {
-        alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
-    }
+    alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 
 window.viewAutoAssignLogs = async function () {
@@ -6105,13 +6048,7 @@ window.saveManualAllocation = async function () {
         window.closeModal('manual-allocation-modal');
         renderSlotsGridAdmin();
 
-        // --- NEW: Trigger Reserve Notification ---
-        const reserves = getSlotReserves(key);
-        if (reserves.length > 0) {
-            if (confirm(`✅ Allocation Saved.\n\n⚠️ Reserves Identified: ${reserves.length}\n(These are staff assigned beyond the required count).\n\nNotify them now?`)) {
-                await notifySlotReserves(key);
-            }
-        }
+       
     }
 }
 window.switchAdminTab = function (tabName) {
