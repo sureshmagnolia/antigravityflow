@@ -149,95 +149,103 @@ document.getElementById('login-btn').addEventListener('click', () => signInWithP
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
-async function handleLogin(user) {
-    document.getElementById('login-btn').innerText = "Verifying...";
-    console.log("👤 Handling login for:", user.email);
 
-    // --- 1. CHECK URL ID (Highest Priority) ---
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlId = urlParams.get('id');
+function setupLiveSync(collegeId, mode) {
+    // 1. Clear Old Listeners
+    if (cloudUnsubscribe) cloudUnsubscribe();
+    if (slotsUnsubscribe) slotsUnsubscribe();
+    if (staffUnsubscribe) staffUnsubscribe();
+    if (allocUnsubscribe) allocUnsubscribe();
 
-    if (urlId) {
-        // If URL has ID, we trust it and verify access
-        await verifyAndLaunch(urlId, user);
-        return;
-    }
+    const docRef = doc(db, "colleges", collegeId);
 
-    // --- 2. CHECK LOCAL STORAGE (Cache - The "Zero Read" Optimization) ---
-    // If user logged in before, we remember their college ID.
-    const cachedCollegeId = localStorage.getItem('my_college_id');
-    if (cachedCollegeId) {
-        console.log("⚡ Found cached College ID:", cachedCollegeId);
-        await verifyAndLaunch(cachedCollegeId, user);
-        return;
-    }
-
-    // --- 3. FALLBACK: Search Firebase (Only if first time) ---
-    // This costs reads, but happens only once per device.
-    try {
-        const collegesRef = collection(db, "colleges");
-        
-        // Parallel Query: Check both Admin and Staff lists at once
-        const [adminSnap, staffSnap] = await Promise.all([
-            getDocs(query(collegesRef, where("allowedUsers", "array-contains", user.email))),
-            getDocs(query(collegesRef, where("staffAccessList", "array-contains", user.email)))
-        ]);
-
-        if (!adminSnap.empty) {
-            await verifyAndLaunch(adminSnap.docs[0].id, user);
-            return;
-        }
-        if (!staffSnap.empty) {
-            await verifyAndLaunch(staffSnap.docs[0].id, user);
-            return;
-        }
-
-        // No access found
-        alert("⛔ Access Denied.\n\nYou are not listed in any college system.");
-        signOut(auth);
-        document.getElementById('login-btn').innerText = "Login with Google";
-
-    } catch (e) {
-        console.error("Login Search Error:", e);
-        alert("Login Error: " + e.message);
-    }
-}
-
-// Helper to verify access and start session
-async function verifyAndLaunch(collegeId, user) {
-    try {
-        const docRef = doc(db, "colleges", collegeId);
-        const snap = await getDoc(docRef);
-
-        if (snap.exists()) {
-            const data = snap.data();
+    // --- A. CONFIG SYNC (Lightweight) ---
+    cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            updateSyncStatus("Synced", "success");
+            const data = docSnap.data();
             
-            // Determine Role
-            const isAdmin = data.allowedUsers?.includes(user.email);
-            const isStaff = data.staffAccessList?.includes(user.email); // Access List Check
-            const sList = JSON.parse(data.examStaffData || '[]');
-            const isStaffData = sList.some(s => s.email.toLowerCase() === user.email.toLowerCase());
+            // Update Global Variables
+            collegeName = data.examCollegeName || "College";
+            collegeSettings = data; // Store full object for reference
 
-            if (isAdmin || isStaff || isStaffData) {
-                // SUCCESS: Save ID for next time to avoid search queries
-                localStorage.setItem('my_college_id', collegeId);
-                
-                const role = isAdmin ? "Admin" : "Staff";
-                initializeSession(collegeId, isAdmin, role);
-            } else {
-                alert("⛔ Access Revoked or Invalid.");
-                localStorage.removeItem('my_college_id'); // Clear invalid cache
-                signOut(auth);
+            const currentCache = localStorage.getItem(`config_${collegeId}`);
+            if (currentCache !== JSON.stringify(data)) {
+                localStorage.setItem(`config_${collegeId}`, JSON.stringify(data));
+                applyCollegeConfig(data, mode, true);
             }
-        } else {
-            alert("❌ College Database not found.");
-            localStorage.removeItem('my_college_id');
         }
-    } catch (e) {
-        console.error("Launch Error:", e);
+    });
+
+    // --- B. SLOTS SYNC (Always Live - Critical) ---
+    // Both Admin and Staff need to see live slot changes (bookings/exchanges)
+    const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
+    slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            invigilationSlots = JSON.parse(data.examInvigilationSlots || '{}');
+            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+
+            // Dynamic UI Refresh
+            const adminView = document.getElementById('view-admin');
+            const staffView = document.getElementById('view-staff');
+
+            if (adminView && !adminView.classList.contains('hidden')) {
+                renderSlotsGridAdmin();
+                renderAdminTodayStats();
+            } else if (staffView && !staffView.classList.contains('hidden')) {
+                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                if (me) {
+                    renderStaffCalendar(me.email);
+                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
+                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(me.email);
+                }
+            }
+        }
+    });
+
+    // --- C. STAFF DATA (Conditional Strategy) ---
+    const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
+
+    if (mode === 'admin') {
+        // ADMIN: Live Listener (Needs to see new staff immediately)
+        staffUnsubscribe = onSnapshot(staffRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                staffData = JSON.parse(data.examStaffData || '[]');
+                
+                renderStaffTable();
+                updateAdminUI();
+            }
+        });
+    } else {
+        // STAFF: Fetch ONCE (Saves Reads)
+        // Staff don't need to see realtime updates of other staff profiles
+        getDoc(staffRef).then((docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                staffData = JSON.parse(data.examStaffData || '[]');
+                
+                // Initialize Dashboard
+                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                if (me) {
+                    if (document.getElementById('view-staff').classList.contains('hidden')) {
+                        initStaffDashboard(me);
+                    } else {
+                        // Just update stats if already open
+                        const done = getDutiesDoneCount(me.email);
+                        const pending = Math.max(0, calculateStaffTarget(me) - done);
+                        document.getElementById('staff-view-pending').textContent = pending;
+                        const completedEl = document.getElementById('staff-view-completed');
+                        if (completedEl) completedEl.textContent = done;
+                        renderStaffRankList(me.email);
+                    }
+                }
+            }
+        });
     }
 }
-
 
 // --- Helper to start the session ---
 function initializeSession(id, adminStatus, roleName) {
