@@ -2,6 +2,27 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChang
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+// --- NEW IMPORTS FOR RECAPTCHA (Add this) ---
+import { initializeAppCheck, ReCaptchaV3Provider } 
+    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
+import { getApp } 
+    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
+// --- INITIALIZE APP CHECK (Add this block) ---
+// This grabs the Firebase App instance that you initialized in your other file/HTML
+const app = getApp(); 
+
+// Enable Localhost Debugging (Prevents being blocked while testing on your computer)
+// Remove this line when you go fully public if you want strict enforcement
+self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; 
+
+const appCheck = initializeAppCheck(app, {
+    // Paste your SITE KEY here:
+    provider: new ReCaptchaV3Provider('6LcMiSQsAAAAABfK5nXqVJ_vo6GwU4DFfBN7-u5K'),
+
+    // Automatically refresh the token in the background
+    isTokenAutoRefreshEnabled: true 
+});
 
 const auth = window.firebase.auth;
 const db = window.firebase.db;
