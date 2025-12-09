@@ -7783,7 +7783,221 @@ window.showLiveStaffModal = function() {
     if(typeof UiModal !== 'undefined') UiModal.show("Live Status", html);
     else alert(online.map(o => o.name).join('\n'));
 };
+// ==========================================
+// 📄 PDF GENERATION LOGIC (Added V25)
+// ==========================================
 
+// 1. ATTENDANCE REGISTER PDF
+window.downloadAttendancePDF = function () {
+    if (!confirm("Download Attendance Register PDF?")) return;
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const acYear = getCurrentAcademicYear();
+    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+    
+    // --- Data Gathering (Same as Print) ---
+    const facultyMap = new Map();
+    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
+
+    sortedKeys.forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+        if (!slot.attendance || slot.attendance.length === 0) return;
+
+        const [dateStr, timeStr] = key.split(' | ');
+        const sessionType = (timeStr.includes("PM") || timeStr.startsWith("12")) ? "AN" : "FN";
+
+        slot.attendance.forEach(email => {
+            if (!facultyMap.has(email)) {
+                const staff = staffData.find(s => s.email === email);
+                facultyMap.set(email, {
+                    name: staff ? staff.name : getNameFromEmail(email),
+                    dept: staff ? staff.dept : "N/A",
+                    designation: staff ? staff.designation : "N/A",
+                    sessions: []
+                });
+            }
+            facultyMap.get(email).sessions.push(`${dateStr} (${sessionType})`);
+        });
+    });
+
+    const facultyData = Array.from(facultyMap.values()).sort((a, b) => {
+        if (a.dept !== b.dept) return a.dept.localeCompare(b.dept);
+        return a.name.localeCompare(b.name);
+    });
+
+    if (facultyData.length === 0) return alert("No attendance records found.");
+
+    // --- Table Body ---
+    const tableData = facultyData.map((f, index) => [
+        index + 1,
+        f.name,
+        f.dept,
+        f.designation,
+        f.sessions.length,
+        f.sessions.join(', ')
+    ]);
+
+    // --- Generate PDF ---
+    // Header
+    doc.setFillColor(30, 41, 59); // Dark Blue Header
+    doc.rect(0, 0, 210, 25, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.text(collegeName.toUpperCase(), 14, 10);
+    
+    doc.setFontSize(10);
+    doc.text(`Faculty Attendance Register: AY ${acYear.label}`, 14, 18);
+    
+    // Table
+    doc.autoTable({
+        head: [['#', 'Name', 'Dept', 'Desig', 'Count', 'Sessions Attended']],
+        body: tableData,
+        startY: 30,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+        columnStyles: {
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 40 },
+            4: { cellWidth: 15, halign: 'center', fontStyle: 'bold' },
+            5: { cellWidth: 'auto' }
+        }
+    });
+
+    // Footer
+    const finalY = doc.lastAutoTable.finalY + 15;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text("Senior Asst. Superintendent", 14, finalY);
+    doc.text("Chief Superintendent", 150, finalY);
+
+    doc.save(`Attendance_Register_${acYear.label}.pdf`);
+};
+
+
+// 2. VACATION REPORT PDF
+window.downloadVacationPDF = function() {
+    const startStr = document.getElementById('vac-start').value;
+    const endStr = document.getElementById('vac-end').value;
+
+    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    
+    // --- Data Calculation (Same as Print) ---
+    const startDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    const isHoliday = (d) => {
+        const day = d.getDay();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateString = `${yyyy}-${mm}-${dd}`;
+        return (day === 0 || day === 6 || vacationExtraHolidays.has(dateString));
+    };
+
+    const reportData = [];
+
+    staffData.forEach(staff => {
+        if (staff.status === 'archived') return;
+        const dutyDates = []; 
+        Object.keys(invigilationSlots).forEach(key => {
+            const slot = invigilationSlots[key];
+            const dateObj = parseDate(key);
+            if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
+                if (!dutyDates.some(d => d.toDateString() === dateObj.toDateString())) dutyDates.push(dateObj);
+            }
+        });
+
+        if (dutyDates.length === 0) return;
+        dutyDates.sort((a, b) => a - b);
+
+        const interveningDates = [];
+        for (let i = 0; i < dutyDates.length - 1; i++) {
+            const current = dutyDates[i];
+            const next = dutyDates[i+1];
+            let temp = new Date(current); temp.setDate(temp.getDate() + 1);
+            const gapDates = [];
+            let isGapValid = true;
+            while (temp < next) {
+                if (!isHoliday(temp)) { isGapValid = false; break; }
+                gapDates.push(new Date(temp));
+                temp.setDate(temp.getDate() + 1);
+            }
+            if (isGapValid) gapDates.forEach(gd => interveningDates.push(gd));
+        }
+
+        const dutyCount = dutyDates.length;
+        const holidayCount = interveningDates.length;
+        
+        reportData.push({
+            name: staff.name,
+            dept: staff.dept,
+            dates: dutyDates.map(d => d.getDate() + '/' + (d.getMonth()+1)).join(', '),
+            holidays: interveningDates.map(d => d.getDate() + '/' + (d.getMonth()+1)).join(', '),
+            dutyCount: dutyCount,
+            holidayCount: holidayCount,
+            total: dutyCount + holidayCount
+        });
+    });
+
+    if (reportData.length === 0) return alert("No duties found in range.");
+
+    reportData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+
+    // --- Generate PDF (Landscape) ---
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "landscape" }); 
+    const collegeName = collegeData.examCollegeName || "College";
+
+    // Header
+    doc.setFillColor(30, 41, 59);
+    doc.rect(0, 0, 297, 25, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.text(collegeName.toUpperCase(), 14, 10);
+    
+    doc.setFontSize(10);
+    doc.text(`Vacation Duty Report: ${startStr} to ${endStr}`, 14, 18);
+
+    // Table Body
+    const tableBody = reportData.map((r, i) => [
+        i + 1,
+        `${r.name}\n(${r.dept})`,
+        r.dates,
+        r.dutyCount,
+        r.holidays,
+        r.holidayCount,
+        r.total
+    ]);
+
+    doc.autoTable({
+        head: [['#', 'Staff', 'Duty Dates', 'Duty', 'Intervening Holidays', 'Hol.', 'Total']],
+        body: tableBody,
+        startY: 30,
+        theme: 'grid',
+        headStyles: { fillColor: [30, 41, 59] },
+        styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+        columnStyles: {
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 40 },
+            3: { cellWidth: 10, halign: 'center', fontStyle: 'bold' },
+            5: { cellWidth: 10, halign: 'center' },
+            6: { cellWidth: 15, halign: 'center', fontStyle: 'bold', fillColor: [240, 253, 244] }
+        }
+    });
+
+    // Footer
+    const finalY = doc.lastAutoTable.finalY + 15;
+    doc.setTextColor(0, 0, 0);
+    doc.text("Chief Superintendent", 250, finalY);
+
+    doc.save(`Vacation_Report_${startStr}.pdf`);
+    window.closeModal('vacation-report-modal');
+};
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
     const acYear = getCurrentAcademicYear();
