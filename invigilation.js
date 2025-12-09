@@ -7879,16 +7879,17 @@ window.downloadAttendancePDF = function () {
 };
 
 
-// 2. VACATION REPORT PDF
+// 2. VACATION REPORT PDF (Corrected: 7 Columns)
 window.downloadVacationPDF = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
     if (!startStr || !endStr) return alert("Please select start and end dates.");
     
-    // --- Data Calculation (Same as Print) ---
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
+
+    // Helper: Check for Holidays (Sundays, Saturdays, Extra Holidays)
     const isHoliday = (d) => {
         const day = d.getDay();
         const yyyy = d.getFullYear();
@@ -7900,20 +7901,49 @@ window.downloadVacationPDF = function() {
 
     const reportData = [];
 
+    // --- 1. GATHER DATA (Exact match to Print Logic) ---
     staffData.forEach(staff => {
         if (staff.status === 'archived') return;
-        const dutyDates = []; 
+
+        const dutyDates = [];   // For unique dates count
+        const rawSessions = []; // For displaying FN/AN details
+
         Object.keys(invigilationSlots).forEach(key => {
             const slot = invigilationSlots[key];
             const dateObj = parseDate(key);
+            
+            // Check Range & Attendance
             if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
-                if (!dutyDates.some(d => d.toDateString() === dateObj.toDateString())) dutyDates.push(dateObj);
+                const [dStr, tStr] = key.split(' | ');
+                const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+                const sessCode = isAN ? "AN" : "FN";
+                
+                // Add Session Detail
+                rawSessions.push({
+                    dateObj: dateObj,
+                    isAN: isAN,
+                    str: `${dStr} (${sessCode})`
+                });
+
+                // Add to Unique Dates
+                const dateKey = dateObj.toDateString();
+                if (!dutyDates.some(d => d.toDateString() === dateKey)) {
+                    dutyDates.push(dateObj);
+                }
             }
         });
 
         if (dutyDates.length === 0) return;
-        dutyDates.sort((a, b) => a - b);
 
+        // Sort Dates & Sessions
+        dutyDates.sort((a, b) => a - b);
+        rawSessions.sort((a, b) => {
+            const timeDiff = a.dateObj - b.dateObj;
+            if (timeDiff !== 0) return timeDiff;
+            return a.isAN ? 1 : -1;
+        });
+
+        // Calculate Intervening Holidays
         const interveningDates = [];
         for (let i = 0; i < dutyDates.length - 1; i++) {
             const current = dutyDates[i];
@@ -7921,33 +7951,41 @@ window.downloadVacationPDF = function() {
             let temp = new Date(current); temp.setDate(temp.getDate() + 1);
             const gapDates = [];
             let isGapValid = true;
+
             while (temp < next) {
                 if (!isHoliday(temp)) { isGapValid = false; break; }
                 gapDates.push(new Date(temp));
                 temp.setDate(temp.getDate() + 1);
             }
-            if (isGapValid) gapDates.forEach(gd => interveningDates.push(gd));
+            if (isGapValid && gapDates.length > 0) {
+                gapDates.forEach(gd => interveningDates.push(gd));
+            }
         }
 
-        const dutyCount = dutyDates.length;
-        const holidayCount = interveningDates.length;
-        
+        // Formats
+        const sessionsStr = rawSessions.map(s => s.str).join(', ');
+        const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
+        const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
+
         reportData.push({
             name: staff.name,
-            dept: staff.dept,
-            dates: dutyDates.map(d => d.getDate() + '/' + (d.getMonth()+1)).join(', '),
-            holidays: interveningDates.map(d => d.getDate() + '/' + (d.getMonth()+1)).join(', '),
-            dutyCount: dutyCount,
-            holidayCount: holidayCount,
-            total: dutyCount + holidayCount
+            desig: staff.designation || "",
+            dept: staff.dept || "",
+            phone: staff.phone || "-",
+            sessions: sessionsStr,
+            dutyDates: dutyDatesStr,
+            interveningDates: interveningStr || "-",
+            interveningCount: interveningDates.length,
+            total: dutyDates.length + interveningDates.length
         });
     });
 
     if (reportData.length === 0) return alert("No duties found in range.");
 
+    // Sort by Dept, then Name
     reportData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
 
-    // --- Generate PDF (Landscape) ---
+    // --- 2. GENERATE PDF ---
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: "landscape" }); 
     const collegeName = collegeData.examCollegeName || "College";
@@ -7960,44 +7998,59 @@ window.downloadVacationPDF = function() {
     doc.setFontSize(16);
     doc.text(collegeName.toUpperCase(), 14, 10);
     
-    doc.setFontSize(10);
-    doc.text(`Vacation Duty Report: ${startStr} to ${endStr}`, 14, 18);
+    doc.setFontSize(12);
+    doc.text(`Vacation Duty & Earned Leave Report`, 14, 18);
+    doc.text(`${startStr} to ${endStr}`, 240, 18);
 
-    // Table Body
+    // Table Body (7 Columns)
     const tableBody = reportData.map((r, i) => [
         i + 1,
-        `${r.name}\n(${r.dept})`,
-        r.dates,
-        r.dutyCount,
-        r.holidays,
-        r.holidayCount,
-        r.total
+        `${r.name}\n${r.desig}\n${r.dept}\nPh: ${r.phone}`, // Combined Staff Details
+        r.sessions,         // Sessions Attended
+        r.dutyDates,        // Unique Dates
+        r.interveningDates, // Intervening Holidays
+        r.interveningCount, // Hol. Count
+        r.total             // Total Eligible
     ]);
 
     doc.autoTable({
-        head: [['#', 'Staff', 'Duty Dates', 'Duty', 'Intervening Holidays', 'Hol.', 'Total']],
+        head: [['#', 'Staff Details', 'Sessions Attended', 'Duty Dates', 'Intervening Holidays', 'Hol.', 'Total']],
         body: tableBody,
         startY: 30,
         theme: 'grid',
-        headStyles: { fillColor: [30, 41, 59] },
-        styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+        headStyles: { 
+            fillColor: [30, 41, 59], 
+            textColor: 255, 
+            fontStyle: 'bold',
+            halign: 'center'
+        },
+        styles: { 
+            fontSize: 9, 
+            cellPadding: 3, 
+            valign: 'top', // Top align for multiline text
+            overflow: 'linebreak'
+        },
         columnStyles: {
-            0: { cellWidth: 10, halign: 'center' },
-            1: { cellWidth: 40 },
-            3: { cellWidth: 10, halign: 'center', fontStyle: 'bold' },
-            5: { cellWidth: 10, halign: 'center' },
-            6: { cellWidth: 15, halign: 'center', fontStyle: 'bold', fillColor: [240, 253, 244] }
+            0: { cellWidth: 10, halign: 'center' }, // Index
+            1: { cellWidth: 50 },                   // Staff Details (Wider)
+            2: { cellWidth: 60 },                   // Sessions (Widest)
+            3: { cellWidth: 40 },                   // Duty Dates
+            4: { cellWidth: 40 },                   // Intervening
+            5: { cellWidth: 15, halign: 'center' }, // Count
+            6: { cellWidth: 20, halign: 'center', fontStyle: 'bold', fillColor: [240, 253, 244] } // Total (Greenish)
         }
     });
 
     // Footer
     const finalY = doc.lastAutoTable.finalY + 15;
     doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
     doc.text("Chief Superintendent", 250, finalY);
 
-    doc.save(`Vacation_Report_${startStr}.pdf`);
+    doc.save(`Vacation_Report_${startStr}_${endStr}.pdf`);
     window.closeModal('vacation-report-modal');
 };
+
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
     const acYear = getCurrentAcademicYear();
