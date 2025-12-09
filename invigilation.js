@@ -1266,7 +1266,7 @@ function renderStaffCalendar(myEmail) {
                 else if (isMarketAvailable) {
                     badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse";
                     icon = "♻️";
-                    statusText = "Market";
+                    statusText = "Exchange";
                 }
                 else if (isUnavailable) {
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
