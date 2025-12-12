@@ -1296,16 +1296,15 @@ function updateLocalSlotsFromStudents() {
     });
 
   
-// --- NEW FUNCTION: High-Fidelity PDF Generator (using jsPDF + AutoTable) ---
+// --- HIGH-FIDELITY PDF GENERATOR (Matches Print Layout) ---
 window.downloadReportPDF = function() {
     const { jsPDF } = window.jspdf;
     const reportContainer = document.getElementById('report-output-area');
     
-    // Get all 'print-page' divs. If none, try the container itself.
+    // Get all 'print-page' divs.
     let pages = reportContainer.querySelectorAll('.print-page');
     if (pages.length === 0 && reportContainer.innerHTML.trim() !== "") {
-        // Fallback for single page reports without the class
-        pages = [reportContainer];
+        pages = [reportContainer]; // Fallback for single page
     }
 
     if (pages.length === 0) return alert("No report content found.");
@@ -1320,7 +1319,7 @@ window.downloadReportPDF = function() {
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
-    // --- HELPER: Parse RGB string to array ---
+    // Helper to extract RGB from CSS strings
     const getRgb = (str) => {
         if(!str || str === 'rgba(0, 0, 0, 0)' || str === 'transparent') return null;
         const match = str.match(/\d+/g);
@@ -1331,122 +1330,161 @@ window.downloadReportPDF = function() {
         if (index > 0) doc.addPage();
 
         let currentY = 15;
+        const pageWidth = doc.internal.pageSize.getWidth();
 
-        // 1. HEADER EXTRACTION (H1, H2, H3, Divs)
-        const headerGroup = page.querySelector('.print-header-group') || page;
-        // We select immediate text children elements to print as header
-        const headers = headerGroup.querySelectorAll('h1, h2, h3, .report-location-header, .print-header-text');
+        // --- 1. HEADER EXTRACTION ---
+        const headerGroup = page.querySelector('.print-header-group');
+        if (headerGroup) {
+            // A. Centered Titles (H1, H2, H3)
+            const titles = headerGroup.querySelectorAll('h1, h2, h3, .report-location-header, .print-header-text');
+            titles.forEach(el => {
+                const text = el.innerText.trim();
+                if(!text) return;
+                
+                const style = window.getComputedStyle(el);
+                const fontSize = parseFloat(style.fontSize) * 0.75; // px to pt conversion
+                const isBold = parseInt(style.fontWeight) > 500 || style.fontWeight === 'bold';
+                
+                doc.setFont("helvetica", isBold ? "bold" : "normal");
+                doc.setFontSize(Math.max(fontSize, 10));
+                
+                doc.text(text, pageWidth / 2, currentY, { align: 'center' });
+                currentY += (fontSize * 0.4) + 2;
+            });
 
-        headers.forEach(el => {
-            if(el.closest('table')) return; // Skip if inside a table (handled by autotable)
-            
-            const text = el.innerText.trim();
-            if(!text) return;
+            // B. "Ears" (Absolute Positioned Elements: Page No, Stream)
+            // We look for divs with absolute positioning in the header
+            const ears = headerGroup.querySelectorAll('div[style*="absolute"]');
+            ears.forEach(el => {
+                const text = el.innerText.trim().replace(/\s+/g, ' '); // Clean text
+                if(!text) return;
+                const style = el.getAttribute('style');
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
 
-            const style = window.getComputedStyle(el);
-            const fontSize = parseFloat(style.fontSize) * 0.75; // px to pt approx
-            const isBold = parseInt(style.fontWeight) > 500 || style.fontWeight === 'bold';
-            
-            doc.setFont("helvetica", isBold ? "bold" : "normal");
-            doc.setFontSize(Math.max(fontSize, 10)); // Min size 10
-            
-            // Center text
-            doc.text(text, 105, currentY, { align: 'center' });
-            currentY += (fontSize / 2) + 2;
-        });
+                if (style.includes('left: 0') || style.includes('left:0')) {
+                    doc.text(text, 14, 10); // Top Left Corner
+                } else if (style.includes('right: 0') || style.includes('right:0')) {
+                    doc.text(text, pageWidth - 14, 10, { align: 'right' }); // Top Right Corner
+                }
+            });
+            currentY += 5; // Spacing after header
+        }
 
-        currentY += 5; // Gap after header
-
-        // 2. TABLE EXTRACTION (The Core Logic)
-        const tables = page.querySelectorAll('table');
+        // --- 2. TABLE EXTRACTION ---
+        // Find tables that are NOT inside the footer (main data tables)
+        const tables = Array.from(page.querySelectorAll('table')).filter(t => !t.closest('.invigilator-footer') && !t.closest('.footer') && !t.closest('.absentee-footer'));
 
         tables.forEach(table => {
             doc.autoTable({
                 html: table,
                 startY: currentY,
                 theme: 'grid',
-                // --- STYLE SCRAPER ---
-                styles: {
-                    lineColor: [0, 0, 0],
-                    lineWidth: 0.1,
-                    textColor: [0, 0, 0],
-                    valign: 'middle',
-                    fontSize: 9 // Default size
+                // STYLE SCRAPER: Copies CSS from HTML to PDF
+                styles: { 
+                    lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
+                    valign: 'middle', fontSize: 9, cellPadding: 1.5 
                 },
-                headStyles: {
-                    fillColor: [240, 240, 240], // Default grey header
-                    textColor: [0, 0, 0],
-                    fontStyle: 'bold',
-                    lineWidth: 0.1
+                headStyles: { 
+                    fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 
                 },
-                // This function runs for EVERY cell and copies the HTML CSS to PDF
                 didParseCell: function(data) {
                     const el = data.cell.raw; 
                     if (!el) return;
-
                     const style = window.getComputedStyle(el);
-
-                    // A. Background Color
+                    
+                    // Background Color
                     const bg = getRgb(style.backgroundColor);
-                    if (bg) {
-                        data.cell.styles.fillColor = bg;
-                    }
-
-                    // B. Font Weight
-                    const weight = style.fontWeight;
-                    if (weight === 'bold' || parseInt(weight) > 500 || el.tagName === 'TH') {
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-
-                    // C. Text Alignment
-                    if (style.textAlign) {
-                        data.cell.styles.halign = style.textAlign; // left, center, right
-                    }
-
-                    // D. Font Size (Scaling)
-                    // If HTML has small text (e.g. 10px), scale it down in PDF
+                    if(bg) data.cell.styles.fillColor = bg;
+                    
+                    // Bold Text
+                    if (style.fontWeight === 'bold' || parseInt(style.fontWeight) > 500) data.cell.styles.fontStyle = 'bold';
+                    
+                    // Alignment
+                    if (style.textAlign) data.cell.styles.halign = style.textAlign;
+                    
+                    // Font Size Scaling (Small text stays small)
                     const pxSize = parseFloat(style.fontSize);
-                    if (pxSize < 12) { 
-                        data.cell.styles.fontSize = 8; 
-                    } else if (pxSize > 16) {
-                        data.cell.styles.fontSize = 11;
-                    }
+                    if (pxSize < 12) data.cell.styles.fontSize = 8;
                 },
-                margin: { left: 10, right: 10 },
-                tableWidth: 'auto'
+                margin: { left: 10, right: 10 }
             });
-
-            currentY = doc.lastAutoTable.finalY + 10;
+            currentY = doc.lastAutoTable.finalY + 5;
         });
 
-        // 3. FOOTER EXTRACTION
-        const footers = page.querySelectorAll('.footer, .invigilator-footer, .absentee-footer, .signature');
-        
-        footers.forEach(footer => {
-            // Check if we have space, else add page
-            if (currentY > 270) { doc.addPage(); currentY = 15; }
+        // --- 3. FOOTER RECONSTRUCTION (Room-wise Report) ---
+        const invigFooter = page.querySelector('.invigilator-footer');
+        if (invigFooter) {
+            // A. Course Summary Table (Nested inside footer)
+            const sumTable = invigFooter.querySelector('table');
+            if (sumTable) {
+                 // Check if we need a new page
+                 if(currentY > 220) { doc.addPage(); currentY = 15; }
+                 
+                 doc.setFontSize(10);
+                 doc.setFont("helvetica", "bold");
+                 doc.text("Course Summary:", 14, currentY + 5);
+                 currentY += 7;
 
-            const textLines = footer.innerText.split('\n').filter(x => x.trim());
-            doc.setFontSize(10);
+                 doc.autoTable({
+                    html: sumTable,
+                    startY: currentY,
+                    theme: 'grid',
+                    styles: { lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], fontSize: 8 },
+                    headStyles: { fillColor: [240,240,240], fontStyle: 'bold' },
+                    margin: { left: 14, right: 14 }
+                 });
+                 currentY = doc.lastAutoTable.finalY + 10;
+            }
+
+            // B. Booklet Box (Draw Rectangle manually)
+            if(currentY > 250) { doc.addPage(); currentY = 15; }
+            
+            const boxHeight = 25;
+            doc.setDrawColor(0);
+            doc.setLineWidth(0.1);
+            doc.rect(14, currentY, pageWidth - 28, boxHeight); // Main Box
+            
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "bold");
+            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", 16, currentY + 6);
+            
+            doc.setLineDash([1, 1], 0); // Dotted line
+            doc.line(14, currentY + 12, pageWidth - 14, currentY + 12);
+            doc.setLineDash([]); // Reset to solid
+            
+            doc.text("Written Booklets (QP Wise):", 16, currentY + 17);
+            
+            // C. Signatures
+            currentY += boxHeight + 15;
             doc.setFont("helvetica", "normal");
-
-            let footerY = (currentY > 250) ? 280 : currentY + 10; // Push to bottom if near, else append
-
-            // Smart align: If text contains "Signature" or "Superintendent", align Right
-            textLines.forEach(line => {
-                if (line.includes("Superintendent") || line.includes("Signature") || line.includes("Invigilator")) {
-                    // Split line if it has left/right parts (common in flex footers)
-                    if(line.length > 50) {
-                         doc.text(line, 105, footerY, { align: 'center' }); // Center long lines
-                    } else {
-                         doc.text(line, 190, footerY, { align: 'right' });
-                    }
-                } else {
-                    doc.text(line, 14, footerY);
-                }
-                footerY += 5;
-            });
-        });
+            
+            if(invigFooter.innerText.includes("Scribe Assistance")) {
+                doc.text("* = Scribe Assistance", 14, currentY);
+            }
+            
+            // Signature Line
+            doc.line(140, currentY - 1, 190, currentY - 1); 
+            doc.text("Name & Signature of Invigilator", 165, currentY + 4, { align: 'center' });
+        }
+        
+        // --- 4. GENERIC FOOTER (Absentee/Summary Reports) ---
+        const genericFooter = page.querySelector('.footer, .absentee-footer');
+        if (genericFooter) {
+             const footerText = genericFooter.innerText.split('\n').filter(x => x.trim());
+             let footerY = 280; // Bottom of page
+             
+             doc.setFontSize(10);
+             footerText.forEach(line => {
+                 if(line.includes("Superintendent") || line.includes("Signature")) {
+                     doc.text(line, pageWidth - 14, footerY, {align:'right'});
+                 } else {
+                     doc.text(line, 14, footerY);
+                 }
+                 footerY -= 5;
+             });
+        }
     });
 
     // Save
