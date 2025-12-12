@@ -822,29 +822,29 @@ function updateLocalSlotsFromStudents() {
     }
 
 
-    // 4. CLOUD UPLOAD FUNCTION (Strict V2: No Legacy/Heavy Sync)
-    async function syncDataToCloud(targetSection = 'heavy') {
-        // --- BLOCK LEGACY V1 SYNC ---
+    // 4. CLOUD UPLOAD FUNCTION (Pure V2)
+    // Removed 'heavy' default. Now requires explicit target.
+    async function syncDataToCloud(targetSection) {
+        if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
-            console.log("🚫 V1 'Heavy' Sync ignored. System is in V2 Mode.");
-            return; // STOP HERE. Do not upload chunks.
+            console.warn("🚫 Ignored V1 'heavy' sync call. System is V2.");
+            return;
         }
 
         if (!currentUser || !currentCollegeId || isSyncing) return;
         if (!navigator.onLine) return updateSyncStatus("Offline", "error");
 
         isSyncing = true;
-        updateSyncStatus("Saving...", "neutral");
+        updateSyncStatus(`Saving ${targetSection}...`, "neutral");
 
         const { db, doc, setDoc } = window.firebase;
         const cid = currentCollegeId;
         const timestamp = new Date().toISOString();
 
         try {
-            // Helper to get data from LocalStorage
             const get = (k) => localStorage.getItem(k);
 
-            // 1. SETTINGS (College Name, Rooms, Streams, Rules)
+            // 1. SETTINGS (Global Config)
             if (targetSection === 'settings') {
                 const data = {
                     examCollegeName: get('examCollegeName'),
@@ -858,7 +858,7 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
             }
 
-            // 2. OPERATIONS (Absentees, QP Codes - Global Lists)
+            // 2. OPERATIONS (Global Lists)
             else if (targetSection === 'ops') {
                 const data = {
                     examAbsenteeList: get('examAbsenteeList'),
@@ -867,7 +867,7 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
             }
 
-            // 3. ALLOCATION (Global Scribe List)
+            // 3. ALLOCATION (Scribes)
             else if (targetSection === 'allocation') {
                 const data = {
                     examScribeList: get('examScribeList'),
@@ -13363,38 +13363,36 @@ window.confirmDialSelection = confirmDialSelection;
         headerSyncStatus.title = "Click to Force Save to Cloud";
         headerSyncStatus.classList.add("hover:underline"); // Add underline on hover
 
-        // 2. Click Handler
+       // 2. Click Handler
         headerSyncStatus.addEventListener('click', async () => {
             const currentText = headerSyncStatus.textContent;
-            
-            // Prevent double-clicking if already saving
             if (currentText === "Saving..." || currentText === "Connecting...") return;
 
             if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
-                // Update UI immediately
-                updateSyncStatus("Saving...", "neutral");
-    
-               // MODULAR FORCE SYNC (V2)
-                updateSyncStatus("Syncing Global Config...", "neutral");
-                await syncDataToCloud('settings');
-                await syncDataToCloud('staff');
-                await syncDataToCloud('slots');
-                await syncDataToCloud('allocation'); // Scribe List
-                await syncDataToCloud('ops');        // Global Ops (if any)
+                    updateSyncStatus("Saving...", "neutral");
+        
+                    // MODULAR FORCE SYNC (V2)
+                    updateSyncStatus("Syncing Global Config...", "neutral");
+                    await syncDataToCloud('settings');
+                    await syncDataToCloud('ops');
+                    await syncDataToCloud('allocation');
+                    await syncDataToCloud('staff');
+                    await syncDataToCloud('slots');
+                    // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
-                // Iteratively sync all sessions (Ensures V2 documents are fresh)
-                const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-                let count = 0;
-                for (const sessionKey of allSessions) {
-                    count++;
-                    updateSyncStatus(`Syncing Session ${count}/${allSessions.size}...`, "neutral");
-                    await syncSessionToCloud(sessionKey);
-                }
-                
-                updateSyncStatus("All Synced!", "success");
+                    // Iteratively sync all sessions (Ensures V2 documents are fresh)
+                    const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+                    let count = 0;
+                    for (const sessionKey of allSessions) {
+                        count++;
+                        updateSyncStatus(`Syncing Session ${count}/${allSessions.size}...`, "neutral");
+                        await syncSessionToCloud(sessionKey);
+                    }
+                    
+                    updateSyncStatus("All Synced!", "success");
                 } else {
-                alert("Sync function is not ready yet. Please wait.");
+                    alert("Sync function is not ready yet.");
                 }
             }
         });
