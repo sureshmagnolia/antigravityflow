@@ -1554,218 +1554,346 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
-// --- FIXED GENERATOR: DAY-WISE REPORT (Strict 1-Page Fit + Auto-Scale) ---
+// --- ULTIMATE PDF GENERATOR: FROM SOURCE DATA (No HTML Scraping) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const container = document.getElementById('report-output-area');
-    const pages = container.querySelectorAll('.print-page');
 
-    if (pages.length === 0) return alert("No pages found.");
+    // 1. VALIDATION
+    if (!allStudentData || allStudentData.length === 0) return alert("No data loaded to generate PDF.");
 
     const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
 
-    // Page Constants
+    // 2. CONFIGURATION
     const PAGE_HEIGHT = 297;
     const PAGE_WIDTH = 210;
     const MARGIN = 10;
-    const HEADER_HEIGHT_ESTIMATE = 40; // Approx height of college header
-    const AVAILABLE_HEIGHT = PAGE_HEIGHT - MARGIN - HEADER_HEIGHT_ESTIMATE - 10; // 10mm buffer
+    const COL_GAP = 5;
+    const HEADER_Y_START = 15;
+    
+    // Threshold: If rows > 40, switch to 2 columns to save paper
+    const ROW_THRESHOLD_FOR_2COL = 40; 
 
-    pages.forEach((page, i) => {
-        if (i > 0) doc.addPage();
+    try {
+        // 3. PREPARE DATA (Mirroring the Logic of HTML Generator)
+        // We filter based on the current UI selection (Session/Stream)
+        const reportType = 'day-wise';
+        const rawData = getFilteredReportData(reportType); // Reuse existing filter logic
+
+        if (!rawData || rawData.length === 0) throw new Error("No matching data found.");
+
+        // Allocate Rooms (Get Room Nos and Seats)
+        const dataWithRooms = performOriginalAllocation(rawData);
         
-        let currentY = 15; 
+        // Get Scribe List for highlighting
+        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
 
-        // --- 1. HEADER RECONSTRUCTION ---
-        const headerDiv = page.querySelector('.print-header-group');
-        if (headerDiv) {
-            // A. Absolute Divs (Page No / Stream)
-            const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
-            absoluteDivs.forEach(div => {
-                const text = div.innerText.trim().replace(/\s+/g, ' ');
-                const style = div.getAttribute('style');
-                if (style && style.includes('left')) doc.text(text, 14, 10);
-                if (style && style.includes('right')) doc.text(text, PAGE_WIDTH - 14, 10, { align: 'right' });
-            });
-
-            // B. Center Titles
-            const titles = headerDiv.querySelectorAll('h1, h2, h3');
-            titles.forEach(el => {
-                const text = el.innerText.trim();
-                let size = 10;
-                if (el.tagName === 'H1') size = 16; 
-                else if (el.tagName === 'H2') size = 12;
-                else if (el.tagName === 'H3') size = 10;
-
-                doc.setFontSize(size);
-                doc.setFont("helvetica", "bold");
-                doc.text(text, PAGE_WIDTH/2, currentY, {align:'center'});
-                currentY += (size * 0.35) + 3;
-            });
-        }
-        
-        currentY += 2; 
-
-        // --- 2. DATA EXTRACTION & SCALING ---
-        const tables = page.querySelectorAll('table');
-        const isScribePage = page.innerText.includes("Scribe Assistance Summary");
-        // Trust the HTML structure: if .column-container exists, it's 2 cols
-        const isTwoColumn = (page.querySelector('.column-container') !== null) && !isScribePage; 
-
-        // Count Rows to determine density
-        let totalRows = 0;
-        tables.forEach(t => totalRows += t.querySelectorAll('tr').length);
-        
-        // AUTO-SCALE LOGIC:
-        // If rows > 40, shrink font to fit page.
-        // Base Font: 9pt. Min Font: 6pt.
-        let dynamicFontSize = 9;
-        let dynamicPadding = 1.5;
-        
-        if (totalRows > 55) { dynamicFontSize = 6; dynamicPadding = 0.8; }
-        else if (totalRows > 45) { dynamicFontSize = 7; dynamicPadding = 1; }
-        else if (totalRows > 35) { dynamicFontSize = 8; dynamicPadding = 1.2; }
-
-        // --- 3. RENDERING ---
-
-        const commonStyles = {
-            lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-            valign: 'middle', 
-            fontSize: dynamicFontSize, 
-            cellPadding: dynamicPadding,
-            overflow: 'linebreak'
-        };
-
-        const headerStyles = { 
-            fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
-        };
-
-        // Hook to style specific cells
-        const parseCell = function(data) {
-            const el = data.cell.raw;
-            if (!el) return;
-
-            // A. COURSE HEADERS (Black BG, White Text)
-            // Detected by colspan=4 OR specific class/style
-            if (el.getAttribute('colspan') == '4' || el.style.backgroundColor === 'rgb(238, 238, 238)' || el.innerText.length > 40) {
-                // Double check it's not the main header row
-                if (data.row.section === 'body') {
-                    data.cell.styles.fillColor = [0, 0, 0];       
-                    data.cell.styles.textColor = [255, 255, 255]; 
-                    data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.halign = 'left';
-                    // Make header slightly larger than body
-                    data.cell.styles.fontSize = dynamicFontSize + 1; 
-                }
+        // Group by Stream -> Session
+        const tree = {};
+        dataWithRooms.forEach(row => {
+            const stream = row.Stream || "Regular";
+            const sessionKey = `${row.Date} | ${row.Time}`;
+            
+            if (!tree[stream]) tree[stream] = {};
+            if (!tree[stream][sessionKey]) {
+                tree[stream][sessionKey] = { 
+                    date: row.Date, time: row.Time, 
+                    students: [], scribes: [] 
+                };
             }
 
-            // B. Scribe Rows (Orange Text)
-            if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
-                data.cell.styles.textColor = [194, 65, 12];
-                data.cell.styles.fontStyle = 'bold';
+            tree[stream][sessionKey].students.push(row);
+            if(scribeRegNos.has(row['Register Number'])) {
+                tree[stream][sessionKey].scribes.push(row);
             }
-        };
+        });
 
-        if (isScribePage) {
-            // === SCRIBE SUMMARY (1 Column, Spacious) ===
-            if(tables.length > 0) {
-                doc.autoTable({
-                    html: tables[0],
-                    startY: currentY,
-                    theme: 'grid',
-                    styles: { ...commonStyles, fontSize: 11, cellPadding: 3 }, // Force big font
-                    headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 12 },
-                    columnStyles: { 0: { cellWidth: 60, fontStyle: 'bold' } },
-                    margin: { left: 14, right: 14 }
-                });
+        // 4. GENERATE PAGES
+        const sortedStreams = Object.keys(tree).sort();
+        let pageCount = 0;
+
+        sortedStreams.forEach(streamName => {
+            const sessions = tree[streamName];
+            const sortedKeys = Object.keys(sessions).sort(compareSessionStrings);
+
+            sortedKeys.forEach(sessionKey => {
+                const sessionData = sessions[sessionKey];
+
+                // --- A. STUDENT SEATING LIST ---
                 
-                const footer = page.querySelector('.text-right');
-                if (footer) {
-                     doc.setFontSize(11);
-                     doc.text(footer.innerText.trim(), PAGE_WIDTH - 14, doc.lastAutoTable.finalY + 8, { align: 'right' });
+                // Sort Students: Course -> RegNo
+                sessionData.students.sort((a, b) => {
+                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                    return a['Register Number'].localeCompare(b['Register Number']);
+                });
+
+                // Build "Flat" List of Rows (Headers + Students)
+                // This allows us to count total lines accurately
+                const flatRows = [];
+                let lastCourse = "";
+                let lastLocRaw = ""; // For merge detection
+
+                sessionData.students.forEach(s => {
+                    // Inject Course Header
+                    if (s.Course !== lastCourse) {
+                        flatRows.push({ type: 'header', text: s.Course });
+                        lastCourse = s.Course;
+                        lastLocRaw = ""; // Reset merge on new course
+                    }
+
+                    // Prepare Student Row
+                    const roomName = s['Room No'];
+                    const roomInfo = currentRoomConfig[roomName] || {};
+                    // Format Location: "Room 101\n(Main Block)"
+                    const locText = roomInfo.location ? `${roomName}\n(${roomInfo.location})` : roomName;
+                    const isScribe = scribeRegNos.has(s['Register Number']);
+                    
+                    // Merge Logic
+                    let rowSpan = 1;
+                    let showLoc = true;
+                    if (locText === lastLocRaw) {
+                        showLoc = false; // Hide duplicate
+                    } else {
+                        lastLocRaw = locText;
+                    }
+
+                    flatRows.push({
+                        type: 'data',
+                        loc: showLoc ? locText : "", 
+                        locRaw: locText, // Keep raw for span calculation
+                        reg: s['Register Number'],
+                        name: s.Name,
+                        seat: s.seatNumber,
+                        isScribe: isScribe
+                    });
+                });
+
+                // Calculate RowSpans (Post-Process)
+                for(let i=0; i<flatRows.length; i++) {
+                    if(flatRows[i].type === 'header') continue;
+                    if(flatRows[i].loc === "") continue; // Already merged
+                    
+                    // Look ahead
+                    let span = 1;
+                    for(let j=i+1; j<flatRows.length; j++) {
+                        if(flatRows[j].type === 'header') break;
+                        if(flatRows[j].locRaw === flatRows[i].locRaw) {
+                            span++;
+                        } else {
+                            break;
+                        }
+                    }
+                    flatRows[i].rowSpan = span;
                 }
-            }
-        } 
-        else if (isTwoColumn && tables.length === 2) {
-            // === 2 COLUMN LAYOUT (Side-by-Side) ===
-            const midGap = 5;
-            const colWidth = (PAGE_WIDTH - (MARGIN * 2) - midGap) / 2;
 
-            // Define specific column widths for 2-col to prevent wrapping
-            const twoColWidths = {
-                0: { cellWidth: 14, halign: 'center' }, // Loc
-                1: { cellWidth: 25, fontStyle: 'bold' }, // Reg
-                2: { cellWidth: 'auto' }, // Name
-                3: { cellWidth: 8, halign: 'center', fontStyle: 'bold' } // Seat
+                // --- LAYOUT DECISION ---
+                const totalRows = flatRows.length;
+                const isTwoCol = totalRows > ROW_LIMIT_FOR_1_COL;
+
+                if (pageCount > 0) doc.addPage();
+                drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", currentCollegeName);
+
+                if (isTwoCol) {
+                    // === 2 COLUMN LAYOUT ===
+                    // Split rows into Left and Right chunks
+                    const mid = Math.ceil(totalRows / 2);
+                    // Optimization: Don't split a small course header from its first student if possible
+                    // (Simple split for now)
+                    const leftRows = flatRows.slice(0, mid);
+                    const rightRows = flatRows.slice(mid);
+
+                    const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
+                    const startY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 5 : 45; // Below header
+
+                    // Draw Left
+                    drawAutoTable(doc, leftRows, MARGIN, startY, colWidth, true);
+                    
+                    // Draw Right (Force same Y)
+                    drawAutoTable(doc, rightRows, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
+
+                    // Divider Line
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.1);
+                    doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
+
+                } else {
+                    // === 1 COLUMN LAYOUT ===
+                    const startY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 5 : 45;
+                    drawAutoTable(doc, flatRows, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                }
+                pageCount++;
+
+
+                // --- B. SCRIBE SUMMARY PAGE (If needed) ---
+                if (sessionData.scribes.length > 0) {
+                    doc.addPage();
+                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", currentCollegeName);
+                    
+                    // Group by Room
+                    const scribesByRoom = {};
+                    sessionData.scribes.forEach(s => {
+                        // Scribe logic re-check (Allocation might have updated room)
+                        // Ideally we read from scribe allocation map, but 's.Room No' from performAllocation is accurate
+                        const r = s['Room No'];
+                        if(!scribesByRoom[r]) scribesByRoom[r] = [];
+                        scribesByRoom[r].push(s);
+                    });
+
+                    const scribeRows = [];
+                    Object.keys(scribesByRoom).sort().forEach(room => {
+                        const students = scribesByRoom[room];
+                        const names = students.map(st => `${st.Name} (${st['Register Number']})`).join(', ');
+                        
+                        // Get nice location text
+                        const roomInfo = currentRoomConfig[room] || {};
+                        const locText = roomInfo.location ? `${room}\n(${roomInfo.location})` : room;
+
+                        scribeRows.push({
+                            type: 'data',
+                            col1: locText,
+                            col2: names
+                        });
+                    });
+
+                    drawScribeTable(doc, scribeRows);
+                    pageCount++;
+                }
+
+            });
+        });
+
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`DayWise_Report_${dateStr}.pdf`);
+
+    } catch (e) {
+        console.error("PDF Gen Error:", e);
+        alert("Error generating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
+// --- HELPER: DRAW HEADER ---
+function drawHeader(doc, stream, date, time, title, collegeName) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 10;
+
+    // Ears
+    doc.setFontSize(9); doc.setFont("helvetica", "bold");
+    // doc.text(`Page`, 14, y); // Page num handled manually if needed?
+    doc.text(stream, pageWidth - 14, y, { align: 'right' });
+
+    y += 10;
+    
+    // Titles
+    doc.setFontSize(16); doc.text(collegeName, pageWidth/2, y, {align:'center'});
+    y += 7;
+    
+    doc.setFontSize(14); doc.text(title, pageWidth/2, y, {align:'center'});
+    y += 6;
+    
+    doc.setFontSize(11); doc.setFont("helvetica", "normal");
+    doc.text(`${date} | ${time}`, pageWidth/2, y, {align:'center'});
+    
+    // Reset AutoTable cursor
+    doc.lastAutoTable = { finalY: y + 5 }; 
+}
+
+// --- HELPER: DRAW MAIN TABLE ---
+function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
+    
+    const body = rows.map(r => {
+        if (r.type === 'header') {
+            // Course Header: Black BG, White Text
+            return [{ 
+                content: r.text, 
+                colSpan: 4, 
+                styles: { 
+                    fillColor: [0, 0, 0], 
+                    textColor: [255, 255, 255], 
+                    fontStyle: 'bold', 
+                    halign: 'left',
+                    fontSize: isCompact ? 9 : 10
+                } 
+            }];
+        } else {
+            // Student Row
+            const textColor = r.isScribe ? [194, 65, 12] : [0, 0, 0];
+            const fontStyle = r.isScribe ? 'bold' : 'normal';
+            
+            // Handle merged location
+            const locCell = { 
+                content: r.loc, 
+                styles: { halign: 'center', textColor: textColor, fontStyle: fontStyle } 
             };
+            if (r.rowSpan > 1) locCell.rowSpan = r.rowSpan;
 
-            // LEFT TABLE
-            doc.autoTable({
-                html: tables[0],
-                startY: currentY,
-                theme: 'grid',
-                styles: commonStyles,
-                headStyles: headerStyles,
-                columnStyles: twoColWidths,
-                didParseCell: parseCell,
-                margin: { left: MARGIN },
-                tableWidth: colWidth
-            });
-
-            // RIGHT TABLE (Force align top)
-            doc.autoTable({
-                html: tables[1],
-                startY: currentY, 
-                theme: 'grid',
-                styles: commonStyles,
-                headStyles: headerStyles,
-                columnStyles: twoColWidths,
-                didParseCell: parseCell,
-                margin: { left: MARGIN + colWidth + midGap },
-                tableWidth: colWidth
-            });
-
-            // Divider Line
-            const lineX = MARGIN + colWidth + (midGap/2);
-            const lineBottom = Math.max(doc.lastAutoTable.finalY, currentY + 50); 
-            doc.setDrawColor(200, 200, 200);
-            doc.setLineWidth(0.1);
-            doc.line(lineX, currentY, lineX, lineBottom);
-
-        } else if (tables.length === 1) {
-            // === SINGLE COLUMN LAYOUT ===
-            doc.autoTable({
-                html: tables[0],
-                startY: currentY,
-                theme: 'grid',
-                styles: commonStyles,
-                headStyles: headerStyles,
-                columnStyles: {
-                    0: { cellWidth: 25, halign: 'center' },
-                    1: { cellWidth: 35, fontStyle: 'bold' },
-                    2: { cellWidth: 'auto' },
-                    3: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }
-                },
-                didParseCell: parseCell,
-                margin: { left: MARGIN, right: MARGIN }
-            });
+            return [
+                locCell,
+                { content: r.reg, styles: { fontStyle: 'bold', textColor: textColor } },
+                { content: r.name, styles: { textColor: textColor, fontStyle: fontStyle } },
+                { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: textColor } }
+            ];
         }
-        
-        // Footer
-        doc.setFontSize(7);
-        doc.setTextColor(150);
-        doc.text("Generated by ExamFlow", PAGE_WIDTH/2, 292, { align: 'center' });
-        doc.setTextColor(0);
     });
 
-    const dateStr = new Date().toISOString().slice(0,10);
-    doc.save(`DayWise_Report_${dateStr}.pdf`);
+    doc.autoTable({
+        startY: startY,
+        margin: { left: startX },
+        tableWidth: width,
+        head: [['Loc', 'Reg No', 'Name', 'Seat']],
+        body: body,
+        theme: 'grid',
+        styles: { 
+            lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
+            valign: 'middle', 
+            fontSize: isCompact ? 7 : 10, 
+            cellPadding: isCompact ? 1 : 2,
+            overflow: 'linebreak'
+        },
+        headStyles: { 
+            fillColor: [220, 220, 220], textColor: [0, 0, 0], 
+            fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
+        },
+        columnStyles: {
+            0: { cellWidth: isCompact ? 12 : 25 }, // Loc
+            1: { cellWidth: isCompact ? 22 : 35 }, // Reg
+            2: { cellWidth: 'auto' },              // Name
+            3: { cellWidth: isCompact ? 8 : 15 }   // Seat
+        },
+        // Important: Prevent page breaks inside the table if possible, 
+        // but since we manually split pages, this just renders what we give it.
+        pageBreak: 'auto' 
+    });
+}
 
-    if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+// --- HELPER: DRAW SCRIBE TABLE ---
+function drawScribeTable(doc, rows) {
+    const body = rows.map(r => [
+        { content: r.col1, styles: { fontStyle: 'bold' } },
+        { content: r.col2 }
+    ]);
+
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 5,
+        head: [['Room Location', 'Candidates']],
+        body: body,
+        theme: 'grid',
+        styles: { 
+            lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
+            fontSize: 11, cellPadding: 3, valign: 'top' 
+        },
+        headStyles: { 
+            fillColor: [50, 50, 50], textColor: [255, 255, 255], 
+            fontStyle: 'bold', fontSize: 12
+        },
+        columnStyles: {
+            0: { cellWidth: 50 }, 
+            1: { cellWidth: 'auto' }
+        },
+        margin: { left: 14, right: 14 }
+    });
 }
 
 
