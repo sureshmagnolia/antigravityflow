@@ -1311,7 +1311,7 @@ window.downloadReportPDF = function() {
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
 
-// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT ---
+// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Dynamic Fit) ---
 function generateRoomWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1328,14 +1328,14 @@ function generateRoomWisePDF() {
         
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        let currentY = 12; // Starting higher to maximize space
+        let currentY = 15; // Standard top margin
 
         // --- 1. HEADER EXTRACTION ---
         const headerDiv = page.querySelector('.print-header-group');
         if (headerDiv) {
             // A. "Ears" (Page No & Stream)
             const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(9);
+            doc.setFontSize(10);
             doc.setFont("helvetica", "bold");
             
             absoluteDivs.forEach(div => {
@@ -1353,33 +1353,33 @@ function generateRoomWisePDF() {
             const h2s = headerDiv.querySelectorAll('h2');
             
             if (h1) {
-                doc.setFontSize(14);
+                doc.setFontSize(16); // Larger College Name
                 doc.setFont("helvetica", "bold");
                 doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 6;
+                currentY += 7;
             }
 
             if (h2s.length > 0) {
-                doc.setFontSize(11);
+                doc.setFontSize(12);
                 h2s.forEach(h2 => {
                     doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                    currentY += 5;
+                    currentY += 6;
                 });
             }
             
             // Location Header
             const locHeader = headerDiv.querySelector('.report-location-header');
             if(locHeader) {
-                doc.setFontSize(10);
+                doc.setFontSize(11);
                 doc.setFont("helvetica", "normal");
                 doc.text(locHeader.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 5;
+                currentY += 6;
             }
         }
 
-        currentY += 2; // Small gap before table
+        currentY += 4; // Gap before table
 
-        // --- 2. MAIN STUDENT TABLE ---
+        // --- 2. MAIN STUDENT TABLE (Optimized Sizing) ---
         const mainTable = page.querySelector('table.print-table');
         if (mainTable) {
             doc.autoTable({
@@ -1390,9 +1390,10 @@ function generateRoomWisePDF() {
                     lineColor: [0, 0, 0], 
                     lineWidth: 0.1, 
                     textColor: [0, 0, 0], 
-                    fontSize: 9,           // Reduced base font size
-                    cellPadding: 1,        // Tight padding to fit 20 rows
+                    fontSize: 11,           // Readable standard size
+                    cellPadding: 3,        // Comfortable padding (fills page better)
                     valign: 'middle',
+                    minCellHeight: 10,     // Ensures rows aren't too skinny
                     overflow: 'linebreak'
                 },
                 headStyles: { 
@@ -1400,11 +1401,12 @@ function generateRoomWisePDF() {
                     textColor: [0, 0, 0], 
                     fontStyle: 'bold', 
                     lineWidth: 0.1,
-                    halign: 'center'
+                    halign: 'center',
+                    minCellHeight: 12
                 },
                 columnStyles: {
-                    0: { cellWidth: 10, halign: 'center' }, // Seat
-                    1: { cellWidth: 45, fontSize: 8 },      // Course (Smaller font)
+                    0: { cellWidth: 12, halign: 'center' }, // Seat
+                    1: { cellWidth: 45, fontSize: 9 },      // Course (Small font to fit)
                     2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No (Right Align)
                     3: { cellWidth: 'auto' },               // Name
                     4: { cellWidth: 25 },                   // Remarks
@@ -1413,14 +1415,14 @@ function generateRoomWisePDF() {
                 margin: { left: 14, right: 14 }
             });
             
-            currentY = doc.lastAutoTable.finalY + 8;
+            currentY = doc.lastAutoTable.finalY + 10;
         }
 
         // --- 3. FOOTER RECONSTRUCTION ---
         const footer = page.querySelector('.invigilator-footer');
         if (footer) {
-            // Check for space
-            if (currentY + 50 > pageHeight) {
+            // Check for space (Footer needs ~65mm)
+            if (currentY + 65 > pageHeight) {
                 doc.addPage();
                 currentY = 15;
             }
@@ -1428,7 +1430,7 @@ function generateRoomWisePDF() {
             // A. Course Summary Table
             const sumTable = footer.querySelector('table');
             if (sumTable) {
-                doc.setFontSize(9);
+                doc.setFontSize(10);
                 doc.setFont("helvetica", "bold");
                 doc.text("Course Summary:", 14, currentY);
                 currentY += 2;
@@ -1438,16 +1440,16 @@ function generateRoomWisePDF() {
                     startY: currentY,
                     theme: 'grid',
                     styles: { 
-                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 
+                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 9, cellPadding: 1.5 
                     },
                     headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold' },
                     margin: { left: 14, right: 14 }
                 });
-                currentY = doc.lastAutoTable.finalY + 8;
+                currentY = doc.lastAutoTable.finalY + 10;
             }
 
             // B. Booklet Account Box
-            const boxHeight = 22;
+            const boxHeight = 24;
             doc.setDrawColor(0);
             doc.setLineWidth(0.2);
             doc.rect(14, currentY, pageWidth - 28, boxHeight); 
@@ -1455,47 +1457,48 @@ function generateRoomWisePDF() {
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             
-            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 6, { align: 'center' });
+            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 7, { align: 'center' });
             
             doc.setLineDash([1, 1], 0);
-            doc.line(14, currentY + 10, pageWidth - 14, currentY + 10);
+            doc.line(14, currentY + 11, pageWidth - 14, currentY + 11);
             doc.setLineDash([]); 
             
-            doc.text("Written Booklets (QP Wise):", 16, currentY + 15);
+            doc.text("Written Booklets (QP Wise):", 16, currentY + 16);
             
             doc.setLineDash([1, 1], 0);
-            doc.line(14, currentY + 18, pageWidth - 14, currentY + 18);
+            doc.line(14, currentY + 19, pageWidth - 14, currentY + 19);
             doc.setLineDash([]);
 
-            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 21, { align: 'right' });
+            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 22, { align: 'right' });
 
-            currentY += boxHeight + 12;
+            currentY += boxHeight + 15;
 
             // C. Signature Area
             if (footer.innerText.includes("* = Scribe")) {
-                doc.setFontSize(8);
+                doc.setFontSize(9);
                 doc.setFont("helvetica", "italic");
-                doc.text("* = Scribe Assistance", 14, currentY);
+                doc.text("* = Scribe Assistance", 14, currentY + 4);
             }
 
             // --- EXTRACT ACTUAL INVIGILATOR NAME ---
             let sigText = "Name & Signature of Invigilator";
             const sigDiv = footer.querySelector('.signature');
             if (sigDiv) {
-                // Get the text content, cleaning up any internal HTML tags if present
                 const rawText = sigDiv.innerText.trim();
-                if (rawText && !rawText.includes("Name & Signature")) {
+                // Clean up possible line breaks or spaces
+                if (rawText && rawText.replace(/\s/g,'').length > 0 && !rawText.includes("Name & Signature")) {
                     sigText = rawText;
                 }
             }
 
             doc.setLineWidth(0.2);
-            doc.line(pageWidth - 80, currentY - 2, pageWidth - 14, currentY - 2); 
+            doc.line(pageWidth - 80, currentY, pageWidth - 14, currentY); 
             
-            doc.setFontSize(9);
+            doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
-            // Center the name over the line (line is from X=130 to X=196, center is ~163)
-            doc.text(sigText, pageWidth - 47, currentY + 3, { align: 'center' });
+            // Center text relative to the line
+            const lineCenter = (pageWidth - 80) + ((pageWidth - 14) - (pageWidth - 80))/2;
+            doc.text(sigText, lineCenter, currentY + 5, { align: 'center' });
         }
     });
 
