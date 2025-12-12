@@ -10281,7 +10281,6 @@ Are you sure?
                 ...item,
                 Time: (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time, // Fixed
                 Stream: selectedStream
-                Stream: selectedStream
             }));
 
             if (parsedData.length === 0) {
