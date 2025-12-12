@@ -1311,8 +1311,8 @@ window.downloadReportPDF = function() {
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
 
-// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Dynamic Fit) ---
-// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (With Scribe Highlighting) ---
+
+// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Strict Fit) ---
 function generateRoomWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1329,7 +1329,7 @@ function generateRoomWisePDF() {
         
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        let currentY = 15; // Standard top margin
+        let currentY = 15;
 
         // --- 1. HEADER EXTRACTION ---
         const headerDiv = page.querySelector('.print-header-group');
@@ -1342,9 +1342,9 @@ function generateRoomWisePDF() {
             absoluteDivs.forEach(div => {
                 const text = div.innerText.trim().replace(/\s+/g, ' ');
                 const style = div.getAttribute('style');
-                if (style.includes('left: 0') || style.includes('left:0')) {
+                if (style && (style.includes('left: 0') || style.includes('left:0'))) {
                     doc.text(text, 14, 10);
-                } else if (style.includes('right: 0') || style.includes('right:0')) {
+                } else if (style && (style.includes('right: 0') || style.includes('right:0'))) {
                     doc.text(text, pageWidth - 14, 10, { align: 'right' });
                 }
             });
@@ -1354,33 +1354,33 @@ function generateRoomWisePDF() {
             const h2s = headerDiv.querySelectorAll('h2');
             
             if (h1) {
-                doc.setFontSize(16);
+                doc.setFontSize(15);
                 doc.setFont("helvetica", "bold");
                 doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
                 currentY += 7;
             }
 
             if (h2s.length > 0) {
-                doc.setFontSize(12);
+                doc.setFontSize(11);
                 h2s.forEach(h2 => {
                     doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                    currentY += 6;
+                    currentY += 5;
                 });
             }
             
-            // Location Header
+            // Location
             const locHeader = headerDiv.querySelector('.report-location-header');
             if(locHeader) {
-                doc.setFontSize(11);
+                doc.setFontSize(10);
                 doc.setFont("helvetica", "normal");
                 doc.text(locHeader.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 6;
+                currentY += 5;
             }
         }
 
-        currentY += 4; // Gap before table
+        currentY += 2;
 
-        // --- 2. MAIN STUDENT TABLE ---
+        // --- 2. MAIN STUDENT TABLE (Strict Fitting) ---
         const mainTable = page.querySelector('table.print-table');
         if (mainTable) {
             doc.autoTable({
@@ -1391,10 +1391,10 @@ function generateRoomWisePDF() {
                     lineColor: [0, 0, 0], 
                     lineWidth: 0.1, 
                     textColor: [0, 0, 0], 
-                    fontSize: 11,           
-                    cellPadding: 3,        
+                    fontSize: 10,           
+                    cellPadding: 1.5,       // Tight padding
                     valign: 'middle',
-                    minCellHeight: 10,     
+                    minCellHeight: 9,       // Fixed height ~9mm * 20 = 180mm (Fits perfectly)
                     overflow: 'linebreak'
                 },
                 headStyles: { 
@@ -1403,31 +1403,35 @@ function generateRoomWisePDF() {
                     fontStyle: 'bold', 
                     lineWidth: 0.1,
                     halign: 'center',
-                    minCellHeight: 12
+                    minCellHeight: 10
                 },
                 columnStyles: {
-                    0: { cellWidth: 12, halign: 'center' }, // Seat
-                    1: { cellWidth: 45, fontSize: 9 },      // Course (Small font)
-                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No
+                    0: { cellWidth: 10, halign: 'center' }, // Seat
+                    1: { 
+                        cellWidth: 50, 
+                        fontSize: 7,        // Small font for Course
+                        overflow: 'hidden'  // Cut off if too long (Don't expand row)
+                    },      
+                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No (Right Align)
                     3: { cellWidth: 'auto' },               // Name
                     4: { cellWidth: 25 },                   // Remarks
                     5: { cellWidth: 20 }                    // Sign
                 },
-                // --- SCRIBE HIGHLIGHT LOGIC ---
                 didParseCell: function(data) {
-                    // Check if the HTML row has the scribe class
-                    // We check the parent TR of the cell
+                    // Scribe Highlighting
                     const rowElement = data.cell.raw.parentElement;
                     if (rowElement && (rowElement.classList.contains('scribe-row-highlight') || rowElement.className.includes('scribe'))) {
-                        data.cell.styles.fillColor = [0, 0, 0];   // Black Background
-                        data.cell.styles.textColor = [255, 255, 255]; // White Text
+                        data.cell.styles.fillColor = [0, 0, 0];
+                        data.cell.styles.textColor = [255, 255, 255];
                         data.cell.styles.fontStyle = 'bold';
                     }
+                    // Course Column Specifics: Attempt to split QP and Name if you wanted manual drawing, 
+                    // but simply shrinking font (above) is safer for layout.
                 },
                 margin: { left: 14, right: 14 }
             });
             
-            currentY = doc.lastAutoTable.finalY + 10;
+            currentY = doc.lastAutoTable.finalY + 8;
         }
 
         // --- 3. FOOTER RECONSTRUCTION ---
@@ -1439,10 +1443,10 @@ function generateRoomWisePDF() {
                 currentY = 15;
             }
 
-            // A. Course Summary Table
+            // A. Course Summary
             const sumTable = footer.querySelector('table');
             if (sumTable) {
-                doc.setFontSize(10);
+                doc.setFontSize(9);
                 doc.setFont("helvetica", "bold");
                 doc.text("Course Summary:", 14, currentY);
                 currentY += 2;
@@ -1452,7 +1456,7 @@ function generateRoomWisePDF() {
                     startY: currentY,
                     theme: 'grid',
                     styles: { 
-                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 9, cellPadding: 1.5 
+                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 
                     },
                     headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold' },
                     margin: { left: 14, right: 14 }
@@ -1485,19 +1489,23 @@ function generateRoomWisePDF() {
 
             currentY += boxHeight + 15;
 
-            // C. Signature Area
+            // C. Scribe Note
             if (footer.innerText.includes("* = Scribe")) {
                 doc.setFontSize(9);
                 doc.setFont("helvetica", "italic");
                 doc.text("* = Scribe Assistance", 14, currentY + 4);
             }
 
-            // Extract Invigilator Name
+            // D. Invigilator Signature
+            // Extract the name cleanly from the footer div
             let sigText = "Name & Signature of Invigilator";
             const sigDiv = footer.querySelector('.signature');
+            
             if (sigDiv) {
-                const rawText = sigDiv.innerText.trim();
-                if (rawText && rawText.replace(/\s/g,'').length > 0 && !rawText.includes("Name & Signature")) {
+                // Get direct text content
+                let rawText = sigDiv.innerText.replace(/\n/g, '').trim();
+                // If it contains the placeholder text, don't use it as a "Name"
+                if (rawText && !rawText.includes("Name & Signature")) {
                     sigText = rawText;
                 }
             }
@@ -1507,9 +1515,8 @@ function generateRoomWisePDF() {
             
             doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
-            // Center text relative to the line
-            const lineCenter = (pageWidth - 80) + ((pageWidth - 14) - (pageWidth - 80))/2;
-            doc.text(sigText, lineCenter, currentY + 5, { align: 'center' });
+            // Center text relative to the line (approx X=163)
+            doc.text(sigText, 163, currentY + 5, { align: 'center' });
         }
     });
 
