@@ -6426,15 +6426,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                         }
                     }
 
-                    alert('Restore successful! Syncing to Cloud...');
-                    if (typeof syncDataToCloud === 'function') {
-                    await syncDataToCloud('settings');
-                    await syncDataToCloud('ops');
-                    await syncDataToCloud('allocation');
-                    await syncDataToCloud('staff');
-                    await syncDataToCloud('slots');
-                    await syncDataToCloud('heavy');
-                    }
+                    alert('Update successful! Syncing session...');
+                
+                // MODULAR SYNC (V2)
+                // We only need to sync the specific session we just modified
+                    await syncSessionToCloud(editSessionSelect.value);
                     window.location.reload();
 
                 } catch (e) {
@@ -7181,12 +7177,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         // 1. Save Room Allotment (Updates student seating and scribe cleanup)
         saveRoomAllotment(); // Update Local Storage (Room & Scribe)
 
-        // 2. MODULAR SYNC (Cheaper)
-        if (typeof syncSessionToCloud === 'function') {
-            await syncSessionToCloud(currentSessionKey);
-        } else if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('heavy'); // Fallback
-        }
+        // MODULAR SYNC (V2)
+        // This updates the Session Document + Triggering Slot Sync automatically
+        await syncSessionToCloud(currentSessionKey);
 // ------------------------
         // ------------------------
 
@@ -7381,12 +7374,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         // --- AUTO SAVE & SYNC ---
         saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
 
-        if (typeof syncDataToCloud === 'function') {
-    // 1. Sync Room Allotment (HEAVY bucket)
-        await syncDataToCloud('heavy'); 
-    
-    // 2. Sync Scribe Allotment (ALLOCATION bucket)
-        await syncDataToCloud('allocation'); 
+        // MODULAR SYNC (V2)
+        // This handles both Room Allotment and Scribes for this session
+        await syncSessionToCloud(currentSessionKey);
         }
         // ------------------------
 
@@ -11891,13 +11881,12 @@ Are you sure?
                 alert(alertMsg);
 
                 // REPLACE line 8831:
-                if (typeof syncDataToCloud === 'function') {
-                await syncDataToCloud('heavy');      // Students & Rooms
-                await syncDataToCloud('ops');        // Absentees
-                await syncDataToCloud('allocation'); // Scribes
-                await syncDataToCloud('staff');      // Invigilators
-                await syncDataToCloud('slots');      // Duty Slots
-                }
+               // MODULAR SYNC (V2)
+                updateSyncStatus("Syncing Old Session...", "neutral");
+                await syncSessionToCloud(currentSession); // Update old session (removes students)
+                
+                updateSyncStatus("Syncing New Session...", "neutral");
+                await syncSessionToCloud(newSessionKey); // Update new session (adds students)
                 window.location.reload();
 
             } catch (e) {
@@ -11952,13 +11941,9 @@ Are you sure?
                 alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
                 // REPLACE line 8831:
-                if (typeof syncDataToCloud === 'function') {
-                await syncDataToCloud('heavy');      // Students & Rooms
-                await syncDataToCloud('ops');        // Absentees
-                await syncDataToCloud('allocation'); // Scribes
-                await syncDataToCloud('staff');      // Invigilators
-                await syncDataToCloud('slots');      // Duty Slots
-                }
+                // MODULAR SYNC (V2)
+                // This will push an "Empty" session document to the cloud, effectively clearing it
+                await syncSessionToCloud(currentSession);
                 window.location.reload();
 
             } catch (e) {
@@ -12907,13 +12892,21 @@ Are you sure?
                 fixStorageKeys('examInvigilationSlots', 'slot');   // Invigilation Duty Slots
 
                 // 4. Sync & Reload
-                if (typeof syncDataToCloud === 'function') {
-                // Sync ALL buckets because times were changed everywhere
-                await syncDataToCloud('heavy');      // Student Data & Rooms
-                await syncDataToCloud('ops');        // Absentees & QP Codes
-                await syncDataToCloud('allocation'); // Scribes
-                await syncDataToCloud('staff');      // Invigilator Assignments
-                await syncDataToCloud('slots');      // Duty Slots
+                // MODULAR SYNC (V2) - ITERATIVE UPDATE
+                if (typeof syncSessionToCloud === 'function') {
+                    updateSyncStatus("Syncing all sessions...", "neutral");
+                    // 1. Identify all unique sessions
+                    const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+                    
+                    // 2. Sync each one individually (This updates the V2 docs)
+                    for (const sessionKey of allSessions) {
+                        await syncSessionToCloud(sessionKey);
+                    }
+                    
+                    // 3. Sync Settings/Staff/Slots (Global Data)
+                    await syncDataToCloud('settings');
+                    await syncDataToCloud('staff');
+                    await syncDataToCloud('slots');
                 }
 
                 alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
@@ -13378,13 +13371,22 @@ window.confirmDialSelection = confirmDialSelection;
                 // Update UI immediately
                 updateSyncStatus("Saving...", "neutral");
     
-                // Trigger a FULL save of all sections
+               // MODULAR FORCE SYNC (V2)
+                updateSyncStatus("Syncing Global Config...", "neutral");
                 await syncDataToCloud('settings');
-                await syncDataToCloud('ops');
-                await syncDataToCloud('allocation');
                 await syncDataToCloud('staff');
                 await syncDataToCloud('slots');
-                await syncDataToCloud('heavy');
+
+                // Iteratively sync all sessions (Ensures V2 documents are fresh)
+                const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+                let count = 0;
+                for (const sessionKey of allSessions) {
+                    count++;
+                    updateSyncStatus(`Syncing Session ${count}/${allSessions.size}...`, "neutral");
+                    await syncSessionToCloud(sessionKey);
+                }
+                
+                updateSyncStatus("All Synced!", "success");
                 } else {
                 alert("Sync function is not ready yet. Please wait.");
                 }
