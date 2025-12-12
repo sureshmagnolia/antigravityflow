@@ -734,6 +734,95 @@ function updateLocalSlotsFromStudents() {
         fetchHeavyData();
     }
 
+
+// --- PHASE 4: MODULAR WRITE HELPERS ---
+
+    function generateSessionId(sessionKey) {
+        try {
+            // sessionKey format: "DD.MM.YYYY | HH:MM AM"
+            const [dateStr, timeStr] = sessionKey.split('|');
+            if(!dateStr || !timeStr) return "UNKNOWN_SESSION";
+
+            const [d, m, y] = dateStr.trim().split('.');
+            const isoDate = `${y}-${m}-${d}`;
+
+            const t = timeStr.trim().toUpperCase();
+            let sessionType = "FN";
+            // Logic: PM or 12:xx or 13:xx+ implies AN.
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") || 
+                t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
+                sessionType = "AN";
+            }
+            return `${isoDate}_${sessionType}`;
+        } catch (e) {
+            console.error("Session ID Gen Error:", sessionKey);
+            return "ERROR_ID";
+        }
+    }
+
+    async function syncSessionToCloud(sessionKey) {
+        if (!window.currentCollegeId || !navigator.onLine) return;
+        
+        updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
+        const { db, doc, setDoc } = window.firebase;
+        const sessionId = generateSessionId(sessionKey);
+        
+        // 1. Gather Data for THIS Session Only from Global Memory
+        const [date, time] = sessionKey.split(' | ');
+        const cleanDate = date.trim();
+        const cleanTime = time.trim();
+
+        // Students
+        const students = allStudentData.filter(s => s.Date === cleanDate && s.Time === cleanTime);
+        
+        // Rooms (Read from LocalStorage)
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[sessionKey] || [];
+
+        // QP Codes
+        const allQPs = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+        const sessionQPs = allQPs[sessionKey] || {};
+
+        // Absentees
+        const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+        const sessionAbsentees = allAbsentees[sessionKey] || [];
+
+        // Scribes
+        const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const sessionScribes = allScribes[sessionKey] || {};
+
+        // 2. Construct Payload
+        const sessionDoc = {
+            id: sessionId,
+            date: cleanDate,
+            time: cleanTime,
+            students: students,
+            roomAllotment: sessionAllotment,
+            qpCodes: sessionQPs,
+            absentees: sessionAbsentees,
+            scribeAllotment: sessionScribes,
+            meta: { 
+                studentCount: students.length, 
+                lastUpdated: new Date().toISOString() 
+            }
+        };
+
+        // 3. Write to Firestore (Modular Write)
+        try {
+            await setDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', sessionId), sessionDoc);
+            updateSyncStatus("Saved (V2)", "success");
+            
+            // Trigger Slot Sync (Keeps Invigilation Portal Updated)
+            await syncDataToCloud('slots'); 
+            
+        } catch (e) {
+            console.error("Session Sync Error:", e);
+            updateSyncStatus("Save Failed", "error");
+        }
+    }
+
+
+    
    // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
     // MODULAR SYNC FUNCTION
     // targetSection: 'settings', 'ops', 'allocation', 'staff', 'slots', or 'heavy' (default)
@@ -5788,7 +5877,7 @@ window.real_populate_session_dropdown = function () {
         saveAbsenteeList(sessionKey);
         renderAbsenteeList();
         clearSearch();
-        syncDataToCloud('ops');
+        syncSessionToCloud(sessionKey);
     });
 
     function loadAbsenteeList(sessionKey) {
@@ -5944,7 +6033,7 @@ window.real_populate_session_dropdown = function () {
             currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
             saveAbsenteeList(sessionSelect.value);
             renderAbsenteeList();
-            syncDataToCloud('ops');
+            syncSessionToCloud(sessionSelect.value);
         }
     }
 
@@ -6156,7 +6245,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         qpCodeStatus.classList.add('text-green-600');
         qpCodeStatus.textContent = `QP Codes saved successfully!`;
         setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
-           syncDataToCloud('ops'); // <--- ADD THIS
+           syncSessionToCloud(sessionKey); // <--- ADD THIS
     });
 
     // V89: NEW INPUT STRATEGY
@@ -7380,7 +7469,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             // 3. Sync to Cloud
             if (currentCollegeId && typeof syncDataToCloud === 'function') {
-                syncDataToCloud('heavy');
+                syncSessionToCloud(currentSessionKey);
             }
 
             // 4. Reset Dirty Flag
@@ -7948,7 +8037,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        syncDataToCloud('allocation'); // <--- ADD THIS
+        syncSessionToCloud(sessionKey);
     }
 
     scribeCloseRoomModal.addEventListener('click', () => {
@@ -8542,7 +8631,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             editDataStatus.textContent = 'All changes saved successfully!';
             setUnsavedChanges(false);
             setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
-            if (typeof syncDataToCloud === 'function') syncDataToCloud('heavy');
+            if (typeof syncDataToCloud === 'function') syncSessionToCloud(currentEditSession);
 
             // 4. Reload other parts of the app
             jsonDataStore.innerHTML = JSON.stringify(allStudentData);
@@ -12053,7 +12142,7 @@ Are you sure?
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
+        if (typeof syncDataToCloud === 'function') syncSessionToCloud(currentSessionKey);
         renderScribeAllotmentList(currentSessionKey);
     };
 
