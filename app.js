@@ -1554,7 +1554,7 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
-// --- FIXED GENERATOR: DAY-WISE REPORT (Strict Fit & Paper Saving) ---
+// --- FIXED GENERATOR: DAY-WISE REPORT (Crash Fix + Layout Optimization) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1568,15 +1568,13 @@ function generateDayWisePDF() {
 
     // Page Dimensions
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 10;
-    const midGap = 4; // Tighter gap to give columns more width
+    const midGap = 4;
 
     pages.forEach((page, i) => {
         if (i > 0) doc.addPage();
         
-        // Reset Y for new page
-        let currentY = 12; 
+        let currentY = 12;
 
         // --- 1. HEADER RECONSTRUCTION ---
         const headerDiv = page.querySelector('.print-header-group');
@@ -1596,8 +1594,6 @@ function generateDayWisePDF() {
             const titles = headerDiv.querySelectorAll('h1, h2, h3');
             titles.forEach(el => {
                 const text = el.innerText.trim();
-                const style = window.getComputedStyle(el);
-                // Smart Scaling
                 let size = 10;
                 if (el.tagName === 'H1') size = 16; 
                 else if (el.tagName === 'H2') size = 12;
@@ -1606,23 +1602,20 @@ function generateDayWisePDF() {
                 doc.setFontSize(size);
                 doc.setFont("helvetica", "bold");
                 doc.text(text, pageWidth/2, currentY, {align:'center'});
-                currentY += (size * 0.35) + 3; // Tight spacing
+                currentY += (size * 0.35) + 3;
             });
         }
         
-        currentY += 2; // Gap before table
+        currentY += 2; 
 
         // --- 2. LAYOUT DETECTION ---
         const tables = page.querySelectorAll('table');
         const isScribePage = page.innerText.includes("Scribe Assistance Summary");
-        
-        // Check if HTML requested 2 columns (look for the flex container or 2 tables)
-        const isTwoColumn = (tables.length === 2 && !isScribePage);
+        const isTwoColumn = (tables.length === 2 && !isScribePage); 
 
-        // --- 3. RENDERING STRATEGY ---
-
+        // --- 3. RENDERING ---
         if (isScribePage) {
-            // === SCRIBE SUMMARY (Always 1 Col, Big & Clear) ===
+            // === SCRIBE SUMMARY (1 Column, Spacious) ===
             if(tables.length > 0) {
                 doc.autoTable({
                     html: tables[0],
@@ -1630,7 +1623,7 @@ function generateDayWisePDF() {
                     theme: 'grid',
                     styles: { 
                         lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                        fontSize: 11, cellPadding: 3, valign: 'middle' // Spacious
+                        fontSize: 11, cellPadding: 3, valign: 'middle'
                     },
                     headStyles: { 
                         fillColor: [0, 0, 0], textColor: [255, 255, 255], 
@@ -1642,9 +1635,11 @@ function generateDayWisePDF() {
                     },
                     margin: { left: 14, right: 14 }
                 });
-                // Footer (Total Scribes)
+                
+                // Footer
                 const footer = page.querySelector('.text-right');
                 if (footer && footer.innerText.includes("Total Scribes")) {
+                     doc.setFontSize(11);
                      doc.text(footer.innerText.trim(), pageWidth - 14, doc.lastAutoTable.finalY + 8, { align: 'right' });
                 }
             }
@@ -1653,10 +1648,10 @@ function generateDayWisePDF() {
             // === STUDENT LISTS (Smart Compression) ===
             const colWidth = isTwoColumn ? (pageWidth - (margin * 2) - midGap) / 2 : (pageWidth - (margin * 2));
             
-            // COMPACT STYLES for 2-Column to prevent overflow
-            const fontSize = isTwoColumn ? 7 : 10;      // Tiny font for 2-col
-            const cellPad  = isTwoColumn ? 0.8 : 2;     // Minimal padding
-            const locSize  = isTwoColumn ? 6 : 9;       // Extra small for Location to stop wrapping
+            // OPTIMIZED FOR 2-COL: Smaller Fonts, Wider Location Column
+            const fontSize = isTwoColumn ? 7 : 10;
+            const cellPad  = isTwoColumn ? 1 : 2;
+            const locSize  = isTwoColumn ? 6 : 9; // Tiny font for location to prevent wrap
 
             const tableConfig = {
                 theme: 'grid',
@@ -1670,34 +1665,34 @@ function generateDayWisePDF() {
                     fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
                 },
                 columnStyles: {
-                    0: { cellWidth: isTwoColumn ? 12 : 25, halign: 'center', fontSize: locSize }, // Loc
-                    1: { cellWidth: isTwoColumn ? 20 : 35, fontStyle: 'bold' }, // Reg
+                    // WIDENED Location Column (17mm) to stop wrapping
+                    0: { cellWidth: isTwoColumn ? 17 : 25, halign: 'center', fontSize: locSize }, 
+                    1: { cellWidth: isTwoColumn ? 22 : 35, fontStyle: 'bold' }, // Reg
                     2: { cellWidth: 'auto' }, // Name
-                    3: { cellWidth: isTwoColumn ? 7 : 15, halign: 'center', fontStyle: 'bold' } // Seat
+                    3: { cellWidth: isTwoColumn ? 8 : 15, halign: 'center', fontStyle: 'bold' } // Seat
                 },
                 didParseCell: function(data) {
                     const el = data.cell.raw;
                     if (!el) return;
 
-                    // A. INVERTED HEADERS (Black BG, White Text)
-                    if (el.getAttribute('colspan') == '4' || el.style.backgroundColor === 'rgb(238, 238, 238)' || data.row.raw[0].content === el.innerText) {
-                        // Check if it's actually a course header row
-                        if (data.row.cells[0].colSpan > 1) {
-                            data.cell.styles.fillColor = [0, 0, 0];       
-                            data.cell.styles.textColor = [255, 255, 255]; 
-                            data.cell.styles.fontStyle = 'bold';
-                            data.cell.styles.halign = 'left';
-                            data.cell.styles.fontSize = fontSize + 1;
-                        }
+                    // FIX: Safe Check for Header Rows (Crash Fixed Here)
+                    // We check HTML attributes directly instead of PDF engine data
+                    const colspan = parseInt(el.getAttribute('colspan') || '1');
+                    if (colspan > 1 || el.style.backgroundColor === 'rgb(238, 238, 238)' || el.tagName === 'TH') {
+                        data.cell.styles.fillColor = [0, 0, 0];       
+                        data.cell.styles.textColor = [255, 255, 255]; 
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.halign = 'left';
+                        data.cell.styles.fontSize = fontSize + 1;
                     }
 
-                    // B. Scribe Rows (Orange Text)
+                    // Scribe Highlight
                     if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
                         data.cell.styles.textColor = [194, 65, 12];
                         data.cell.styles.fontStyle = 'bold';
                     }
 
-                    // C. Merged Locations (Center Vertically)
+                    // Merged Location Alignment
                     if (el.hasAttribute('rowspan') && parseInt(el.getAttribute('rowspan')) > 1) {
                         data.cell.styles.valign = 'middle';
                         data.cell.styles.fontStyle = 'bold';
@@ -1712,27 +1707,26 @@ function generateDayWisePDF() {
                     html: tables[0],
                     margin: { left: margin },
                     tableWidth: colWidth
-                    // We DO NOT set pageBreak here, we let it flow naturally on this page
                 });
 
-                // RIGHT TABLE (Must start at same Y as Left)
+                // RIGHT TABLE (Same Y)
                 doc.autoTable({
                     ...tableConfig,
                     html: tables[1],
-                    startY: currentY, // Force reset to top
+                    startY: currentY,
                     margin: { left: margin + colWidth + midGap },
                     tableWidth: colWidth
                 });
 
-                // Vertical Divider Line
+                // Vertical Line
                 const lineX = margin + colWidth + (midGap/2);
-                const lineBottom = doc.lastAutoTable.finalY; // Height of the longer table
+                const lineBottom = doc.lastAutoTable.finalY;
                 doc.setDrawColor(200, 200, 200);
                 doc.setLineWidth(0.1);
                 doc.line(lineX, currentY, lineX, lineBottom);
 
             } else {
-                // SINGLE COLUMN (Full Width)
+                // SINGLE COLUMN
                 doc.autoTable({
                     ...tableConfig,
                     html: tables[0],
@@ -1741,7 +1735,7 @@ function generateDayWisePDF() {
             }
         }
         
-        // Minimal Footer
+        // Footer
         doc.setFontSize(7);
         doc.setTextColor(150);
         doc.text("Generated by ExamFlow", pageWidth/2, 292, { align: 'center' });
