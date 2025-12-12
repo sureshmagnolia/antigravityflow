@@ -1554,7 +1554,7 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
-// --- OPTIMIZED GENERATOR: DAY-WISE SEATING (Smart Layout + Styled Headers) ---
+// --- FIXED GENERATOR: DAY-WISE REPORT (Mirrors HTML Layout + Styled Headers) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1566,16 +1566,25 @@ function generateDayWisePDF() {
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
+    // Constants for Layout
+    const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+    const margin = 10;
+    const gap = 5;
+    const availableWidth = pageWidth - (margin * 2);
+    const colWidth = (availableWidth - gap) / 2; // For 2-column mode
+
     pages.forEach((page, i) => {
         if (i > 0) doc.addPage();
         
-        const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
         let currentY = 15;
+
+        // --- 0. DETECT SCRIBE SUMMARY PAGE ---
+        const isScribePage = page.innerText.includes("Scribe Assistance Summary");
 
         // --- 1. HEADER RECONSTRUCTION ---
         const headerDiv = page.querySelector('.print-header-group');
         if (headerDiv) {
-            // "Ears" (Page No & Stream)
+            // A. "Ears" (Page No & Stream)
             const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
@@ -1587,159 +1596,139 @@ function generateDayWisePDF() {
                 if (style && style.includes('right')) doc.text(text, pageWidth - 14, 10, { align: 'right' });
             });
 
-            // Center Titles
+            // B. Center Titles
             const titles = headerDiv.querySelectorAll('h1, h2, h3');
             titles.forEach(el => {
                 const text = el.innerText.trim();
                 const style = window.getComputedStyle(el);
-                const fontSize = parseFloat(style.fontSize) * 0.75;
-                const finalSize = Math.max(fontSize, 11); 
+                // Scale font: HTML px -> PDF pt
+                let size = parseFloat(style.fontSize) * 0.75; 
+                // Boost Scribe Title
+                if(isScribePage && el.tagName === 'H1') size = 16;
+                else if(isScribePage) size = 12;
 
-                doc.setFontSize(finalSize);
+                doc.setFontSize(Math.max(size, 10));
                 doc.setFont("helvetica", "bold");
                 doc.text(text, pageWidth/2, currentY, {align:'center'});
-                currentY += (finalSize * 0.4) + 2;
+                currentY += (size * 0.45) + 2;
             });
         }
         
-        currentY += 4; // Gap
+        currentY += 3; // Gap before table
 
-        // --- 2. DATA EXTRACTION & LAYOUT DECISION ---
-        // Instead of relying on HTML tables, we extract ALL rows to decide layout dynamically.
-        const allRows = [];
+        // --- 2. TABLE RENDERING (Mirror HTML Layout) ---
         const tables = page.querySelectorAll('table');
-        
-        tables.forEach(table => {
-            const trs = table.querySelectorAll('tbody tr');
-            trs.forEach(tr => {
-                const cells = Array.from(tr.querySelectorAll('td'));
-                if (cells.length === 0) return; // Skip empty
+        const isTwoColumn = page.querySelector('.column-container') !== null;
 
-                // Detect Row Type
-                let type = 'student';
-                let text = '';
-                
-                // Header Detection (colspan=4 or grey bg in HTML)
-                if (cells[0].getAttribute('colspan') == '4' || cells[0].innerText.length > 50 || tr.classList.contains('bg-gray-200')) {
-                    type = 'header';
-                    text = cells[0].innerText.trim();
-                    allRows.push({ type, text });
-                } 
-                // Scribe / Regular Student
-                else {
-                    const isScribe = tr.className.includes('scribe') || tr.style.color.includes('rgb(194');
-                    // Extract Cell Data
-                    // HTML Table order: [0]Location, [1]RegNo, [2]Name, [3]Seat
-                    // Handle cases where Location is merged (phantom cell)
-                    // For robust PDF generation, we grab text. 
-                    // Note: If HTML uses rowspan, subsequent rows might miss cell[0]. 
-                    // Ideally, we replicate the visual data. 
-                    
-                    let loc = cells[0].innerText.trim();
-                    let reg = cells[1] ? cells[1].innerText.trim() : "";
-                    let name = cells[2] ? cells[2].innerText.trim() : "";
-                    let seat = cells[3] ? cells[3].innerText.trim() : "";
-                    
-                    // Fix Rowspan Logic: If this row has fewer cells, it means Location is merged from above.
-                    // We will handle this by simple array logic if needed, but usually querySelectorAll gets full cells if structured right.
-                    // If your HTML table actually omits <td> for rowspan, we need to fill it.
-                    // Simplified: We assume HTML structure matches.
-                    
-                    allRows.push({ type, loc, reg, name, seat, isScribe });
+        // Common Table Config
+        const tableConfig = {
+            theme: 'grid',
+            startY: currentY,
+            styles: { 
+                lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
+                valign: 'middle', fontSize: 9, cellPadding: 1.5, overflow: 'linebreak'
+            },
+            headStyles: { 
+                fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
+            },
+            didParseCell: function(data) {
+                const el = data.cell.raw;
+                if (!el) return;
+
+                // A. INVERTED COURSE HEADERS (Black BG, White Text)
+                // We detect headers by colspan=4 or specific background color
+                if (el.getAttribute('colspan') == '4' || el.style.backgroundColor === 'rgb(238, 238, 238)') {
+                    data.cell.styles.fillColor = [0, 0, 0];       // Black
+                    data.cell.styles.textColor = [255, 255, 255]; // White
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.halign = 'left';
+                    data.cell.styles.fontSize = 10;
                 }
-            });
-        });
 
-        // --- 3. LAYOUT STRATEGY ---
-        // A4 Height ~297mm. Available ~250mm.
-        // 1 Row ~ 7mm. 
-        // 35 rows = 245mm (Full Page).
-        const ROW_LIMIT_FOR_1_COL = 38; 
+                // B. Scribe Rows (Orange/Red Text)
+                if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
+                    data.cell.styles.textColor = [194, 65, 12];
+                    data.cell.styles.fontStyle = 'bold';
+                }
 
-        // If we have few rows, use 1 Column (Wide, readable).
-        // If we have many rows, use 2 Columns (Compact, save paper).
-        const useTwoColumns = allRows.length > ROW_LIMIT_FOR_1_COL;
-
-        // Styles for PDF
-        const baseStyles = { 
-            lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], 
-            valign: 'middle', overflow: 'linebreak' 
-        };
-        
-        const headerStyles = { 
-            fillColor: [0, 0, 0], // Black Background
-            textColor: [255, 255, 255], // White Text
-            fontStyle: 'bold',
-            halign: 'left',
-            cellPadding: 1.5
+                // C. Merged Locations (Center Vertically & Scale Font)
+                if (el.hasAttribute('rowspan') && parseInt(el.getAttribute('rowspan')) > 1) {
+                    data.cell.styles.valign = 'middle';
+                    data.cell.styles.fontStyle = 'bold';
+                    // Scale font based on rowspan size (similar to HTML logic)
+                    const span = parseInt(el.getAttribute('rowspan'));
+                    if (span > 10) data.cell.styles.fontSize = 12;
+                    else if (span > 5) data.cell.styles.fontSize = 10;
+                }
+            }
         };
 
-        const drawTable = (data, startX, startY, width) => {
-            // Prepare Body for AutoTable
-            const body = data.map(r => {
-                if (r.type === 'header') {
-                    // Special syntax for Colspan in AutoTable
-                    return [{ content: r.text, colSpan: 4, styles: headerStyles }];
-                } else {
-                    const txtColor = r.isScribe ? [194, 65, 12] : [0,0,0]; // Orange for Scribe
-                    const fontStyle = r.isScribe ? 'bold' : 'normal';
-                    return [
-                        { content: r.loc, styles: { halign: 'center', textColor: txtColor, fontStyle: fontStyle } },
-                        { content: r.reg, styles: { fontStyle: 'bold', textColor: txtColor } },
-                        { content: r.name, styles: { textColor: txtColor, fontStyle: fontStyle } }, // Full name wraps automatically
-                        { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: txtColor } }
-                    ];
-                }
-            });
-
+        if (isScribePage && tables.length > 0) {
+            // === SCRIBE SUMMARY (1 Column, Full Width) ===
             doc.autoTable({
-                startY: startY,
-                margin: { left: startX },
-                tableWidth: width,
-                head: [['Loc', 'Reg No', 'Name', 'Seat']],
-                body: body,
-                theme: 'grid',
-                styles: { ...baseStyles, fontSize: useTwoColumns ? 8 : 10, cellPadding: useTwoColumns ? 1 : 1.5 },
-                headStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
+                ...tableConfig,
+                html: tables[0],
+                margin: { left: margin, right: margin },
+                styles: { ...tableConfig.styles, fontSize: 11, cellPadding: 3 }, // Larger font for scribes
+                headStyles: { ...tableConfig.headStyles, fillColor: [50, 50, 50], textColor: [255, 255, 255] }
+            });
+            
+            // Footer (Total Scribes)
+            const footer = page.querySelector('.text-right');
+            if (footer) {
+                const fy = doc.lastAutoTable.finalY + 8;
+                doc.setFontSize(11);
+                doc.text(footer.innerText.trim(), pageWidth - margin, fy, { align: 'right' });
+            }
+
+        } else if (isTwoColumn && tables.length === 2) {
+            // === 2 COLUMN LAYOUT (Side by Side) ===
+            // This mirrors the HTML "column-container" perfectly
+
+            // LEFT TABLE
+            doc.autoTable({
+                ...tableConfig,
+                html: tables[0],
+                margin: { left: margin },
+                tableWidth: colWidth,
                 columnStyles: {
-                    0: { cellWidth: useTwoColumns ? 12 : 20 }, // Loc
-                    1: { cellWidth: useTwoColumns ? 22 : 35 }, // Reg
-                    2: { cellWidth: 'auto' },                  // Name (Fills space)
-                    3: { cellWidth: useTwoColumns ? 8 : 12 }   // Seat
+                    0: { cellWidth: 12, halign: 'center' }, // Loc
+                    1: { cellWidth: 22, fontStyle: 'bold' }, // Reg
+                    2: { cellWidth: 'auto' }, // Name
+                    3: { cellWidth: 8, halign: 'center' }   // Seat
+                },
+                styles: { ...tableConfig.styles, fontSize: 8 } // Smaller font for 2-col
+            });
+
+            // RIGHT TABLE (Same Start Y)
+            doc.autoTable({
+                ...tableConfig,
+                html: tables[1],
+                startY: currentY, // FORCE SAME START Y
+                margin: { left: margin + colWidth + gap },
+                tableWidth: colWidth,
+                columnStyles: {
+                    0: { cellWidth: 12, halign: 'center' },
+                    1: { cellWidth: 22, fontStyle: 'bold' },
+                    2: { cellWidth: 'auto' },
+                    3: { cellWidth: 8, halign: 'center' }
+                },
+                styles: { ...tableConfig.styles, fontSize: 8 }
+            });
+
+        } else if (tables.length === 1) {
+            // === 1 COLUMN LAYOUT (Full Width) ===
+            doc.autoTable({
+                ...tableConfig,
+                html: tables[0],
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                    0: { cellWidth: 25, halign: 'center' },
+                    1: { cellWidth: 35, fontStyle: 'bold' },
+                    2: { cellWidth: 'auto' },
+                    3: { cellWidth: 15, halign: 'center' }
                 }
             });
-        };
-
-        if (!useTwoColumns) {
-            // === SINGLE COLUMN LAYOUT ===
-            drawTable(allRows, 14, currentY, 182); // 182 = PageWidth (210) - Margins (28)
-        } else {
-            // === DOUBLE COLUMN LAYOUT ===
-            // Split data roughly in half, but respect Course Headers (don't split a header from its first student if possible)
-            const mid = Math.ceil(allRows.length / 2);
-            let splitIndex = mid;
-
-            // Adjust split to avoid separating a header from its data too awkwardly
-            // (Optional refinement: Find the nearest header)
-            
-            const leftData = allRows.slice(0, splitIndex);
-            const rightData = allRows.slice(splitIndex);
-
-            const gap = 8;
-            const colWidth = (pageWidth - 28 - gap) / 2;
-
-            // Draw Left
-            drawTable(leftData, 14, currentY, colWidth);
-            
-            // Draw Right (Reset Y)
-            drawTable(rightData, 14 + colWidth + gap, currentY, colWidth);
-        }
-
-        // --- 3. FOOTER (Scribe Summary Page) ---
-        const footer = page.querySelector('.footer, .text-right');
-        if (footer && footer.innerText.includes("Total Scribes")) {
-            doc.setFontSize(10);
-            doc.text(footer.innerText.trim(), pageWidth - 14, 280, { align: 'right' });
         }
     });
 
