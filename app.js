@@ -1554,7 +1554,7 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
-// --- FIXED GENERATOR: DAY-WISE REPORT (Smart Layout + Styled Headers) ---
+// --- FIXED GENERATOR: DAY-WISE REPORT (Strict Fit & Paper Saving) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1566,21 +1566,22 @@ function generateDayWisePDF() {
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
-    // Dimensions
+    // Page Dimensions
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 10;
-    const midGap = 6;
-    
-    // Iterate through HTML "Print Pages"
+    const midGap = 4; // Tighter gap to give columns more width
+
     pages.forEach((page, i) => {
         if (i > 0) doc.addPage();
         
-        let currentY = 12; // Start high to maximize space
+        // Reset Y for new page
+        let currentY = 12; 
 
-        // --- 1. HEADER ---
+        // --- 1. HEADER RECONSTRUCTION ---
         const headerDiv = page.querySelector('.print-header-group');
         if (headerDiv) {
-            // A. "Ears" (Absolute divs)
+            // A. Absolute Divs (Page No / Stream)
             const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
@@ -1596,92 +1597,98 @@ function generateDayWisePDF() {
             titles.forEach(el => {
                 const text = el.innerText.trim();
                 const style = window.getComputedStyle(el);
-                let size = parseFloat(style.fontSize) * 0.7; // Scale down slightly
-                doc.setFontSize(Math.max(size, 10)); 
+                // Smart Scaling
+                let size = 10;
+                if (el.tagName === 'H1') size = 16; 
+                else if (el.tagName === 'H2') size = 12;
+                else if (el.tagName === 'H3') size = 10;
+
+                doc.setFontSize(size);
                 doc.setFont("helvetica", "bold");
                 doc.text(text, pageWidth/2, currentY, {align:'center'});
-                currentY += (size * 0.4) + 2;
+                currentY += (size * 0.35) + 3; // Tight spacing
             });
         }
         
-        currentY += 2;
+        currentY += 2; // Gap before table
 
         // --- 2. LAYOUT DETECTION ---
         const tables = page.querySelectorAll('table');
         const isScribePage = page.innerText.includes("Scribe Assistance Summary");
-        const isTwoColumn = (tables.length === 2 && !isScribePage); 
+        
+        // Check if HTML requested 2 columns (look for the flex container or 2 tables)
+        const isTwoColumn = (tables.length === 2 && !isScribePage);
 
-        // --- 3. RENDERING LOGIC ---
+        // --- 3. RENDERING STRATEGY ---
 
         if (isScribePage) {
-            // === SCRIBE LAYOUT (Always 1 Col, Wide, Readable) ===
-            const scribeTable = tables[0];
-            if(scribeTable) {
+            // === SCRIBE SUMMARY (Always 1 Col, Big & Clear) ===
+            if(tables.length > 0) {
                 doc.autoTable({
-                    html: scribeTable,
+                    html: tables[0],
                     startY: currentY,
                     theme: 'grid',
                     styles: { 
                         lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                        fontSize: 11, cellPadding: 3, valign: 'top' 
+                        fontSize: 11, cellPadding: 3, valign: 'middle' // Spacious
                     },
                     headStyles: { 
-                        fillColor: [50, 50, 50], textColor: [255, 255, 255], 
+                        fillColor: [0, 0, 0], textColor: [255, 255, 255], 
                         fontStyle: 'bold', fontSize: 12
                     },
                     columnStyles: {
-                        0: { cellWidth: 50, fontStyle: 'bold' }, // Room
+                        0: { cellWidth: 60, fontStyle: 'bold' }, // Room
                         1: { cellWidth: 'auto' }                 // Candidates
                     },
                     margin: { left: 14, right: 14 }
                 });
-                
-                // Footer (Total)
+                // Footer (Total Scribes)
                 const footer = page.querySelector('.text-right');
-                if (footer) {
-                    doc.setFontSize(11);
-                    doc.setFont("helvetica", "bold");
-                    doc.text(footer.innerText.trim(), pageWidth - 14, doc.lastAutoTable.finalY + 8, { align: 'right' });
+                if (footer && footer.innerText.includes("Total Scribes")) {
+                     doc.text(footer.innerText.trim(), pageWidth - 14, doc.lastAutoTable.finalY + 8, { align: 'right' });
                 }
             }
         } 
         else {
-            // === STUDENT LISTS (1 or 2 Cols) ===
-            
-            // Configuration for Compact Tables
+            // === STUDENT LISTS (Smart Compression) ===
             const colWidth = isTwoColumn ? (pageWidth - (margin * 2) - midGap) / 2 : (pageWidth - (margin * 2));
             
-            // Shared Styles
-            const tableStyles = {
+            // COMPACT STYLES for 2-Column to prevent overflow
+            const fontSize = isTwoColumn ? 7 : 10;      // Tiny font for 2-col
+            const cellPad  = isTwoColumn ? 0.8 : 2;     // Minimal padding
+            const locSize  = isTwoColumn ? 6 : 9;       // Extra small for Location to stop wrapping
+
+            const tableConfig = {
                 theme: 'grid',
+                startY: currentY,
                 styles: { 
                     lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                    valign: 'middle', 
-                    fontSize: isTwoColumn ? 8 : 10,   // Smaller font for 2-col
-                    cellPadding: isTwoColumn ? 1 : 2, // Tighter padding for 2-col
+                    valign: 'middle', fontSize: fontSize, cellPadding: cellPad,
                     overflow: 'linebreak'
                 },
                 headStyles: { 
                     fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
                 },
                 columnStyles: {
-                    0: { cellWidth: isTwoColumn ? 14 : 25, halign: 'center', fontSize: isTwoColumn ? 7 : 9 }, // Loc (Tiny font in 2-col)
-                    1: { cellWidth: isTwoColumn ? 22 : 35, fontStyle: 'bold' }, // Reg
+                    0: { cellWidth: isTwoColumn ? 12 : 25, halign: 'center', fontSize: locSize }, // Loc
+                    1: { cellWidth: isTwoColumn ? 20 : 35, fontStyle: 'bold' }, // Reg
                     2: { cellWidth: 'auto' }, // Name
-                    3: { cellWidth: isTwoColumn ? 8 : 15, halign: 'center', fontStyle: 'bold' } // Seat
+                    3: { cellWidth: isTwoColumn ? 7 : 15, halign: 'center', fontStyle: 'bold' } // Seat
                 },
                 didParseCell: function(data) {
                     const el = data.cell.raw;
                     if (!el) return;
 
                     // A. INVERTED HEADERS (Black BG, White Text)
-                    // We detect headers by colspan=4 (from HTML) or grey background
-                    if (el.getAttribute('colspan') == '4' || el.style.backgroundColor === 'rgb(238, 238, 238)') {
-                        data.cell.styles.fillColor = [0, 0, 0];       
-                        data.cell.styles.textColor = [255, 255, 255]; 
-                        data.cell.styles.fontStyle = 'bold';
-                        data.cell.styles.halign = 'left';
-                        data.cell.styles.fontSize = isTwoColumn ? 9 : 11;
+                    if (el.getAttribute('colspan') == '4' || el.style.backgroundColor === 'rgb(238, 238, 238)' || data.row.raw[0].content === el.innerText) {
+                        // Check if it's actually a course header row
+                        if (data.row.cells[0].colSpan > 1) {
+                            data.cell.styles.fillColor = [0, 0, 0];       
+                            data.cell.styles.textColor = [255, 255, 255]; 
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.halign = 'left';
+                            data.cell.styles.fontSize = fontSize + 1;
+                        }
                     }
 
                     // B. Scribe Rows (Orange Text)
@@ -1690,9 +1697,10 @@ function generateDayWisePDF() {
                         data.cell.styles.fontStyle = 'bold';
                     }
 
-                    // C. Merged Locations (Vertical Center)
+                    // C. Merged Locations (Center Vertically)
                     if (el.hasAttribute('rowspan') && parseInt(el.getAttribute('rowspan')) > 1) {
                         data.cell.styles.valign = 'middle';
+                        data.cell.styles.fontStyle = 'bold';
                     }
                 }
             };
@@ -1700,25 +1708,25 @@ function generateDayWisePDF() {
             if (isTwoColumn) {
                 // LEFT TABLE
                 doc.autoTable({
-                    ...tableStyles,
+                    ...tableConfig,
                     html: tables[0],
-                    startY: currentY,
                     margin: { left: margin },
                     tableWidth: colWidth
+                    // We DO NOT set pageBreak here, we let it flow naturally on this page
                 });
 
-                // RIGHT TABLE (Force same Start Y to align top)
+                // RIGHT TABLE (Must start at same Y as Left)
                 doc.autoTable({
-                    ...tableStyles,
+                    ...tableConfig,
                     html: tables[1],
-                    startY: currentY,
+                    startY: currentY, // Force reset to top
                     margin: { left: margin + colWidth + midGap },
                     tableWidth: colWidth
                 });
 
-                // Draw Vertical Separator Line (Optional, for aesthetics)
+                // Vertical Divider Line
                 const lineX = margin + colWidth + (midGap/2);
-                const lineBottom = Math.max(doc.lastAutoTable.finalY, currentY + 100); // Rough estimate
+                const lineBottom = doc.lastAutoTable.finalY; // Height of the longer table
                 doc.setDrawColor(200, 200, 200);
                 doc.setLineWidth(0.1);
                 doc.line(lineX, currentY, lineX, lineBottom);
@@ -1726,19 +1734,18 @@ function generateDayWisePDF() {
             } else {
                 // SINGLE COLUMN (Full Width)
                 doc.autoTable({
-                    ...tableStyles,
+                    ...tableConfig,
                     html: tables[0],
-                    startY: currentY,
                     margin: { left: margin, right: margin }
                 });
             }
         }
         
-        // Footer (Page Generated by...)
-        doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text("Generated by ExamFlow", pageWidth/2, 290, { align: 'center' });
-        doc.setTextColor(0); // Reset
+        // Minimal Footer
+        doc.setFontSize(7);
+        doc.setTextColor(150);
+        doc.text("Generated by ExamFlow", pageWidth/2, 292, { align: 'center' });
+        doc.setTextColor(0);
     });
 
     const dateStr = new Date().toISOString().slice(0,10);
