@@ -1295,201 +1295,201 @@ function updateLocalSlotsFromStudents() {
         downloadReportPDF();
     });
 
-  
-// --- HIGH-FIDELITY PDF GENERATOR (Matches Print Layout) ---
+// --- MASTER PDF ROUTER ---
 window.downloadReportPDF = function() {
-    const { jsPDF } = window.jspdf;
-    const reportContainer = document.getElementById('report-output-area');
-    
-    // Get all 'print-page' divs.
-    let pages = reportContainer.querySelectorAll('.print-page');
-    if (pages.length === 0 && reportContainer.innerHTML.trim() !== "") {
-        pages = [reportContainer]; // Fallback for single page
-    }
-
-    if (pages.length === 0) return alert("No report content found.");
-
-    const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-    });
-
-    const filename = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
+    const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
-    // Helper to extract RGB from CSS strings
-    const getRgb = (str) => {
-        if(!str || str === 'rgba(0, 0, 0, 0)' || str === 'transparent') return null;
-        const match = str.match(/\d+/g);
-        return match ? [parseInt(match[0]), parseInt(match[1]), parseInt(match[2])] : null;
-    };
+    // 1. Route to Specific Generators
+    if (reportType === "Roomwise_Seating_Report") {
+        generateRoomWisePDF();
+        return;
+    }
 
-    pages.forEach((page, index) => {
-        if (index > 0) doc.addPage();
+    // 2. Fallback for other reports (we will fix these later)
+    alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
+};
 
-        let currentY = 15;
+// --- SPECIFIC GENERATOR: ROOM-WISE SEATING REPORT ---
+function generateRoomWisePDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const container = document.getElementById('report-output-area');
+    const pages = container.querySelectorAll('.print-page');
+
+    if (pages.length === 0) return alert("No pages found.");
+
+    const btn = document.getElementById('download-pdf-report-btn');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+
+    pages.forEach((page, i) => {
+        if (i > 0) doc.addPage();
+        
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        let currentY = 15;
 
-        // --- 1. HEADER EXTRACTION ---
-        const headerGroup = page.querySelector('.print-header-group');
-        if (headerGroup) {
-            // A. Centered Titles (H1, H2, H3)
-            const titles = headerGroup.querySelectorAll('h1, h2, h3, .report-location-header, .print-header-text');
-            titles.forEach(el => {
-                const text = el.innerText.trim();
-                if(!text) return;
-                
-                const style = window.getComputedStyle(el);
-                const fontSize = parseFloat(style.fontSize) * 0.75; // px to pt conversion
-                const isBold = parseInt(style.fontWeight) > 500 || style.fontWeight === 'bold';
-                
-                doc.setFont("helvetica", isBold ? "bold" : "normal");
-                doc.setFontSize(Math.max(fontSize, 10));
-                
-                doc.text(text, pageWidth / 2, currentY, { align: 'center' });
-                currentY += (fontSize * 0.4) + 2;
-            });
-
-            // B. "Ears" (Absolute Positioned Elements: Page No, Stream)
-            // We look for divs with absolute positioning in the header
-            const ears = headerGroup.querySelectorAll('div[style*="absolute"]');
-            ears.forEach(el => {
-                const text = el.innerText.trim().replace(/\s+/g, ' '); // Clean text
-                if(!text) return;
-                const style = el.getAttribute('style');
-                
-                doc.setFontSize(10);
-                doc.setFont("helvetica", "bold");
-
+        // --- 1. HEADER RECONSTRUCTION ---
+        const headerDiv = page.querySelector('.print-header-group');
+        if (headerDiv) {
+            // A. "Ears" (Absolute divs: Page No & Stream)
+            const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            
+            absoluteDivs.forEach(div => {
+                const text = div.innerText.trim().replace(/\s+/g, ' ');
+                const style = div.getAttribute('style');
+                // Detect Left vs Right based on style text
                 if (style.includes('left: 0') || style.includes('left:0')) {
-                    doc.text(text, 14, 10); // Top Left Corner
+                    doc.text(text, 14, 10);
                 } else if (style.includes('right: 0') || style.includes('right:0')) {
-                    doc.text(text, pageWidth - 14, 10, { align: 'right' }); // Top Right Corner
+                    doc.text(text, pageWidth - 14, 10, { align: 'right' });
                 }
             });
-            currentY += 5; // Spacing after header
+
+            // B. Center Titles (H1, H2)
+            const h1 = headerDiv.querySelector('h1');
+            const h2s = headerDiv.querySelectorAll('h2');
+            
+            if (h1) {
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                currentY += 6;
+            }
+
+            h2s.forEach(h2 => {
+                doc.setFontSize(11);
+                doc.setFont("helvetica", "bold");
+                doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                currentY += 5;
+            });
+            
+            // Location Header
+            const locHeader = headerDiv.querySelector('.report-location-header');
+            if(locHeader) {
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text(locHeader.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                currentY += 5;
+            }
         }
 
-        // --- 2. TABLE EXTRACTION ---
-        // Find tables that are NOT inside the footer (main data tables)
-        const tables = Array.from(page.querySelectorAll('table')).filter(t => !t.closest('.invigilator-footer') && !t.closest('.footer') && !t.closest('.absentee-footer'));
+        currentY += 2; // Spacing
 
-        tables.forEach(table => {
+        // --- 2. MAIN STUDENT TABLE ---
+        // We find the first table (Main list)
+        const mainTable = page.querySelector('table.print-table');
+        if (mainTable) {
             doc.autoTable({
-                html: table,
+                html: mainTable,
                 startY: currentY,
                 theme: 'grid',
-                // STYLE SCRAPER: Copies CSS from HTML to PDF
                 styles: { 
                     lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                    valign: 'middle', fontSize: 9, cellPadding: 1.5 
+                    fontSize: 10, cellPadding: 1.5, valign: 'middle' 
                 },
                 headStyles: { 
                     fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 
                 },
-                didParseCell: function(data) {
-                    const el = data.cell.raw; 
-                    if (!el) return;
-                    const style = window.getComputedStyle(el);
-                    
-                    // Background Color
-                    const bg = getRgb(style.backgroundColor);
-                    if(bg) data.cell.styles.fillColor = bg;
-                    
-                    // Bold Text
-                    if (style.fontWeight === 'bold' || parseInt(style.fontWeight) > 500) data.cell.styles.fontStyle = 'bold';
-                    
-                    // Alignment
-                    if (style.textAlign) data.cell.styles.halign = style.textAlign;
-                    
-                    // Font Size Scaling (Small text stays small)
-                    const pxSize = parseFloat(style.fontSize);
-                    if (pxSize < 12) data.cell.styles.fontSize = 8;
+                columnStyles: {
+                    0: { cellWidth: 12, halign: 'center' }, // Seat
+                    1: { cellWidth: 45 },                   // Course
+                    2: { cellWidth: 35, fontStyle: 'bold' },// Reg No
+                    3: { cellWidth: 'auto' },               // Name (Takes remaining)
+                    4: { cellWidth: 25 },                   // Remarks
+                    5: { cellWidth: 20 }                    // Sign
                 },
-                margin: { left: 10, right: 10 }
+                margin: { left: 14, right: 14 }
             });
-            currentY = doc.lastAutoTable.finalY + 5;
-        });
+            
+            currentY = doc.lastAutoTable.finalY + 8;
+        }
 
-        // --- 3. FOOTER RECONSTRUCTION (Room-wise Report) ---
-        const invigFooter = page.querySelector('.invigilator-footer');
-        if (invigFooter) {
-            // A. Course Summary Table (Nested inside footer)
-            const sumTable = invigFooter.querySelector('table');
+        // --- 3. FOOTER RECONSTRUCTION ---
+        const footer = page.querySelector('.invigilator-footer');
+        if (footer) {
+            // Check for page break space (Needs approx 60mm)
+            if (currentY + 60 > pageHeight) {
+                doc.addPage();
+                currentY = 15;
+            }
+
+            // A. Course Summary Table (Nested)
+            const sumTable = footer.querySelector('table');
             if (sumTable) {
-                 // Check if we need a new page
-                 if(currentY > 220) { doc.addPage(); currentY = 15; }
-                 
-                 doc.setFontSize(10);
-                 doc.setFont("helvetica", "bold");
-                 doc.text("Course Summary:", 14, currentY + 5);
-                 currentY += 7;
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "bold");
+                doc.text("Course Summary:", 14, currentY);
+                currentY += 2;
 
-                 doc.autoTable({
+                doc.autoTable({
                     html: sumTable,
                     startY: currentY,
                     theme: 'grid',
-                    styles: { lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], fontSize: 8 },
-                    headStyles: { fillColor: [240,240,240], fontStyle: 'bold' },
+                    styles: { 
+                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 
+                    },
+                    headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold' },
                     margin: { left: 14, right: 14 }
-                 });
-                 currentY = doc.lastAutoTable.finalY + 10;
+                });
+                currentY = doc.lastAutoTable.finalY + 8;
             }
 
-            // B. Booklet Box (Draw Rectangle manually)
-            if(currentY > 250) { doc.addPage(); currentY = 15; }
-            
-            const boxHeight = 25;
+            // B. Booklet Account Box
+            const boxHeight = 22;
             doc.setDrawColor(0);
-            doc.setLineWidth(0.1);
-            doc.rect(14, currentY, pageWidth - 28, boxHeight); // Main Box
-            
+            doc.setLineWidth(0.2);
+            doc.rect(14, currentY, pageWidth - 28, boxHeight); // The Box
+
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
-            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", 16, currentY + 6);
             
-            doc.setLineDash([1, 1], 0); // Dotted line
-            doc.line(14, currentY + 12, pageWidth - 14, currentY + 12);
+            // Box Header Line
+            const boxHeader = "Booklets Received: __________   Used: __________   Balance Returned: __________";
+            doc.text(boxHeader, pageWidth / 2, currentY + 6, { align: 'center' });
+
+            // Dotted Separator
+            doc.setLineDash([1, 1], 0);
+            doc.line(14, currentY + 10, pageWidth - 14, currentY + 10);
             doc.setLineDash([]); // Reset to solid
+
+            // Box Body
+            doc.text("Written Booklets (QP Wise):", 16, currentY + 15);
             
-            doc.text("Written Booklets (QP Wise):", 16, currentY + 17);
-            
-            // C. Signatures
-            currentY += boxHeight + 15;
-            doc.setFont("helvetica", "normal");
-            
-            if(invigFooter.innerText.includes("Scribe Assistance")) {
+            // Box Footer Line (Total)
+            doc.setLineDash([1, 1], 0);
+            doc.line(14, currentY + 18, pageWidth - 14, currentY + 18);
+            doc.setLineDash([]);
+
+            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 21, { align: 'right' });
+
+            currentY += boxHeight + 12;
+
+            // C. Scribe Note & Signature
+            if (footer.innerText.includes("* = Scribe")) {
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "italic");
                 doc.text("* = Scribe Assistance", 14, currentY);
             }
+
+            doc.setLineWidth(0.2);
+            doc.line(pageWidth - 70, currentY - 2, pageWidth - 14, currentY - 2); // Sign Line
             
-            // Signature Line
-            doc.line(140, currentY - 1, 190, currentY - 1); 
-            doc.text("Name & Signature of Invigilator", 165, currentY + 4, { align: 'center' });
-        }
-        
-        // --- 4. GENERIC FOOTER (Absentee/Summary Reports) ---
-        const genericFooter = page.querySelector('.footer, .absentee-footer');
-        if (genericFooter) {
-             const footerText = genericFooter.innerText.split('\n').filter(x => x.trim());
-             let footerY = 280; // Bottom of page
-             
-             doc.setFontSize(10);
-             footerText.forEach(line => {
-                 if(line.includes("Superintendent") || line.includes("Signature")) {
-                     doc.text(line, pageWidth - 14, footerY, {align:'right'});
-                 } else {
-                     doc.text(line, 14, footerY);
-                 }
-                 footerY -= 5;
-             });
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.text("Name & Signature of Invigilator", pageWidth - 42, currentY + 3, { align: 'center' });
         }
     });
 
-    // Save
-    doc.save(`${filename}_${new Date().toISOString().slice(0,10)}.pdf`);
-};
+    const dateStr = new Date().toISOString().slice(0,10);
+    doc.save(`RoomWise_Report_${dateStr}.pdf`);
+
+    if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+}
+
 
 
 
