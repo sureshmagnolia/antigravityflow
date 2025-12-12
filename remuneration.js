@@ -67,9 +67,7 @@ function loadRates() {
                          : RATE_TEMPLATES["SDE_Default"];
 
         if (savedRates[streamName]) {
-            // *** FIX: SAFE MERGE ***
-            // Merge saved rates OVER the template. 
-            // If saved data is missing a key (like 'invigilator'), the template value is kept.
+            // SAFE MERGE: Keep existing values, fill missing from template
             allRates[streamName] = { ...template, ...savedRates[streamName] };
             
             // Double check essential numbers aren't NaN strings
@@ -176,7 +174,10 @@ function renderRateConfigForm() {
         container.querySelectorAll('.rate-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
-                allRates[currentStream][key] = parseFloat(e.target.value) || 0; // Avoid NaN on bad input
+                allRates[currentStream][key] = parseFloat(e.target.value) || 0;
+                
+                // AUTO-SAVE to Local Storage on input change (Safety)
+                localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
             });
         });
     }
@@ -208,8 +209,15 @@ function updateLockBtn() {
 
 window.toggleRemunerationLock = function() {
     if (!isRatesLocked) {
+        // 1. Commit to Local Storage
         localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
-        if(typeof syncDataToCloud === 'function') syncDataToCloud();
+        
+        // 2. Sync to Cloud (V2 Modular Target: 'settings')
+        if(typeof syncDataToCloud === 'function') {
+            syncDataToCloud('settings');
+        } else {
+            console.warn("Cloud sync not available.");
+        }
     }
     isRatesLocked = !isRatesLocked;
     renderRateConfigForm();
@@ -278,7 +286,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
                 }
                 
                 const totalInvigs = normalInvigs + scribeInvigs;
-                const invigCost = totalInvigs * getNum(rates.invigilator); // SAFETY CHECK HERE
+                const invigCost = totalInvigs * getNum(rates.invigilator); 
 
                 // Support Staff
                 const staffCount = Math.ceil(count / (getNum(rates.clerk_ratio) || 500));
@@ -328,7 +336,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             }
             
             const totalInvigs = normalInvigs + scribeInvigs;
-            const invigCost = totalInvigs * getNum(rates.invigilator); // SAFETY CHECK HERE
+            const invigCost = totalInvigs * getNum(rates.invigilator); 
 
             // Clerk
             let clerkCost = 0;
