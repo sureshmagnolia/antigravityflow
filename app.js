@@ -1296,131 +1296,162 @@ function updateLocalSlotsFromStudents() {
     });
 
   
-// --- NEW FUNCTION: Smart PDF Generator ---
-    window.downloadReportPDF = function() {
-        const reportContainer = document.getElementById('report-output-area');
-        const pages = reportContainer.querySelectorAll('.print-page'); // Get all generated pages
+// --- NEW FUNCTION: High-Fidelity PDF Generator (using jsPDF + AutoTable) ---
+window.downloadReportPDF = function() {
+    const { jsPDF } = window.jspdf;
+    const reportContainer = document.getElementById('report-output-area');
+    
+    // Get all 'print-page' divs. If none, try the container itself.
+    let pages = reportContainer.querySelectorAll('.print-page');
+    if (pages.length === 0 && reportContainer.innerHTML.trim() !== "") {
+        // Fallback for single page reports without the class
+        pages = [reportContainer];
+    }
 
-        if (pages.length === 0) {
-            alert("No report pages found to generate PDF.");
-            return;
-        }
+    if (pages.length === 0) return alert("No report content found.");
 
-        // Initialize jsPDF
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+    });
+
+    const filename = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
+                     ? lastGeneratedReportType 
+                     : "Exam_Report";
+
+    // --- HELPER: Parse RGB string to array ---
+    const getRgb = (str) => {
+        if(!str || str === 'rgba(0, 0, 0, 0)' || str === 'transparent') return null;
+        const match = str.match(/\d+/g);
+        return match ? [parseInt(match[0]), parseInt(match[1]), parseInt(match[2])] : null;
+    };
+
+    pages.forEach((page, index) => {
+        if (index > 0) doc.addPage();
+
+        let currentY = 15;
+
+        // 1. HEADER EXTRACTION (H1, H2, H3, Divs)
+        const headerGroup = page.querySelector('.print-header-group') || page;
+        // We select immediate text children elements to print as header
+        const headers = headerGroup.querySelectorAll('h1, h2, h3, .report-location-header, .print-header-text');
+
+        headers.forEach(el => {
+            if(el.closest('table')) return; // Skip if inside a table (handled by autotable)
+            
+            const text = el.innerText.trim();
+            if(!text) return;
+
+            const style = window.getComputedStyle(el);
+            const fontSize = parseFloat(style.fontSize) * 0.75; // px to pt approx
+            const isBold = parseInt(style.fontWeight) > 500 || style.fontWeight === 'bold';
+            
+            doc.setFont("helvetica", isBold ? "bold" : "normal");
+            doc.setFontSize(Math.max(fontSize, 10)); // Min size 10
+            
+            // Center text
+            doc.text(text, 105, currentY, { align: 'center' });
+            currentY += (fontSize / 2) + 2;
         });
 
-        const filename = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
-                         ? lastGeneratedReportType 
-                         : "Exam_Report";
+        currentY += 5; // Gap after header
 
-        let pageCount = 0;
+        // 2. TABLE EXTRACTION (The Core Logic)
+        const tables = page.querySelectorAll('table');
 
-        pages.forEach((page, index) => {
-            if (index > 0) doc.addPage(); // Add new page for subsequent divs
+        tables.forEach(table => {
+            doc.autoTable({
+                html: table,
+                startY: currentY,
+                theme: 'grid',
+                // --- STYLE SCRAPER ---
+                styles: {
+                    lineColor: [0, 0, 0],
+                    lineWidth: 0.1,
+                    textColor: [0, 0, 0],
+                    valign: 'middle',
+                    fontSize: 9 // Default size
+                },
+                headStyles: {
+                    fillColor: [240, 240, 240], // Default grey header
+                    textColor: [0, 0, 0],
+                    fontStyle: 'bold',
+                    lineWidth: 0.1
+                },
+                // This function runs for EVERY cell and copies the HTML CSS to PDF
+                didParseCell: function(data) {
+                    const el = data.cell.raw; 
+                    if (!el) return;
 
-            // 1. Extract Header Information
-            const headerGroup = page.querySelector('.print-header-group');
-            let startY = 15; // Initial Y position
+                    const style = window.getComputedStyle(el);
 
-            if (headerGroup) {
-                const headerText = headerGroup.innerText.split('\n').filter(line => line.trim() !== "");
-                
-                doc.setFontSize(14);
-                doc.setFont("helvetica", "bold");
-                
-                // Centered Header Text
-                headerText.forEach(line => {
-                    // Check for "Page X" text to align differently if needed, or just center everything
-                    if(line.includes("Page")) {
-                        doc.setFontSize(10);
-                        doc.setFont("helvetica", "normal");
-                        doc.text(line, 200, 10, { align: 'right' }); // Top right page number
-                    } else {
-                        // Main Titles
-                        if(line.toUpperCase() === line) doc.setFontSize(16); // College Name usually uppercase
-                        else doc.setFontSize(12);
-                        
-                        doc.text(line, 105, startY, { align: 'center' });
-                        startY += 6;
+                    // A. Background Color
+                    const bg = getRgb(style.backgroundColor);
+                    if (bg) {
+                        data.cell.styles.fillColor = bg;
                     }
-                });
-                startY += 5; // Spacing after header
-            }
 
-            // 2. Extract Tables
-            // We look for tables inside this specific page div
-            const tables = page.querySelectorAll('table');
+                    // B. Font Weight
+                    const weight = style.fontWeight;
+                    if (weight === 'bold' || parseInt(weight) > 500 || el.tagName === 'TH') {
+                        data.cell.styles.fontStyle = 'bold';
+                    }
 
-            tables.forEach((table) => {
-                // Use autoTable to parse the HTML table
-                doc.autoTable({
-                    html: table,
-                    startY: startY,
-                    theme: 'grid',
-                    styles: { 
-                        fontSize: 9, 
-                        cellPadding: 1, 
-                        lineColor: [0, 0, 0], 
-                        lineWidth: 0.1,
-                        textColor: [0, 0, 0] // Force black text
-                    },
-                    headStyles: { 
-                        fillColor: [240, 240, 240], // Light gray header
-                        textColor: [0, 0, 0], 
-                        fontStyle: 'bold',
-                        lineWidth: 0.1,
-                        lineColor: [0, 0, 0]
-                    },
-                    columnStyles: {
-                        0: { cellWidth: 10, halign: 'center' }, // Sl No usually small
-                        // Auto width for others
-                    },
-                    didParseCell: function(data) {
-                        // Preserve bold styling from HTML if possible
-                        if (data.cell.raw.tagName === 'TH' || (data.cell.raw.style && data.cell.raw.style.fontWeight === 'bold')) {
-                            data.cell.styles.fontStyle = 'bold';
-                        }
-                    },
-                    margin: { top: 10, bottom: 20, left: 10, right: 10 }
-                });
+                    // C. Text Alignment
+                    if (style.textAlign) {
+                        data.cell.styles.halign = style.textAlign; // left, center, right
+                    }
 
-                // Update startY for next element (if any)
-                startY = doc.lastAutoTable.finalY + 10;
+                    // D. Font Size (Scaling)
+                    // If HTML has small text (e.g. 10px), scale it down in PDF
+                    const pxSize = parseFloat(style.fontSize);
+                    if (pxSize < 12) { 
+                        data.cell.styles.fontSize = 8; 
+                    } else if (pxSize > 16) {
+                        data.cell.styles.fontSize = 11;
+                    }
+                },
+                margin: { left: 10, right: 10 },
+                tableWidth: 'auto'
             });
 
-            // 3. Extract Footer / Signatures
-            const footer = page.querySelector('.invigilator-footer') || page.querySelector('.footer') || page.querySelector('.absentee-footer');
-            
-            if (footer) {
-                // Simple footer extraction: Bottom of page
-                const footerText = footer.innerText.split('\n').filter(l => l.trim() !== "");
-                let footerY = 280; // Bottom of A4
-                
-                doc.setFontSize(10);
-                doc.setFont("helvetica", "normal");
-                
-                // If it's a signature line, we try to align it
-                footerText.forEach(line => {
-                    if(line.includes("Superintendent") || line.includes("Signature")) {
-                        doc.text(line, 150, footerY); // Right aligned roughly
-                    } else {
-                        doc.text(line, 14, footerY); // Left aligned
-                    }
-                    footerY -= 5; // Move up for next line (printing bottom up logic or just place explicitly)
-                });
-            }
-            
-            pageCount++;
+            currentY = doc.lastAutoTable.finalY + 10;
         });
 
-        // Save the PDF
-        doc.save(`${filename}_${new Date().toISOString().slice(0,10)}.pdf`);
-    };
+        // 3. FOOTER EXTRACTION
+        const footers = page.querySelectorAll('.footer, .invigilator-footer, .absentee-footer, .signature');
+        
+        footers.forEach(footer => {
+            // Check if we have space, else add page
+            if (currentY > 270) { doc.addPage(); currentY = 15; }
+
+            const textLines = footer.innerText.split('\n').filter(x => x.trim());
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+
+            let footerY = (currentY > 250) ? 280 : currentY + 10; // Push to bottom if near, else append
+
+            // Smart align: If text contains "Signature" or "Superintendent", align Right
+            textLines.forEach(line => {
+                if (line.includes("Superintendent") || line.includes("Signature") || line.includes("Invigilator")) {
+                    // Split line if it has left/right parts (common in flex footers)
+                    if(line.length > 50) {
+                         doc.text(line, 105, footerY, { align: 'center' }); // Center long lines
+                    } else {
+                         doc.text(line, 190, footerY, { align: 'right' });
+                    }
+                } else {
+                    doc.text(line, 14, footerY);
+                }
+                footerY += 5;
+            });
+        });
+    });
+
+    // Save
+    doc.save(`${filename}_${new Date().toISOString().slice(0,10)}.pdf`);
+};
 
 
 
