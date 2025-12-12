@@ -822,26 +822,29 @@ function updateLocalSlotsFromStudents() {
     }
 
 
-    
-   // 4. CLOUD UPLOAD FUNCTION (Optimized with Invigilation Slot Sync)
-    // MODULAR SYNC FUNCTION
-    // targetSection: 'settings', 'ops', 'allocation', 'staff', 'slots', or 'heavy' (default)
+    // 4. CLOUD UPLOAD FUNCTION (Strict V2: No Legacy/Heavy Sync)
     async function syncDataToCloud(targetSection = 'heavy') {
+        // --- BLOCK LEGACY V1 SYNC ---
+        if (targetSection === 'heavy') {
+            console.log("🚫 V1 'Heavy' Sync ignored. System is in V2 Mode.");
+            return; // STOP HERE. Do not upload chunks.
+        }
+
         if (!currentUser || !currentCollegeId || isSyncing) return;
         if (!navigator.onLine) return updateSyncStatus("Offline", "error");
 
         isSyncing = true;
         updateSyncStatus("Saving...", "neutral");
 
-        const { db, doc, setDoc, writeBatch, collection } = window.firebase;
+        const { db, doc, setDoc } = window.firebase;
         const cid = currentCollegeId;
         const timestamp = new Date().toISOString();
 
         try {
-            // Helper to get data
+            // Helper to get data from LocalStorage
             const get = (k) => localStorage.getItem(k);
 
-            // 1. SETTINGS (Fast)
+            // 1. SETTINGS (College Name, Rooms, Streams, Rules)
             if (targetSection === 'settings') {
                 const data = {
                     examCollegeName: get('examCollegeName'),
@@ -855,7 +858,7 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
             }
 
-            // 2. OPERATIONS (Fast)
+            // 2. OPERATIONS (Absentees, QP Codes - Global Lists)
             else if (targetSection === 'ops') {
                 const data = {
                     examAbsenteeList: get('examAbsenteeList'),
@@ -864,7 +867,7 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
             }
 
-            // 3. ALLOCATION (Scribes)
+            // 3. ALLOCATION (Global Scribe List)
             else if (targetSection === 'allocation') {
                 const data = {
                     examScribeList: get('examScribeList'),
@@ -873,7 +876,7 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
             }
 
-            // 4. STAFF (Invigilation)
+            // 4. STAFF (Invigilators)
             else if (targetSection === 'staff') {
                 const data = {
                     examStaffData: get('examStaffData'),
@@ -882,55 +885,13 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
             }
 
-            // 5. SLOTS (Invigilation)
+            // 5. SLOTS (Invigilation Requirements)
             else if (targetSection === 'slots') {
                 const data = {
                     examInvigilationSlots: get('examInvigilationSlots'),
                     invigAdvanceUnavailability: get('invigAdvanceUnavailability')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
-            }
-
-            // 6. HEAVY DATA (Legacy - Disabled for V2 Safety)
-            else if (targetSection === 'heavy') {
-                console.warn("⚠️ Blocked Legacy 'Heavy' Sync. Use syncSessionToCloud() instead.");
-                // return; // Uncomment to strictly block V1 uploads
-                
-                // ... (Existing Chunking Logic below can be kept as fallback or deleted) ...
-            }
-        
-            // --- ADD THIS BLOCK ---
-            // 1. Auto-Calculate Slots based on new Student Data
-            const slotsUpdated = updateLocalSlotsFromStudents();
-        
-            // 2. If slots changed, trigger a slot sync immediately
-            if (slotsUpdated) {
-            // We await this to ensure slots are consistent in cloud
-            await syncDataToCloud('slots'); 
-            }
-                
-                
-                
-                const batch = writeBatch(db);
-                const bulkData = {
-                    examBaseData: get('examBaseData'),
-                    examRoomAllotment: get('examRoomAllotment')
-                };
-                
-                // Chunking Logic
-                const jsonStr = JSON.stringify(bulkData);
-                const chunks = chunkString(jsonStr, 800000); // Defined in your app.js already
-                
-                // 1. Update timestamp on main doc to trigger reload for others
-                batch.update(doc(db, "colleges", cid), { lastUpdated: timestamp });
-
-                // 2. Write Chunks
-                chunks.forEach((chunk, idx) => {
-                    const ref = doc(db, "colleges", cid, "data", `chunk_${idx}`);
-                    batch.set(ref, { payload: chunk, index: idx, totalChunks: chunks.length });
-                });
-                
-                await batch.commit();
             }
 
             updateSyncStatus("Saved", "success");
@@ -942,6 +903,7 @@ function updateLocalSlotsFromStudents() {
             isSyncing = false;
         }
     }
+   
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
 
     adminBtn.addEventListener('click', () => {
@@ -10317,7 +10279,8 @@ Are you sure?
             // INJECT STREAM TAG INTO PYTHON DATA
             parsedData = parsedData.map(item => ({
                 ...item,
-                Time: normalizeTime(item.Time), // <--- FIX APPLIED HERE
+                Time: (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time, // Fixed
+                Stream: selectedStream
                 Stream: selectedStream
             }));
 
