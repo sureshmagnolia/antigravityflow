@@ -13144,15 +13144,27 @@ function initSessionStyles() {
 
         /* Dial Area */
         .dial-container { position: relative; height: 200px; overflow: hidden; background: #f9fafb; margin: 10px 0; }
-        .dial-list { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; padding: 80px 0; scrollbar-width: none; }
+        
+        /* --- FIXED SCROLL CSS --- */
+        .dial-list { 
+            height: 100%; 
+            overflow-y: auto; 
+            scroll-snap-type: y mandatory; 
+            padding: 80px 0; 
+            scrollbar-width: none; 
+            scroll-behavior: smooth;       /* Smooths programmatic scrolls */
+            overscroll-behavior: contain;  /* Prevents scrolling parent page */
+        }
         .dial-list::-webkit-scrollbar { display: none; }
         
         .dial-item { 
             height: 40px; display: flex; align-items: center; justify-content: center; 
             scroll-snap-align: center; font-size: 14px; color: #9ca3af; 
-            transition: all 0.2s; cursor: pointer; font-weight: 500;
+            transition: all 0.15s ease-out; /* Faster visual transition */
+            cursor: pointer; font-weight: 500;
+            user-select: none; /* Prevents text selection while scrolling */
         }
-        .dial-item.active { font-size: 17px; font-weight: 800; color: #4f46e5; transform: scale(1.1); }
+        .dial-item.active { font-size: 18px; font-weight: 800; color: #4f46e5; transform: scale(1.05); }
         
         .dial-highlight { 
             position: absolute; top: 80px; left: 0; right: 0; height: 40px; 
@@ -13188,14 +13200,18 @@ function injectDialModal() {
     
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     
-    // Scroll Listener for Snap Effect
+    // --- UPDATED SCROLL LISTENER (Instant & Smooth) ---
     const list = document.getElementById('dial-list-content');
-    let timeout;
+    let ticking = false;
+
     list.addEventListener('scroll', () => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-            updateActiveItem(list);
-        }, 50);
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                updateActiveItem(list);
+                ticking = false;
+            });
+            ticking = true;
+        }
     });
 }
 
