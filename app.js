@@ -1312,6 +1312,7 @@ window.downloadReportPDF = function() {
 };
 
 // --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Dynamic Fit) ---
+// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (With Scribe Highlighting) ---
 function generateRoomWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1335,7 +1336,7 @@ function generateRoomWisePDF() {
         if (headerDiv) {
             // A. "Ears" (Page No & Stream)
             const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(10);
+            doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             
             absoluteDivs.forEach(div => {
@@ -1353,7 +1354,7 @@ function generateRoomWisePDF() {
             const h2s = headerDiv.querySelectorAll('h2');
             
             if (h1) {
-                doc.setFontSize(16); // Larger College Name
+                doc.setFontSize(16);
                 doc.setFont("helvetica", "bold");
                 doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
                 currentY += 7;
@@ -1379,7 +1380,7 @@ function generateRoomWisePDF() {
 
         currentY += 4; // Gap before table
 
-        // --- 2. MAIN STUDENT TABLE (Optimized Sizing) ---
+        // --- 2. MAIN STUDENT TABLE ---
         const mainTable = page.querySelector('table.print-table');
         if (mainTable) {
             doc.autoTable({
@@ -1390,10 +1391,10 @@ function generateRoomWisePDF() {
                     lineColor: [0, 0, 0], 
                     lineWidth: 0.1, 
                     textColor: [0, 0, 0], 
-                    fontSize: 11,           // Readable standard size
-                    cellPadding: 3,        // Comfortable padding (fills page better)
+                    fontSize: 11,           
+                    cellPadding: 3,        
                     valign: 'middle',
-                    minCellHeight: 10,     // Ensures rows aren't too skinny
+                    minCellHeight: 10,     
                     overflow: 'linebreak'
                 },
                 headStyles: { 
@@ -1406,11 +1407,22 @@ function generateRoomWisePDF() {
                 },
                 columnStyles: {
                     0: { cellWidth: 12, halign: 'center' }, // Seat
-                    1: { cellWidth: 45, fontSize: 9 },      // Course (Small font to fit)
-                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No (Right Align)
+                    1: { cellWidth: 45, fontSize: 9 },      // Course (Small font)
+                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No
                     3: { cellWidth: 'auto' },               // Name
                     4: { cellWidth: 25 },                   // Remarks
                     5: { cellWidth: 20 }                    // Sign
+                },
+                // --- SCRIBE HIGHLIGHT LOGIC ---
+                didParseCell: function(data) {
+                    // Check if the HTML row has the scribe class
+                    // We check the parent TR of the cell
+                    const rowElement = data.cell.raw.parentElement;
+                    if (rowElement && (rowElement.classList.contains('scribe-row-highlight') || rowElement.className.includes('scribe'))) {
+                        data.cell.styles.fillColor = [0, 0, 0];   // Black Background
+                        data.cell.styles.textColor = [255, 255, 255]; // White Text
+                        data.cell.styles.fontStyle = 'bold';
+                    }
                 },
                 margin: { left: 14, right: 14 }
             });
@@ -1480,12 +1492,11 @@ function generateRoomWisePDF() {
                 doc.text("* = Scribe Assistance", 14, currentY + 4);
             }
 
-            // --- EXTRACT ACTUAL INVIGILATOR NAME ---
+            // Extract Invigilator Name
             let sigText = "Name & Signature of Invigilator";
             const sigDiv = footer.querySelector('.signature');
             if (sigDiv) {
                 const rawText = sigDiv.innerText.trim();
-                // Clean up possible line breaks or spaces
                 if (rawText && rawText.replace(/\s/g,'').length > 0 && !rawText.includes("Name & Signature")) {
                     sigText = rawText;
                 }
