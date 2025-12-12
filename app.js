@@ -7400,7 +7400,6 @@ window.real_populate_qp_code_session_dropdown = function () {
         // MODULAR SYNC (V2)
         // This handles both Room Allotment and Scribes for this session
         await syncSessionToCloud(currentSessionKey);
-        }
         // ------------------------
 
         roomSelectionModal.classList.add('hidden');
