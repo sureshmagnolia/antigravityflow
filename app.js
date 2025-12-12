@@ -891,8 +891,13 @@ function updateLocalSlotsFromStudents() {
                 await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
             }
 
-            // 6. HEAVY DATA (Students & Room Allotment) - ONLY on specific actions
+            // 6. HEAVY DATA (Legacy - Disabled for V2 Safety)
             else if (targetSection === 'heavy') {
+                console.warn("⚠️ Blocked Legacy 'Heavy' Sync. Use syncSessionToCloud() instead.");
+                // return; // Uncomment to strictly block V1 uploads
+                
+                // ... (Existing Chunking Logic below can be kept as fallback or deleted) ...
+            }
         
             // --- ADD THIS BLOCK ---
             // 1. Auto-Calculate Slots based on new Student Data
