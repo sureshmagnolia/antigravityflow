@@ -1554,40 +1554,38 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
-// --- ULTIMATE PDF GENERATOR: FROM SOURCE DATA (No HTML Scraping) ---
+// --- ULTIMATE PDF GENERATOR: FROM SOURCE DATA (Paginated & Styled) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    // 1. VALIDATION
+    // 1. DATA VALIDATION
     if (!allStudentData || allStudentData.length === 0) return alert("No data loaded to generate PDF.");
 
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
 
     // 2. CONFIGURATION
-    const PAGE_HEIGHT = 297;
     const PAGE_WIDTH = 210;
     const MARGIN = 10;
     const COL_GAP = 5;
-    const HEADER_Y_START = 15;
     
-    // Threshold: If rows > 40, switch to 2 columns to save paper
-    const ROW_THRESHOLD_FOR_2COL = 40; 
+    // STRICT LIMITS (Rows per page)
+    const ROWS_PER_PAGE_1COL = 38; 
+    const ROWS_PER_PAGE_2COL = 80; // 40 per column
 
     try {
-        // 3. PREPARE DATA (Mirroring the Logic of HTML Generator)
-        // We filter based on the current UI selection (Session/Stream)
+        // 3. PREPARE DATA
         const reportType = 'day-wise';
-        const rawData = getFilteredReportData(reportType); // Reuse existing filter logic
+        const rawData = getFilteredReportData(reportType); 
 
         if (!rawData || rawData.length === 0) throw new Error("No matching data found.");
 
-        // Allocate Rooms (Get Room Nos and Seats)
         const dataWithRooms = performOriginalAllocation(rawData);
         
-        // Get Scribe List for highlighting
-        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+        // Scribe List for highlighting
+        let scribeRegNos = new Set();
+        if(globalScribeList) scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
 
         // Group by Stream -> Session
         const tree = {};
@@ -1620,40 +1618,34 @@ function generateDayWisePDF() {
             sortedKeys.forEach(sessionKey => {
                 const sessionData = sessions[sessionKey];
 
-                // --- A. STUDENT SEATING LIST ---
-                
-                // Sort Students: Course -> RegNo
+                // --- A. BUILD FLAT ROWS (Headers + Students) ---
                 sessionData.students.sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                     return a['Register Number'].localeCompare(b['Register Number']);
                 });
 
-                // Build "Flat" List of Rows (Headers + Students)
-                // This allows us to count total lines accurately
                 const flatRows = [];
                 let lastCourse = "";
-                let lastLocRaw = ""; // For merge detection
+                let lastLocRaw = "";
 
                 sessionData.students.forEach(s => {
-                    // Inject Course Header
+                    // Inject Header
                     if (s.Course !== lastCourse) {
                         flatRows.push({ type: 'header', text: s.Course });
                         lastCourse = s.Course;
-                        lastLocRaw = ""; // Reset merge on new course
+                        lastLocRaw = ""; 
                     }
 
-                    // Prepare Student Row
+                    // Student Row
                     const roomName = s['Room No'];
                     const roomInfo = currentRoomConfig[roomName] || {};
-                    // Format Location: "Room 101\n(Main Block)"
                     const locText = roomInfo.location ? `${roomName}\n(${roomInfo.location})` : roomName;
                     const isScribe = scribeRegNos.has(s['Register Number']);
                     
-                    // Merge Logic
                     let rowSpan = 1;
                     let showLoc = true;
                     if (locText === lastLocRaw) {
-                        showLoc = false; // Hide duplicate
+                        showLoc = false;
                     } else {
                         lastLocRaw = locText;
                     }
@@ -1661,7 +1653,7 @@ function generateDayWisePDF() {
                     flatRows.push({
                         type: 'data',
                         loc: showLoc ? locText : "", 
-                        locRaw: locText, // Keep raw for span calculation
+                        locRaw: locText,
                         reg: s['Register Number'],
                         name: s.Name,
                         seat: s.seatNumber,
@@ -1669,12 +1661,11 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // Calculate RowSpans (Post-Process)
+                // Calculate RowSpans
                 for(let i=0; i<flatRows.length; i++) {
                     if(flatRows[i].type === 'header') continue;
-                    if(flatRows[i].loc === "") continue; // Already merged
+                    if(flatRows[i].loc === "") continue; 
                     
-                    // Look ahead
                     let span = 1;
                     for(let j=i+1; j<flatRows.length; j++) {
                         if(flatRows[j].type === 'header') break;
@@ -1687,54 +1678,49 @@ function generateDayWisePDF() {
                     flatRows[i].rowSpan = span;
                 }
 
-                // --- LAYOUT DECISION ---
+                // --- B. LAYOUT DECISION ---
                 const totalRows = flatRows.length;
-                const isTwoCol = totalRows > ROW_LIMIT_FOR_1_COL;
+                const isTwoCol = totalRows > ROWS_PER_PAGE_1COL;
+                const limit = isTwoCol ? ROWS_PER_PAGE_2COL : ROWS_PER_PAGE_1COL;
 
-                if (pageCount > 0) doc.addPage();
-                drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", currentCollegeName);
-
-                if (isTwoCol) {
-                    // === 2 COLUMN LAYOUT ===
-                    // Split rows into Left and Right chunks
-                    const mid = Math.ceil(totalRows / 2);
-                    // Optimization: Don't split a small course header from its first student if possible
-                    // (Simple split for now)
-                    const leftRows = flatRows.slice(0, mid);
-                    const rightRows = flatRows.slice(mid);
-
-                    const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
-                    const startY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 5 : 45; // Below header
-
-                    // Draw Left
-                    drawAutoTable(doc, leftRows, MARGIN, startY, colWidth, true);
+                // --- C. PAGINATE & DRAW ---
+                for (let i = 0; i < totalRows; i += limit) {
+                    const pageRows = flatRows.slice(i, i + limit);
                     
-                    // Draw Right (Force same Y)
-                    drawAutoTable(doc, rightRows, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
+                    if (pageCount > 0) doc.addPage();
+                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", currentCollegeName);
+                    
+                    const startY = 45; // Below Header
 
-                    // Divider Line
-                    doc.setDrawColor(200, 200, 200);
-                    doc.setLineWidth(0.1);
-                    doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
+                    if (isTwoCol) {
+                        // SPLIT INTO 2 COLS
+                        const mid = Math.ceil(pageRows.length / 2);
+                        const leftData = pageRows.slice(0, mid);
+                        const rightData = pageRows.slice(mid);
+                        const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
 
-                } else {
-                    // === 1 COLUMN LAYOUT ===
-                    const startY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 5 : 45;
-                    drawAutoTable(doc, flatRows, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                        drawAutoTable(doc, leftData, MARGIN, startY, colWidth, true);
+                        drawAutoTable(doc, rightData, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
+
+                        // Divider
+                        doc.setDrawColor(200); doc.setLineWidth(0.1);
+                        doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
+
+                    } else {
+                        // 1 COL
+                        drawAutoTable(doc, pageRows, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                    }
+                    
+                    pageCount++;
                 }
-                pageCount++;
 
-
-                // --- B. SCRIBE SUMMARY PAGE (If needed) ---
+                // --- D. SCRIBE SUMMARY (1 Col) ---
                 if (sessionData.scribes.length > 0) {
                     doc.addPage();
                     drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", currentCollegeName);
                     
-                    // Group by Room
                     const scribesByRoom = {};
                     sessionData.scribes.forEach(s => {
-                        // Scribe logic re-check (Allocation might have updated room)
-                        // Ideally we read from scribe allocation map, but 's.Room No' from performAllocation is accurate
                         const r = s['Room No'];
                         if(!scribesByRoom[r]) scribesByRoom[r] = [];
                         scribesByRoom[r].push(s);
@@ -1744,22 +1730,14 @@ function generateDayWisePDF() {
                     Object.keys(scribesByRoom).sort().forEach(room => {
                         const students = scribesByRoom[room];
                         const names = students.map(st => `${st.Name} (${st['Register Number']})`).join(', ');
-                        
-                        // Get nice location text
                         const roomInfo = currentRoomConfig[room] || {};
                         const locText = roomInfo.location ? `${room}\n(${roomInfo.location})` : room;
-
-                        scribeRows.push({
-                            type: 'data',
-                            col1: locText,
-                            col2: names
-                        });
+                        scribeRows.push({ col1: locText, col2: names });
                     });
 
                     drawScribeTable(doc, scribeRows);
                     pageCount++;
                 }
-
             });
         });
 
@@ -1778,25 +1756,19 @@ function generateDayWisePDF() {
 function drawHeader(doc, stream, date, time, title, collegeName) {
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 10;
-
+    
     // Ears
-    doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    // doc.text(`Page`, 14, y); // Page num handled manually if needed?
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
     doc.text(stream, pageWidth - 14, y, { align: 'right' });
 
     y += 10;
-    
-    // Titles
     doc.setFontSize(16); doc.text(collegeName, pageWidth/2, y, {align:'center'});
     y += 7;
-    
     doc.setFontSize(14); doc.text(title, pageWidth/2, y, {align:'center'});
     y += 6;
-    
     doc.setFontSize(11); doc.setFont("helvetica", "normal");
     doc.text(`${date} | ${time}`, pageWidth/2, y, {align:'center'});
     
-    // Reset AutoTable cursor
     doc.lastAutoTable = { finalY: y + 5 }; 
 }
 
@@ -1805,35 +1777,25 @@ function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
     
     const body = rows.map(r => {
         if (r.type === 'header') {
-            // Course Header: Black BG, White Text
             return [{ 
-                content: r.text, 
-                colSpan: 4, 
+                content: r.text, colSpan: 4, 
                 styles: { 
-                    fillColor: [0, 0, 0], 
-                    textColor: [255, 255, 255], 
-                    fontStyle: 'bold', 
-                    halign: 'left',
-                    fontSize: isCompact ? 9 : 10
+                    fillColor: [0, 0, 0], textColor: [255, 255, 255], // Black Header, White Text
+                    fontStyle: 'bold', halign: 'left', fontSize: isCompact ? 9 : 10
                 } 
             }];
         } else {
-            // Student Row
-            const textColor = r.isScribe ? [194, 65, 12] : [0, 0, 0];
+            const txtColor = r.isScribe ? [194, 65, 12] : [0, 0, 0];
             const fontStyle = r.isScribe ? 'bold' : 'normal';
             
-            // Handle merged location
-            const locCell = { 
-                content: r.loc, 
-                styles: { halign: 'center', textColor: textColor, fontStyle: fontStyle } 
-            };
+            const locCell = { content: r.loc, styles: { halign: 'center', textColor: txtColor, fontStyle: fontStyle } };
             if (r.rowSpan > 1) locCell.rowSpan = r.rowSpan;
 
             return [
                 locCell,
-                { content: r.reg, styles: { fontStyle: 'bold', textColor: textColor } },
-                { content: r.name, styles: { textColor: textColor, fontStyle: fontStyle } },
-                { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: textColor } }
+                { content: r.reg, styles: { fontStyle: 'bold', textColor: txtColor } },
+                { content: r.name, styles: { textColor: txtColor, fontStyle: fontStyle } },
+                { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: txtColor } }
             ];
         }
     });
@@ -1847,54 +1809,36 @@ function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
         theme: 'grid',
         styles: { 
             lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-            valign: 'middle', 
-            fontSize: isCompact ? 7 : 10, 
-            cellPadding: isCompact ? 1 : 2,
-            overflow: 'linebreak'
+            valign: 'middle', fontSize: isCompact ? 7 : 9, 
+            cellPadding: isCompact ? 1 : 1.5, overflow: 'linebreak'
         },
-        headStyles: { 
-            fillColor: [220, 220, 220], textColor: [0, 0, 0], 
-            fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
-        },
+        headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
         columnStyles: {
-            0: { cellWidth: isCompact ? 12 : 25 }, // Loc
-            1: { cellWidth: isCompact ? 22 : 35 }, // Reg
-            2: { cellWidth: 'auto' },              // Name
-            3: { cellWidth: isCompact ? 8 : 15 }   // Seat
-        },
-        // Important: Prevent page breaks inside the table if possible, 
-        // but since we manually split pages, this just renders what we give it.
-        pageBreak: 'auto' 
+            0: { cellWidth: isCompact ? 14 : 25 }, 
+            1: { cellWidth: isCompact ? 22 : 35 }, 
+            2: { cellWidth: 'auto' },              
+            3: { cellWidth: isCompact ? 8 : 15 }   
+        }
     });
 }
 
 // --- HELPER: DRAW SCRIBE TABLE ---
 function drawScribeTable(doc, rows) {
-    const body = rows.map(r => [
-        { content: r.col1, styles: { fontStyle: 'bold' } },
-        { content: r.col2 }
-    ]);
+    const body = rows.map(r => [{ content: r.col1, styles: { fontStyle: 'bold' } }, { content: r.col2 }]);
 
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 5,
         head: [['Room Location', 'Candidates']],
         body: body,
         theme: 'grid',
-        styles: { 
-            lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-            fontSize: 11, cellPadding: 3, valign: 'top' 
-        },
-        headStyles: { 
-            fillColor: [50, 50, 50], textColor: [255, 255, 255], 
-            fontStyle: 'bold', fontSize: 12
-        },
-        columnStyles: {
-            0: { cellWidth: 50 }, 
-            1: { cellWidth: 'auto' }
-        },
+        styles: { lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 11, cellPadding: 3, valign: 'top' },
+        headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 12 },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } },
         margin: { left: 14, right: 14 }
     });
 }
+
+
 
 
 if (toggleButton && sidebar) {
