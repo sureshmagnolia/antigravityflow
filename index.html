@@ -1507,100 +1507,92 @@
                 </div>
             </div>
 
-            <div id="view-scribe-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
-                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
-                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Scribe Assistance</h1>
-
-                    <div id="scribe-content-wrapper" class="hidden">
-                        <p class="text-gray-600 mb-4">
-                            Add students who require scribe assistance. This list is global and will apply to all exam
-                            sessions.
-                        </p>
-                        <div class="mb-6">
-                            <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search
-                                Student (Register Number or Name):</label>
-                            <div class="autocomplete-container">
-                                <input type="text" id="scribe-search"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
-                                    placeholder="Type 2+ chars of Register Number or Name...">
-                                <div id="scribe-autocomplete-results" class="autocomplete-results hidden"></div>
-                            </div>
-
-                            <div id="scribe-selected-student-details"
-                                class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md hidden">
-                                <div class="font-medium text-gray-800" id="scribe-selected-student-name"></div>
-                                <div class="text-sm text-gray-600" id="scribe-selected-student-regno"></div>
-                                <button id="add-scribe-student-button"
-                                    class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-green-700">
-                                    Add to Scribe List
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <h3 class="text-lg font-medium text-gray-900">Current Scribe List (Global):</h3>
-                                <button id="toggle-scribe-lock-btn"
-                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                                    </svg>
-                                    <span>List Locked</span>
-                                </button>
-                            </div>
-                            <div id="current-scribe-list"
-                                class="min-h-[50px] bg-gray-50 border border-gray-200 rounded-md p-3 space-y-2">
-                            </div>
 
 
-                            <div id="scribe-pagination-controls" class="flex justify-between items-center mt-3 hidden">
-                                <button id="scribe-prev-page"
-                                    class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
-                                    &larr; Prev
-                                </button>
-                                <span id="scribe-page-info" class="text-sm text-gray-600 font-bold">Page 1</span>
-                                <button id="scribe-next-page"
-                                    class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
-                                    Next &rarr;
-                                </button>
-                            </div>
+<div id="view-scribe-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Scribe Assistance</h1>
 
+        <div id="scribe-content-wrapper" class="hidden">
+            <p class="text-gray-600 mb-4">
+                Add students who require scribe assistance. This list is global and will apply to all exam sessions.
+            </p>
+            <div class="mb-6">
+                <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search Student (Register Number or Name):</label>
+                <div class="autocomplete-container relative">
+                    <input type="text" id="scribe-search"
+                        class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
+                        placeholder="Type 2+ chars of Register Number or Name...">
+                    <div id="scribe-autocomplete-results" class="autocomplete-results hidden absolute z-10 w-full bg-white border border-gray-300 rounded-b-md shadow-lg max-h-60 overflow-y-auto"></div>
+                </div>
 
-                        </div>
-                    </div>
-
-                    <div id="scribe-loader" class="text-center text-gray-600">
-                        <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
-                    </div>
+                <div id="scribe-selected-student-details" class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md hidden">
+                    <div class="font-medium text-gray-800" id="scribe-selected-student-name"></div>
+                    <div class="text-sm text-gray-600" id="scribe-selected-student-regno"></div>
+                    <button id="add-scribe-student-button"
+                        class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-green-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-green-700">
+                        Add to Scribe List
+                    </button>
                 </div>
             </div>
 
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-lg font-medium text-gray-900">Current Scribe List (Global):</h3>
+                    <button id="toggle-scribe-lock-btn"
+                        class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        </svg>
+                        <span>List Locked</span>
+                    </button>
+                </div>
+                <div id="current-scribe-list" class="min-h-[50px] bg-gray-50 border border-gray-200 rounded-md p-3 space-y-2">
+                </div>
 
+                <div id="scribe-pagination-controls" class="flex justify-between items-center mt-3 hidden">
+                    <button id="scribe-prev-page"
+                        class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
+                        &larr; Prev
+                    </button>
+                    <span id="scribe-page-info" class="text-sm text-gray-600 font-bold">Page 1</span>
+                    <button id="scribe-next-page"
+                        class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
+                        Next &rarr;
+                    </button>
+                </div>
+            </div>
+        </div>
 
+        <div id="scribe-loader" class="text-center text-gray-600 hidden">
+            <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+        </div>
+    </div>
+</div>
 
-<div id="scribe-room-modal" 
-     class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity">
-    
+<div id="scribe-room-modal"
+    class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity">
+
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[85vh] overflow-hidden animate-slide-up">
-        
+
         <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
             <div>
                 <h3 id="scribe-room-modal-title" class="font-bold text-gray-800 text-lg">Assign Scribe Room</h3>
                 <p class="text-xs text-gray-500">Select a room for this scribe student</p>
             </div>
-            <button onclick="document.getElementById('scribe-room-modal').classList.add('hidden')" 
-                    class="bg-white p-2 rounded-full text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition shadow-sm border border-gray-200">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            <button onclick="document.getElementById('scribe-room-modal').classList.add('hidden')"
+                class="bg-white p-2 rounded-full text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition shadow-sm border border-gray-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
             </button>
         </div>
 
         <div class="p-3 border-b border-gray-100 bg-white shrink-0">
             <div class="relative">
-                <input type="text" id="scribe-room-search" 
-                       placeholder="🔍 Search available rooms..." 
-                       class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none shadow-sm">
+                <input type="text" id="scribe-room-search"
+                    placeholder="🔍 Search available rooms..."
+                    class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none shadow-sm">
                 <svg class="w-4 h-4 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
@@ -1608,11 +1600,11 @@
         </div>
 
         <div id="scribe-room-selection-list" class="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/50 custom-scroll">
-            </div>
+        </div>
 
         <div class="p-3 border-t border-gray-200 bg-white shrink-0">
-            <button id="scribe-close-room-modal" 
-                    class="w-full inline-flex justify-center items-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition">
+            <button id="scribe-close-room-modal"
+                class="w-full inline-flex justify-center items-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition">
                 Cancel
             </button>
         </div>
@@ -1620,84 +1612,74 @@
     </div>
 </div>
 
+<div id="student-edit-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-10 mx-auto p-5 border w-[95%] md:w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900 mb-4" id="student-edit-modal-title">Edit Student Details</h3>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="modal-edit-date" class="block text-sm font-medium text-gray-700">Date</label>
+                    <div class="relative">
+                        <input type="date" id="modal-edit-date"
+                            class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
+                            onclick="this.showPicker()">
+                    </div>
+                </div>
+                <div>
+                    <label for="modal-edit-time" class="block text-sm font-medium text-gray-700">Time</label>
+                    <div class="relative">
+                        <input type="time" id="modal-edit-time"
+                            class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
+                            onclick="this.showPicker()">
+                    </div>
+                </div>
+                <div>
+                    <label for="modal-edit-course" class="block text-sm font-medium text-gray-700">Course</label>
+                    <input type="text" id="modal-edit-course"
+                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                </div>
+                <div>
+                    <label for="modal-edit-stream" class="block text-sm font-medium text-gray-700">Stream</label>
+                    <select id="modal-edit-stream"
+                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
+                    </select>
+                </div>
+                <div>
+                    <label for="modal-edit-regno" class="block text-sm font-medium text-gray-700">Register Number</label>
+                    <input type="text" id="modal-edit-regno"
+                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                </div>
+                <div>
+                    <label for="modal-edit-name" class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="modal-edit-name"
+                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                </div>
+            </div>
+
+            <div class="mt-6 flex gap-3">
+                <button id="modal-save-student"
+                    class="flex-1 inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700">
+                    Save Changes
+                </button>
+                <button id="modal-cancel-student"
+                    class="flex-1 inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
 
 
 
 
             
-            </div>
-            <div id="student-edit-modal"
-                class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                <div
-                    class="relative top-10 mx-auto p-5 border w-[95%] md:w-full max-w-lg shadow-lg rounded-md bg-white">
-                    <div class="mt-3">
-                        <h3 class="text-lg font-medium text-gray-900 mb-4" id="student-edit-modal-title">Edit Student
-                            Details</h3>
-
-                        <div class="space-y-4">
-
-                            <div>
-                                <label for="modal-edit-date"
-                                    class="block text-sm font-medium text-gray-700">Date</label>
-                                <div class="relative">
-                                    <input type="date" id="modal-edit-date"
-                                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
-                                        onclick="this.showPicker()">
-                                </div>
-                            </div>
-                            <div>
-                                <label for="modal-edit-time"
-                                    class="block text-sm font-medium text-gray-700">Time</label>
-                                <div class="relative">
-                                    <input type="time" id="modal-edit-time"
-                                        class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm cursor-pointer"
-                                        onclick="this.showPicker()">
-                                </div>
-                            </div>
-
-
-
-
-                            <div>
-                                <label for="modal-edit-course"
-                                    class="block text-sm font-medium text-gray-700">Course</label>
-                                <input type="text" id="modal-edit-course"
-                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label for="modal-edit-stream"
-                                    class="block text-sm font-medium text-gray-700">Stream</label>
-                                <select id="modal-edit-stream"
-                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white">
-                                </select>
-                            </div>
-                            <div>
-                                <label for="modal-edit-regno" class="block text-sm font-medium text-gray-700">Register
-                                    Number</label>
-                                <input type="text" id="modal-edit-regno"
-                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label for="modal-edit-name"
-                                    class="block text-sm font-medium text-gray-700">Name</label>
-                                <input type="text" id="modal-edit-name"
-                                    class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                        </div>
-
-                        <div class="mt-6 flex gap-3">
-                            <button id="modal-save-student"
-                                class="flex-1 inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700">
-                                Save Changes
-                            </button>
-                            <button id="modal-cancel-student"
-                                class="flex-1 inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
             <div id="view-room-allotment" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
                 <div class="bg-white p-8 rounded-lg shadow-xl w-full">
                     <h1 class="text-3xl font-bold text-gray-800 mb-6">Room Allotment</h1>
