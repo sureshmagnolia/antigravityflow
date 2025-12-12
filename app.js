@@ -761,24 +761,33 @@ function updateLocalSlotsFromStudents() {
     }
 
    async function syncSessionToCloud(sessionKey) {
-        if (!window.currentCollegeId || !navigator.onLine) return;
+        // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
+        if (!currentCollegeId || !navigator.onLine) return;
         
         updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
         const { db, doc, setDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
         
-        // 1. Gather Data for THIS Session
+        // 1. Gather Data for THIS Session Only from Global Memory
         const [date, time] = sessionKey.split(' | ');
         const cleanDate = date.trim();
         const cleanTime = time.trim();
 
         const students = allStudentData.filter(s => s.Date === cleanDate && s.Time === cleanTime);
+        
+        // Rooms (Read from LocalStorage)
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         const sessionAllotment = allAllotments[sessionKey] || [];
+
+        // QP Codes
         const allQPs = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
         const sessionQPs = allQPs[sessionKey] || {};
+
+        // Absentees
         const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
         const sessionAbsentees = allAbsentees[sessionKey] || [];
+
+        // Scribes
         const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
         const sessionScribes = allScribes[sessionKey] || {};
 
@@ -798,22 +807,19 @@ function updateLocalSlotsFromStudents() {
             }
         };
 
-        // 3. Write to Firestore
+        // 3. Write to Firestore (Modular Write)
         try {
-            // A. Save the Heavy Session Data (V2)
-            await setDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', sessionId), sessionDoc);
-            
-            // B. CRITICAL: Recalculate Invigilation Slots based on this change
-            // This updates the global 'examInvigilationSlots' object in memory/localStorage
-            if (typeof updateLocalSlotsFromStudents === 'function') {
-                updateLocalSlotsFromStudents(); 
-            }
-
-            // C. Sync the updated Slots to Cloud (Lightweight)
-            // This updates 'system_data/slots' which invigilation.js listens to
-            await syncDataToCloud('slots'); 
-
+            // FIX: Use 'currentCollegeId' directly here too
+            await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             updateSyncStatus("Saved (V2)", "success");
+            
+            // Recalculate Invigilation Slots
+            if (typeof updateLocalSlotsFromStudents === 'function') {
+                updateLocalSlotsFromStudents();
+            }
+            
+            // Sync Slots (This function call is fine)
+            await syncDataToCloud('slots'); 
             
         } catch (e) {
             console.error("Session Sync Error:", e);
