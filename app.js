@@ -13294,12 +13294,24 @@ function openDialModal(selectId) {
         item.className = 'dial-item';
         item.textContent = opt.text;
         item.dataset.value = opt.value;
+        
         item.onclick = (e) => {
-            // Smooth Scroll to Clicked Item
+            // 1. Visual: Smooth Scroll to Clicked Item
             const itemCenter = e.target.offsetTop;
             const listCenter = list.clientHeight / 2;
             const itemHalf = e.target.clientHeight / 2;
             list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'smooth' });
+
+            // 2. Logic: Desktop Auto-Confirm
+            if (window.innerWidth >= 768) {
+                // Force update the selected value immediately
+                tempSelectedValue = opt.value;
+                
+                // Add a tiny delay so the user sees the click/scroll visual before it closes
+                setTimeout(() => {
+                    confirmDialSelection();
+                }, 150);
+            }
         };
         list.appendChild(item);
     });
@@ -13310,7 +13322,13 @@ function openDialModal(selectId) {
     setTimeout(() => {
         const currentVal = select.value;
         const target = Array.from(list.children).find(el => el.dataset.value === currentVal) || list.lastElementChild;
-        if (target) target.click();
+        if (target) {
+            // Trigger the scroll but bypass the auto-confirm for the initial open
+            const itemCenter = target.offsetTop;
+            const listCenter = list.clientHeight / 2;
+            const itemHalf = target.clientHeight / 2;
+            list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'auto' });
+        }
     }, 100);
 }
 
