@@ -1267,7 +1267,7 @@ function updateLocalSlotsFromStudents() {
     btnPdfReport.id = 'download-pdf-report-btn';
     btnPdfReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 ml-2";
     btnPdfReport.innerHTML = `📄 Download PDF`;
-    
+    if (clearReportButton && clearReportButton.parentNode) {
     // Remove old buttons if they exist to prevent duplicates on reload
         const oldPrint = document.getElementById('print-generated-report-btn');
         const oldPdf = document.getElementById('download-pdf-report-btn');
