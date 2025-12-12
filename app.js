@@ -5496,10 +5496,7 @@ function updateLocalSlotsFromStudents() {
         }
     }
 
-
-    // --- (V56) NEW ABSENTEE LOGIC ---
-// *** FIX: This is the REAL implementation of the function Python calls ***
-    window.real_populate_session_dropdown = function () {
+window.real_populate_session_dropdown = function () {
         try {
             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
             if (allStudentData.length === 0) {
@@ -5525,7 +5522,7 @@ function updateLocalSlotsFromStudents() {
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
-            // Clear Dropdowns
+            // Clear Options
             [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
                 if(el) el.innerHTML = '<option value="">-- Select a Session --</option>';
             });
@@ -5555,34 +5552,32 @@ function updateLocalSlotsFromStudents() {
             });
 
             let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
-
-            // Restore/Set Default & Trigger Change
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
+            // Set Value & Initialize Trigger UI
             [sessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
-                if(el && targetVal) {
-                    el.value = targetVal;
-                    el.dispatchEvent(new Event('change'));
-                }
+                if(el && targetVal) el.value = targetVal;
+                // Dispatch change to run logic, but UI might not be ready yet
+                if(el) el.dispatchEvent(new Event('change'));
             });
-
             if(reportsSessionSelect) reportsSessionSelect.value = targetVal || "all";
 
             reportFilterSection.classList.remove('hidden');
             filterSessionRadio.checked = true;
             reportsSessionDropdownContainer.classList.remove('hidden');
 
-            // --- 🚀 ACTIVATE ROTARY DIALS FOR ALL TABS ---
-            setupRotaryDial('session-select');          // Absentees Tab
-            setupRotaryDial('reports-session-select');  // Reports Tab
-            setupRotaryDial('edit-session-select');     // Edit Data Tab
-            setupRotaryDial('search-session-select');   // Search Tab
+            // --- 🚀 INITIALIZE MODAL SELECTORS ---
+            setupSessionSelector('session-select');          // Absentees
+            setupSessionSelector('reports-session-select');  // Reports
+            setupSessionSelector('edit-session-select');     // Edit Data
+            setupSessionSelector('search-session-select');   // Search
 
         } catch (e) {
             console.error("Failed to populate sessions:", e);
             disable_absentee_tab(true);
         }
     }
+  
    
 
     sessionSelect.addEventListener('change', () => {
@@ -5925,9 +5920,7 @@ function updateLocalSlotsFromStudents() {
         qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
     }
 
-    // V61: Populates the QP Code session dropdown
-// V61: Populates the QP Code session dropdown
-    window.real_populate_qp_code_session_dropdown = function () {
+window.real_populate_qp_code_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -5967,9 +5960,9 @@ function updateLocalSlotsFromStudents() {
                 sessionSelectQP.value = targetVal;
                 sessionSelectQP.dispatchEvent(new Event('change'));
             }
-            
-            // --- 🚀 ACTIVATE ROTARY DIAL ---
-            setupRotaryDial('session-select-qp'); // QP Code Entry Tab
+
+            // --- 🚀 INITIALIZE MODAL SELECTOR ---
+            setupSessionSelector('session-select-qp');
 
         } catch (e) {
             console.error("Failed to populate QP sessions:", e);
@@ -6755,7 +6748,7 @@ function updateLocalSlotsFromStudents() {
 
     // --- ROOM ALLOTMENT FUNCTIONALITY ---
 // *** FIX: This is the REAL implementation of the function Python calls ***
-    window.real_populate_room_allotment_session_dropdown = function () {
+  window.real_populate_room_allotment_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -6798,8 +6791,8 @@ function updateLocalSlotsFromStudents() {
 
             disable_room_allotment_tab(false);
 
-            // --- 🚀 ACTIVATE ROTARY DIAL ---
-            setupRotaryDial('allotment-session-select'); // Room Allotment Tab
+            // --- 🚀 INITIALIZE MODAL SELECTOR ---
+            setupSessionSelector('allotment-session-select');
 
         } catch (e) {
             console.error("Failed to populate room allotment sessions:", e);
@@ -13030,114 +13023,216 @@ Are you sure?
     window.closeRoomSettingsModal = function () {
         roomSettingsModal.classList.add('hidden');
     }
+
+
 // ==========================================
-// 🎡 ROTARY DIAL UI COMPONENT
+// 🎡 MODAL-BASED SESSION SELECTOR UI
 // ==========================================
 
-function initDialStyles() {
-    if (document.getElementById('dial-css')) return;
+function initSessionStyles() {
+    if (document.getElementById('session-ui-css')) return;
     const style = document.createElement('style');
-    style.id = 'dial-css';
+    style.id = 'session-ui-css';
     style.innerHTML = `
-        .dial-container { position: relative; height: 140px; overflow: hidden; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .dial-list { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; padding: 50px 0; -ms-overflow-style: none; scrollbar-width: none; }
+        /* Trigger Button */
+        .session-trigger {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; padding: 12px 16px;
+            background: white; border: 1px solid #d1d5db; border-radius: 10px;
+            cursor: pointer; transition: all 0.2s;
+            font-size: 14px; font-weight: 600; color: #374151;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .session-trigger:hover { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); }
+        .session-trigger svg { width: 20px; height: 20px; color: #6b7280; }
+        
+        /* Modal Overlay */
+        .dial-modal-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(2px);
+            display: flex; align-items: end; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        .dial-modal-overlay.open { opacity: 1; pointer-events: auto; }
+        @media (min-width: 768px) { .dial-modal-overlay { align-items: center; } }
+
+        /* Modal Box */
+        .dial-modal {
+            width: 100%; max-width: 400px; background: white;
+            border-radius: 20px 20px 0 0; 
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        @media (min-width: 768px) { .dial-modal { border-radius: 20px; transform: scale(0.95); opacity: 0; } }
+        
+        .dial-modal-overlay.open .dial-modal { transform: translateY(0); }
+        @media (min-width: 768px) { .dial-modal-overlay.open .dial-modal { transform: scale(1); opacity: 1; } }
+
+        /* Dial Area */
+        .dial-container { position: relative; height: 200px; overflow: hidden; background: #f9fafb; margin: 10px 0; }
+        .dial-list { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; padding: 80px 0; scrollbar-width: none; }
         .dial-list::-webkit-scrollbar { display: none; }
-        .dial-item { height: 40px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 13px; color: #9ca3af; transition: all 0.2s ease; cursor: pointer; font-family: monospace; font-weight: 500; }
-        .dial-item.active { font-size: 16px; font-weight: 700; color: #4f46e5; transform: scale(1.05); }
-        .dial-highlight { position: absolute; top: 50px; left: 0; right: 0; height: 40px; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; background: rgba(224, 231, 255, 0.2); pointer-events: none; z-index: 10; }
-        .dial-overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to bottom, white 0%, transparent 40%, transparent 60%, white 100%); z-index: 5; }
+        
+        .dial-item { 
+            height: 40px; display: flex; align-items: center; justify-content: center; 
+            scroll-snap-align: center; font-size: 14px; color: #9ca3af; 
+            transition: all 0.2s; cursor: pointer; font-weight: 500;
+        }
+        .dial-item.active { font-size: 17px; font-weight: 800; color: #4f46e5; transform: scale(1.1); }
+        
+        .dial-highlight { 
+            position: absolute; top: 80px; left: 0; right: 0; height: 40px; 
+            border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; 
+            background: rgba(224, 231, 255, 0.3); pointer-events: none; 
+        }
     `;
     document.head.appendChild(style);
 }
 
-function setupRotaryDial(selectId) {
+// Global state for the active selector
+let activeSelectId = null;
+let tempSelectedValue = null;
+
+function injectDialModal() {
+    if (document.getElementById('global-dial-modal')) return;
+
+    const modalHTML = `
+    <div id="global-dial-modal" class="dial-modal-overlay">
+        <div class="dial-modal">
+            <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
+                <button onclick="closeDialModal()" class="text-sm font-bold text-gray-500 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition">Cancel</button>
+                <span class="text-sm font-black text-gray-800 uppercase tracking-wide">Select Session</span>
+                <button onclick="confirmDialSelection()" class="text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition">Confirm</button>
+            </div>
+
+            <div class="dial-container">
+                <div class="dial-highlight"></div>
+                <div id="dial-list-content" class="dial-list"></div>
+            </div>
+        </div>
+    </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Scroll Listener for Snap Effect
+    const list = document.getElementById('dial-list-content');
+    let timeout;
+    list.addEventListener('scroll', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+            updateActiveItem(list);
+        }, 50);
+    });
+}
+
+function updateActiveItem(list) {
+    const center = list.scrollTop + (list.clientHeight / 2);
+    const items = list.querySelectorAll('.dial-item');
+    
+    items.forEach(item => {
+        const itemCenter = item.offsetTop + (item.clientHeight / 2);
+        if (Math.abs(center - itemCenter) < 20) {
+            item.classList.add('active');
+            tempSelectedValue = item.dataset.value;
+        } else {
+            item.classList.remove('active');
+        }
+    });
+}
+
+function setupSessionSelector(selectId) {
     const select = document.getElementById(selectId);
-    if (!select || select.options.length === 0) return;
+    if (!select) return;
 
-    // 1. Initialize Styles
-    initDialStyles();
+    initSessionStyles();
+    injectDialModal();
 
-    // 2. Hide Original Select
-    select.style.display = 'none';
+    // 1. Hide Original Select
+    select.classList.add('hidden'); // Use Tailwind's hidden or style.display = none
 
-    // 3. Clean up old dial if exists
-    const oldDial = document.getElementById(selectId + '-dial');
-    if (oldDial) oldDial.remove();
-
-    // 4. Create UI
-    const wrapper = document.createElement('div');
-    wrapper.id = selectId + '-dial';
-    wrapper.className = 'dial-container';
-
-    const overlay = document.createElement('div');
-    overlay.className = 'dial-overlay';
-
-    const highlight = document.createElement('div');
-    highlight.className = 'dial-highlight';
-
-    const list = document.createElement('div');
-    list.className = 'dial-list';
-
-    // 5. Populate
-    Array.from(select.options).forEach((opt, index) => {
-        if (opt.value === "") return; // Skip placeholder
+    // 2. Create Trigger Button (if not exists)
+    let trigger = document.getElementById(selectId + '-trigger');
+    if (!trigger) {
+        trigger = document.createElement('div');
+        trigger.id = selectId + '-trigger';
+        trigger.className = 'session-trigger';
+        select.parentNode.insertBefore(trigger, select.nextSibling);
         
+        trigger.onclick = () => openDialModal(selectId);
+    }
+
+    // 3. Sync Initial Text
+    updateTriggerText(select, trigger);
+
+    // 4. Listen for External Changes (e.g. Reset Logic)
+    select.addEventListener('change', () => updateTriggerText(select, trigger));
+}
+
+function updateTriggerText(select, trigger) {
+    const text = select.options[select.selectedIndex]?.text || "Select Session";
+    trigger.innerHTML = `
+        <span>${text}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+        </svg>
+    `;
+}
+
+function openDialModal(selectId) {
+    activeSelectId = selectId;
+    const select = document.getElementById(selectId);
+    const list = document.getElementById('dial-list-content');
+    list.innerHTML = '';
+    
+    // Populate List
+    Array.from(select.options).forEach(opt => {
+        if (opt.value === "") return;
         const item = document.createElement('div');
         item.className = 'dial-item';
         item.textContent = opt.text;
         item.dataset.value = opt.value;
-        item.dataset.index = index;
-        
-        item.onclick = () => {
-            const itemCenter = item.offsetTop;
+        item.onclick = (e) => {
+            // Smooth Scroll to Clicked Item
+            const itemCenter = e.target.offsetTop;
             const listCenter = list.clientHeight / 2;
-            const itemHalf = item.clientHeight / 2;
+            const itemHalf = e.target.clientHeight / 2;
             list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'smooth' });
         };
-        
         list.appendChild(item);
     });
 
-    wrapper.appendChild(overlay);
-    wrapper.appendChild(highlight);
-    wrapper.appendChild(list);
-    select.parentNode.insertBefore(wrapper, select.nextSibling);
+    document.getElementById('global-dial-modal').classList.add('open');
 
-    // 6. Scroll Sync
-    let scrollTimeout;
-    list.addEventListener('scroll', () => {
-        clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(() => {
-            const center = list.scrollTop + (list.clientHeight / 2);
-            const items = list.querySelectorAll('.dial-item');
-            
-            items.forEach(item => {
-                const itemCenter = item.offsetTop + (item.clientHeight / 2);
-                const dist = Math.abs(center - itemCenter);
-                
-                if (dist < 20) {
-                    item.classList.add('active');
-                    if (select.value !== item.dataset.value) {
-                        select.value = item.dataset.value;
-                        select.dispatchEvent(new Event('change'));
-                    }
-                } else {
-                    item.classList.remove('active');
-                }
-            });
-        }, 50);
-    });
-
-    // 7. Initial Scroll (Auto-Focus)
+    // Scroll to Current Value
     setTimeout(() => {
-        if (select.value) {
-            const target = Array.from(list.children).find(el => el.dataset.value === select.value);
-            if (target) target.click();
-        } else if (list.lastElementChild) {
-            list.lastElementChild.click();
-        }
-    }, 200);
+        const currentVal = select.value;
+        const target = Array.from(list.children).find(el => el.dataset.value === currentVal) || list.lastElementChild;
+        if (target) target.click();
+    }, 100);
 }
+
+function closeDialModal() {
+    document.getElementById('global-dial-modal').classList.remove('open');
+}
+
+function confirmDialSelection() {
+    if (activeSelectId && tempSelectedValue) {
+        const select = document.getElementById(activeSelectId);
+        select.value = tempSelectedValue;
+        select.dispatchEvent(new Event('change')); // Trigger app logic
+    }
+    closeDialModal();
+}
+
+// Make functions global for inline onclick handlers
+window.closeDialModal = closeDialModal;
+window.confirmDialSelection = confirmDialSelection;
+
+
+    
+
+    
 // ==========================================
     // ☁️ FORCE CLOUD SYNC (Header Button)
     // ==========================================
