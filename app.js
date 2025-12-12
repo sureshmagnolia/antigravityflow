@@ -13145,24 +13145,23 @@ function initSessionStyles() {
         /* Dial Area */
         .dial-container { position: relative; height: 200px; overflow: hidden; background: #f9fafb; margin: 10px 0; }
         
-        /* --- FIXED SCROLL CSS --- */
+        /* FIXED: Added scroll-behavior and overscroll-behavior */
         .dial-list { 
             height: 100%; 
             overflow-y: auto; 
             scroll-snap-type: y mandatory; 
             padding: 80px 0; 
             scrollbar-width: none; 
-            scroll-behavior: smooth;       /* Smooths programmatic scrolls */
-            overscroll-behavior: contain;  /* Prevents scrolling parent page */
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
         }
         .dial-list::-webkit-scrollbar { display: none; }
         
         .dial-item { 
             height: 40px; display: flex; align-items: center; justify-content: center; 
             scroll-snap-align: center; font-size: 14px; color: #9ca3af; 
-            transition: all 0.15s ease-out; /* Faster visual transition */
-            cursor: pointer; font-weight: 500;
-            user-select: none; /* Prevents text selection while scrolling */
+            transition: all 0.15s ease-out; cursor: pointer; font-weight: 500;
+            user-select: none;
         }
         .dial-item.active { font-size: 18px; font-weight: 800; color: #4f46e5; transform: scale(1.05); }
         
@@ -13200,10 +13199,24 @@ function injectDialModal() {
     
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     
-    // --- UPDATED SCROLL LISTENER (Instant & Smooth) ---
     const list = document.getElementById('dial-list-content');
-    let ticking = false;
 
+    // --- 1. MOUSE WHEEL CONTROL (THE FIX) ---
+    // Intercepts wheel events to scroll exactly one item (40px) at a time.
+    list.addEventListener('wheel', (e) => {
+        e.preventDefault(); // Stop the native "fast" scroll
+        
+        const itemHeight = 40;
+        const direction = e.deltaY > 0 ? 1 : -1;
+        
+        list.scrollBy({
+            top: direction * itemHeight,
+            behavior: 'smooth'
+        });
+    }, { passive: false });
+
+    // --- 2. HIGHLIGHT UPDATER (Instant) ---
+    let ticking = false;
     list.addEventListener('scroll', () => {
         if (!ticking) {
             window.requestAnimationFrame(() => {
