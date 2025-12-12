@@ -8913,11 +8913,10 @@ Are you sure you want to update these records?
                 
                 alert('Update successful! Syncing session...');
                 
-                // MODULAR SYNC (Only sync the session we modified)
+                // MODULAR SYNC (V2)
+                // We only need to sync the specific session we just modified
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(editSessionSelect.value);
-                } else if (typeof syncDataToCloud === 'function') {
-                    await syncDataToCloud('heavy');
                 }
 
                 window.location.reload();
@@ -9676,11 +9675,9 @@ Are you sure?
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
 
-                // MODULAR SYNC
+               // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
-                    await syncSessionToCloud(sessionVal); // sessionVal is defined in your existing code above
-                } else if (typeof syncDataToCloud === 'function') {
-                    await syncDataToCloud('heavy');
+                    await syncSessionToCloud(sessionVal);
                 }
                 window.location.reload();
             }
@@ -10246,8 +10243,31 @@ Are you sure?
             if (btn) btn.disabled = false;
         });
 
-        // 5. Sync
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('heavy');
+        // 5. MODULAR SYNC (V2) - Sync all affected sessions
+        if (typeof syncSessionToCloud === 'function') {
+            // We use an IIFE (Immediately Invoked Function Expression) to handle async inside this sync function
+            (async () => {
+                updateSyncStatus("Analyzing sessions...", "neutral");
+                
+                // 1. Identify all unique sessions in the loaded data
+                const sessionsToSync = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+                
+                // 2. Iterate and sync each session document individually
+                let count = 0;
+                for (const sessionKey of sessionsToSync) {
+                    count++;
+                    updateSyncStatus(`Syncing ${count}/${sessionsToSync.size}: ${sessionKey}`, "neutral");
+                    await syncSessionToCloud(sessionKey);
+                }
+
+                // 3. Ensure global slots/counts are updated
+                if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots');
+
+                updateSyncStatus("Import & Sync Complete", "success");
+            })();
+        }
+
+        // 6. Feedback
 
         // 6. Feedback
         if (mainCsvStatus) {
@@ -13376,6 +13396,8 @@ window.confirmDialSelection = confirmDialSelection;
                 await syncDataToCloud('settings');
                 await syncDataToCloud('staff');
                 await syncDataToCloud('slots');
+                await syncDataToCloud('allocation'); // Scribe List
+                await syncDataToCloud('ops');        // Global Ops (if any)
 
                 // Iteratively sync all sessions (Ensures V2 documents are fresh)
                 const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
