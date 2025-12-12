@@ -1312,7 +1312,7 @@ window.downloadReportPDF = function() {
 };
 
 
-// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Strict Fit) ---
+// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Fixes: QP Codes & Layout) ---
 function generateRoomWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1368,7 +1368,7 @@ function generateRoomWisePDF() {
                 });
             }
             
-            // Location
+            // Location Header
             const locHeader = headerDiv.querySelector('.report-location-header');
             if(locHeader) {
                 doc.setFontSize(10);
@@ -1380,7 +1380,7 @@ function generateRoomWisePDF() {
 
         currentY += 2;
 
-        // --- 2. MAIN STUDENT TABLE (Strict Fitting) ---
+        // --- 2. MAIN STUDENT TABLE ---
         const mainTable = page.querySelector('table.print-table');
         if (mainTable) {
             doc.autoTable({
@@ -1392,9 +1392,9 @@ function generateRoomWisePDF() {
                     lineWidth: 0.1, 
                     textColor: [0, 0, 0], 
                     fontSize: 10,           
-                    cellPadding: 1.5,       // Tight padding
+                    cellPadding: 1.5,       
                     valign: 'middle',
-                    minCellHeight: 9,       // Fixed height ~9mm * 20 = 180mm (Fits perfectly)
+                    minCellHeight: 9, // Strict height for 20 rows
                     overflow: 'linebreak'
                 },
                 headStyles: { 
@@ -1407,26 +1407,19 @@ function generateRoomWisePDF() {
                 },
                 columnStyles: {
                     0: { cellWidth: 10, halign: 'center' }, // Seat
-                    1: { 
-                        cellWidth: 50, 
-                        fontSize: 7,        // Small font for Course
-                        overflow: 'hidden'  // Cut off if too long (Don't expand row)
-                    },      
-                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No (Right Align)
+                    1: { cellWidth: 50, fontSize: 7, overflow: 'hidden' }, // Course (Tiny font, no wrap)
+                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No
                     3: { cellWidth: 'auto' },               // Name
                     4: { cellWidth: 25 },                   // Remarks
                     5: { cellWidth: 20 }                    // Sign
                 },
                 didParseCell: function(data) {
-                    // Scribe Highlighting
                     const rowElement = data.cell.raw.parentElement;
                     if (rowElement && (rowElement.classList.contains('scribe-row-highlight') || rowElement.className.includes('scribe'))) {
                         data.cell.styles.fillColor = [0, 0, 0];
                         data.cell.styles.textColor = [255, 255, 255];
                         data.cell.styles.fontStyle = 'bold';
                     }
-                    // Course Column Specifics: Attempt to split QP and Name if you wanted manual drawing, 
-                    // but simply shrinking font (above) is safer for layout.
                 },
                 margin: { left: 14, right: 14 }
             });
@@ -1437,7 +1430,7 @@ function generateRoomWisePDF() {
         // --- 3. FOOTER RECONSTRUCTION ---
         const footer = page.querySelector('.invigilator-footer');
         if (footer) {
-            // Check for space (Footer needs ~65mm)
+            // Check for space
             if (currentY + 65 > pageHeight) {
                 doc.addPage();
                 currentY = 15;
@@ -1455,9 +1448,7 @@ function generateRoomWisePDF() {
                     html: sumTable,
                     startY: currentY,
                     theme: 'grid',
-                    styles: { 
-                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 
-                    },
+                    styles: { lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 },
                     headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold' },
                     margin: { left: 14, right: 14 }
                 });
@@ -1473,39 +1464,71 @@ function generateRoomWisePDF() {
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             
+            // Header Line
             doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 7, { align: 'center' });
             
-            doc.setLineDash([1, 1], 0);
-            doc.line(14, currentY + 11, pageWidth - 14, currentY + 11);
-            doc.setLineDash([]); 
+            // Label
+            doc.text("Written Booklets (QP Wise):", 16, currentY + 14);
             
-            doc.text("Written Booklets (QP Wise):", 16, currentY + 16);
+            // --- C. DYNAMIC QP CODES POPULATION ---
+            let qpString = "";
+            // Find the box in HTML
+            const htmlBox = footer.querySelector('div[style*="border: 1px solid #000"]');
+            if (htmlBox) {
+                // The QP codes are usually in the second DIV child or we extract text
+                // Text looks like: "Written Booklets (QP Wise): QP01:  QP02: "
+                const fullText = htmlBox.innerText;
+                const marker = "Written Booklets (QP Wise):";
+                const endMarker = "Written Booklets Total:";
+                
+                if(fullText.includes(marker)) {
+                    let qpSection = fullText.split(marker)[1];
+                    if(qpSection.includes(endMarker)) qpSection = qpSection.split(endMarker)[0];
+                    
+                    // qpSection is now "QP01:  QP02: "
+                    // We split by colon to find keys
+                    const parts = qpSection.split(':');
+                    const codes = [];
+                    
+                    for(let k=0; k<parts.length-1; k++) {
+                        // The code is the last word of the previous part
+                        // e.g. "QP01" -> "_______"
+                        const fragment = parts[k].trim();
+                        // Get the last word (the QP code)
+                        const words = fragment.split(/\s+/);
+                        const code = words[words.length-1];
+                        if(code) codes.push(code);
+                    }
+                    
+                    if(codes.length > 0) {
+                        qpString = codes.map(c => `${c}: _______`).join("   ");
+                    }
+                }
+            }
             
-            doc.setLineDash([1, 1], 0);
-            doc.line(14, currentY + 19, pageWidth - 14, currentY + 19);
-            doc.setLineDash([]);
+            // Print the QP String
+            doc.setFont("helvetica", "normal");
+            doc.text(qpString, 60, currentY + 14); // Offset to right of label
 
-            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 22, { align: 'right' });
+            // Total Line
+            doc.setFont("helvetica", "bold");
+            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 21, { align: 'right' });
 
             currentY += boxHeight + 15;
 
-            // C. Scribe Note
+            // D. Signatures
             if (footer.innerText.includes("* = Scribe")) {
                 doc.setFontSize(9);
                 doc.setFont("helvetica", "italic");
                 doc.text("* = Scribe Assistance", 14, currentY + 4);
             }
 
-            // D. Invigilator Signature
-            // Extract the name cleanly from the footer div
+            // Extract Name
             let sigText = "Name & Signature of Invigilator";
             const sigDiv = footer.querySelector('.signature');
-            
             if (sigDiv) {
-                // Get direct text content
-                let rawText = sigDiv.innerText.replace(/\n/g, '').trim();
-                // If it contains the placeholder text, don't use it as a "Name"
-                if (rawText && !rawText.includes("Name & Signature")) {
+                const rawText = sigDiv.innerText.trim();
+                if (rawText && rawText.replace(/\s/g,'').length > 0 && !rawText.includes("Name & Signature")) {
                     sigText = rawText;
                 }
             }
@@ -1515,7 +1538,6 @@ function generateRoomWisePDF() {
             
             doc.setFontSize(10);
             doc.setFont("helvetica", "normal");
-            // Center text relative to the line (approx X=163)
             doc.text(sigText, 163, currentY + 5, { align: 'center' });
         }
     });
