@@ -1311,7 +1311,7 @@ window.downloadReportPDF = function() {
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
 
-// --- SPECIFIC GENERATOR: ROOM-WISE SEATING REPORT ---
+// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT ---
 function generateRoomWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1328,20 +1328,19 @@ function generateRoomWisePDF() {
         
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        let currentY = 15;
+        let currentY = 12; // Starting higher to maximize space
 
-        // --- 1. HEADER RECONSTRUCTION ---
+        // --- 1. HEADER EXTRACTION ---
         const headerDiv = page.querySelector('.print-header-group');
         if (headerDiv) {
-            // A. "Ears" (Absolute divs: Page No & Stream)
+            // A. "Ears" (Page No & Stream)
             const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(10);
+            doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             
             absoluteDivs.forEach(div => {
                 const text = div.innerText.trim().replace(/\s+/g, ' ');
                 const style = div.getAttribute('style');
-                // Detect Left vs Right based on style text
                 if (style.includes('left: 0') || style.includes('left:0')) {
                     doc.text(text, 14, 10);
                 } else if (style.includes('right: 0') || style.includes('right:0')) {
@@ -1349,7 +1348,7 @@ function generateRoomWisePDF() {
                 }
             });
 
-            // B. Center Titles (H1, H2)
+            // B. Center Titles
             const h1 = headerDiv.querySelector('h1');
             const h2s = headerDiv.querySelectorAll('h2');
             
@@ -1360,12 +1359,13 @@ function generateRoomWisePDF() {
                 currentY += 6;
             }
 
-            h2s.forEach(h2 => {
+            if (h2s.length > 0) {
                 doc.setFontSize(11);
-                doc.setFont("helvetica", "bold");
-                doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 5;
-            });
+                h2s.forEach(h2 => {
+                    doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                    currentY += 5;
+                });
+            }
             
             // Location Header
             const locHeader = headerDiv.querySelector('.report-location-header');
@@ -1377,10 +1377,9 @@ function generateRoomWisePDF() {
             }
         }
 
-        currentY += 2; // Spacing
+        currentY += 2; // Small gap before table
 
         // --- 2. MAIN STUDENT TABLE ---
-        // We find the first table (Main list)
         const mainTable = page.querySelector('table.print-table');
         if (mainTable) {
             doc.autoTable({
@@ -1388,17 +1387,26 @@ function generateRoomWisePDF() {
                 startY: currentY,
                 theme: 'grid',
                 styles: { 
-                    lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                    fontSize: 10, cellPadding: 1.5, valign: 'middle' 
+                    lineColor: [0, 0, 0], 
+                    lineWidth: 0.1, 
+                    textColor: [0, 0, 0], 
+                    fontSize: 9,           // Reduced base font size
+                    cellPadding: 1,        // Tight padding to fit 20 rows
+                    valign: 'middle',
+                    overflow: 'linebreak'
                 },
                 headStyles: { 
-                    fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1 
+                    fillColor: [240, 240, 240], 
+                    textColor: [0, 0, 0], 
+                    fontStyle: 'bold', 
+                    lineWidth: 0.1,
+                    halign: 'center'
                 },
                 columnStyles: {
-                    0: { cellWidth: 12, halign: 'center' }, // Seat
-                    1: { cellWidth: 45 },                   // Course
-                    2: { cellWidth: 35, fontStyle: 'bold' },// Reg No
-                    3: { cellWidth: 'auto' },               // Name (Takes remaining)
+                    0: { cellWidth: 10, halign: 'center' }, // Seat
+                    1: { cellWidth: 45, fontSize: 8 },      // Course (Smaller font)
+                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No (Right Align)
+                    3: { cellWidth: 'auto' },               // Name
                     4: { cellWidth: 25 },                   // Remarks
                     5: { cellWidth: 20 }                    // Sign
                 },
@@ -1411,13 +1419,13 @@ function generateRoomWisePDF() {
         // --- 3. FOOTER RECONSTRUCTION ---
         const footer = page.querySelector('.invigilator-footer');
         if (footer) {
-            // Check for page break space (Needs approx 60mm)
-            if (currentY + 60 > pageHeight) {
+            // Check for space
+            if (currentY + 50 > pageHeight) {
                 doc.addPage();
                 currentY = 15;
             }
 
-            // A. Course Summary Table (Nested)
+            // A. Course Summary Table
             const sumTable = footer.querySelector('table');
             if (sumTable) {
                 doc.setFontSize(9);
@@ -1442,24 +1450,19 @@ function generateRoomWisePDF() {
             const boxHeight = 22;
             doc.setDrawColor(0);
             doc.setLineWidth(0.2);
-            doc.rect(14, currentY, pageWidth - 28, boxHeight); // The Box
+            doc.rect(14, currentY, pageWidth - 28, boxHeight); 
 
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             
-            // Box Header Line
-            const boxHeader = "Booklets Received: __________   Used: __________   Balance Returned: __________";
-            doc.text(boxHeader, pageWidth / 2, currentY + 6, { align: 'center' });
-
-            // Dotted Separator
+            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 6, { align: 'center' });
+            
             doc.setLineDash([1, 1], 0);
             doc.line(14, currentY + 10, pageWidth - 14, currentY + 10);
-            doc.setLineDash([]); // Reset to solid
-
-            // Box Body
+            doc.setLineDash([]); 
+            
             doc.text("Written Booklets (QP Wise):", 16, currentY + 15);
             
-            // Box Footer Line (Total)
             doc.setLineDash([1, 1], 0);
             doc.line(14, currentY + 18, pageWidth - 14, currentY + 18);
             doc.setLineDash([]);
@@ -1468,19 +1471,31 @@ function generateRoomWisePDF() {
 
             currentY += boxHeight + 12;
 
-            // C. Scribe Note & Signature
+            // C. Signature Area
             if (footer.innerText.includes("* = Scribe")) {
                 doc.setFontSize(8);
                 doc.setFont("helvetica", "italic");
                 doc.text("* = Scribe Assistance", 14, currentY);
             }
 
+            // --- EXTRACT ACTUAL INVIGILATOR NAME ---
+            let sigText = "Name & Signature of Invigilator";
+            const sigDiv = footer.querySelector('.signature');
+            if (sigDiv) {
+                // Get the text content, cleaning up any internal HTML tags if present
+                const rawText = sigDiv.innerText.trim();
+                if (rawText && !rawText.includes("Name & Signature")) {
+                    sigText = rawText;
+                }
+            }
+
             doc.setLineWidth(0.2);
-            doc.line(pageWidth - 70, currentY - 2, pageWidth - 14, currentY - 2); // Sign Line
+            doc.line(pageWidth - 80, currentY - 2, pageWidth - 14, currentY - 2); 
             
             doc.setFontSize(9);
             doc.setFont("helvetica", "normal");
-            doc.text("Name & Signature of Invigilator", pageWidth - 42, currentY + 3, { align: 'center' });
+            // Center the name over the line (line is from X=130 to X=196, center is ~163)
+            doc.text(sigText, pageWidth - 47, currentY + 3, { align: 'center' });
         }
     });
 
