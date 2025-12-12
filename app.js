@@ -1262,16 +1262,21 @@ function updateLocalSlotsFromStudents() {
     btnPrintReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-gray-700 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800";
     btnPrintReport.innerHTML = `🖨️ Print Report`;
 
-    // FIX: Anchor to 'clearReportButton' because 'finalPrintButton' was removed from HTML
-    if (clearReportButton && clearReportButton.parentNode) {
-        if (!document.getElementById('print-generated-report-btn')) {
-            // Insert BEFORE the Clear button
-            clearReportButton.parentNode.insertBefore(btnPrintReport, clearReportButton);
-        }
-        
-        // Cleanup: Remove the old download button if it exists
-        const oldBtn = document.getElementById('download-report-pdf-btn');
-        if (oldBtn) oldBtn.remove();
+    // --- NEW CODE: PDF Button Injection ---
+    const btnPdfReport = document.createElement('button');
+    btnPdfReport.id = 'download-pdf-report-btn';
+    btnPdfReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 ml-2";
+    btnPdfReport.innerHTML = `📄 Download PDF`;
+    
+    // Remove old buttons if they exist to prevent duplicates on reload
+        const oldPrint = document.getElementById('print-generated-report-btn');
+        const oldPdf = document.getElementById('download-pdf-report-btn');
+        if (oldPrint) oldPrint.remove();
+        if (oldPdf) oldPdf.remove();
+
+        // Insert Buttons
+        clearReportButton.parentNode.insertBefore(btnPrintReport, clearReportButton);
+        clearReportButton.parentNode.insertBefore(btnPdfReport, clearReportButton);
     }
 
     // Attach Listener (Opens the Print Preview Window)
@@ -1285,8 +1290,141 @@ function updateLocalSlotsFromStudents() {
 
         openPdfPreview(content, filename);
     });
+    // --- NEW: PDF Download Listener ---
+    btnPdfReport.addEventListener('click', () => {
+        downloadReportPDF();
+    });
 
-    if (toggleButton && sidebar) {
+  
+// --- NEW FUNCTION: Smart PDF Generator ---
+    window.downloadReportPDF = function() {
+        const reportContainer = document.getElementById('report-output-area');
+        const pages = reportContainer.querySelectorAll('.print-page'); // Get all generated pages
+
+        if (pages.length === 0) {
+            alert("No report pages found to generate PDF.");
+            return;
+        }
+
+        // Initialize jsPDF
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        const filename = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
+                         ? lastGeneratedReportType 
+                         : "Exam_Report";
+
+        let pageCount = 0;
+
+        pages.forEach((page, index) => {
+            if (index > 0) doc.addPage(); // Add new page for subsequent divs
+
+            // 1. Extract Header Information
+            const headerGroup = page.querySelector('.print-header-group');
+            let startY = 15; // Initial Y position
+
+            if (headerGroup) {
+                const headerText = headerGroup.innerText.split('\n').filter(line => line.trim() !== "");
+                
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                
+                // Centered Header Text
+                headerText.forEach(line => {
+                    // Check for "Page X" text to align differently if needed, or just center everything
+                    if(line.includes("Page")) {
+                        doc.setFontSize(10);
+                        doc.setFont("helvetica", "normal");
+                        doc.text(line, 200, 10, { align: 'right' }); // Top right page number
+                    } else {
+                        // Main Titles
+                        if(line.toUpperCase() === line) doc.setFontSize(16); // College Name usually uppercase
+                        else doc.setFontSize(12);
+                        
+                        doc.text(line, 105, startY, { align: 'center' });
+                        startY += 6;
+                    }
+                });
+                startY += 5; // Spacing after header
+            }
+
+            // 2. Extract Tables
+            // We look for tables inside this specific page div
+            const tables = page.querySelectorAll('table');
+
+            tables.forEach((table) => {
+                // Use autoTable to parse the HTML table
+                doc.autoTable({
+                    html: table,
+                    startY: startY,
+                    theme: 'grid',
+                    styles: { 
+                        fontSize: 9, 
+                        cellPadding: 1, 
+                        lineColor: [0, 0, 0], 
+                        lineWidth: 0.1,
+                        textColor: [0, 0, 0] // Force black text
+                    },
+                    headStyles: { 
+                        fillColor: [240, 240, 240], // Light gray header
+                        textColor: [0, 0, 0], 
+                        fontStyle: 'bold',
+                        lineWidth: 0.1,
+                        lineColor: [0, 0, 0]
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 10, halign: 'center' }, // Sl No usually small
+                        // Auto width for others
+                    },
+                    didParseCell: function(data) {
+                        // Preserve bold styling from HTML if possible
+                        if (data.cell.raw.tagName === 'TH' || (data.cell.raw.style && data.cell.raw.style.fontWeight === 'bold')) {
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    },
+                    margin: { top: 10, bottom: 20, left: 10, right: 10 }
+                });
+
+                // Update startY for next element (if any)
+                startY = doc.lastAutoTable.finalY + 10;
+            });
+
+            // 3. Extract Footer / Signatures
+            const footer = page.querySelector('.invigilator-footer') || page.querySelector('.footer') || page.querySelector('.absentee-footer');
+            
+            if (footer) {
+                // Simple footer extraction: Bottom of page
+                const footerText = footer.innerText.split('\n').filter(l => l.trim() !== "");
+                let footerY = 280; // Bottom of A4
+                
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                
+                // If it's a signature line, we try to align it
+                footerText.forEach(line => {
+                    if(line.includes("Superintendent") || line.includes("Signature")) {
+                        doc.text(line, 150, footerY); // Right aligned roughly
+                    } else {
+                        doc.text(line, 14, footerY); // Left aligned
+                    }
+                    footerY -= 5; // Move up for next line (printing bottom up logic or just place explicitly)
+                });
+            }
+            
+            pageCount++;
+        });
+
+        // Save the PDF
+        doc.save(`${filename}_${new Date().toISOString().slice(0,10)}.pdf`);
+    };
+
+
+
+if (toggleButton && sidebar) {
         toggleButton.addEventListener('click', () => {
             // Check if we are on Mobile (window width < 768px)
             const isMobile = window.innerWidth < 768;
