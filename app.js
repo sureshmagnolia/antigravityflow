@@ -5498,8 +5498,7 @@ function updateLocalSlotsFromStudents() {
 
 
     // --- (V56) NEW ABSENTEE LOGIC ---
-
-    // *** FIX: This is the REAL implementation of the function Python calls ***
+// *** FIX: This is the REAL implementation of the function Python calls ***
     window.real_populate_session_dropdown = function () {
         try {
             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -5509,56 +5508,41 @@ function updateLocalSlotsFromStudents() {
             }
 
             const previousSelection = sessionSelect.value;
-
-            // ### Data Analysis (Existing) ###
-            const totalRows = allStudentData.length;
             const seenKeys = new Set();
             const uniqueStudentEntries = [];
-            let duplicateCount = 0;
-
+            
             allStudentData.forEach(row => {
                 const key = `${row.Date}|${row.Time}|${row['Register Number']}`;
-                if (seenKeys.has(key)) {
-                    duplicateCount++;
-                } else {
+                if (!seenKeys.has(key)) {
                     seenKeys.add(key);
                     uniqueStudentEntries.push(row);
                 }
             });
-
-            if (duplicateCount > 0) {
-                // ... (Existing warning logic preserved) ...
-                const uniqueCount = seenKeys.size;
-                if (statusLogDiv) {
-                    // ... (Log message logic) ...
-                }
-                allStudentData = uniqueStudentEntries;
-            }
+            allStudentData = uniqueStudentEntries;
 
             updateUniqueStudentList();
 
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
-            sessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
-            reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
-            editSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
-            searchSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
+            // Clear Dropdowns
+            [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+                if(el) el.innerHTML = '<option value="">-- Select a Session --</option>';
+            });
+            if(reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
 
-            // 2. Time-Based Default Logic
+            // Time-Based Default
             const today = new Date();
             const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
             const currentHour = today.getHours();
-
-            let fnSession = "";
-            let anSession = "";
+            let fnSession = "", anSession = "";
 
             allStudentSessions.forEach(session => {
                 const opt = `<option value="${session}">${session}</option>`;
                 sessionSelect.innerHTML += opt;
-                reportsSessionSelect.innerHTML += opt;
-                editSessionSelect.innerHTML += opt;
-                searchSessionSelect.innerHTML += opt;
+                if(reportsSessionSelect) reportsSessionSelect.innerHTML += opt;
+                if(editSessionSelect) editSessionSelect.innerHTML += opt;
+                if(searchSessionSelect) searchSessionSelect.innerHTML += opt;
 
                 if (session.startsWith(todayStr)) {
                     const timePart = (session.split('|')[1] || "").toUpperCase();
@@ -5570,41 +5554,36 @@ function updateLocalSlotsFromStudents() {
                 }
             });
 
-            let defaultSession = "";
-            if (currentHour >= 12) {
-                defaultSession = anSession || fnSession;
-            } else {
-                defaultSession = fnSession || anSession;
-            }
+            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
 
-            // 3. Restore Previous OR Set Default
-            if (previousSelection && allStudentSessions.includes(previousSelection)) {
-                sessionSelect.value = previousSelection;
-                sessionSelect.dispatchEvent(new Event('change'));
-            } else if (defaultSession) {
-                sessionSelect.value = defaultSession;
-                sessionSelect.dispatchEvent(new Event('change'));
+            // Restore/Set Default & Trigger Change
+            const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
-                if (searchSessionSelect) {
-                    searchSessionSelect.value = defaultSession;
-                    searchSessionSelect.dispatchEvent(new Event('change'));
+            [sessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+                if(el && targetVal) {
+                    el.value = targetVal;
+                    el.dispatchEvent(new Event('change'));
                 }
-                if (editSessionSelect) {
-                    editSessionSelect.value = defaultSession;
-                    editSessionSelect.dispatchEvent(new Event('change'));
-                }
-            }
+            });
+
+            if(reportsSessionSelect) reportsSessionSelect.value = targetVal || "all";
 
             reportFilterSection.classList.remove('hidden');
             filterSessionRadio.checked = true;
             reportsSessionDropdownContainer.classList.remove('hidden');
-            reportsSessionSelect.value = defaultSession || reportsSessionSelect.options[1]?.value || "all";
+
+            // --- 🚀 ACTIVATE ROTARY DIALS FOR ALL TABS ---
+            setupRotaryDial('session-select');          // Absentees Tab
+            setupRotaryDial('reports-session-select');  // Reports Tab
+            setupRotaryDial('edit-session-select');     // Edit Data Tab
+            setupRotaryDial('search-session-select');   // Search Tab
 
         } catch (e) {
             console.error("Failed to populate sessions:", e);
             disable_absentee_tab(true);
         }
     }
+   
 
     sessionSelect.addEventListener('change', () => {
         const sessionKey = sessionSelect.value;
@@ -5947,7 +5926,7 @@ function updateLocalSlotsFromStudents() {
     }
 
     // V61: Populates the QP Code session dropdown
-    // *** FIX: This is the REAL implementation of the function Python calls ***
+// V61: Populates the QP Code session dropdown
     window.real_populate_qp_code_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
@@ -5958,26 +5937,19 @@ function updateLocalSlotsFromStudents() {
                 return;
             }
 
-            // 1. Capture Previous Selection
             const previousSelection = sessionSelectQP.value;
-
-            // Get unique sessions
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
             sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>';
 
-            // 2. Time-Based Default Logic
             const today = new Date();
             const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
             const currentHour = today.getHours();
-
-            let fnSession = "";
-            let anSession = "";
+            let fnSession = "", anSession = "";
 
             allStudentSessions.forEach(session => {
                 sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
-
                 if (session.startsWith(todayStr)) {
                     const timePart = (session.split('|')[1] || "").toUpperCase();
                     if (timePart.includes("PM") || timePart.trim().startsWith("12")) {
@@ -5988,27 +5960,23 @@ function updateLocalSlotsFromStudents() {
                 }
             });
 
-            let defaultSession = "";
-            if (currentHour >= 12) {
-                defaultSession = anSession || fnSession;
-            } else {
-                defaultSession = fnSession || anSession;
-            }
+            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
+            const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
-            // 3. Restore Previous OR Set Default
-            if (previousSelection && allStudentSessions.includes(previousSelection)) {
-                sessionSelectQP.value = previousSelection;
-                sessionSelectQP.dispatchEvent(new Event('change'));
-            } else if (defaultSession) {
-                sessionSelectQP.value = defaultSession;
+            if (targetVal) {
+                sessionSelectQP.value = targetVal;
                 sessionSelectQP.dispatchEvent(new Event('change'));
             }
+            
+            // --- 🚀 ACTIVATE ROTARY DIAL ---
+            setupRotaryDial('session-select-qp'); // QP Code Entry Tab
 
         } catch (e) {
             console.error("Failed to populate QP sessions:", e);
             disable_qpcode_tab(true);
         }
     }
+    
 
     // V61: Event listener for the QP Code session dropdown
     sessionSelectQP.addEventListener('change', () => {
@@ -6786,8 +6754,7 @@ function updateLocalSlotsFromStudents() {
 
 
     // --- ROOM ALLOTMENT FUNCTIONALITY ---
-
-    // *** FIX: This is the REAL implementation of the function Python calls ***
+// *** FIX: This is the REAL implementation of the function Python calls ***
     window.real_populate_room_allotment_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
@@ -6798,29 +6765,21 @@ function updateLocalSlotsFromStudents() {
                 return;
             }
 
-            // 1. Capture Previous Selection
             const previousSelection = allotmentSessionSelect.value;
-
-            // Get unique sessions
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
             allotmentSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
 
-            // 2. Time-Based Default Logic
             const today = new Date();
-            const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
-            const currentHour = today.getHours(); // 0-23
-
-            let fnSession = "";
-            let anSession = "";
+            const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
+            const currentHour = today.getHours();
+            let fnSession = "", anSession = "";
 
             allStudentSessions.forEach(session => {
                 allotmentSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
-
                 if (session.startsWith(todayStr)) {
                     const timePart = (session.split('|')[1] || "").toUpperCase();
-                    // Identify AN (PM or 12:xx) vs FN
                     if (timePart.includes("PM") || timePart.trim().startsWith("12")) {
                         if (!anSession) anSession = session;
                     } else {
@@ -6829,29 +6788,25 @@ function updateLocalSlotsFromStudents() {
                 }
             });
 
-            // Determine Default based on Time
-            let defaultSession = "";
-            if (currentHour >= 12) {
-                defaultSession = anSession || fnSession; // After 12pm? Prefer AN
-            } else {
-                defaultSession = fnSession || anSession; // Before 12pm? Prefer FN
-            }
+            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
+            const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
-            // 3. Restore Previous OR Set Default
-            if (previousSelection && allStudentSessions.includes(previousSelection)) {
-                allotmentSessionSelect.value = previousSelection;
-                allotmentSessionSelect.dispatchEvent(new Event('change'));
-            } else if (defaultSession) {
-                allotmentSessionSelect.value = defaultSession;
+            if (targetVal) {
+                allotmentSessionSelect.value = targetVal;
                 allotmentSessionSelect.dispatchEvent(new Event('change'));
             }
 
             disable_room_allotment_tab(false);
+
+            // --- 🚀 ACTIVATE ROTARY DIAL ---
+            setupRotaryDial('allotment-session-select'); // Room Allotment Tab
+
         } catch (e) {
             console.error("Failed to populate room allotment sessions:", e);
             disable_room_allotment_tab(true);
         }
     }
+   
 
     // Load Room Allotment for a session
     function loadRoomAllotment(sessionKey) {
@@ -13075,7 +13030,114 @@ Are you sure?
     window.closeRoomSettingsModal = function () {
         roomSettingsModal.classList.add('hidden');
     }
+// ==========================================
+// 🎡 ROTARY DIAL UI COMPONENT
+// ==========================================
 
+function initDialStyles() {
+    if (document.getElementById('dial-css')) return;
+    const style = document.createElement('style');
+    style.id = 'dial-css';
+    style.innerHTML = `
+        .dial-container { position: relative; height: 140px; overflow: hidden; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .dial-list { height: 100%; overflow-y: auto; scroll-snap-type: y mandatory; scroll-behavior: smooth; padding: 50px 0; -ms-overflow-style: none; scrollbar-width: none; }
+        .dial-list::-webkit-scrollbar { display: none; }
+        .dial-item { height: 40px; display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: 13px; color: #9ca3af; transition: all 0.2s ease; cursor: pointer; font-family: monospace; font-weight: 500; }
+        .dial-item.active { font-size: 16px; font-weight: 700; color: #4f46e5; transform: scale(1.05); }
+        .dial-highlight { position: absolute; top: 50px; left: 0; right: 0; height: 40px; border-top: 1px solid #c7d2fe; border-bottom: 1px solid #c7d2fe; background: rgba(224, 231, 255, 0.2); pointer-events: none; z-index: 10; }
+        .dial-overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to bottom, white 0%, transparent 40%, transparent 60%, white 100%); z-index: 5; }
+    `;
+    document.head.appendChild(style);
+}
+
+function setupRotaryDial(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select || select.options.length === 0) return;
+
+    // 1. Initialize Styles
+    initDialStyles();
+
+    // 2. Hide Original Select
+    select.style.display = 'none';
+
+    // 3. Clean up old dial if exists
+    const oldDial = document.getElementById(selectId + '-dial');
+    if (oldDial) oldDial.remove();
+
+    // 4. Create UI
+    const wrapper = document.createElement('div');
+    wrapper.id = selectId + '-dial';
+    wrapper.className = 'dial-container';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'dial-overlay';
+
+    const highlight = document.createElement('div');
+    highlight.className = 'dial-highlight';
+
+    const list = document.createElement('div');
+    list.className = 'dial-list';
+
+    // 5. Populate
+    Array.from(select.options).forEach((opt, index) => {
+        if (opt.value === "") return; // Skip placeholder
+        
+        const item = document.createElement('div');
+        item.className = 'dial-item';
+        item.textContent = opt.text;
+        item.dataset.value = opt.value;
+        item.dataset.index = index;
+        
+        item.onclick = () => {
+            const itemCenter = item.offsetTop;
+            const listCenter = list.clientHeight / 2;
+            const itemHalf = item.clientHeight / 2;
+            list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'smooth' });
+        };
+        
+        list.appendChild(item);
+    });
+
+    wrapper.appendChild(overlay);
+    wrapper.appendChild(highlight);
+    wrapper.appendChild(list);
+    select.parentNode.insertBefore(wrapper, select.nextSibling);
+
+    // 6. Scroll Sync
+    let scrollTimeout;
+    list.addEventListener('scroll', () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            const center = list.scrollTop + (list.clientHeight / 2);
+            const items = list.querySelectorAll('.dial-item');
+            
+            items.forEach(item => {
+                const itemCenter = item.offsetTop + (item.clientHeight / 2);
+                const dist = Math.abs(center - itemCenter);
+                
+                if (dist < 20) {
+                    item.classList.add('active');
+                    if (select.value !== item.dataset.value) {
+                        select.value = item.dataset.value;
+                        select.dispatchEvent(new Event('change'));
+                    }
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }, 50);
+    });
+
+    // 7. Initial Scroll (Auto-Focus)
+    setTimeout(() => {
+        if (select.value) {
+            const target = Array.from(list.children).find(el => el.dataset.value === select.value);
+            if (target) target.click();
+        } else if (list.lastElementChild) {
+            list.lastElementChild.click();
+        }
+    }, 200);
+}
 // ==========================================
     // ☁️ FORCE CLOUD SYNC (Header Button)
     // ==========================================
