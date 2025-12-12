@@ -6308,41 +6308,42 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // 2. Wipe Cloud Data (The Fix)
                 if (currentCollegeId) {
                     try {
-                        // Change button text to show activity
                         const originalText = resetStudentDataButton.innerHTML;
-                        resetStudentDataButton.innerHTML = "☁️ Wiping Cloud...";
+                        resetStudentDataButton.innerHTML = "☁️ Wiping V2 Data...";
                         resetStudentDataButton.disabled = true;
-
+                        
                         const { db, doc, writeBatch, collection, getDocs } = window.firebase;
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
 
-                        // A. Reset fields in the main document (Metadata)
+                        // A. Reset fields in the main document (Metadata only)
+                        // We do NOT reset global shared lists to protect V1
                         batch.update(mainRef, {
-                            examQPCodes: "{}",
-                            examScribeAllotment: "{}",
-                            examScribeList: "[]",
-                            examAbsenteeList: "{}",
                             lastUpdated: new Date().toISOString()
                         });
 
-                        // B. DELETE SUB-COLLECTIONS (Targeted Wipe)
-                        // We wipe Operations (QP/Absentees), Allocation (Scribes), and Slots
-                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "operations"));
-                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "allocation"));
-                        batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "slots"));
+                        // B. [DISABLED] DELETE SUB-COLLECTIONS 
+                        // These are shared with V1. We keep them safe.
+                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "operations"));
+                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "allocation"));
+                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "slots"));
 
-                        // C. Delete all data chunks (Where Student Data & Allotment live)
-                        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-                        const chunkSnaps = await getDocs(dataColRef);
-                        chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+                        // C. [NEW] Delete ONLY V2 SESSIONS (Modular Data)
+                        const sessionsRef = collection(db, "colleges", currentCollegeId, "sessions");
+                        const sessionSnaps = await getDocs(sessionsRef);
+                        sessionSnaps.forEach(doc => batch.delete(doc.ref));
+
+                        // D. [DISABLED] Delete Legacy Chunks (V1 Data)
+                        // Kept strictly safe so V1 continues to work
+                        // const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                        // const chunkSnaps = await getDocs(dataColRef);
+                        // chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
 
                         await batch.commit();
-                        console.log("Cloud data wiped successfully.");
-
+                        console.log("V2 Session data wiped successfully.");
                     } catch (e) {
                         console.error("Cloud Wipe Error:", e);
-                        alert("⚠️ Warning: Local data was cleared, but Cloud wipe failed.\nError: " + e.message);
+                        alert("⚠️ Warning: Cloud wipe failed.\nError: " + e.message);
                     }
                 }
                 
@@ -6426,11 +6427,28 @@ window.real_populate_qp_code_session_dropdown = function () {
                         }
                     }
 
-                    alert('Update successful! Syncing session...');
-                
-                // MODULAR SYNC (V2)
-                // We only need to sync the specific session we just modified
-                    await syncSessionToCloud(editSessionSelect.value);
+                    alert('Restore successful! Syncing all sessions to V2 Cloud...');
+                    
+                    // MODULAR SYNC (V2) - Loop through ALL restored sessions
+                    if (typeof syncSessionToCloud === 'function') {
+                        // 1. Identify all sessions in the restored file
+                        const sessionsToSync = new Set();
+                        if (allStudentData) {
+                            allStudentData.forEach(s => sessionsToSync.add(`${s.Date} | ${s.Time}`));
+                        }
+
+                        // 2. Sync them one by one to 'colleges/{id}/sessions'
+                        // This DOES NOT touch 'colleges/{id}/data' (V1 is safe)
+                        let count = 0;
+                        for (const sessionKey of sessionsToSync) {
+                            count++;
+                            updateSyncStatus(`Restoring ${count}/${sessionsToSync.size}...`, "neutral");
+                            await syncSessionToCloud(sessionKey);
+                        }
+                        
+                        updateSyncStatus("Restore Complete", "success");
+                    }
+                    
                     window.location.reload();
 
                 } catch (e) {
