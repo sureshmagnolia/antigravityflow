@@ -1301,13 +1301,19 @@ window.downloadReportPDF = function() {
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
-    // 1. Route to Specific Generators
+    // 1. Room-wise Report
     if (reportType === "Roomwise_Seating_Report") {
         generateRoomWisePDF();
         return;
     }
 
-    // 2. Fallback for other reports (we will fix these later)
+    // 2. Day-wise (Seating Details) Report
+    if (reportType === "Daywise_Seating_Details") {
+        generateDayWisePDF();
+        return;
+    }
+
+    // 3. Fallback
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
 
@@ -1548,7 +1554,204 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 
+// --- OPTIMIZED GENERATOR: DAY-WISE SEATING REPORT (2-Col Support + Font Scaling) ---
+function generateDayWisePDF() {
+    const { jsPDF } = window.jspdf;
+    // Landscape usually works better for 2-column, but user requested "Same as HTML" (Portrait)
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const container = document.getElementById('report-output-area');
+    const pages = container.querySelectorAll('.print-page');
 
+    if (pages.length === 0) return alert("No pages found.");
+
+    const btn = document.getElementById('download-pdf-report-btn');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+
+    // Helper: Convert CSS font-size (px/em) to PDF font size (pt)
+    const getPdfFontSize = (el) => {
+        const style = window.getComputedStyle(el);
+        const fontSizePx = parseFloat(style.fontSize);
+        // Base conversion: 16px = 12pt approx. 
+        // We scale it slightly down for PDF compactness.
+        return (fontSizePx * 0.75); 
+    };
+
+    pages.forEach((page, i) => {
+        if (i > 0) doc.addPage();
+        
+        const pageWidth = doc.internal.pageSize.getWidth();
+        let currentY = 15;
+
+        // --- 1. HEADER RECONSTRUCTION ---
+        // (Reusing the robust header logic from Room-wise)
+        const headerDiv = page.querySelector('.print-header-group');
+        if (headerDiv) {
+            // "Ears" (Page No & Stream)
+            const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "bold");
+            
+            absoluteDivs.forEach(div => {
+                const text = div.innerText.trim().replace(/\s+/g, ' ');
+                const style = div.getAttribute('style');
+                if (style.includes('left')) doc.text(text, 14, 10);
+                if (style.includes('right')) doc.text(text, pageWidth - 14, 10, { align: 'right' });
+            });
+
+            // Center Titles
+            const h1 = headerDiv.querySelector('h1');
+            const h2 = headerDiv.querySelector('h2');
+            const h3 = headerDiv.querySelector('h3');
+            
+            if (h1) {
+                doc.setFontSize(16); doc.text(h1.innerText.trim(), pageWidth/2, currentY, {align:'center'});
+                currentY += 7;
+            }
+            if (h2) {
+                doc.setFontSize(12); doc.text(h2.innerText.trim(), pageWidth/2, currentY, {align:'center'});
+                currentY += 6;
+            }
+            if (h3) {
+                doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                doc.text(h3.innerText.trim(), pageWidth/2, currentY, {align:'center'});
+                currentY += 6;
+            }
+        }
+        
+        currentY += 3; // Gap
+
+        // --- 2. TABLE LAYOUT DETECTION ---
+        const tables = page.querySelectorAll('table');
+        
+        if (tables.length === 1) {
+            // === CASE A: SINGLE COLUMN (Full Width) ===
+            doc.autoTable({
+                html: tables[0],
+                startY: currentY,
+                theme: 'grid',
+                styles: { lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], fontSize: 9, cellPadding: 1.5, valign: 'middle' },
+                headStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
+                columnStyles: {
+                    0: { cellWidth: 25, halign: 'center' }, // Loc
+                    1: { cellWidth: 35, fontStyle: 'bold' }, // Reg
+                    2: { cellWidth: 'auto' }, // Name
+                    3: { cellWidth: 15, halign: 'center', fontStyle: 'bold' } // Seat
+                },
+                // SCRAPER: Read HTML Font Size for Merged Cells
+                didParseCell: function(data) {
+                    const el = data.cell.raw;
+                    if (!el) return;
+                    
+                    // 1. Font Size Scaling (For Merged Locations)
+                    const htmlSize = getPdfFontSize(el);
+                    // If HTML font is significantly larger than base (e.g., merged cell), use it
+                    if (htmlSize > 11) {
+                        data.cell.styles.fontSize = htmlSize;
+                    }
+
+                    // 2. Scribe Highlighting
+                    if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
+                        data.cell.styles.textColor = [194, 65, 12]; // Orange-Red
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                    
+                    // 3. Course Headers (Grey Background)
+                    const style = window.getComputedStyle(el);
+                    if (style.backgroundColor === 'rgb(238, 238, 238)' || el.getAttribute('colspan') === '4') {
+                        data.cell.styles.fillColor = [238, 238, 238];
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.halign = 'left';
+                    }
+                },
+                margin: { left: 14, right: 14 }
+            });
+
+        } else if (tables.length === 2) {
+            // === CASE B: TWO COLUMNS (Side-by-Side) ===
+            const midGap = 10;
+            const margin = 10;
+            const colWidth = (pageWidth - (margin * 2) - midGap) / 2;
+
+            // Render Left Table
+            doc.autoTable({
+                html: tables[0],
+                startY: currentY,
+                theme: 'grid',
+                tableWidth: colWidth,
+                styles: { lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], fontSize: 8, cellPadding: 1, valign: 'middle' },
+                headStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
+                columnStyles: {
+                    0: { cellWidth: 15, halign: 'center' }, // Loc (Narrower for 2-col)
+                    1: { cellWidth: 25, fontStyle: 'bold' }, // Reg
+                    2: { cellWidth: 'auto' }, // Name
+                    3: { cellWidth: 10, halign: 'center' } // Seat
+                },
+                didParseCell: function(data) {
+                    const el = data.cell.raw;
+                    if (!el) return;
+                    
+                    const htmlSize = getPdfFontSize(el);
+                    if (htmlSize > 10) data.cell.styles.fontSize = htmlSize; // Scale Up
+
+                    if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
+                        data.cell.styles.textColor = [194, 65, 12];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                    if (el.getAttribute('colspan') === '4') {
+                        data.cell.styles.fillColor = [238, 238, 238];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                },
+                margin: { left: margin }
+            });
+
+            // Render Right Table (Same Y)
+            doc.autoTable({
+                html: tables[1],
+                startY: currentY,
+                theme: 'grid',
+                tableWidth: colWidth,
+                styles: { lineColor: [0,0,0], lineWidth: 0.1, textColor: [0,0,0], fontSize: 8, cellPadding: 1, valign: 'middle' },
+                headStyles: { fillColor: [240, 240, 240], textColor: [0,0,0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
+                columnStyles: {
+                    0: { cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 25, fontStyle: 'bold' },
+                    2: { cellWidth: 'auto' },
+                    3: { cellWidth: 10, halign: 'center' }
+                },
+                didParseCell: function(data) {
+                    const el = data.cell.raw;
+                    if (!el) return;
+                    
+                    const htmlSize = getPdfFontSize(el);
+                    if (htmlSize > 10) data.cell.styles.fontSize = htmlSize;
+
+                    if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
+                        data.cell.styles.textColor = [194, 65, 12];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                    if (el.getAttribute('colspan') === '4') {
+                        data.cell.styles.fillColor = [238, 238, 238];
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                },
+                margin: { left: margin + colWidth + midGap }
+            });
+        }
+        
+        // --- 3. FOOTER (Scribe Summary Page) ---
+        const footer = page.querySelector('.footer, .text-right');
+        if (footer && footer.innerText.includes("Total Scribes")) {
+            doc.setFontSize(10);
+            doc.text(footer.innerText.trim(), pageWidth - 14, 280, { align: 'right' });
+        }
+    });
+
+    const dateStr = new Date().toISOString().slice(0,10);
+    doc.save(`DayWise_Report_${dateStr}.pdf`);
+
+    if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+}
 
 
 if (toggleButton && sidebar) {
