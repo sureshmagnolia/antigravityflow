@@ -7181,12 +7181,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         // 1. Save Room Allotment (Updates student seating and scribe cleanup)
         saveRoomAllotment(); // Update Local Storage (Room & Scribe)
 
-        if (typeof syncDataToCloud === 'function') {
-    // 2. Sync 'heavy' to update the Room Allotment (Student Data Chunks)
-            await syncDataToCloud('heavy'); 
-    
-    // 3. Sync 'slots' to update the Invigilator Mapping (The NEW FIX)
-            await syncDataToCloud('slots'); 
+        // 2. MODULAR SYNC (Cheaper)
+        if (typeof syncSessionToCloud === 'function') {
+            await syncSessionToCloud(currentSessionKey);
+        } else if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('heavy'); // Fallback
         }
 // ------------------------
         // ------------------------
@@ -8921,15 +8920,13 @@ Are you sure you want to update these records?
                 });
 
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-                // REPLACE "window.location.reload()" at line 7596 with:
-                alert('Restore successful! Syncing to Cloud...');
-
-                if (typeof syncDataToCloud === 'function') {
-                    await syncDataToCloud('settings');
-                    await syncDataToCloud('ops');
-                    await syncDataToCloud('allocation');
-                    await syncDataToCloud('staff');
-                    await syncDataToCloud('slots');
+                
+                alert('Update successful! Syncing session...');
+                
+                // MODULAR SYNC (Only sync the session we modified)
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(editSessionSelect.value);
+                } else if (typeof syncDataToCloud === 'function') {
                     await syncDataToCloud('heavy');
                 }
 
@@ -9689,10 +9686,11 @@ Are you sure?
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
 
-                if (typeof syncDataToCloud === 'function') {
-                // This pushes the updated allStudentData (which is now smaller)
-                // to the cloud chunks (the 'heavy' bucket).
-                await syncDataToCloud('heavy'); 
+                // MODULAR SYNC
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(sessionVal); // sessionVal is defined in your existing code above
+                } else if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('heavy');
                 }
                 window.location.reload();
             }
