@@ -2422,10 +2422,11 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (HTML SCRAPER: Fixed Selectors) ---
+// --- QP DISTRIBUTION PDF (FIXED: Single Line Room+Loc, Robust QP Scraper) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
+    // 1. Validation
     const reportContainer = document.getElementById('report-output-area');
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
@@ -2493,37 +2494,50 @@ function generateQPDistributionPDF() {
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
+                    // --- 1. SCRAPE METADATA ---
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
                     
-                    // --- FIXED QP SCRAPER ---
-                    // Look for the "QP:" label and extract the text from the span next to it
+                    // QP Code: Look specifically for the "QP:" text label
                     let qpCode = "N/A";
-                    const qpContainer = Array.from(headerRow.querySelectorAll('div')).find(d => d.innerText.includes("QP:"));
-                    if(qpContainer) {
-                        // The QP code is usually in a span/badge inside this container
-                        const badge = qpContainer.querySelector('span.bg-white') || qpContainer.querySelector('span.border');
-                        if(badge) qpCode = badge.innerText.trim();
-                        // Handle "QP Missing" case
-                        else if(qpContainer.innerText.includes("Missing")) qpCode = "Missing";
+                    // Find the container that has "QP:" text
+                    const qpLabelContainer = Array.from(headerRow.querySelectorAll('div, span')).find(
+                        node => node.innerText.includes("QP:") && node.children.length > 0
+                    );
+                    
+                    if (qpLabelContainer) {
+                        // The code is usually in a nested span with a border
+                        const codeSpan = qpLabelContainer.querySelector('span.border');
+                        if (codeSpan) qpCode = codeSpan.innerText.trim();
+                        else {
+                            // Fallback: simple text split
+                            const parts = qpLabelContainer.innerText.split("QP:");
+                            if(parts[1]) qpCode = parts[1].trim();
+                        }
                     }
 
+                    // Stream Label
                     let strmLabel = "";
                     const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
                     if (strmSpan) strmLabel = strmSpan.innerText.trim();
 
+                    // Total Count
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
+                    
+                    // Room Divs
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
+                    // Style & Height
                     let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
                     const gridRowsCount = Math.ceil(roomDivs.length / 3);
                     const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
 
+                    // Pagination Check
                     if (currentY + cardHeight > MAX_Y) {
                         doc.addPage();
                         currentY = MARGIN + 5;
                     }
 
-                    // Card Bg
+                    // --- 2. DRAW CARD BACKGROUND ---
                     doc.setDrawColor(0); doc.setLineWidth(0.1);
                     if (isOthers) {
                         doc.setFillColor(255, 251, 235);
@@ -2543,6 +2557,7 @@ function generateQPDistributionPDF() {
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
+                    // QP Code Label & Value
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2560,7 +2575,7 @@ function generateQPDistributionPDF() {
                     doc.setDrawColor(200);
                     doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
 
-                    // --- ROOM GRID ---
+                    // --- 3. DRAW ROOM GRID ---
                     let roomY = headY + 7;
                     let roomX = MARGIN + 2;
                     const boxW = (CONTENT_W - 4) / 3; 
@@ -2571,12 +2586,16 @@ function generateQPDistributionPDF() {
                             roomY += 8.5;
                         }
 
+                        // --- SCRAPE ROOM DATA (SPECIFIC SELECTORS) ---
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
                         
-                        // --- FIXED ROOM & LOCATION SCRAPERS ---
-                        // Target the specific SPANs using their distinct classes
-                        const roomNameTxt = rDiv.querySelector('span.text-sm.font-black')?.innerText.trim() || ""; // Room #1
-                        const locTxt = rDiv.querySelector('span.text-gray-500')?.innerText.trim() || ""; // (G101)
+                        // Select "Room #X" specifically by class 'text-sm'
+                        const roomNameSpan = rDiv.querySelector('span.text-sm');
+                        const roomNameTxt = roomNameSpan ? roomNameSpan.innerText.trim() : ""; 
+                        
+                        // Select Location "(G101)" specifically by class 'truncate' (on the span, not div)
+                        const locSpan = rDiv.querySelector('span.truncate');
+                        const locTxt = locSpan ? locSpan.innerText.trim() : "";
 
                         // Box
                         doc.setDrawColor(180); doc.setFillColor(255);
@@ -2588,31 +2607,32 @@ function generateQPDistributionPDF() {
                         doc.setFontSize(6); doc.setFont("helvetica", "normal");
                         doc.text("Nos", roomX + 8, roomY + 5);
 
-                        // Vertical Line
+                        // Vertical Separator
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- COMBINED TEXT LOGIC (Serial + Location) ---
-                        let fullText = roomNameTxt;
+                        // --- CONCATENATE & DRAW TEXT (Single Line) ---
+                        let displayLine = roomNameTxt; // Start with "Room #1"
                         if (locTxt) {
-                            // Extract just the text, e.g. "G101" from "(G101)"
-                            let cleanLoc = locTxt.replace(/[()]/g, '').trim(); 
-                            if (cleanLoc) fullText += ` (${cleanLoc})`; 
+                            const cleanLoc = locTxt.replace(/[()]/g, '').trim();
+                            if (cleanLoc) {
+                                displayLine += ` (${cleanLoc})`; // Add location: "Room #1 (G101)"
+                            }
                         }
 
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                         
-                        // Check Width & Truncate
-                        const maxW = boxW - 22; 
-                        if (doc.getTextWidth(fullText) > maxW) {
-                            doc.setFontSize(7);
-                            if (doc.getTextWidth(fullText) > maxW) {
+                        // Truncate to fit box
+                        const maxW = boxW - 22; // space available
+                        if (doc.getTextWidth(displayLine) > maxW) {
+                            doc.setFontSize(7); // Shrink first
+                            if (doc.getTextWidth(displayLine) > maxW) {
                                 const chars = Math.floor(maxW / 1.4);
-                                fullText = fullText.substring(0, chars) + "..";
+                                displayLine = displayLine.substring(0, chars) + "..";
                             }
                         }
 
-                        doc.text(fullText, roomX + 16, roomY + 5);
+                        doc.text(displayLine, roomX + 16, roomY + 5);
 
                         // Checkbox
                         doc.setDrawColor(0);
@@ -2638,7 +2658,6 @@ function generateQPDistributionPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
 
     
 
