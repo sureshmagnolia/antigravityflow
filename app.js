@@ -15109,13 +15109,10 @@ window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
 //----------------Remunereation Bill PDF---------------------
-// --- ADD THIS FUNCTION TO app.js ---
-
-// --- REMUNERATION BILL PDF (Fixed: Rupee Symbol & Footer Layout) ---
+// --- REMUNERATION BILL PDF (Fixed: No Duplicates, No Overlap) ---
 function generateRemunerationBillPDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. Target the specific remuneration output
     const container = document.getElementById('remuneration-output');
     const billDiv = container ? container.querySelector('.print-page') : null;
 
@@ -15131,28 +15128,31 @@ function generateRemunerationBillPDF() {
         const MARGIN = 10;
         const CONTENT_W = PAGE_W - (MARGIN * 2);
         
-        // --- HELPER: SANITIZE TEXT (Fix Rupee Symbol) ---
+        // --- HELPER: CLEAN TEXT (Remove Newlines & Fix Symbol) ---
         const clean = (text) => {
             if (!text) return "";
-            // Replace Rupee symbol with "Rs."
-            return text.replace(/₹/g, "Rs. ").trim();
+            // 1. Replace Rupee symbol
+            // 2. Replace newlines with space (Fixes "Amount pushed to next line")
+            // 3. Trim extra spaces
+            return text.replace(/₹/g, "Rs. ").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
         };
 
-        // --- A. SCRAPE HEADER INFO ---
+        // --- A. SCRAPE HEADER ---
         const h2 = clean(billDiv.querySelector('h2')?.innerText);
         const h3 = clean(billDiv.querySelector('h3')?.innerText);
         const pStream = clean(billDiv.querySelector('p')?.innerText); 
 
-        // --- B. SCRAPE TABLE DATA ---
+        // --- B. SCRAPE TABLE ---
         const table = billDiv.querySelector('table');
         const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
         
-        // Get Rows (Preserve multiline structure)
         const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-            return Array.from(tr.querySelectorAll('td')).map(td => clean(td.innerText));
+            // For table cells, we might WANT newlines (e.g. date vs time), so we use a lighter clean
+            return Array.from(tr.querySelectorAll('td')).map(td => {
+                return td.innerText.replace(/₹/g, "Rs. ").trim(); 
+            });
         });
 
-        // Get Footer Row (Subtotals)
         const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
         const footerValues = tfootCells.map(td => clean(td.innerText));
 
@@ -15165,24 +15165,26 @@ function generateRemunerationBillPDF() {
         let signatureTitle = "Chief Superintendent";
 
         if(summaryBoxes.length > 0) {
-            // Box 1: Supervision & Allowances
             const box1 = summaryBoxes[0];
             
-            // Supervision: Extract text lines (CS:..., SAS:..., OS:..., Total:...)
+            // Supervision Breakdown
             const breakdownDiv = box1.querySelector('div.border-b'); 
             if(breakdownDiv && breakdownDiv.nextElementSibling) {
-                // Get the text content, replace commas with newlines for better stacking
+                // Replace commas with newlines for list effect
                 supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n"); 
             }
             
-            // Allowances
+            // Allowances (FIXED LOGIC)
             const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
             allowanceDivs.forEach(div => {
-                allowances.push(clean(div.innerText));
+                const txt = clean(div.innerText);
+                // Filter out the header text to prevent duplication
+                if (!txt.toLowerCase().includes("other allowances")) {
+                    allowances.push(txt);
+                }
             });
         }
         if(summaryBoxes.length > 1) {
-            // Box 2: Grand Total
             const totalBox = summaryBoxes[1];
             grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
             amountWords = clean(totalBox.querySelector('.italic')?.innerText);
@@ -15191,11 +15193,11 @@ function generateRemunerationBillPDF() {
             signatureTitle = clean(summaryBoxes[2].innerText);
         }
 
-        // --- D. PDF DRAWING CONFIG ---
-        const ROWS_PER_PAGE = 18; // Reduced slightly to ensure footer fits comfortably
+        // --- D. LAYOUT CONFIG ---
+        const ROWS_PER_PAGE = 18;
         const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
 
-        // Column Widths
+        // Columns
         const count = headers.length;
         let colWidths = [];
         if (count === 9) { // Regular
@@ -15204,19 +15206,17 @@ function generateRemunerationBillPDF() {
             colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
         }
         
-        // Normalize Widths
         const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
         const scale = CONTENT_W / totalDefined;
         colWidths = colWidths.map(w => w * scale);
-
         const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a,b)=>a+b, 0);
 
-        // --- E. RENDER LOOP ---
+        // --- E. RENDER ---
         for (let p = 0; p < totalPages; p++) {
             if (p > 0) doc.addPage();
             let y = 15;
 
-            // 1. HEADER
+            // Header
             doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
             doc.text(h2, PAGE_W/2, y, { align: 'center' });
             y += 6;
@@ -15227,10 +15227,9 @@ function generateRemunerationBillPDF() {
             doc.text(pStream, PAGE_W/2, y, { align: 'center' });
             y += 10;
 
-            // 2. TABLE HEADER
+            // Table Header
             doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
             doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
-            
             doc.setFontSize(8); doc.setFont("helvetica", "bold");
             headers.forEach((h, i) => {
                 const cx = getX(i) + (colWidths[i]/2);
@@ -15240,50 +15239,38 @@ function generateRemunerationBillPDF() {
             doc.rect(MARGIN, y, CONTENT_W, 8); 
             y += 8;
 
-            // 3. TABLE ROWS
+            // Rows
             const startIdx = p * ROWS_PER_PAGE;
             const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
             const pageRows = rows.slice(startIdx, endIdx);
 
             doc.setFont("helvetica", "normal");
-            
             pageRows.forEach(row => {
-                // Calculate max height
                 let maxLines = 1;
                 row.forEach((cell, i) => {
-                    const cellWidth = colWidths[i] - 2; 
-                    const lines = doc.splitTextToSize(cell, cellWidth);
+                    const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
                     if (lines.length > maxLines) maxLines = lines.length;
                 });
                 
-                // Dynamic Row Height (Base 6mm + 3.5mm per extra line)
                 const rowH = 6 + ((maxLines - 1) * 3.5);
 
-                // Page Break Check
                 if (y + rowH > PAGE_H - MARGIN) {
                     doc.addPage();
                     y = MARGIN; 
                 }
 
-                // Draw Cells
                 row.forEach((cell, i) => {
                     const cx = getX(i) + (colWidths[i]/2);
-                    let ty = y + 4; // Base Y for single line
+                    let ty = y + 4; 
                     
                     doc.setFontSize(8);
                     if (i === row.length - 1) doc.setFont("helvetica", "bold");
                     else doc.setFont("helvetica", "normal");
 
                     const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                    
-                    // Adjust Y for multiline to center it vertically
-                    if (lines.length > 1) {
-                        const totalTextH = lines.length * 2.8; // Approx height of text block
-                        ty = y + (rowH / 2) - (totalTextH / 2) + 2; 
-                    }
+                    if (lines.length > 1) ty = y + (rowH / 2) - ((lines.length * 2.8) / 2) + 2; 
                     
                     doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
-
                     if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
                 });
 
@@ -15291,20 +15278,17 @@ function generateRemunerationBillPDF() {
                 y += rowH;
             });
 
-            // 4. FOOTER (Last Page Only)
+            // Footer (Last Page)
             if (p === totalPages - 1) {
-                // A. Subtotals
                 doc.setFont("helvetica", "bold");
                 doc.rect(MARGIN, y, CONTENT_W, 8);
                 
                 const valsReversed = [...footerValues].reverse();
-                
-                // Draw Total (Last Col)
                 const totalColIdx = colWidths.length - 1;
+                
                 doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
                 doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); 
 
-                // Draw Other Cols
                 for(let k=1; k < valsReversed.length; k++) {
                     const colIdx = totalColIdx - k;
                     if(colIdx > 1) { 
@@ -15316,29 +15300,37 @@ function generateRemunerationBillPDF() {
 
                 y += 12;
 
-                // --- B. BREAKDOWN BOXES (Dynamic Height Logic) ---
-                doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                
-                // Measure text height to determine box height
+                // --- BREAKDOWN BOXES (FIXED OVERLAP) ---
                 const boxW = (CONTENT_W / 2) - 3;
-                const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
-                const allowLines = allowances.map(l => doc.splitTextToSize(l, boxW - 6)).flat();
                 
-                // Calculate required height (lines * line_height + padding)
-                const h1 = (supLines.length * 4) + 15;
-                const h2 = (allowances.length * 5) + 15;
-                const boxH = Math.max(h1, h2, 35); // Min 35mm
+                // 1. Calculate Content Heights First
+                doc.setFontSize(8);
+                const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
+                
+                // Calculate height for Allowances safely
+                let allowTotalH = 0;
+                const allowItems = [];
+                allowances.forEach(l => {
+                    // Force splitting to ensure it fits width
+                    const itemLines = doc.splitTextToSize(l, boxW - 6);
+                    allowItems.push(itemLines);
+                    allowTotalH += (itemLines.length * 4) + 2; // Height per item
+                });
 
-                // Supervision Box
+                const h1 = (supLines.length * 4) + 15;
+                const h2 = allowTotalH + 15;
+                const boxH = Math.max(h1, h2, 35); // Ensure equal height
+
+                // Draw Box 1 (Supervision)
                 doc.setDrawColor(0);
                 doc.rect(MARGIN, y, boxW, boxH);
-                doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                doc.setFont("helvetica", "bold"); doc.setFontSize(9);
                 doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
                 
                 doc.setFontSize(8); doc.setFont("helvetica", "normal");
                 doc.text(supLines, MARGIN + 3, y + 10);
 
-                // Allowances Box
+                // Draw Box 2 (Allowances)
                 const box2X = MARGIN + boxW + 6;
                 doc.rect(box2X, y, boxW, boxH);
                 doc.setFont("helvetica", "bold"); doc.setFontSize(9);
@@ -15346,21 +15338,22 @@ function generateRemunerationBillPDF() {
                 
                 doc.setFontSize(8); doc.setFont("helvetica", "normal");
                 let ay = y + 10;
-                allowances.forEach(line => {
-                    doc.text(line, box2X + 3, ay);
-                    ay += 5; // Spacing between items
+                
+                allowItems.forEach(lines => {
+                    doc.text(lines, box2X + 3, ay);
+                    ay += (lines.length * 4) + 2; // Dynamic move down
                 });
 
                 y += boxH + 8;
 
-                // C. Grand Total
+                // Grand Total
                 doc.setFontSize(14); doc.setFont("helvetica", "bold");
                 doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
                 y += 6;
                 doc.setFontSize(10); doc.setFont("helvetica", "italic");
                 doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
 
-                // D. Signature
+                // Signature
                 y += 20;
                 doc.setLineWidth(0.2);
                 doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
@@ -15368,7 +15361,6 @@ function generateRemunerationBillPDF() {
                 doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
             }
             
-            // Page Number
             doc.setFontSize(8); doc.setFont("helvetica", "italic");
             doc.text(`Page ${p+1} of ${totalPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
         }
@@ -15380,13 +15372,11 @@ function generateRemunerationBillPDF() {
         console.error("PDF Error:", e);
         alert("Error creating PDF: " + e.message);
     } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg> Download PDF`; 
-        }
+        if(btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
     }
 }
+
+
 
 
     
