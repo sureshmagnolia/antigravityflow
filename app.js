@@ -1958,8 +1958,7 @@ function generateDayWisePDF() {
     }
 }
 //------------------------------------------------------------------
-
-// --- ROOM STICKERS PDF (2 Per Page - Boxed Columns, No Header Box, Session Info) ---
+// --- ROOM STICKERS PDF (2 Per Page - Fixed Header & Location Format) ---
 function generateRoomStickersPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1984,6 +1983,11 @@ function generateRoomStickersPDF() {
         const TOP_Y = 10;
         const BOT_Y = 10 + STICKER_H + 10; 
 
+        // --- PREPARE SERIAL MAPS (For Lookup) ---
+        // We need this to find the serial number based on the room name
+        // We'll generate maps for all sessions present in the stickers
+        const sessionSerialMaps = {};
+        
         pages.forEach((pageEl, pageIndex) => {
             if (pageIndex > 0) doc.addPage();
 
@@ -2001,14 +2005,42 @@ function generateRoomStickersPDF() {
                 // --- 2. HEADER ---
                 const headerDiv = stickerEl.firstElementChild;
                 const collegeName = headerDiv.querySelector('h1')?.innerText.trim() || "";
-                const dateText = headerDiv.querySelector('div.text-gray-400, div.text-\\[9pt\\]')?.innerText.trim() || ""; 
+                
+                // FIX: Better selector for Date/Time (2nd child div)
+                const dateDiv = headerDiv.children[1]; 
+                const dateText = dateDiv ? dateDiv.innerText.trim() : "";
+                
+                // Room Text from HTML (might be "Loc (Room)" or "Room")
                 const roomSpan = headerDiv.querySelector('span')?.innerText.trim() || "";
 
-                // Calculate Session
-                let sessionSuffix = "";
-                const t = dateText.toUpperCase();
-                if(t.includes("AM")) sessionSuffix = " (FN)";
-                else if(t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:")) sessionSuffix = " (AN)";
+                // --- RE-CALCULATE HEADER DISPLAY ---
+                // Try to extract real room name to find serial number
+                let roomName = roomSpan;
+                const parenMatch = roomSpan.match(/\((.*?)\)/);
+                if (parenMatch) {
+                    // If format is "Location (Room 1)", extract "Room 1"
+                    roomName = parenMatch[1]; 
+                }
+
+                // Get Serial No
+                let serialNo = "?";
+                if (typeof getRoomSerialMap === 'function') {
+                    if (!sessionSerialMaps[dateText]) {
+                        sessionSerialMaps[dateText] = getRoomSerialMap(dateText);
+                    }
+                    if (sessionSerialMaps[dateText]) {
+                        serialNo = sessionSerialMaps[dateText][roomName] || "?";
+                    }
+                }
+
+                // Get Location
+                const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
+                const location = roomInfo.location || "";
+
+                // FORMAT: "Location (Serial)" OR "Room (Serial)"
+                // "No Room Number needed" means we prefer Location.
+                const mainLabel = location ? location : roomName;
+                const displayTitle = `${mainLabel} (${serialNo})`;
 
                 let y = startY + 8;
                 
@@ -2017,15 +2049,17 @@ function generateRoomStickersPDF() {
                 doc.text(collegeName, PAGE_W / 2, y, { align: 'center' });
                 y += 5;
 
-                // Date + Session (Added)
+                // Date (Session Info)
                 doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(dateText + sessionSuffix, PAGE_W / 2, y, { align: 'center' });
+                doc.text(dateText, PAGE_W / 2, y, { align: 'center' });
                 y += 8;
 
-                // Room Name (Box Removed, Font Larger)
-                doc.setFontSize(14); doc.setFont("helvetica", "bold");
-                doc.text(roomSpan, PAGE_W / 2, y + 2, { align: 'center' });
-                y += 10;
+                // Room/Location Box (Replaced Text)
+                doc.setDrawColor(0); doc.setLineWidth(0.2);
+                doc.rect((PAGE_W/2) - 45, y, 90, 9); // Box for room
+                doc.setFontSize(12); doc.setFont("helvetica", "bold");
+                doc.text(displayTitle, PAGE_W / 2, y + 6, { align: 'center' });
+                y += 14;
 
                 // --- 3. COURSE BLOCKS ---
                 const bodyDiv = stickerEl.children[1]; 
@@ -2058,7 +2092,7 @@ function generateRoomStickersPDF() {
 
                     currentBlockY += 6;
 
-                    // --- STUDENT GRID (BOXED) ---
+                    // --- STUDENT GRID ---
                     const gridDiv = block.children[1];
                     const studentRows = gridDiv ? gridDiv.querySelectorAll('div[style*="display: grid"]') : [];
                     
@@ -2076,9 +2110,8 @@ function generateRoomStickersPDF() {
 
                         const xBase = MARGIN_X + 2 + (colIndex * cellW);
                         
-                        // --- DRAW BLACK BOX AROUND ENTRY ---
-                        doc.setDrawColor(0); 
-                        doc.setLineWidth(0.15); 
+                        // Draw Box
+                        doc.setDrawColor(0); doc.setLineWidth(0.15); 
                         doc.rect(xBase, rowY, cellW - 1, 6); 
 
                         // Text
@@ -2088,7 +2121,7 @@ function generateRoomStickersPDF() {
                         doc.setFont("helvetica", "normal");
                         doc.text(reg, xBase + 10, rowY + 4); 
                         
-                        // Name (Truncate to fit box)
+                        // Name
                         let dName = name;
                         if(doc.getTextWidth(dName) > (cellW - 35)) dName = dName.substring(0, 12) + "..";
                         doc.text(dName, xBase + 35, rowY + 4);
@@ -2128,6 +2161,7 @@ function generateRoomStickersPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
+
 
 
     
