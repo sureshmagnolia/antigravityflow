@@ -1301,9 +1301,9 @@ window.downloadReportPDF = function() {
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
-    console.log("📄 Generating PDF for type:", reportType);
+    console.log("📄 Requesting PDF for:", reportType);
 
-    // 1. Room-wise Report
+    // 1. Room-wise Seating Report
     if (reportType === "Roomwise_Seating_Report") {
         if(typeof generateRoomWisePDF === 'function') {
             generateRoomWisePDF();
@@ -1323,22 +1323,26 @@ window.downloadReportPDF = function() {
         return;
     }
 
-    // 3. QP Distribution Report (NEW)
-    if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
-        if(typeof generateQPDistributionPDF === 'function') {
-            generateQPDistributionPDF();
-        } else {
-            alert("QP Distribution PDF generator not loaded. Please reload.");
-        }
-        return;
-    }
-
-    // 3. Question Paper Report (Room-Wise)
-    if (reportType === "Question_Paper_Report" || reportType === "Roomwise_QP_Report") {
+    // 3. Question Paper Report (Room-Wise QP Count)
+    // ADDED: "Question_Paper_Summary" to the check
+    if (reportType === "Question_Paper_Report" || 
+        reportType === "Roomwise_QP_Report" || 
+        reportType === "Question_Paper_Summary") {
+        
         if(typeof generateQuestionPaperReportPDF === 'function') {
             generateQuestionPaperReportPDF();
         } else {
             alert("QP Report generator not loaded.");
+        }
+        return;
+    }
+
+    // 4. QP Distribution Report (Aggregate Count)
+    if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
+        if(typeof generateQPDistributionPDF === 'function') {
+            generateQPDistributionPDF();
+        } else {
+            alert("QP Distribution PDF generator not loaded.");
         }
         return;
     }
