@@ -1296,6 +1296,7 @@ function updateLocalSlotsFromStudents() {
     });
 
 // --- MASTER PDF ROUTER ---
+
 window.downloadReportPDF = function() {
     const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
                      ? lastGeneratedReportType 
@@ -1303,53 +1304,49 @@ window.downloadReportPDF = function() {
 
     console.log("📄 Requesting PDF for:", reportType);
 
-    // 1. Room-wise Seating Report
     if (reportType === "Roomwise_Seating_Report") {
-        if(typeof generateRoomWisePDF === 'function') {
-            generateRoomWisePDF();
-        } else {
-            alert("Room-wise PDF generator not loaded.");
-        }
+        if(typeof generateRoomWisePDF === 'function') generateRoomWisePDF();
+        else alert("Room-wise PDF generator not loaded.");
         return;
     }
 
-    // 2. Day-wise (Seating Details) Report
     if (reportType === "Daywise_Seating_Details") {
-        if(typeof generateDayWisePDF === 'function') {
-            generateDayWisePDF();
+        if(typeof generateDayWisePDF === 'function') generateDayWisePDF();
+        else alert("Day-wise PDF generator not loaded.");
+        return;
+    }
+
+    // 3. Question Paper Summary (Stream-Wise)
+    if (reportType === "Question_Paper_Summary") {
+        if(typeof generateQuestionPaperSummaryPDF === 'function') {
+            generateQuestionPaperSummaryPDF();
         } else {
-            alert("Day-wise PDF generator not loaded.");
+            alert("QP Summary generator not loaded.");
         }
         return;
     }
 
-    // 3. Question Paper Report (Room-Wise QP Count)
-    // ADDED: "Question_Paper_Summary" to the check
-    if (reportType === "Question_Paper_Report" || 
-        reportType === "Roomwise_QP_Report" || 
-        reportType === "Question_Paper_Summary") {
-        
+    // 4. Room-Wise QP Report (Detailed)
+    if (reportType === "Question_Paper_Report" || reportType === "Roomwise_QP_Report") {
         if(typeof generateQuestionPaperReportPDF === 'function') {
             generateQuestionPaperReportPDF();
         } else {
-            alert("QP Report generator not loaded.");
+            alert("Room-wise QP generator not loaded.");
         }
         return;
     }
 
-    // 4. QP Distribution Report (Aggregate Count)
+    // 5. Aggregate Distribution
     if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
-        if(typeof generateQPDistributionPDF === 'function') {
-            generateQPDistributionPDF();
-        } else {
-            alert("QP Distribution PDF generator not loaded.");
-        }
+        if(typeof generateQPDistributionPDF === 'function') generateQPDistributionPDF();
+        else alert("QP Distribution PDF generator not loaded.");
         return;
     }
 
-    // Fallback
-    alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
+    alert("PDF generation for '" + reportType + "' is coming next!");
 };
+
+    
 
 
 // --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Fixes: QP Codes & Layout) ---
