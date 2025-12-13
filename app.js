@@ -1958,7 +1958,7 @@ function generateDayWisePDF() {
     }
 }
 //------------------------------------------------------------------
-// --- ROOM STICKERS PDF (Final Polish: No Header Box, No Question Marks) ---
+// --- ROOM STICKERS PDF (2 Per Page - Boxed Columns, Session Info, Stream, No Location Box) ---
 function generateRoomStickersPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1983,7 +1983,7 @@ function generateRoomStickersPDF() {
         const TOP_Y = 10;
         const BOT_Y = 10 + STICKER_H + 10; 
 
-        // Cache Serial Maps to avoid repeated lookups
+        // Cache Serial Maps
         const sessionSerialMaps = {};
 
         pages.forEach((pageEl, pageIndex) => {
@@ -2011,57 +2011,74 @@ function generateRoomStickersPDF() {
                 // Room info from HTML
                 const roomSpan = headerDiv.querySelector('span')?.innerText.trim() || "";
 
-                // --- SERIAL & LOCATION LOGIC ---
-                // 1. Extract raw Room Name (e.g. from "Loc (Room 1)" -> "Room 1")
-                let roomName = roomSpan;
-                const parenMatch = roomSpan.match(/\((.*?)\)/);
-                if (parenMatch) {
-                    roomName = parenMatch[1]; 
+                // --- STREAM LOOKUP (NEW) ---
+                let streamText = "";
+                // Look into the first course block to find a course name
+                const firstCourseBlock = stickerEl.querySelector('div[style*="border: 1px solid"]');
+                if (firstCourseBlock) {
+                    const blockHeader = firstCourseBlock.firstElementChild;
+                    // Course name is the first text node
+                    const cNameNode = blockHeader.childNodes[0];
+                    const cName = cNameNode ? cNameNode.textContent.trim() : "";
+                    
+                    if (cName && typeof allStudentData !== 'undefined') {
+                        // Find a student with this course to get the stream
+                        const student = allStudentData.find(s => s.Course === cName);
+                        if (student && student.Stream) {
+                            streamText = student.Stream;
+                        }
+                    }
                 }
 
-                // 2. Get Serial No
+                // --- SERIAL & LOCATION LOGIC ---
+                let roomName = roomSpan;
+                const parenMatch = roomSpan.match(/\((.*?)\)/);
+                if (parenMatch) roomName = parenMatch[1]; 
+
                 let serialNo = "";
                 if (typeof getRoomSerialMap === 'function') {
                     if (!sessionSerialMaps[dateText]) {
                         sessionSerialMaps[dateText] = getRoomSerialMap(dateText);
                     }
                     if (sessionSerialMaps[dateText]) {
-                        // Get value, default to empty if not found
                         const val = sessionSerialMaps[dateText][roomName];
                         if (val !== undefined && val !== null) serialNo = val;
                     }
                 }
 
-                // 3. Get Location Config
                 const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
                 const location = roomInfo.location || "";
 
-                // 4. Construct Title: "Location (Serial)" or "Room (Serial)"
-                // Priority: Location > RoomName
+                // Format: Location (Serial) or Room (Serial)
                 const mainLabel = location ? location : roomName;
-                
-                // Only add serial if it exists
                 const displayTitle = serialNo ? `${mainLabel} (${serialNo})` : mainLabel;
+
+                // Session Suffix
+                let sessionSuffix = "";
+                const t = dateText.toUpperCase();
+                if(t.includes("AM")) sessionSuffix = " (FN)";
+                else if(t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:") || t.includes("15:") || t.includes("16:")) sessionSuffix = " (AN)";
 
                 let y = startY + 8;
                 
                 // College
                 doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                 doc.text(collegeName, PAGE_W / 2, y, { align: 'center' });
+                
+                // Stream (Top Right)
+                if (streamText) {
+                    doc.setFontSize(10);
+                    doc.text(streamText, MARGIN_X + STICKER_W - 5, y, { align: 'right' });
+                }
+                
                 y += 5;
 
-                // Date/Session
-                // Add Session Suffix (FN/AN)
-                let sessionSuffix = "";
-                const t = dateText.toUpperCase();
-                if(t.includes("AM")) sessionSuffix = " (FN)";
-                else if(t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:")) sessionSuffix = " (AN)";
-
+                // Date + Session
                 doc.setFontSize(10); doc.setFont("helvetica", "normal");
                 doc.text(dateText + sessionSuffix, PAGE_W / 2, y, { align: 'center' });
-                y += 10;
+                y += 8;
 
-                // Room Title (NO BOX, CENTERED, BOLD)
+                // Room Title (NO BOX)
                 doc.setFontSize(14); doc.setFont("helvetica", "bold");
                 doc.text(displayTitle, PAGE_W / 2, y, { align: 'center' });
                 y += 8;
@@ -2115,7 +2132,7 @@ function generateRoomStickersPDF() {
 
                         const xBase = MARGIN_X + 2 + (colIndex * cellW);
                         
-                        // Black Box per Student
+                        // DRAW BLACK BOX
                         doc.setDrawColor(0); 
                         doc.setLineWidth(0.15); 
                         doc.rect(xBase, rowY, cellW - 1, 6); 
@@ -2127,7 +2144,7 @@ function generateRoomStickersPDF() {
                         doc.setFont("helvetica", "normal");
                         doc.text(reg, xBase + 10, rowY + 4); 
                         
-                        // Name Truncate
+                        // Name
                         let dName = name;
                         if(doc.getTextWidth(dName) > (cellW - 35)) dName = dName.substring(0, 12) + "..";
                         doc.text(dName, xBase + 35, rowY + 4);
@@ -2168,6 +2185,8 @@ function generateRoomStickersPDF() {
     }
 }
 
+
+    
 
 
     
