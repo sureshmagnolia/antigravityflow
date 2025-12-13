@@ -1555,7 +1555,7 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-// --- ULTIMATE PDF GENERATOR: "SCR" SEAT & BOLD SUMMARY ---
+// --- ULTIMATE PDF GENERATOR: ACCESSIBLE SCRIBE SUMMARY ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1572,6 +1572,7 @@ function generateDayWisePDF() {
         
         // --- 2. CONFIGURATION ---
         const PAGE_H = 297;
+        const PAGE_W = 210;
         const MARGIN = 10;
         const COL_GAP = 5;
         const ROW_H = 6;
@@ -1579,7 +1580,7 @@ function generateDayWisePDF() {
         const COL_HEADER_H = 7;
         
         // Grid Dimensions
-        const USABLE_W = 210 - (MARGIN * 2);
+        const USABLE_W = PAGE_W - (MARGIN * 2);
         const COL_W = (USABLE_W - COL_GAP) / 2; 
         
         // Column Offsets (Precision Grid)
@@ -1594,7 +1595,6 @@ function generateDayWisePDF() {
 
         // --- 3. HELPER FUNCTIONS ---
 
-        // Helper: Fit text strictly inside a box (Wrap -> Scale -> Center)
         const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 8) => {
             if (!text) return;
             
@@ -1602,26 +1602,23 @@ function generateDayWisePDF() {
             let fontSize = maxFontSize;
             let lines = [];
             
-            // 1. Shrink-to-Fit Logic
+            // Shrink-to-Fit Logic
             while (fontSize > 4) {
                 doc.setFontSize(fontSize);
                 lines = doc.splitTextToSize(String(text), w - 2); 
                 const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
                 
-                if (blockHeight <= (h - 1)) { 
-                    break; 
-                }
+                if (blockHeight <= (h - 1)) break; 
                 fontSize -= 0.5;
             }
             
             doc.setFontSize(fontSize);
             
-            // 2. Vertical Centering
+            // Vertical Centering
             const lineHeight = fontSize * 0.3527 * 1.2;
             const totalH = lines.length * lineHeight;
             let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
 
-            // 3. Draw
             lines.forEach((line) => {
                 if (align === "center") {
                     doc.text(line, x + (w / 2), startY, { align: "center" });
@@ -1717,7 +1714,6 @@ function generateDayWisePDF() {
                         loc: locText,
                         reg: s['Register Number'],
                         name: s.Name,
-                        // CHANGE 1: If Scribe, show "SCR"
                         seat: isScribe ? "SCR" : s.seatNumber,
                         isScribe: isScribe
                     });
@@ -1763,7 +1759,7 @@ function generateDayWisePDF() {
                     pageCount++;
                 }
 
-                // --- SCRIBE SUMMARY (Improved Legibility) ---
+                // --- SCRIBE SUMMARY (Large Font for Accessibility) ---
                 if (sData.scribes.length > 0) {
                     doc.addPage();
                     let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
@@ -1779,46 +1775,59 @@ function generateDayWisePDF() {
                     
                     // Scribe Header
                     doc.setFillColor(220); doc.setDrawColor(0);
-                    doc.rect(MARGIN, sY, USABLE_W, 8, 'FD');
-                    doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                    doc.text("Room Location", MARGIN + 2, sY + 5);
-                    doc.text("Candidates", MARGIN + 52, sY + 5); 
-                    sY += 8;
+                    doc.rect(MARGIN, sY, USABLE_W, 10, 'FD'); // Taller header
+                    doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
+                    doc.text("Room Location", MARGIN + 2, sY + 6.5);
+                    doc.text("Candidates", MARGIN + 52, sY + 6.5); 
+                    sY += 10;
 
                     sRows.forEach(r => {
                         const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
                         const loc = info.location ? `${r}\n(${info.location})` : r;
                         const cands = map[r].join(', ');
                         
-                        // Strict Widths
                         const W_ROOM = 48; 
                         const W_CAND = USABLE_W - W_ROOM;
 
-                        // CHANGE 2: Calculate Height using BOLD, LARGER font (10pt) for Candidates
-                        doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                        // Calculate Height (Based on 12pt Bold for Candidates)
+                        doc.setFontSize(12); doc.setFont("helvetica", "bold");
                         const candLines = doc.splitTextToSize(cands, W_CAND - 2);
+                        const candLineHeight = 6.5; 
+                        const hCand = candLines.length * candLineHeight;
                         
-                        doc.setFontSize(9); doc.setFont("helvetica", "bold"); // Room font
+                        doc.setFontSize(10); doc.setFont("helvetica", "bold"); 
                         const locLines = doc.splitTextToSize(loc, W_ROOM - 2);
-                        
                         const hLoc = locLines.length * 5;
-                        const hCand = candLines.length * 6; // slightly taller line height for 10pt
-                        const rowH = Math.max(10, hLoc + 4, hCand + 4); // Min height 10mm
+                        
+                        const rowH = Math.max(12, hLoc + 4, hCand + 4);
 
-                        // Draw Room (Vertically Centered)
+                        // Check Page Break
+                        if (sY + rowH > PAGE_H - 15) {
+                            doc.addPage();
+                            sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
+                            doc.setFillColor(220); doc.setDrawColor(0);
+                            doc.rect(MARGIN, sY, USABLE_W, 10, 'FD');
+                            doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
+                            doc.text("Room Location", MARGIN + 2, sY + 6.5);
+                            doc.text("Candidates", MARGIN + 52, sY + 6.5); 
+                            sY += 10;
+                        }
+
+                        // Draw Room
                         const roomCenterY = sY + (rowH/2);
-                        drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true, 9);
+                        drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true, 10);
 
-                        // Draw Candidates (Bold & Big)
+                        // Draw Candidates (12pt Bold)
                         doc.setFont("helvetica", "bold");
-                        doc.setFontSize(10);
-                        let cY = sY + 5; // Start slightly lower
+                        doc.setFontSize(12);
+                        let cY = sY + 5; 
                         candLines.forEach(line => {
-                            doc.text(line, MARGIN + 50, cY);
-                            cY += 6;
+                            doc.text(line, MARGIN + 50, cY + 2);
+                            cY += candLineHeight;
                         });
 
                         // Borders
+                        doc.setDrawColor(0);
                         doc.rect(MARGIN, sY, USABLE_W, rowH); 
                         doc.line(MARGIN + 50, sY, MARGIN + 50, sY + rowH); 
 
@@ -1829,11 +1838,10 @@ function generateDayWisePDF() {
             });
         });
 
-        // --- INTERNAL HELPER: DRAW COLUMN ---
+        // --- HELPER: DRAW COLUMN CONTENT ---
         function drawDataColumn(pdf, rows, xBase, yStart, colW, rowH, headerH) {
             let y = yStart;
             
-            // X Coordinates
             const xLoc  = xBase + OFF_LOC;
             const xReg  = xBase + OFF_REG;
             const xName = xBase + OFF_NAME;
@@ -1855,19 +1863,16 @@ function generateDayWisePDF() {
                 mergeMap[i].span = span;
             }
 
-            // Draw Loop
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
                 
                 if (row.type === 'header') {
-                    // Course Header
                     pdf.setFillColor(0); 
                     pdf.rect(xBase, y, colW, headerH, 'F');
                     pdf.setTextColor(255);
                     drawSmartText(row.text, xBase + 2, y + (headerH/2), colW - 4, headerH, "left", true, 9);
                     y += headerH;
                 } else {
-                    // Student Row
                     pdf.setDrawColor(0); 
                     pdf.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); 
 
@@ -1887,16 +1892,10 @@ function generateDayWisePDF() {
                         pdf.line(xBase, y, xBase, blockBottomY); 
                     }
 
-                    // REG
                     drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true, 8);
-
-                    // NAME
                     drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe, 8);
-
-                    // SEAT
                     drawSmartText(String(row.seat), xSeat, rowCenterY, W_SEAT, rowH, "center", true, 8);
 
-                    // BORDERS
                     const lineY = y + rowH;
                     pdf.line(xBase + W_LOC, lineY, xBase + colW, lineY); 
                     pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY); 
