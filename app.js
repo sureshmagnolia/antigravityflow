@@ -1555,7 +1555,7 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-// --- ULTIMATE PDF GENERATOR: VERTICAL CENTER, SMART FIT, & ZERO OVERFLOW ---
+// --- ULTIMATE PDF GENERATOR: "SCR" SEAT & BOLD SUMMARY ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1578,10 +1578,11 @@ function generateDayWisePDF() {
         const COURSE_HEADER_H = 7;
         const COL_HEADER_H = 7;
         
+        // Grid Dimensions
         const USABLE_W = 210 - (MARGIN * 2);
-        const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm
+        const COL_W = (USABLE_W - COL_GAP) / 2; 
         
-        // Column Offsets & Widths
+        // Column Offsets (Precision Grid)
         const OFF_LOC = 0;  const W_LOC = 25;
         const OFF_REG = 25; const W_REG = 30;
         const OFF_NAME= 55; const W_NAME= 30;
@@ -1594,21 +1595,20 @@ function generateDayWisePDF() {
         // --- 3. HELPER FUNCTIONS ---
 
         // Helper: Fit text strictly inside a box (Wrap -> Scale -> Center)
-        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
+        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 8) => {
             if (!text) return;
             
             doc.setFont("helvetica", isBold ? "bold" : "normal");
-            let fontSize = 8;
+            let fontSize = maxFontSize;
             let lines = [];
             
-            // 1. Try to wrap at current font size
-            // Reduce font until the wrapped block fits vertically
+            // 1. Shrink-to-Fit Logic
             while (fontSize > 4) {
                 doc.setFontSize(fontSize);
-                lines = doc.splitTextToSize(String(text), w - 2); // -2 for padding
-                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); // pt to mm approx
+                lines = doc.splitTextToSize(String(text), w - 2); 
+                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
                 
-                if (blockHeight <= (h - 2)) { // -2 padding vertically
+                if (blockHeight <= (h - 1)) { 
                     break; 
                 }
                 fontSize -= 0.5;
@@ -1616,12 +1616,12 @@ function generateDayWisePDF() {
             
             doc.setFontSize(fontSize);
             
-            // 2. Calculate Start Y to center vertically
+            // 2. Vertical Centering
             const lineHeight = fontSize * 0.3527 * 1.2;
             const totalH = lines.length * lineHeight;
-            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); // Adjust baseline
+            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
 
-            // 3. Draw Lines
+            // 3. Draw
             lines.forEach((line) => {
                 if (align === "center") {
                     doc.text(line, x + (w / 2), startY, { align: "center" });
@@ -1698,7 +1698,6 @@ function generateDayWisePDF() {
                     return a['Register Number'].localeCompare(b['Register Number']);
                 });
 
-                // Flatten Data & Calculate Merges
                 const printRows = [];
                 let lastCourse = "";
                 
@@ -1711,14 +1710,16 @@ function generateDayWisePDF() {
                     const roomName = s['Room No'];
                     const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
                     const locText = roomInfo.location ? `${roomName} (${roomInfo.location})` : roomName;
+                    const isScribe = scribeRegNos.has(s['Register Number']);
 
                     printRows.push({
                         type: 'data',
                         loc: locText,
                         reg: s['Register Number'],
                         name: s.Name,
-                        seat: s.seatNumber,
-                        isScribe: scribeRegNos.has(s['Register Number'])
+                        // CHANGE 1: If Scribe, show "SCR"
+                        seat: isScribe ? "SCR" : s.seatNumber,
+                        isScribe: isScribe
                     });
                 });
 
@@ -1762,7 +1763,7 @@ function generateDayWisePDF() {
                     pageCount++;
                 }
 
-                // MANUAL SCRIBE TABLE (Fixes Overflow)
+                // --- SCRIBE SUMMARY (Improved Legibility) ---
                 if (sData.scribes.length > 0) {
                     doc.addPage();
                     let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
@@ -1781,7 +1782,7 @@ function generateDayWisePDF() {
                     doc.rect(MARGIN, sY, USABLE_W, 8, 'FD');
                     doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
                     doc.text("Room Location", MARGIN + 2, sY + 5);
-                    doc.text("Candidates", MARGIN + 52, sY + 5); // Shifted
+                    doc.text("Candidates", MARGIN + 52, sY + 5); 
                     sY += 8;
 
                     sRows.forEach(r => {
@@ -1793,31 +1794,33 @@ function generateDayWisePDF() {
                         const W_ROOM = 48; 
                         const W_CAND = USABLE_W - W_ROOM;
 
-                        // Calculate Height needed
-                        doc.setFontSize(9);
-                        const locLines = doc.splitTextToSize(loc, W_ROOM - 2);
+                        // CHANGE 2: Calculate Height using BOLD, LARGER font (10pt) for Candidates
+                        doc.setFontSize(10); doc.setFont("helvetica", "bold");
                         const candLines = doc.splitTextToSize(cands, W_CAND - 2);
                         
+                        doc.setFontSize(9); doc.setFont("helvetica", "bold"); // Room font
+                        const locLines = doc.splitTextToSize(loc, W_ROOM - 2);
+                        
                         const hLoc = locLines.length * 5;
-                        const hCand = candLines.length * 5;
-                        const rowH = Math.max(8, hLoc + 4, hCand + 4); // Max height
+                        const hCand = candLines.length * 6; // slightly taller line height for 10pt
+                        const rowH = Math.max(10, hLoc + 4, hCand + 4); // Min height 10mm
 
                         // Draw Room (Vertically Centered)
                         const roomCenterY = sY + (rowH/2);
-                        doc.setFont("helvetica", "bold");
-                        drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true);
+                        drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true, 9);
 
-                        // Draw Candidates
-                        doc.setFont("helvetica", "normal");
-                        let cY = sY + 4;
+                        // Draw Candidates (Bold & Big)
+                        doc.setFont("helvetica", "bold");
+                        doc.setFontSize(10);
+                        let cY = sY + 5; // Start slightly lower
                         candLines.forEach(line => {
                             doc.text(line, MARGIN + 50, cY);
-                            cY += 5;
+                            cY += 6;
                         });
 
                         // Borders
-                        doc.rect(MARGIN, sY, USABLE_W, rowH); // Outer
-                        doc.line(MARGIN + 50, sY, MARGIN + 50, sY + rowH); // Divider
+                        doc.rect(MARGIN, sY, USABLE_W, rowH); 
+                        doc.line(MARGIN + 50, sY, MARGIN + 50, sY + rowH); 
 
                         sY += rowH;
                     });
@@ -1836,31 +1839,23 @@ function generateDayWisePDF() {
             const xName = xBase + OFF_NAME;
             const xSeat = xBase + OFF_SEAT;
 
-            // 1. Calculate Merges for this specific page column
-            // We scan the 'rows' array to find contiguous groups
+            // Merging Pre-Calculation
             const mergeMap = []; 
-            // mergeMap[i] = { span: N, isStart: boolean }
-            
-            for(let i=0; i<rows.length; i++) {
-                mergeMap[i] = { span: 1, isStart: true, skip: false };
-            }
+            for(let i=0; i<rows.length; i++) mergeMap[i] = { span: 1, isStart: true, skip: false };
 
             for(let i=0; i<rows.length; i++) {
                 if (rows[i].type !== 'data' || mergeMap[i].skip) continue;
-                
                 let span = 1;
                 for(let j=i+1; j<rows.length; j++) {
                     if (rows[j].type === 'data' && rows[j].loc === rows[i].loc) {
                         span++;
-                        mergeMap[j].skip = true; // Mark as part of merge
-                    } else {
-                        break;
-                    }
+                        mergeMap[j].skip = true;
+                    } else break;
                 }
                 mergeMap[i].span = span;
             }
 
-            // 2. Draw Loop
+            // Draw Loop
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
                 
@@ -1869,7 +1864,7 @@ function generateDayWisePDF() {
                     pdf.setFillColor(0); 
                     pdf.rect(xBase, y, colW, headerH, 'F');
                     pdf.setTextColor(255);
-                    drawSmartText(row.text, xBase + 2, y + (headerH/2), colW - 4, headerH, "left", true);
+                    drawSmartText(row.text, xBase + 2, y + (headerH/2), colW - 4, headerH, "left", true, 9);
                     y += headerH;
                 } else {
                     // Student Row
@@ -1878,48 +1873,40 @@ function generateDayWisePDF() {
 
                     const rowCenterY = y + (rowH / 2);
 
-                    // LOC: Only draw if it's the start of a merge block
+                    // LOC: Merged Drawing
                     if (!mergeMap[i].skip) {
                         const span = mergeMap[i].span;
                         const totalMergeH = span * rowH;
                         const mergeCenterY = y + (totalMergeH / 2);
                         
-                        // Draw Scaled & Centered Loc
-                        drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center");
+                        drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
                         
-                        // Draw Loc Border (Right & Bottom of the whole block)
                         const blockBottomY = y + totalMergeH;
-                        pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); // Bottom Loc
-                        pdf.line(xBase + W_LOC, y, xBase + W_LOC, blockBottomY); // Right Loc
-                        pdf.line(xBase, y, xBase, blockBottomY); // Left Loc
+                        pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); 
+                        pdf.line(xBase + W_LOC, y, xBase + W_LOC, blockBottomY); 
+                        pdf.line(xBase, y, xBase, blockBottomY); 
                     }
 
                     // REG
-                    drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true);
+                    drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true, 8);
 
                     // NAME
-                    drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe);
+                    drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe, 8);
 
                     // SEAT
-                    drawSmartText(String(row.seat), xSeat, rowCenterY, W_SEAT, rowH, "center", true);
+                    drawSmartText(String(row.seat), xSeat, rowCenterY, W_SEAT, rowH, "center", true, 8);
 
-                    // --- BORDERS (Cell by Cell) ---
+                    // BORDERS
                     const lineY = y + rowH;
-                    
-                    // Horizontal (Rest of row)
                     pdf.line(xBase + W_LOC, lineY, xBase + colW, lineY); 
-                    
-                    // Vertical Lines
-                    pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY); // Loc/Reg
-                    pdf.line(xBase + OFF_NAME, y, xBase + OFF_NAME, lineY); // Reg/Name
-                    pdf.line(xBase + OFF_SEAT, y, xBase + OFF_SEAT, lineY); // Name/Seat
-                    pdf.line(xBase + colW, y, xBase + colW, lineY); // Right Edge
+                    pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY); 
+                    pdf.line(xBase + OFF_NAME, y, xBase + OFF_NAME, lineY); 
+                    pdf.line(xBase + OFF_SEAT, y, xBase + OFF_SEAT, lineY); 
+                    pdf.line(xBase + colW, y, xBase + colW, lineY); 
 
                     y += rowH;
                 }
             }
-            
-            // Closing top line for the very first row if needed (handled by header usually)
             pdf.setDrawColor(0);
             pdf.line(xBase, yStart, xBase + colW, yStart);
         }
