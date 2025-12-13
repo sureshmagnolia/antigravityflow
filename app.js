@@ -1555,8 +1555,7 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-
-// --- ULTIMATE PDF GENERATOR: STRICT GRID SYSTEM (Fixed Coordinates) ---
+// --- ULTIMATE PDF GENERATOR: STRICT CHUNK & RENDER ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1575,12 +1574,12 @@ function generateDayWisePDF() {
         const PAGE_WIDTH = 210;
         const MARGIN = 10;
         const COL_GAP = 5;
-        const COL_WIDTH = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2; // ~92.5mm
-        const START_Y = 45; // Fixed vertical start position
+        const COL_WIDTH = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2; 
+        const START_Y = 45; // Fixed vertical start position for all tables
         
-        // STRICT LIMITS (Manual Page Breaking)
+        // Strict Limits (35 rows per column = 70 rows per page)
         const ROWS_PER_COL = 35; 
-        const ROWS_PER_PAGE = 70; // 35 Left + 35 Right
+        const ROWS_PER_PAGE = 70; 
 
         // 3. PREPARE DATA
         const reportType = 'day-wise';
@@ -1672,18 +1671,15 @@ function generateDayWisePDF() {
                     drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
                     
                     // 1. Determine Layout
-                    // If total remaining > 35, we use 2 columns.
-                    // If <= 35, we use 1 column (Full Width).
                     const isTwoCol = queue.length > ROWS_PER_COL;
+                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_COL;
                     
                     // 2. Extract Data for this Page
-                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_COL;
                     const pageData = queue.splice(0, limit);
 
                     if (isTwoCol) {
                         // === 2 COLUMN MODE (Fixed Grid) ===
                         
-                        // Split Data
                         const mid = Math.ceil(pageData.length / 2);
                         const leftRows = pageData.slice(0, mid);
                         const rightRows = pageData.slice(mid);
@@ -1828,6 +1824,7 @@ function drawFixedTable(doc, rows, x, y, width, isCompact) {
         pageBreak: 'avoid' // CRITICAL: Prevents engine from creating unwanted blank pages
     });
 }
+
 
 
 
