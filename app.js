@@ -1972,7 +1972,7 @@ function generateQuestionPaperSummaryPDF() {
         
         // --- 2. CONFIGURATION ---
         const PAGE_H = 297;
-        const MARGIN = 15; // Slightly wider margin matching the sample
+        const MARGIN = 15; 
         const ROW_H = 8;
         const HEADER_H = 8;
         
@@ -2022,7 +2022,8 @@ function generateQuestionPaperSummaryPDF() {
             doc.setFontSize(12); 
             doc.text("Question Paper Summary", 105, y, { align: 'center' });
             y += 6;
-            // Retrieve time from first record if possible, else default
+            
+            // Attempt to get time from first record
             const rawData = getFilteredReportData('day-wise');
             const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
             
@@ -2069,12 +2070,12 @@ function generateQuestionPaperSummaryPDF() {
                 currentY = drawHeader();
             }
 
-            // A. STREAM HEADER (No Box, Just Text)
+            // A. STREAM HEADER
             doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text(`Stream: ${stream}`, MARGIN, currentY + 5);
             currentY += 8;
 
-            // B. TABLE HEADER (Grey Background)
+            // B. TABLE HEADER
             doc.setFillColor(240); doc.setDrawColor(0);
             doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
             
@@ -2137,19 +2138,18 @@ function generateQuestionPaperSummaryPDF() {
             }
 
             doc.setFont("helvetica", "bold");
-            [cite_start]// Merge Sl + Course cols for "Total" label [cite: 664]
-            const totalLabelWidth = W_SL + W_COURSE;
-            
             // Draw Box
             doc.rect(MARGIN, currentY, USABLE_W, ROW_H);
-            doc.line(MARGIN + totalLabelWidth, currentY, MARGIN + totalLabelWidth, currentY + ROW_H);
+            // Label box line
+            const labelW = W_SL + W_COURSE;
+            doc.line(MARGIN + labelW, currentY, MARGIN + labelW, currentY + ROW_H);
 
             // Text
             const totalCenterY = currentY + (ROW_H/2) + 1.5;
-            doc.text(`Total (${stream})`, MARGIN + totalLabelWidth - 2, totalCenterY, { align: 'right' });
+            doc.text(`Total (${stream})`, MARGIN + labelW - 2, totalCenterY, { align: 'right' });
             doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT/2), totalCenterY, { align: 'center' });
 
-            currentY += (ROW_H + 8); // Add gap before next stream
+            currentY += (ROW_H + 8); 
         });
 
         const dateStr = new Date().toISOString().slice(0,10);
