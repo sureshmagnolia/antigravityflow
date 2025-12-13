@@ -15111,190 +15111,272 @@ window.confirmDialSelection = confirmDialSelection;
 //----------------Remunereation Bill PDF---------------------
 // --- ADD THIS FUNCTION TO app.js ---
 
+// --- REMUNERATION BILL PDF (Rectified for Multiline & Layout) ---
 function generateRemunerationBillPDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. Target the specific remuneration container
+    // 1. Target the specific remuneration output
     const container = document.getElementById('remuneration-output');
-    // Each bill generated is wrapped in a .print-page div inside this container
-    const billPages = container.querySelectorAll('.print-page');
+    // The HTML generator creates .print-page divs. We scrape the first one's data structure.
+    // (Assuming data is consistent, we rebuild pagination ourselves).
+    const billDiv = container ? container.querySelector('.print-page') : null;
 
-    if (billPages.length === 0) return alert("No bills found. Generate a bill first.");
+    if (!billDiv) return alert("No bill generated. Please click 'Generate Bill' first.");
 
     const btn = document.getElementById('btn-download-bill-pdf');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating PDF..."; }
 
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const PAGE_W = 210;
         const PAGE_H = 297;
-        const MARGIN = 15;
+        const MARGIN = 10;
         const CONTENT_W = PAGE_W - (MARGIN * 2);
         
-        billPages.forEach((billDiv, billIndex) => {
-            if (billIndex > 0) doc.addPage();
+        // --- A. SCRAPE HEADER INFO ---
+        const h2 = billDiv.querySelector('h2')?.innerText.trim() || "COLLEGE NAME";
+        const h3 = billDiv.querySelector('h3')?.innerText.trim() || "Remuneration Bill";
+        const pStream = billDiv.querySelector('p')?.innerText.trim() || ""; 
 
-            // --- A. SCRAPE HEADER ---
-            // The remuneration HTML structure is specific (see remuneration.js renderBillHTML)
-            const h2 = billDiv.querySelector('h2')?.innerText.trim() || ""; // College Name
-            const h3 = billDiv.querySelector('h3')?.innerText.trim() || ""; // Bill Title
-            const pStream = billDiv.querySelector('p')?.innerText.trim() || ""; // Stream
+        // --- B. SCRAPE TABLE DATA ---
+        const table = billDiv.querySelector('table');
+        // Get Headers
+        const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+        // Get Rows (Preserve innerText newlines for multi-line cells)
+        const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+            return Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+        });
+        // Get Footer Row (Subtotals)
+        const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
+        // Map footer text. Note: HTML might have colspans. We'll handle placement manually.
+        const footerValues = tfootCells.map(td => td.innerText.trim());
 
-            // --- B. SCRAPE TABLE ---
-            const table = billDiv.querySelector('table');
-            const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+        // --- C. SCRAPE SUMMARY BOXES ---
+        const summaryBoxes = billDiv.querySelectorAll('.summary-box');
+        let supBreakdown = "";
+        let allowances = [];
+        let grandTotal = "";
+        let amountWords = "";
+        let signatureTitle = "Chief Superintendent";
+
+        if(summaryBoxes.length > 0) {
+            // Box 1: Supervision & Allowances
+            const box1 = summaryBoxes[0];
+            const breakdownDiv = box1.querySelector('div.border-b'); // Supervision header
+            if(breakdownDiv && breakdownDiv.nextElementSibling) {
+                supBreakdown = breakdownDiv.nextElementSibling.innerText.trim();
+            }
             
-            // Get all data rows
-            const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-                return Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+            // Allowances usually in the second column of the grid
+            const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
+            allowanceDivs.forEach(div => {
+                allowances.push(div.innerText.trim());
+            });
+        }
+        if(summaryBoxes.length > 1) {
+            // Box 2: Grand Total
+            const totalBox = summaryBoxes[1];
+            grandTotal = totalBox.querySelector('.text-2xl')?.innerText.trim() || "";
+            amountWords = totalBox.querySelector('.italic')?.innerText.trim() || "";
+        }
+        if(summaryBoxes.length > 2) {
+            // Box 3: Signature
+            signatureTitle = summaryBoxes[2].innerText.trim() || "Chief Superintendent";
+        }
+
+        // --- D. PDF DRAWING CONFIG ---
+        const ROWS_PER_PAGE = 20;
+        const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
+
+        // Column Config (Matches PDF: Session wider, others narrow)
+        // Col indices: 0=Session, 1=Cand, 2=Invig, 3=Clerk, 4=Peon, 5=Swpr, 6=CS, 7=SAS, 8=OS, 9=Total
+        // Note: Peon/OS cols might be hidden in HTML depending on stream. We rely on scraped headers length.
+        
+        // Dynamic width distribution based on header count
+        const count = headers.length;
+        // Base widths approximation
+        let colWidths = [];
+        if (count === 9) { // Regular (No Peon)
+            colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25]; 
+        } else { // SDE (Has Peon) - 10 cols
+            colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
+        }
+        
+        // Normalize to CONTENT_W
+        const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
+        const scale = CONTENT_W / totalDefined;
+        colWidths = colWidths.map(w => w * scale);
+
+        const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a,b)=>a+b, 0);
+
+        // --- E. RENDER LOOP ---
+        for (let p = 0; p < totalPages; p++) {
+            if (p > 0) doc.addPage();
+            let y = 15;
+
+            // 1. HEADER
+            doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+            doc.text(h2, PAGE_W/2, y, { align: 'center' });
+            y += 6;
+            doc.setFontSize(11);
+            doc.text(h3, PAGE_W/2, y, { align: 'center' });
+            y += 6;
+            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            doc.text(pStream, PAGE_W/2, y, { align: 'center' });
+            y += 10;
+
+            // 2. TABLE HEADER
+            doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
+            doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+            
+            doc.setFontSize(8); doc.setFont("helvetica", "bold");
+            headers.forEach((h, i) => {
+                const cx = getX(i) + (colWidths[i]/2);
+                doc.text(h, cx, y + 5, { align: 'center' });
+                // Vert Line (Right side)
+                if (i < headers.length - 1) doc.line(getX(i+1), y, getX(i+1), y + 8);
+            });
+            doc.rect(MARGIN, y, CONTENT_W, 8); // Header border
+            y += 8;
+
+            // 3. TABLE ROWS
+            const startIdx = p * ROWS_PER_PAGE;
+            const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
+            const pageRows = rows.slice(startIdx, endIdx);
+
+            doc.setFont("helvetica", "normal");
+            
+            pageRows.forEach(row => {
+                // Calculate max height for this row based on multiline content
+                let maxLines = 1;
+                row.forEach((cell, i) => {
+                    const cellWidth = colWidths[i] - 2; // Padding
+                    const lines = doc.splitTextToSize(cell, cellWidth);
+                    if (lines.length > maxLines) maxLines = lines.length;
+                });
+                
+                // Height: Base 6mm + 4mm per extra line
+                const rowH = 6 + ((maxLines - 1) * 4);
+
+                // Check page overflow (unlikely with fixed 20 but good practice)
+                if (y + rowH > PAGE_H - MARGIN) {
+                    doc.addPage();
+                    y = MARGIN; // Reset Y
+                }
+
+                // Draw Cell Content
+                row.forEach((cell, i) => {
+                    const cx = getX(i) + (colWidths[i]/2);
+                    // Y position centered text
+                    let ty = y + 4; // Start slightly down
+                    
+                    doc.setFontSize(8);
+                    // Special case: Amount column (last) bold
+                    if (i === row.length - 1) doc.setFont("helvetica", "bold");
+                    else doc.setFont("helvetica", "normal");
+
+                    const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
+                    // Manual vertical alignment if multiple lines
+                    if (lines.length > 1) ty = y + 3; 
+                    
+                    doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.15 });
+
+                    // Vert Line
+                    if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
+                });
+
+                // Row Border
+                doc.rect(MARGIN, y, CONTENT_W, rowH);
+                y += rowH;
             });
 
-            // Get Footer Totals (The tfoot row)
-            const tfoot = table.querySelector('tfoot');
-            const footerRow = tfoot ? Array.from(tfoot.querySelectorAll('td')).map(td => td.innerText.trim()) : [];
-
-            // --- C. SCRAPE SUMMARY BOXES ---
-            const summaryBoxes = billDiv.querySelectorAll('.summary-box');
-            let supervisionText = "";
-            let allowancesText = "";
-            let grandTotalText = "";
-            let totalWords = "";
-
-            if(summaryBoxes.length >= 1) {
-                // First box has Supervision & Allowances (Grid)
-                const gridDivs = summaryBoxes[0].querySelectorAll('div');
-                if(gridDivs.length > 0) supervisionText = gridDivs[0].innerText.replace(/\n/g, " | ");
-                // Allowances usually in the second column/div
-                if(summaryBoxes[0].children[1]) allowancesText = summaryBoxes[0].children[1].innerText.replace(/\n/g, " | ");
-            }
-            if(summaryBoxes.length >= 2) {
-                // Second box is Grand Total
-                grandTotalText = summaryBoxes[1].querySelector('.text-2xl')?.innerText.trim() || "";
-                totalWords = summaryBoxes[1].querySelector('.italic')?.innerText.trim() || "";
-            }
-
-            // --- D. RENDER PDF (PAGINATED 20 ROWS) ---
-            const ROWS_PER_PAGE = 20;
-            const totalPdfPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
-
-            // Column Width Configuration (Matches HTML)
-            // [Date, Cand, Inv, Clk, Peon, Swp, CS, SAS, OS, Total]
-            const colWidths = [30, 15, 15, 15, 15, 15, 15, 15, 15, 20]; // Approx mm
-            // Helper to get X
-            const getColX = (idx) => MARGIN + colWidths.slice(0, idx).reduce((a,b) => a+b, 0);
-
-            for (let p = 0; p < totalPdfPages; p++) {
-                if (p > 0) doc.addPage();
-                let y = 15;
-
-                // 1. Draw Header
-                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(h2, PAGE_W/2, y, { align: 'center' });
-                y += 6;
-                doc.setFontSize(12);
-                doc.text(h3, PAGE_W/2, y, { align: 'center' });
-                y += 6;
-                doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(pStream, PAGE_W/2, y, { align: 'center' });
-                y += 10;
-
-                // 2. Draw Table Header
-                doc.setFillColor(240); doc.setDrawColor(0); doc.setLineWidth(0.1);
-                doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+            // 4. FOOTER SUMMARY (Only Last Page)
+            if (p === totalPages - 1) {
+                // A. Subtotals Row
+                doc.setFont("helvetica", "bold");
+                doc.rect(MARGIN, y, CONTENT_W, 8);
                 
-                doc.setFontSize(8); doc.setFont("helvetica", "bold");
-                headers.forEach((h, i) => {
-                    // Check if column exists (Peon/OS might be missing based on config)
-                    if (i < colWidths.length) {
-                        doc.text(h, getColX(i) + (colWidths[i]/2), y + 5, { align: 'center' });
-                        if(i > 0) doc.line(getColX(i), y, getColX(i), y + 8);
+                // HTML Footer logic is: [Label, Val1, Val2...]
+                // We align the "Subtotals:" label to the column before values start
+                // and place values in corresponding columns.
+                
+                // Logic: The footerValues array from HTML usually matches the data columns
+                // BUT the first cell is usually "Subtotals:" spanning 2 cols.
+                // Let's rely on column indices from right to left.
+                
+                const valsReversed = [...footerValues].reverse();
+                // valsReversed[0] = Total
+                // valsReversed[1] = OS/Peon ...
+                
+                // Draw Total (Last Col)
+                const totalColIdx = colWidths.length - 1;
+                doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
+                doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); // Line
+
+                // Draw Other Cols (going backwards)
+                for(let k=1; k < valsReversed.length; k++) {
+                    const colIdx = totalColIdx - k;
+                    if(colIdx > 1) { // Don't draw in date/student cols
+                        doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx]/2), y+5, {align:'center'});
+                        doc.line(getX(colIdx), y, getX(colIdx), y+8);
                     }
-                });
-                doc.rect(MARGIN, y, CONTENT_W, 8, 'S'); // Border
-                y += 8;
-
-                // 3. Draw Rows
-                const startIdx = p * ROWS_PER_PAGE;
-                const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
-                const pageRows = rows.slice(startIdx, endIdx);
-
-                doc.setFont("helvetica", "normal");
-                pageRows.forEach(row => {
-                    const rowH = 8;
-                    // Zebra
-                    // if (startIdx % 2 !== 0) doc.setFillColor(250); else doc.setFillColor(255);
-                    // doc.rect(MARGIN, y, CONTENT_W, rowH, 'F');
-
-                    row.forEach((cell, i) => {
-                        if (i < colWidths.length) {
-                            // Clean cell text (remove newlines from HTML)
-                            let txt = cell.replace(/\n/g, ' ');
-                            // Truncate
-                            if (doc.getTextWidth(txt) > colWidths[i]-2) txt = txt.substring(0, 8) + "..";
-                            
-                            doc.text(txt, getColX(i) + (colWidths[i]/2), y + 5, { align: 'center' });
-                            if(i > 0) doc.line(getColX(i), y, getColX(i), y + rowH);
-                        }
-                    });
-                    
-                    doc.rect(MARGIN, y, CONTENT_W, rowH, 'S');
-                    y += rowH;
-                });
-
-                // 4. Footer (Only on last page)
-                if (p === totalPdfPages - 1) {
-                    // Draw Table Totals
-                    doc.setFont("helvetica", "bold");
-                    doc.rect(MARGIN, y, CONTENT_W, 8);
-                    
-                    // The footerRow array from HTML might have colspans merged in text
-                    // We simply place the last cell (Total) and label
-                    doc.text("Subtotals:", getColX(1), y+5, { align: 'right' });
-                    // Draw the last cell (Grand Total for column)
-                    if(footerRow.length > 0) {
-                        const grandVal = footerRow[footerRow.length-1];
-                        doc.text(grandVal, getColX(colWidths.length-1) + (colWidths[colWidths.length-1]/2), y+5, { align: 'center' });
-                    }
-                    y += 15;
-
-                    // Draw Summary Boxes
-                    doc.setDrawColor(0);
-                    // Supervision Box
-                    doc.rect(MARGIN, y, CONTENT_W/2 - 2, 25);
-                    doc.text("1. Supervision Breakdown", MARGIN + 2, y + 5);
-                    doc.setFontSize(7); doc.setFont("helvetica", "normal");
-                    const supLines = doc.splitTextToSize(supervisionText, (CONTENT_W/2) - 6);
-                    doc.text(supLines, MARGIN + 2, y + 10);
-
-                    // Allowances Box
-                    doc.rect(MARGIN + (CONTENT_W/2) + 2, y, (CONTENT_W/2) - 2, 25);
-                    doc.setFontSize(8); doc.setFont("helvetica", "bold");
-                    doc.text("2. Other Allowances", MARGIN + (CONTENT_W/2) + 4, y + 5);
-                    doc.setFontSize(7); doc.setFont("helvetica", "normal");
-                    const allLines = doc.splitTextToSize(allowancesText, (CONTENT_W/2) - 6);
-                    doc.text(allLines, MARGIN + (CONTENT_W/2) + 4, y + 10);
-                    y += 30;
-
-                    // Grand Total
-                    doc.setFontSize(14); doc.setFont("helvetica", "bold");
-                    doc.text(`Grand Total Claim: ${grandTotalText}`, PAGE_W - MARGIN, y, { align: 'right' });
-                    y += 5;
-                    doc.setFontSize(9); doc.setFont("helvetica", "italic");
-                    doc.text(totalWords, PAGE_W - MARGIN, y, { align: 'right' });
-                    y += 20;
-
-                    // Signature
-                    doc.setLineWidth(0.2);
-                    doc.line(PAGE_W - 70, y, PAGE_W - MARGIN, y);
-                    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-                    doc.text("Chief Superintendent", PAGE_W - 35, y + 5, { align: 'center' });
                 }
                 
-                // Page Number
-                doc.setFontSize(8); doc.setFont("helvetica", "italic");
-                doc.text(`Page ${p+1} of ${totalPdfPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
+                // Label
+                doc.text("Subtotals:", getX(1) + 15, y+5, { align: 'right' });
+
+                y += 12;
+
+                // B. Breakdown Boxes
+                const boxH = 35;
+                const boxW = (CONTENT_W / 2) - 3;
+                
+                // Supervision Box
+                doc.setDrawColor(0);
+                doc.rect(MARGIN, y, boxW, boxH);
+                doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
+                
+                doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                // The scraped text might be "CS: 100, SAS: 100..."
+                // Split by comma for cleaner list
+                const supLines = doc.splitTextToSize(supBreakdown.replace(/,/g, '\n'), boxW - 6);
+                doc.text(supLines, MARGIN + 3, y + 10);
+
+                // Allowances Box
+                const box2X = MARGIN + boxW + 6;
+                doc.rect(box2X, y, boxW, boxH);
+                doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+                doc.text("2. Other Allowances", box2X + 3, y + 5);
+                
+                doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                let ay = y + 10;
+                allowances.forEach(line => {
+                    doc.text(line, box2X + 3, ay);
+                    ay += 5;
+                });
+
+                y += boxH + 8;
+
+                // C. Grand Total
+                doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
+                y += 6;
+                doc.setFontSize(10); doc.setFont("helvetica", "italic");
+                doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
+
+                // D. Signature
+                y += 20;
+                doc.setLineWidth(0.2);
+                doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
+                doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
             }
-        });
+
+            // Page Number
+            doc.setFontSize(8); doc.setFont("helvetica", "italic");
+            doc.text(`Page ${p+1} of ${totalPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
+        }
 
         const dateStr = new Date().toISOString().slice(0,10);
         doc.save(`Remuneration_Bill_${dateStr}.pdf`);
@@ -15310,6 +15392,9 @@ function generateRemunerationBillPDF() {
         }
     }
 }
+
+
+    
     
 
     
