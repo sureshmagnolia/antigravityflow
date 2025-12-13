@@ -1959,7 +1959,7 @@ function generateDayWisePDF() {
 }
 //------------------------------------------------------------------
 
-// --- ROOM STICKERS PDF (2 Per Page - Boxed Columns) ---
+// --- ROOM STICKERS PDF (2 Per Page - Boxed Columns, No Header Box, Session Info) ---
 function generateRoomStickersPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2004,6 +2004,12 @@ function generateRoomStickersPDF() {
                 const dateText = headerDiv.querySelector('div.text-gray-400, div.text-\\[9pt\\]')?.innerText.trim() || ""; 
                 const roomSpan = headerDiv.querySelector('span')?.innerText.trim() || "";
 
+                // Calculate Session
+                let sessionSuffix = "";
+                const t = dateText.toUpperCase();
+                if(t.includes("AM")) sessionSuffix = " (FN)";
+                else if(t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:")) sessionSuffix = " (AN)";
+
                 let y = startY + 8;
                 
                 // College
@@ -2011,17 +2017,15 @@ function generateRoomStickersPDF() {
                 doc.text(collegeName, PAGE_W / 2, y, { align: 'center' });
                 y += 5;
 
-                // Date
+                // Date + Session (Added)
                 doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(dateText, PAGE_W / 2, y, { align: 'center' });
-                y += 6;
+                doc.text(dateText + sessionSuffix, PAGE_W / 2, y, { align: 'center' });
+                y += 8;
 
-                // Room Box
-                doc.setDrawColor(0); doc.setLineWidth(0.2);
-                doc.rect((PAGE_W/2) - 40, y, 80, 8); 
-                doc.setFontSize(12); doc.setFont("helvetica", "bold");
-                doc.text(roomSpan, PAGE_W / 2, y + 5.5, { align: 'center' });
-                y += 12;
+                // Room Name (Box Removed, Font Larger)
+                doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                doc.text(roomSpan, PAGE_W / 2, y + 2, { align: 'center' });
+                y += 10;
 
                 // --- 3. COURSE BLOCKS ---
                 const bodyDiv = stickerEl.children[1]; 
@@ -2073,9 +2077,9 @@ function generateRoomStickersPDF() {
                         const xBase = MARGIN_X + 2 + (colIndex * cellW);
                         
                         // --- DRAW BLACK BOX AROUND ENTRY ---
-                        doc.setDrawColor(0); // Black
-                        doc.setLineWidth(0.15); // Slightly clearer line
-                        doc.rect(xBase, rowY, cellW - 1, 6); // Full box
+                        doc.setDrawColor(0); 
+                        doc.setLineWidth(0.15); 
+                        doc.rect(xBase, rowY, cellW - 1, 6); 
 
                         // Text
                         doc.setFont("helvetica", "bold");
@@ -2124,7 +2128,6 @@ function generateRoomStickersPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
 
 
     
