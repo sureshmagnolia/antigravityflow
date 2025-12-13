@@ -12954,6 +12954,16 @@ Are you sure?
             });
 
             if (btnPrintBill) btnPrintBill.classList.remove('hidden');
+            // --- ADD THESE LINES HERE ---
+            const pdfBtn = document.getElementById('btn-download-bill-pdf');
+            if(pdfBtn) {
+            pdfBtn.classList.remove('hidden');
+            // Remove old listener to avoid duplicates if clicked multiple times
+            const newBtn = pdfBtn.cloneNode(true);
+            pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
+            newBtn.addEventListener('click', generateRemunerationBillPDF);
+            }
+        // ----------------------------
         });
     }
 
@@ -15098,7 +15108,208 @@ function confirmDialSelection() {
 window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
+//----------------Remunereation Bill PDF---------------------
+// --- ADD THIS FUNCTION TO app.js ---
 
+function generateRemunerationBillPDF() {
+    const { jsPDF } = window.jspdf;
+    
+    // 1. Target the specific remuneration container
+    const container = document.getElementById('remuneration-output');
+    // Each bill generated is wrapped in a .print-page div inside this container
+    const billPages = container.querySelectorAll('.print-page');
+
+    if (billPages.length === 0) return alert("No bills found. Generate a bill first.");
+
+    const btn = document.getElementById('btn-download-bill-pdf');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
+
+    try {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const PAGE_W = 210;
+        const PAGE_H = 297;
+        const MARGIN = 15;
+        const CONTENT_W = PAGE_W - (MARGIN * 2);
+        
+        billPages.forEach((billDiv, billIndex) => {
+            if (billIndex > 0) doc.addPage();
+
+            // --- A. SCRAPE HEADER ---
+            // The remuneration HTML structure is specific (see remuneration.js renderBillHTML)
+            const h2 = billDiv.querySelector('h2')?.innerText.trim() || ""; // College Name
+            const h3 = billDiv.querySelector('h3')?.innerText.trim() || ""; // Bill Title
+            const pStream = billDiv.querySelector('p')?.innerText.trim() || ""; // Stream
+
+            // --- B. SCRAPE TABLE ---
+            const table = billDiv.querySelector('table');
+            const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+            
+            // Get all data rows
+            const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+                return Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+            });
+
+            // Get Footer Totals (The tfoot row)
+            const tfoot = table.querySelector('tfoot');
+            const footerRow = tfoot ? Array.from(tfoot.querySelectorAll('td')).map(td => td.innerText.trim()) : [];
+
+            // --- C. SCRAPE SUMMARY BOXES ---
+            const summaryBoxes = billDiv.querySelectorAll('.summary-box');
+            let supervisionText = "";
+            let allowancesText = "";
+            let grandTotalText = "";
+            let totalWords = "";
+
+            if(summaryBoxes.length >= 1) {
+                // First box has Supervision & Allowances (Grid)
+                const gridDivs = summaryBoxes[0].querySelectorAll('div');
+                if(gridDivs.length > 0) supervisionText = gridDivs[0].innerText.replace(/\n/g, " | ");
+                // Allowances usually in the second column/div
+                if(summaryBoxes[0].children[1]) allowancesText = summaryBoxes[0].children[1].innerText.replace(/\n/g, " | ");
+            }
+            if(summaryBoxes.length >= 2) {
+                // Second box is Grand Total
+                grandTotalText = summaryBoxes[1].querySelector('.text-2xl')?.innerText.trim() || "";
+                totalWords = summaryBoxes[1].querySelector('.italic')?.innerText.trim() || "";
+            }
+
+            // --- D. RENDER PDF (PAGINATED 20 ROWS) ---
+            const ROWS_PER_PAGE = 20;
+            const totalPdfPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
+
+            // Column Width Configuration (Matches HTML)
+            // [Date, Cand, Inv, Clk, Peon, Swp, CS, SAS, OS, Total]
+            const colWidths = [30, 15, 15, 15, 15, 15, 15, 15, 15, 20]; // Approx mm
+            // Helper to get X
+            const getColX = (idx) => MARGIN + colWidths.slice(0, idx).reduce((a,b) => a+b, 0);
+
+            for (let p = 0; p < totalPdfPages; p++) {
+                if (p > 0) doc.addPage();
+                let y = 15;
+
+                // 1. Draw Header
+                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(h2, PAGE_W/2, y, { align: 'center' });
+                y += 6;
+                doc.setFontSize(12);
+                doc.text(h3, PAGE_W/2, y, { align: 'center' });
+                y += 6;
+                doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                doc.text(pStream, PAGE_W/2, y, { align: 'center' });
+                y += 10;
+
+                // 2. Draw Table Header
+                doc.setFillColor(240); doc.setDrawColor(0); doc.setLineWidth(0.1);
+                doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+                
+                doc.setFontSize(8); doc.setFont("helvetica", "bold");
+                headers.forEach((h, i) => {
+                    // Check if column exists (Peon/OS might be missing based on config)
+                    if (i < colWidths.length) {
+                        doc.text(h, getColX(i) + (colWidths[i]/2), y + 5, { align: 'center' });
+                        if(i > 0) doc.line(getColX(i), y, getColX(i), y + 8);
+                    }
+                });
+                doc.rect(MARGIN, y, CONTENT_W, 8, 'S'); // Border
+                y += 8;
+
+                // 3. Draw Rows
+                const startIdx = p * ROWS_PER_PAGE;
+                const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
+                const pageRows = rows.slice(startIdx, endIdx);
+
+                doc.setFont("helvetica", "normal");
+                pageRows.forEach(row => {
+                    const rowH = 8;
+                    // Zebra
+                    // if (startIdx % 2 !== 0) doc.setFillColor(250); else doc.setFillColor(255);
+                    // doc.rect(MARGIN, y, CONTENT_W, rowH, 'F');
+
+                    row.forEach((cell, i) => {
+                        if (i < colWidths.length) {
+                            // Clean cell text (remove newlines from HTML)
+                            let txt = cell.replace(/\n/g, ' ');
+                            // Truncate
+                            if (doc.getTextWidth(txt) > colWidths[i]-2) txt = txt.substring(0, 8) + "..";
+                            
+                            doc.text(txt, getColX(i) + (colWidths[i]/2), y + 5, { align: 'center' });
+                            if(i > 0) doc.line(getColX(i), y, getColX(i), y + rowH);
+                        }
+                    });
+                    
+                    doc.rect(MARGIN, y, CONTENT_W, rowH, 'S');
+                    y += rowH;
+                });
+
+                // 4. Footer (Only on last page)
+                if (p === totalPdfPages - 1) {
+                    // Draw Table Totals
+                    doc.setFont("helvetica", "bold");
+                    doc.rect(MARGIN, y, CONTENT_W, 8);
+                    
+                    // The footerRow array from HTML might have colspans merged in text
+                    // We simply place the last cell (Total) and label
+                    doc.text("Subtotals:", getColX(1), y+5, { align: 'right' });
+                    // Draw the last cell (Grand Total for column)
+                    if(footerRow.length > 0) {
+                        const grandVal = footerRow[footerRow.length-1];
+                        doc.text(grandVal, getColX(colWidths.length-1) + (colWidths[colWidths.length-1]/2), y+5, { align: 'center' });
+                    }
+                    y += 15;
+
+                    // Draw Summary Boxes
+                    doc.setDrawColor(0);
+                    // Supervision Box
+                    doc.rect(MARGIN, y, CONTENT_W/2 - 2, 25);
+                    doc.text("1. Supervision Breakdown", MARGIN + 2, y + 5);
+                    doc.setFontSize(7); doc.setFont("helvetica", "normal");
+                    const supLines = doc.splitTextToSize(supervisionText, (CONTENT_W/2) - 6);
+                    doc.text(supLines, MARGIN + 2, y + 10);
+
+                    // Allowances Box
+                    doc.rect(MARGIN + (CONTENT_W/2) + 2, y, (CONTENT_W/2) - 2, 25);
+                    doc.setFontSize(8); doc.setFont("helvetica", "bold");
+                    doc.text("2. Other Allowances", MARGIN + (CONTENT_W/2) + 4, y + 5);
+                    doc.setFontSize(7); doc.setFont("helvetica", "normal");
+                    const allLines = doc.splitTextToSize(allowancesText, (CONTENT_W/2) - 6);
+                    doc.text(allLines, MARGIN + (CONTENT_W/2) + 4, y + 10);
+                    y += 30;
+
+                    // Grand Total
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                    doc.text(`Grand Total Claim: ${grandTotalText}`, PAGE_W - MARGIN, y, { align: 'right' });
+                    y += 5;
+                    doc.setFontSize(9); doc.setFont("helvetica", "italic");
+                    doc.text(totalWords, PAGE_W - MARGIN, y, { align: 'right' });
+                    y += 20;
+
+                    // Signature
+                    doc.setLineWidth(0.2);
+                    doc.line(PAGE_W - 70, y, PAGE_W - MARGIN, y);
+                    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+                    doc.text("Chief Superintendent", PAGE_W - 35, y + 5, { align: 'center' });
+                }
+                
+                // Page Number
+                doc.setFontSize(8); doc.setFont("helvetica", "italic");
+                doc.text(`Page ${p+1} of ${totalPdfPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
+            }
+        });
+
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`Remuneration_Bill_${dateStr}.pdf`);
+
+    } catch (e) {
+        console.error("PDF Error:", e);
+        alert("Error creating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg> Download PDF`; 
+        }
+    }
+}
     
 
     
