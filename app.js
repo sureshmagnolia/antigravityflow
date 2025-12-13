@@ -1333,6 +1333,16 @@ window.downloadReportPDF = function() {
         return;
     }
 
+    // 3. Question Paper Report (Room-Wise)
+    if (reportType === "Question_Paper_Report" || reportType === "Roomwise_QP_Report") {
+        if(typeof generateQuestionPaperReportPDF === 'function') {
+            generateQuestionPaperReportPDF();
+        } else {
+            alert("QP Report generator not loaded.");
+        }
+        return;
+    }
+
     // Fallback
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
@@ -1941,6 +1951,282 @@ function generateDayWisePDF() {
     }
 }
 //------------------------------------------------------------------
+
+//--------------QP Report to Print -------------------------------
+
+// --- QUESTION PAPER REPORT (Room-Wise QP Counts) ---
+function generateQuestionPaperReportPDF() {
+    const { jsPDF } = window.jspdf;
+    
+    // 1. Validation
+    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+        return alert("No data loaded to generate Report.");
+    }
+
+    const btn = document.getElementById('download-qp-report-btn'); // Ensure button ID matches
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Report..."; }
+
+    try {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        
+        // --- 2. CONFIGURATION ---
+        const PAGE_H = 297;
+        const MARGIN = 10;
+        const COL_GAP = 5;
+        const ROW_H = 7;
+        const HEADER_H = 7;
+        
+        const USABLE_W = 210 - (MARGIN * 2);
+        const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm per column
+        
+        // Column Widths (Room | QP Code | Subject | Count)
+        const W_ROOM  = 18;
+        const W_CODE  = 22;
+        const W_COUNT = 10;
+        const W_SUBJ  = COL_W - W_ROOM - W_CODE - W_COUNT; // Remaining width (~42.5mm)
+
+        // Offsets
+        const OFF_ROOM  = 0;
+        const OFF_CODE  = W_ROOM;
+        const OFF_SUBJ  = W_ROOM + W_CODE;
+        const OFF_COUNT = W_ROOM + W_CODE + W_SUBJ;
+
+        // Limits
+        const ROWS_PER_SIDE = 36; 
+        const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
+
+        // --- 3. HELPER FUNCTIONS ---
+        
+        // Smart Text Scaler
+        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
+            if (!text) return;
+            doc.setFont("helvetica", isBold ? "bold" : "normal");
+            
+            // Default font size
+            let fontSize = 9;
+            
+            // Check width
+            if (doc.getTextWidth(text) > w - 2) {
+                // Approximate scale
+                fontSize = fontSize * ((w - 2) / doc.getTextWidth(text));
+                if (fontSize < 6) fontSize = 6; // Min limit
+            }
+            doc.setFontSize(fontSize);
+
+            // Vertical Center Calculation
+            const typeOffset = (fontSize * 0.3527) / 2.5; 
+            const y = centerY + typeOffset;
+
+            if (align === "center") {
+                doc.text(text, x + (w / 2), y, { align: "center" });
+            } else {
+                doc.text(text, x + 1, y);
+            }
+        };
+
+        const drawHeader = () => {
+            let y = 10;
+            const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
+            const dateStr = new Date().toISOString().slice(0,10);
+            
+            doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            doc.text(collegeName, 105, y, { align: 'center' });
+            y += 6;
+            doc.setFontSize(12); 
+            doc.text("Question Paper Report (Room-Wise Count)", 105, y, { align: 'center' });
+            y += 5;
+            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            doc.text(`Generated: ${dateStr}`, 105, y, { align: 'center' });
+            return y + 8;
+        };
+
+        const drawColumnHeader = (x, y) => {
+            doc.setFillColor(220); doc.setDrawColor(0);
+            doc.rect(x, y, COL_W, HEADER_H, 'FD');
+            doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            
+            doc.text("Room", x + OFF_ROOM + 2, y + 4.5);
+            doc.text("QP Code", x + OFF_CODE + 2, y + 4.5);
+            doc.text("Subject", x + OFF_SUBJ + 2, y + 4.5);
+            doc.text("Qty", x + OFF_COUNT + (W_COUNT/2), y + 4.5, { align: 'center' });
+        };
+
+        // --- 4. PREPARE DATA ---
+        const reportType = 'day-wise'; 
+        // We reuse day-wise filter because QP report is usually generated for a specific day
+        const rawData = getFilteredReportData(reportType); 
+        
+        if (!rawData || rawData.length === 0) throw new Error("No data found.");
+
+        const dataWithRooms = performOriginalAllocation(rawData);
+
+        // Group by Room -> QP Code
+        const roomMap = {};
+        
+        dataWithRooms.forEach(s => {
+            const room = s['Room No'] || "Unallocated";
+            // Prefer QP Code, fallback to Course Name
+            const qpCode = s.qpCode || s.Course || "Unknown";
+            const subject = s.Course || "";
+
+            if (!roomMap[room]) roomMap[room] = {};
+            
+            if (!roomMap[room][qpCode]) {
+                roomMap[room][qpCode] = {
+                    code: qpCode,
+                    subject: subject,
+                    count: 0
+                };
+            }
+            roomMap[room][qpCode].count++;
+        });
+
+        // Flatten to List
+        const flatRows = [];
+        
+        // Sort Rooms naturally (1, 2, 10 instead of 1, 10, 2)
+        const sortedRooms = Object.keys(roomMap).sort((a, b) => {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        sortedRooms.forEach(room => {
+            const qps = roomMap[room];
+            const sortedQPs = Object.keys(qps).sort();
+            
+            sortedQPs.forEach(qpKey => {
+                const data = qps[qpKey];
+                flatRows.push({
+                    room: room,
+                    qp: data.code,
+                    subject: data.subject,
+                    count: data.count
+                });
+            });
+        });
+
+        // --- 5. RENDER LOOP ---
+        let queue = [...flatRows];
+        let pageCount = 0;
+
+        while(queue.length > 0) {
+            if (pageCount > 0) doc.addPage();
+            
+            let startY = drawHeader();
+            let currentY = startY + HEADER_H;
+            
+            // Layout Decision
+            const isTwoCol = queue.length > ROWS_PER_SIDE;
+            const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
+            const pageData = queue.splice(0, limit);
+
+            let leftRows = [], rightRows = [];
+            if (isTwoCol) {
+                const mid = Math.ceil(pageData.length / 2);
+                leftRows = pageData.slice(0, mid);
+                rightRows = pageData.slice(mid);
+            } else {
+                leftRows = pageData;
+            }
+
+            // Draw Left
+            drawColumnHeader(MARGIN, startY);
+            drawDataColumn(doc, leftRows, MARGIN, currentY);
+
+            // Draw Right
+            if (rightRows.length > 0) {
+                const rightX = MARGIN + COL_W + COL_GAP;
+                drawColumnHeader(rightX, startY);
+                drawDataColumn(doc, rightRows, rightX, currentY);
+                
+                // Divider
+                const midX = MARGIN + COL_W + (COL_GAP/2);
+                doc.setDrawColor(200); 
+                doc.line(midX, startY, midX, PAGE_H - 10);
+            }
+
+            pageCount++;
+        }
+
+        // --- INTERNAL HELPER: DRAW DATA COLUMN ---
+        function drawDataColumn(pdf, rows, xBase, yStart) {
+            let y = yStart;
+            
+            // Pre-calculate Merges for Room Column
+            const mergeMap = [];
+            for(let i=0; i<rows.length; i++) mergeMap[i] = { span: 1, skip: false };
+
+            for(let i=0; i<rows.length; i++) {
+                if (mergeMap[i].skip) continue;
+                let span = 1;
+                for(let j=i+1; j<rows.length; j++) {
+                    if (rows[j].room === rows[i].room) {
+                        span++;
+                        mergeMap[j].skip = true;
+                    } else break;
+                }
+                mergeMap[i].span = span;
+            }
+
+            for(let i=0; i<rows.length; i++) {
+                const row = rows[i];
+                const rowCenterY = y + (ROW_H/2);
+                
+                pdf.setDrawColor(0); pdf.setTextColor(0);
+
+                // ROOM (Merged)
+                if (!mergeMap[i].skip) {
+                    const span = mergeMap[i].span;
+                    const totalH = span * ROW_H;
+                    const mergeCenterY = y + (totalH / 2);
+                    
+                    // Draw Room Name
+                    drawSmartText(row.room, xBase + OFF_ROOM, mergeCenterY, W_ROOM, totalH, "center", true);
+                    
+                    // Room Borders
+                    const blockBottom = y + totalH;
+                    pdf.line(xBase, y, xBase, blockBottom); // Left
+                    pdf.line(xBase + W_ROOM, y, xBase + W_ROOM, blockBottom); // Right
+                    pdf.line(xBase, blockBottom, xBase + W_ROOM, blockBottom); // Bottom
+                }
+
+                // QP CODE
+                drawSmartText(row.qp, xBase + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true);
+
+                // SUBJECT
+                drawSmartText(row.subject, xBase + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left");
+
+                // COUNT
+                drawSmartText(String(row.count), xBase + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true);
+
+                // GRID LINES
+                const lineY = y + ROW_H;
+                
+                // Horizontal (Skip Room column if merged)
+                pdf.line(xBase + W_ROOM, lineY, xBase + COL_W, lineY);
+                
+                // Vertical Lines
+                pdf.line(xBase + OFF_SUBJ, y, xBase + OFF_SUBJ, lineY); // QP/Subj
+                pdf.line(xBase + OFF_COUNT, y, xBase + OFF_COUNT, lineY); // Subj/Count
+                pdf.line(xBase + COL_W, y, xBase + COL_W, lineY); // Right Edge
+
+                y += ROW_H;
+            }
+            
+            // Top Border
+            pdf.line(xBase, yStart, xBase + COL_W, yStart);
+        }
+
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`QP_Report_RoomWise_${dateStr}.pdf`);
+
+    } catch (e) {
+        console.error("PDF Error:", e);
+        alert("Error: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
 
     
 //----------------QP Distribution Report (QP-Wise Count)---------
