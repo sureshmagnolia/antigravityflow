@@ -2422,11 +2422,11 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (Smart Scraper: Auto-Pagination + Clean Location) ---
+// --- QP DISTRIBUTION PDF (Smart Scraper: Inline Room & Location) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. Validation: Ensure HTML report exists
+    // 1. Validation
     const reportContainer = document.getElementById('report-output-area');
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
@@ -2435,7 +2435,7 @@ function generateQPDistributionPDF() {
     }
 
     const btn = document.getElementById('download-qp-pdf-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating PDF..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
 
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -2459,11 +2459,9 @@ function generateQPDistributionPDF() {
                 doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                 doc.text(h1, PAGE_W/2, y, { align: 'center' });
                 y += 6;
-                
                 doc.setFontSize(11);
                 doc.text(h2, PAGE_W/2, y, { align: 'center' });
                 y += 5;
-                
                 doc.setFontSize(10); doc.setFont("helvetica", "normal");
                 doc.text(h3, PAGE_W/2, y, { align: 'center' });
                 y += 10;
@@ -2475,24 +2473,18 @@ function generateQPDistributionPDF() {
         pages.forEach((pageEl) => {
             if (pageCount > 0) doc.addPage();
             
-            // 1. Draw Header on First Page of Session
             let currentY = drawMainHeader(pageEl);
             
-            // 2. Iterate Content Elements
-            // We skip the header group itself, and process Title Divs and QP Card Divs
             const children = Array.from(pageEl.children).filter(el => !el.classList.contains('print-header-group'));
 
             children.forEach(el => {
-                // A. STREAM HEADER (e.g. "REGULAR STREAM")
+                // A. STREAM HEADER
                 if (el.innerText.includes('STREAM') && el.classList.contains('font-bold')) {
                     const hHeight = 10;
-                    
-                    // Check Page Break
                     if (currentY + hHeight > MAX_Y) {
                         doc.addPage();
                         currentY = MARGIN + 5; 
                     }
-
                     doc.setFillColor(230); doc.setDrawColor(0); doc.setLineWidth(0.1);
                     doc.rect(MARGIN, currentY, CONTENT_W, 7, 'F');
                     doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2500,17 +2492,14 @@ function generateQPDistributionPDF() {
                     currentY += 9;
                 }
                 
-                // B. QP CARD (Contains a grid)
+                // B. QP CARD
                 else if (el.querySelector('.grid')) {
                     
-                    // -- 1. Extract Data --
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
-                    // Course Name
+                    // Extract Metadata
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
-                    
-                    // QP Code (Look for badge style)
                     let qpCode = "N/A";
                     const allSpans = headerRow.querySelectorAll('span');
                     allSpans.forEach(sp => {
@@ -2519,63 +2508,50 @@ function generateQPDistributionPDF() {
                         }
                     });
 
-                    // Stream Badge (e.g., [Regular])
                     let strmLabel = "";
                     const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
                     if (strmSpan) strmLabel = strmSpan.innerText.trim();
 
-                    // Total Count
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
-
-                    // Rooms
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
-                    // -- 2. Determine Styling (Regular vs Others) --
-                    // "Other" streams usually have a dashed border or yellow bg in the HTML
+                    // Style & Height
                     let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
-                    
-                    // -- 3. Calculate Required Height --
-                    // Header (12mm) + Grid Rows (8mm each) + Padding (4mm)
                     const gridRowsCount = Math.ceil(roomDivs.length / 3);
                     const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
 
-                    // -- 4. PAGE BREAK CHECK --
+                    // Page Break
                     if (currentY + cardHeight > MAX_Y) {
                         doc.addPage();
-                        currentY = MARGIN + 5; // Start at top of new page
+                        currentY = MARGIN + 5;
                     }
 
-                    // -- 5. DRAW CARD --
-                    doc.setDrawColor(0);
-                    doc.setLineWidth(0.1);
-                    
+                    // Draw Card
+                    doc.setDrawColor(0); doc.setLineWidth(0.1);
                     if (isOthers) {
                         doc.setFillColor(255, 251, 235); // Light Yellow
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'FD');
-                        doc.setLineDash([1, 1], 0); // Dashed for others
+                        doc.setLineDash([1, 1], 0); 
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight); 
-                        doc.setLineDash([]); // Reset
+                        doc.setLineDash([]); 
                     } else {
                         doc.setFillColor(255, 255, 255);
-                        doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); // Outline only
+                        doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); 
                     }
 
                     // Header Text
                     const headY = currentY + 5;
                     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    
-                    // Truncate Course
                     let dispCourse = courseName;
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
-                    // QP Code Label
+                    // QP Code & Stream
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                     doc.text(qpCode, MARGIN + 136, headY);
 
-                    // Stream Label (if Others)
                     if (strmLabel && isOthers) {
                         doc.setFontSize(7); doc.setTextColor(100);
                         doc.text(`[${strmLabel}]`, MARGIN + 2, headY + 4);
@@ -2586,28 +2562,27 @@ function generateQPDistributionPDF() {
                     doc.setFontSize(11); doc.setFont("helvetica", "bold");
                     doc.text(totalCount, PAGE_W - MARGIN - 4, headY + 2, { align: 'right' });
 
-                    // Divider Line
+                    // Divider
                     doc.setDrawColor(200);
                     doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
 
-                    // -- 6. DRAW ROOM GRID --
+                    // --- ROOM GRID ---
                     let roomY = headY + 7;
                     let roomX = MARGIN + 2;
-                    const boxW = (CONTENT_W - 4) / 3; // 3 columns
+                    const boxW = (CONTENT_W - 4) / 3; 
 
                     roomDivs.forEach((rDiv, idx) => {
-                        // New Row
                         if (idx > 0 && idx % 3 === 0) {
                             roomX = MARGIN + 2;
                             roomY += 8.5;
                         }
 
-                        // Scrape Room Data
+                        // Scrape Data
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
                         const roomNameTxt = rDiv.querySelector('.text-sm')?.innerText.trim() || ""; // "Room #1"
-                        const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || ""; // "(Location)"
+                        const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || ""; // "(G101)"
 
-                        // Draw Room Box
+                        // Draw Box
                         doc.setDrawColor(180); doc.setFillColor(255);
                         doc.rect(roomX, roomY, boxW - 2, 7, 'FD');
 
@@ -2621,34 +2596,49 @@ function generateQPDistributionPDF() {
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- SMART LOCATION LOGIC (Remove "Room #..." if Location exists) ---
-                        // 1. Prepare Location Text
-                        let cleanLoc = "";
-                        if (locTxt) {
-                            cleanLoc = locTxt.replace(/[()]/g, ''); // Remove parens
-                            // Truncate if too long
-                            if (cleanLoc.length > 20) cleanLoc = cleanLoc.substring(0, 18) + "..";
-                        }
-
-                        // 2. Decide what to print
+                        // --- SMART INLINE LAYOUT (Room # + Loc) ---
+                        // 1. Draw Room #
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        doc.text(roomNameTxt, roomX + 16, roomY + 5);
                         
-                        if (cleanLoc) {
-                            // If location exists, print JUST the location in the main slot
-                            doc.text(cleanLoc, roomX + 16, roomY + 5);
-                        } else {
-                            // If NO location, fall back to "Room #1" so we identify the room
-                            doc.text(roomNameTxt, roomX + 16, roomY + 5);
+                        // 2. Measure Room # Width
+                        const roomNameWidth = doc.getTextWidth(roomNameTxt);
+
+                        // 3. Draw Location (if exists) immediately after
+                        if (locTxt) {
+                            doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+                            
+                            // Clean parens
+                            let cleanLoc = locTxt.replace(/[()]/g, '');
+                            
+                            // Calculate Start Position
+                            const locX = roomX + 16 + roomNameWidth + 1.5; // 1.5mm gap
+                            
+                            // Calculate Max Width allowed (Box Width - checkbox area - current X relative to box)
+                            const maxLocW = (boxW - 10) - (16 + roomNameWidth);
+                            
+                            // Truncate logic
+                            let displayLoc = cleanLoc;
+                            if (doc.getTextWidth(displayLoc) > maxLocW) {
+                                // Simple char truncation estimate
+                                const approxChars = Math.floor(maxLocW / 1.5);
+                                displayLoc = cleanLoc.substring(0, Math.max(0, approxChars)) + "..";
+                            }
+
+                            if (maxLocW > 3) { // Only draw if we have meaningful space
+                                doc.text(`(${displayLoc})`, locX, roomY + 5);
+                            }
+                            doc.setTextColor(0);
                         }
 
-                        // Checkbox Square
+                        // Checkbox
                         doc.setDrawColor(0);
                         doc.rect(roomX + boxW - 7, roomY + 2, 3, 3);
 
                         roomX += boxW;
                     });
 
-                    currentY += cardHeight + 2; // Advance Y
+                    currentY += cardHeight + 2; 
                 }
             });
 
@@ -2656,16 +2646,15 @@ function generateQPDistributionPDF() {
         });
 
         const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Distribution_Scraped_${dateStr}.pdf`);
+        doc.save(`QP_Distribution_${dateStr}.pdf`);
 
     } catch (e) {
         console.error("PDF Scraper Error:", e);
-        alert("Error creating PDF from HTML: " + e.message);
+        alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
 
 
     
