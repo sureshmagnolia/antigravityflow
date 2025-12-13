@@ -1972,28 +1972,28 @@ function generateQuestionPaperSummaryPDF() {
         
         // --- 2. CONFIGURATION ---
         const PAGE_H = 297;
-        const MARGIN = 10;
-        const ROW_H = 7;
+        const MARGIN = 15; // Slightly wider margin matching the sample
+        const ROW_H = 8;
         const HEADER_H = 8;
         
         const USABLE_W = 210 - (MARGIN * 2);
         
-        // Column Dimensions (QP Code | Subject | Count)
-        const W_CODE  = 35;
+        // Column Dimensions
+        const W_SL = 15;
         const W_COUNT = 20;
-        const W_SUBJ  = USABLE_W - W_CODE - W_COUNT; // Remainder (~135mm)
+        const W_COURSE = USABLE_W - W_SL - W_COUNT; 
 
         // Offsets
-        const OFF_CODE  = 0;
-        const OFF_SUBJ  = W_CODE;
-        const OFF_COUNT = W_CODE + W_SUBJ;
+        const OFF_SL = 0;
+        const OFF_COURSE = W_SL;
+        const OFF_COUNT = W_SL + W_COURSE;
 
         // --- 3. HELPER: SMART TEXT ---
         const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
             if (!text) return;
             doc.setFont("helvetica", isBold ? "bold" : "normal");
             
-            let fontSize = 10; // Slightly larger for Summary
+            let fontSize = 10;
             // Shrink to fit
             if (doc.getTextWidth(text) > w - 2) {
                 fontSize = fontSize * ((w - 2) / doc.getTextWidth(text));
@@ -2007,135 +2007,153 @@ function generateQuestionPaperSummaryPDF() {
             if (align === "center") {
                 doc.text(text, x + (w / 2), y, { align: "center" });
             } else {
-                doc.text(text, x + 1, y);
+                doc.text(text, x + 2, y); // Left padding
             }
         };
 
         const drawHeader = () => {
-            let y = 10;
+            let y = 15;
             const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
             const dateStr = new Date().toISOString().slice(0,10);
             
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text(collegeName, 105, y, { align: 'center' });
-            y += 6;
+            y += 7;
             doc.setFontSize(12); 
-            doc.text("Question Paper Summary (Stream-Wise)", 105, y, { align: 'center' });
-            y += 5;
-            doc.setFontSize(10); doc.setFont("helvetica", "normal");
-            doc.text(`Generated: ${dateStr}`, 105, y, { align: 'center' });
-            return y + 8;
+            doc.text("Question Paper Summary", 105, y, { align: 'center' });
+            y += 6;
+            // Retrieve time from first record if possible, else default
+            const rawData = getFilteredReportData('day-wise');
+            const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
+            
+            doc.setFontSize(11); doc.setFont("helvetica", "normal");
+            doc.text(`${dateStr} | ${sessionTime}`, 105, y, { align: 'center' });
+            return y + 10;
         };
 
         // --- 4. PREPARE DATA ---
-        // Use 'day-wise' filtered data to respect current view
         const rawData = getFilteredReportData('day-wise');
         if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
-        // Group by Stream -> QP Code
+        // Group by Stream -> Course Name
         const streamMap = {};
 
         rawData.forEach(s => {
-            const stream = s.Stream || "General";
-            // Valid QP Code or Course Code
-            const qpCode = s.qpCode || s.Course || "Unknown";
-            const subject = s.Course || "";
+            const stream = s.Stream || "Regular";
+            const courseName = s.Course || "Unknown Course"; 
 
             if (!streamMap[stream]) streamMap[stream] = {};
             
-            if (!streamMap[stream][qpCode]) {
-                streamMap[stream][qpCode] = {
-                    code: qpCode,
-                    subject: subject,
+            if (!streamMap[stream][courseName]) {
+                streamMap[stream][courseName] = {
+                    name: courseName,
                     count: 0
                 };
             }
-            streamMap[stream][qpCode].count++;
+            streamMap[stream][courseName].count++;
         });
 
         // --- 5. RENDER LOOP ---
         let currentY = drawHeader();
-        const sortedStreams = Object.keys(streamMap).sort();
+        const sortedStreams = Object.keys(streamMap).sort((a, b) => {
+             // Force Regular to top
+             if(a === "Regular") return -1;
+             if(b === "Regular") return 1;
+             return a.localeCompare(b);
+        });
 
         sortedStreams.forEach(stream => {
-            // Check Space for Stream Header (Needs approx 25mm for header + 1 row)
-            if (currentY + 25 > PAGE_H - MARGIN) {
+            // Check Space for Stream Header + Table Header + 1 Row
+            if (currentY + 30 > PAGE_H - MARGIN) {
                 doc.addPage();
                 currentY = drawHeader();
             }
 
-            // A. STREAM HEADER (Grey Bar)
-            doc.setFillColor(230); doc.setDrawColor(0);
-            doc.rect(MARGIN, currentY, USABLE_W, 8, 'FD');
+            // A. STREAM HEADER (No Box, Just Text)
             doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text(stream, MARGIN + 2, currentY + 5.5);
+            doc.text(`Stream: ${stream}`, MARGIN, currentY + 5);
             currentY += 8;
 
-            // B. TABLE HEADER (Black Bar)
-            doc.setFillColor(0); 
-            doc.rect(MARGIN, currentY, USABLE_W, 7, 'F');
-            doc.setTextColor(255); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-            doc.text("QP Code", MARGIN + OFF_CODE + 2, currentY + 4.5);
-            doc.text("Subject / Course Name", MARGIN + OFF_SUBJ + 2, currentY + 4.5);
-            doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 4.5, { align: 'center' });
-            currentY += 7;
+            // B. TABLE HEADER (Grey Background)
+            doc.setFillColor(240); doc.setDrawColor(0);
+            doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
+            
+            doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+            doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
+            doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
+            doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 5.5, { align: 'center' });
+            currentY += ROW_H;
 
             // C. ROWS
-            const qps = streamMap[stream];
-            const sortedQPs = Object.keys(qps).sort();
+            const courses = streamMap[stream];
+            const sortedCourses = Object.keys(courses).sort();
+            let slNo = 1;
+            let streamTotal = 0;
 
-            sortedQPs.forEach(qpKey => {
-                const row = qps[qpKey];
-                
-                // Page Break Check (Individual Row)
+            sortedCourses.forEach(cKey => {
+                const row = courses[cKey];
+                streamTotal += row.count;
+
+                // Page Break Check
                 if (currentY + ROW_H > PAGE_H - MARGIN) {
                     doc.addPage();
                     currentY = drawHeader();
                     
-                    // Re-draw Stream Header (Cont.)
-                    doc.setFillColor(230); doc.setDrawColor(0);
-                    doc.rect(MARGIN, currentY, USABLE_W, 8, 'FD');
-                    doc.setTextColor(0); doc.setFont("helvetica", "bold");
-                    doc.text(`${stream} (Continued)`, MARGIN + 2, currentY + 5.5);
-                    currentY += 8;
-                    
                     // Re-draw Table Header
-                    doc.setFillColor(0); 
-                    doc.rect(MARGIN, currentY, USABLE_W, 7, 'F');
-                    doc.setTextColor(255); 
-                    doc.text("QP Code", MARGIN + OFF_CODE + 2, currentY + 4.5);
-                    doc.text("Subject / Course Name", MARGIN + OFF_SUBJ + 2, currentY + 4.5);
-                    doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 4.5, { align: 'center' });
-                    currentY += 7;
+                    doc.setFillColor(240); doc.setDrawColor(0);
+                    doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
+                    doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                    doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
+                    doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
+                    doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 5.5, { align: 'center' });
+                    currentY += ROW_H;
                 }
 
                 doc.setTextColor(0); doc.setDrawColor(0);
                 const rowCenterY = currentY + (ROW_H/2);
 
-                // QP Code
-                drawSmartText(row.code, MARGIN + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true);
+                // Sl No
+                drawSmartText(String(slNo), MARGIN + OFF_SL, rowCenterY, W_SL, ROW_H, "center", false);
                 
-                // Subject
-                drawSmartText(row.subject, MARGIN + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left");
+                // Course Name
+                drawSmartText(row.name, MARGIN + OFF_COURSE, rowCenterY, W_COURSE, ROW_H, "left");
 
                 // Count
                 drawSmartText(String(row.count), MARGIN + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true);
 
                 // Borders
-                doc.setDrawColor(200); // Light grey lines for data
                 doc.rect(MARGIN, currentY, USABLE_W, ROW_H); 
-                doc.line(MARGIN + OFF_SUBJ, currentY, MARGIN + OFF_SUBJ, currentY + ROW_H);
+                doc.line(MARGIN + OFF_COURSE, currentY, MARGIN + OFF_COURSE, currentY + ROW_H);
                 doc.line(MARGIN + OFF_COUNT, currentY, MARGIN + OFF_COUNT, currentY + ROW_H);
 
                 currentY += ROW_H;
+                slNo++;
             });
+
+            // D. TOTAL ROW
+            if (currentY + ROW_H > PAGE_H - MARGIN) {
+                 doc.addPage();
+                 currentY = drawHeader();
+            }
+
+            doc.setFont("helvetica", "bold");
+            [cite_start]// Merge Sl + Course cols for "Total" label [cite: 664]
+            const totalLabelWidth = W_SL + W_COURSE;
             
-            // Gap between streams
-            currentY += 5;
+            // Draw Box
+            doc.rect(MARGIN, currentY, USABLE_W, ROW_H);
+            doc.line(MARGIN + totalLabelWidth, currentY, MARGIN + totalLabelWidth, currentY + ROW_H);
+
+            // Text
+            const totalCenterY = currentY + (ROW_H/2) + 1.5;
+            doc.text(`Total (${stream})`, MARGIN + totalLabelWidth - 2, totalCenterY, { align: 'right' });
+            doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT/2), totalCenterY, { align: 'center' });
+
+            currentY += (ROW_H + 8); // Add gap before next stream
         });
 
         const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Summary_StreamWise_${dateStr}.pdf`);
+        doc.save(`QP_Summary_${dateStr}.pdf`);
 
     } catch (e) {
         console.error("PDF Error:", e);
