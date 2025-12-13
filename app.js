@@ -15111,20 +15111,18 @@ window.confirmDialSelection = confirmDialSelection;
 //----------------Remunereation Bill PDF---------------------
 // --- ADD THIS FUNCTION TO app.js ---
 
-// --- REMUNERATION BILL PDF (Rectified for Multiline & Layout) ---
+// --- REMUNERATION BILL PDF (Fixed: Rupee Symbol & Footer Layout) ---
 function generateRemunerationBillPDF() {
     const { jsPDF } = window.jspdf;
     
     // 1. Target the specific remuneration output
     const container = document.getElementById('remuneration-output');
-    // The HTML generator creates .print-page divs. We scrape the first one's data structure.
-    // (Assuming data is consistent, we rebuild pagination ourselves).
     const billDiv = container ? container.querySelector('.print-page') : null;
 
     if (!billDiv) return alert("No bill generated. Please click 'Generate Bill' first.");
 
     const btn = document.getElementById('btn-download-bill-pdf');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating PDF..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
 
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -15133,23 +15131,30 @@ function generateRemunerationBillPDF() {
         const MARGIN = 10;
         const CONTENT_W = PAGE_W - (MARGIN * 2);
         
+        // --- HELPER: SANITIZE TEXT (Fix Rupee Symbol) ---
+        const clean = (text) => {
+            if (!text) return "";
+            // Replace Rupee symbol with "Rs."
+            return text.replace(/₹/g, "Rs. ").trim();
+        };
+
         // --- A. SCRAPE HEADER INFO ---
-        const h2 = billDiv.querySelector('h2')?.innerText.trim() || "COLLEGE NAME";
-        const h3 = billDiv.querySelector('h3')?.innerText.trim() || "Remuneration Bill";
-        const pStream = billDiv.querySelector('p')?.innerText.trim() || ""; 
+        const h2 = clean(billDiv.querySelector('h2')?.innerText);
+        const h3 = clean(billDiv.querySelector('h3')?.innerText);
+        const pStream = clean(billDiv.querySelector('p')?.innerText); 
 
         // --- B. SCRAPE TABLE DATA ---
         const table = billDiv.querySelector('table');
-        // Get Headers
-        const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
-        // Get Rows (Preserve innerText newlines for multi-line cells)
+        const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
+        
+        // Get Rows (Preserve multiline structure)
         const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-            return Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+            return Array.from(tr.querySelectorAll('td')).map(td => clean(td.innerText));
         });
+
         // Get Footer Row (Subtotals)
         const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
-        // Map footer text. Note: HTML might have colspans. We'll handle placement manually.
-        const footerValues = tfootCells.map(td => td.innerText.trim());
+        const footerValues = tfootCells.map(td => clean(td.innerText));
 
         // --- C. SCRAPE SUMMARY BOXES ---
         const summaryBoxes = billDiv.querySelectorAll('.summary-box');
@@ -15162,47 +15167,44 @@ function generateRemunerationBillPDF() {
         if(summaryBoxes.length > 0) {
             // Box 1: Supervision & Allowances
             const box1 = summaryBoxes[0];
-            const breakdownDiv = box1.querySelector('div.border-b'); // Supervision header
+            
+            // Supervision: Extract text lines (CS:..., SAS:..., OS:..., Total:...)
+            const breakdownDiv = box1.querySelector('div.border-b'); 
             if(breakdownDiv && breakdownDiv.nextElementSibling) {
-                supBreakdown = breakdownDiv.nextElementSibling.innerText.trim();
+                // Get the text content, replace commas with newlines for better stacking
+                supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n"); 
             }
             
-            // Allowances usually in the second column of the grid
+            // Allowances
             const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
             allowanceDivs.forEach(div => {
-                allowances.push(div.innerText.trim());
+                allowances.push(clean(div.innerText));
             });
         }
         if(summaryBoxes.length > 1) {
             // Box 2: Grand Total
             const totalBox = summaryBoxes[1];
-            grandTotal = totalBox.querySelector('.text-2xl')?.innerText.trim() || "";
-            amountWords = totalBox.querySelector('.italic')?.innerText.trim() || "";
+            grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
+            amountWords = clean(totalBox.querySelector('.italic')?.innerText);
         }
         if(summaryBoxes.length > 2) {
-            // Box 3: Signature
-            signatureTitle = summaryBoxes[2].innerText.trim() || "Chief Superintendent";
+            signatureTitle = clean(summaryBoxes[2].innerText);
         }
 
         // --- D. PDF DRAWING CONFIG ---
-        const ROWS_PER_PAGE = 20;
+        const ROWS_PER_PAGE = 18; // Reduced slightly to ensure footer fits comfortably
         const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
 
-        // Column Config (Matches PDF: Session wider, others narrow)
-        // Col indices: 0=Session, 1=Cand, 2=Invig, 3=Clerk, 4=Peon, 5=Swpr, 6=CS, 7=SAS, 8=OS, 9=Total
-        // Note: Peon/OS cols might be hidden in HTML depending on stream. We rely on scraped headers length.
-        
-        // Dynamic width distribution based on header count
+        // Column Widths
         const count = headers.length;
-        // Base widths approximation
         let colWidths = [];
-        if (count === 9) { // Regular (No Peon)
+        if (count === 9) { // Regular
             colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25]; 
-        } else { // SDE (Has Peon) - 10 cols
+        } else { // SDE
             colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
         }
         
-        // Normalize to CONTENT_W
+        // Normalize Widths
         const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
         const scale = CONTENT_W / totalDefined;
         colWidths = colWidths.map(w => w * scale);
@@ -15233,10 +15235,9 @@ function generateRemunerationBillPDF() {
             headers.forEach((h, i) => {
                 const cx = getX(i) + (colWidths[i]/2);
                 doc.text(h, cx, y + 5, { align: 'center' });
-                // Vert Line (Right side)
                 if (i < headers.length - 1) doc.line(getX(i+1), y, getX(i+1), y + 8);
             });
-            doc.rect(MARGIN, y, CONTENT_W, 8); // Header border
+            doc.rect(MARGIN, y, CONTENT_W, 8); 
             y += 8;
 
             // 3. TABLE ROWS
@@ -15247,90 +15248,87 @@ function generateRemunerationBillPDF() {
             doc.setFont("helvetica", "normal");
             
             pageRows.forEach(row => {
-                // Calculate max height for this row based on multiline content
+                // Calculate max height
                 let maxLines = 1;
                 row.forEach((cell, i) => {
-                    const cellWidth = colWidths[i] - 2; // Padding
+                    const cellWidth = colWidths[i] - 2; 
                     const lines = doc.splitTextToSize(cell, cellWidth);
                     if (lines.length > maxLines) maxLines = lines.length;
                 });
                 
-                // Height: Base 6mm + 4mm per extra line
-                const rowH = 6 + ((maxLines - 1) * 4);
+                // Dynamic Row Height (Base 6mm + 3.5mm per extra line)
+                const rowH = 6 + ((maxLines - 1) * 3.5);
 
-                // Check page overflow (unlikely with fixed 20 but good practice)
+                // Page Break Check
                 if (y + rowH > PAGE_H - MARGIN) {
                     doc.addPage();
-                    y = MARGIN; // Reset Y
+                    y = MARGIN; 
                 }
 
-                // Draw Cell Content
+                // Draw Cells
                 row.forEach((cell, i) => {
                     const cx = getX(i) + (colWidths[i]/2);
-                    // Y position centered text
-                    let ty = y + 4; // Start slightly down
+                    let ty = y + 4; // Base Y for single line
                     
                     doc.setFontSize(8);
-                    // Special case: Amount column (last) bold
                     if (i === row.length - 1) doc.setFont("helvetica", "bold");
                     else doc.setFont("helvetica", "normal");
 
                     const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                    // Manual vertical alignment if multiple lines
-                    if (lines.length > 1) ty = y + 3; 
                     
-                    doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.15 });
+                    // Adjust Y for multiline to center it vertically
+                    if (lines.length > 1) {
+                        const totalTextH = lines.length * 2.8; // Approx height of text block
+                        ty = y + (rowH / 2) - (totalTextH / 2) + 2; 
+                    }
+                    
+                    doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
 
-                    // Vert Line
                     if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
                 });
 
-                // Row Border
                 doc.rect(MARGIN, y, CONTENT_W, rowH);
                 y += rowH;
             });
 
-            // 4. FOOTER SUMMARY (Only Last Page)
+            // 4. FOOTER (Last Page Only)
             if (p === totalPages - 1) {
-                // A. Subtotals Row
+                // A. Subtotals
                 doc.setFont("helvetica", "bold");
                 doc.rect(MARGIN, y, CONTENT_W, 8);
                 
-                // HTML Footer logic is: [Label, Val1, Val2...]
-                // We align the "Subtotals:" label to the column before values start
-                // and place values in corresponding columns.
-                
-                // Logic: The footerValues array from HTML usually matches the data columns
-                // BUT the first cell is usually "Subtotals:" spanning 2 cols.
-                // Let's rely on column indices from right to left.
-                
                 const valsReversed = [...footerValues].reverse();
-                // valsReversed[0] = Total
-                // valsReversed[1] = OS/Peon ...
                 
                 // Draw Total (Last Col)
                 const totalColIdx = colWidths.length - 1;
                 doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
-                doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); // Line
+                doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); 
 
-                // Draw Other Cols (going backwards)
+                // Draw Other Cols
                 for(let k=1; k < valsReversed.length; k++) {
                     const colIdx = totalColIdx - k;
-                    if(colIdx > 1) { // Don't draw in date/student cols
+                    if(colIdx > 1) { 
                         doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx]/2), y+5, {align:'center'});
                         doc.line(getX(colIdx), y, getX(colIdx), y+8);
                     }
                 }
-                
-                // Label
                 doc.text("Subtotals:", getX(1) + 15, y+5, { align: 'right' });
 
                 y += 12;
 
-                // B. Breakdown Boxes
-                const boxH = 35;
-                const boxW = (CONTENT_W / 2) - 3;
+                // --- B. BREAKDOWN BOXES (Dynamic Height Logic) ---
+                doc.setFontSize(8); doc.setFont("helvetica", "normal");
                 
+                // Measure text height to determine box height
+                const boxW = (CONTENT_W / 2) - 3;
+                const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
+                const allowLines = allowances.map(l => doc.splitTextToSize(l, boxW - 6)).flat();
+                
+                // Calculate required height (lines * line_height + padding)
+                const h1 = (supLines.length * 4) + 15;
+                const h2 = (allowances.length * 5) + 15;
+                const boxH = Math.max(h1, h2, 35); // Min 35mm
+
                 // Supervision Box
                 doc.setDrawColor(0);
                 doc.rect(MARGIN, y, boxW, boxH);
@@ -15338,9 +15336,6 @@ function generateRemunerationBillPDF() {
                 doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
                 
                 doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                // The scraped text might be "CS: 100, SAS: 100..."
-                // Split by comma for cleaner list
-                const supLines = doc.splitTextToSize(supBreakdown.replace(/,/g, '\n'), boxW - 6);
                 doc.text(supLines, MARGIN + 3, y + 10);
 
                 // Allowances Box
@@ -15353,7 +15348,7 @@ function generateRemunerationBillPDF() {
                 let ay = y + 10;
                 allowances.forEach(line => {
                     doc.text(line, box2X + 3, ay);
-                    ay += 5;
+                    ay += 5; // Spacing between items
                 });
 
                 y += boxH + 8;
@@ -15372,7 +15367,7 @@ function generateRemunerationBillPDF() {
                 doc.setFontSize(10); doc.setFont("helvetica", "bold");
                 doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
             }
-
+            
             // Page Number
             doc.setFontSize(8); doc.setFont("helvetica", "italic");
             doc.text(`Page ${p+1} of ${totalPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
