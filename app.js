@@ -2422,7 +2422,7 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (HTML SCRAPER: Hide Serial if Location Exists) ---
+// --- QP DISTRIBUTION PDF (HTML SCRAPER: Single Line Layout) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2494,6 +2494,7 @@ function generateQPDistributionPDF() {
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
+                    // Extract Metadata
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
                     let qpCode = "N/A";
                     headerRow.querySelectorAll('span').forEach(sp => {
@@ -2575,7 +2576,7 @@ function generateQPDistributionPDF() {
                         doc.rect(roomX, roomY, boxW - 2, 7, 'FD');
 
                         // Count
-                        doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                         doc.text(countTxt, roomX + 2, roomY + 5);
                         doc.setFontSize(6); doc.setFont("helvetica", "normal");
                         doc.text("Nos", roomX + 8, roomY + 5);
@@ -2584,28 +2585,32 @@ function generateQPDistributionPDF() {
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- ROOM IDENTITY LOGIC ---
-                        // "Location info dont need Room serial number again"
+                        // --- COMBINED TEXT LOGIC (Serial + Location) ---
+                        // "Room Serial No" + space + "Location"
+                        // Example: "Room #1 (G101)"
+                        let fullText = roomNameTxt;
+                        if (locTxt) {
+                            // Clean up location (remove parens if desired, or keep them)
+                            // User request: "Location alone next to room serail number"
+                            // We keep it simple: concat them.
+                            fullText += ` ${locTxt}`; 
+                        }
+
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                         
-                        let textToPrint = roomNameTxt; // Default: "Room #1"
-                        let cleanLoc = "";
-
-                        if (locTxt) {
-                            cleanLoc = locTxt.replace(/[()]/g, '').trim(); 
-                            // If location exists, use it INSTEAD of the serial number
-                            if (cleanLoc) textToPrint = cleanLoc;
+                        // Check Width & Truncate
+                        const maxW = boxW - 22; // Box width - left area - checkbox area
+                        if (doc.getTextWidth(fullText) > maxW) {
+                            // Scale down font slightly if it barely doesn't fit
+                            doc.setFontSize(7);
+                            if (doc.getTextWidth(fullText) > maxW) {
+                                // Still too big? Truncate.
+                                const chars = Math.floor(maxW / 1.5);
+                                fullText = fullText.substring(0, chars) + "..";
+                            }
                         }
 
-                        // Truncate to fit
-                        const maxTextW = boxW - 22; // Box width - left offsets
-                        if (doc.getTextWidth(textToPrint) > maxTextW) {
-                            // Approx char width
-                            const chars = Math.floor(maxTextW / 1.5);
-                            textToPrint = textToPrint.substring(0, chars) + "..";
-                        }
-
-                        doc.text(textToPrint, roomX + 16, roomY + 5);
+                        doc.text(fullText, roomX + 16, roomY + 5);
 
                         // Checkbox
                         doc.setDrawColor(0);
@@ -2631,6 +2636,10 @@ function generateQPDistributionPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
+
+
+
+    
 
 
     
