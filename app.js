@@ -1296,55 +1296,91 @@ function updateLocalSlotsFromStudents() {
     });
 
 // --- MASTER PDF ROUTER ---
-
+// --- MASTER PDF DOWNLOAD DISPATCHER ---
 window.downloadReportPDF = function() {
+    // 1. Get the current report type
     const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
     console.log("📄 Requesting PDF for:", reportType);
 
+    // --- 1. ROOM-WISE SEATING (Standard) ---
     if (reportType === "Roomwise_Seating_Report") {
-        if(typeof generateRoomWisePDF === 'function') generateRoomWisePDF();
-        else alert("Room-wise PDF generator not loaded.");
+        if(typeof generateRoomWisePDF === 'function') {
+            generateRoomWisePDF();
+        } else {
+            alert("Room-wise PDF generator not found.");
+        }
         return;
     }
 
+    // --- 2. DAY-WISE SEATING (Compact/Notice Board) ---
     if (reportType === "Daywise_Seating_Details") {
-        if(typeof generateDayWisePDF === 'function') generateDayWisePDF();
-        else alert("Day-wise PDF generator not loaded.");
+        if(typeof generateDayWisePDF === 'function') {
+            generateDayWisePDF();
+        } else {
+            alert("Day-wise PDF generator not found.");
+        }
         return;
     }
 
-    // 3. Question Paper Summary (Stream-Wise)
+    // --- 3. QUESTION PAPER SUMMARY (Stream-Wise List) ---
     if (reportType === "Question_Paper_Summary") {
         if(typeof generateQuestionPaperSummaryPDF === 'function') {
             generateQuestionPaperSummaryPDF();
         } else {
-            alert("QP Summary generator not loaded.");
+            alert("QP Summary generator not found.");
         }
         return;
     }
 
-    // 4. Room-Wise QP Report (Detailed)
+    // --- 4. ROOM-WISE QP REPORT (Detailed Room Breakdown) ---
     if (reportType === "Question_Paper_Report" || reportType === "Roomwise_QP_Report") {
         if(typeof generateQuestionPaperReportPDF === 'function') {
             generateQuestionPaperReportPDF();
         } else {
-            alert("Room-wise QP generator not loaded.");
+            alert("Room-wise QP Report generator not found.");
         }
         return;
     }
 
-    // 5. Aggregate Distribution
+    // --- 5. QP DISTRIBUTION REPORT (Card Layout - WYSIWYG) ---
     if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
-        if(typeof generateQPDistributionPDF === 'function') generateQPDistributionPDF();
-        else alert("QP Distribution PDF generator not loaded.");
+        if(typeof generateQPDistributionPDF === 'function') {
+            generateQPDistributionPDF();
+        } else {
+            alert("QP Distribution generator not found.");
+        }
         return;
     }
 
-    alert("PDF generation for '" + reportType + "' is coming next!");
+    // --- 6. SCRIBE PROFORMA (One Page Per Scribe) ---
+    if (reportType === "Scribe_Proforma") {
+        if(typeof generateScribeProformaPDF === 'function') {
+            generateScribeProformaPDF();
+        } else {
+            alert("Scribe Proforma generator not found.");
+        }
+        return;
+    }
+
+    // --- 7. FALLBACK FOR OTHER TYPES ---
+    // (Add cases here for Absentee, Invigilator, etc. if you create PDF generators for them)
+    if (reportType === "Absentee_Statement") {
+        alert("PDF generation for Absentee Statement is not yet implemented. Please use Print.");
+        return;
+    }
+    
+    if (reportType === "Invigilator_Summary") {
+        alert("PDF generation for Invigilator Summary is not yet implemented. Please use Print.");
+        return;
+    }
+
+    // Default catch-all
+    alert("PDF generation not available for this report type: " + reportType + "\nPlease use the Print button.");
 };
+
 
     
 
