@@ -1555,106 +1555,94 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-// --- ULTIMATE PDF GENERATOR: SOURCE DATA + STRICT PAGE LOOP ---
+// --- ULTIMATE PDF GENERATOR: MANUAL TEXT RENDERER (Zero AutoTable) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. VALIDATION
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded to generate PDF.");
+        return alert("No data loaded.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
 
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         
-        // 2. CONFIGURATION
-        const PAGE_WIDTH = 210;
+        // --- 1. CONFIGURATION ---
         const MARGIN = 10;
-        const COL_GAP = 6;
+        const PAGE_H = 290;
+        const START_Y = 45;
+        const ROW_H = 6; // Height per student row
+        const HEADER_H = 7; // Height for Course Header
         
-        // STRICT ROW LIMITS (Tuned to fit A4)
-        const ROWS_PER_COL = 38; 
-        const LIMIT_1_COL = 38; 
-        const LIMIT_2_COL = 76; // 38 * 2
+        // Column X Positions (Manual Grid)
+        // Left Column (0 - 95mm)
+        const C1_LOC = 12; 
+        const C1_REG = 35;
+        const C1_NAME = 65; 
+        const C1_SEAT = 95; 
+        
+        // Right Column (115 - 200mm)
+        const C2_LOC = 117; 
+        const C2_REG = 140;
+        const C2_NAME = 170;
+        const C2_SEAT = 200;
 
-        // 3. PREPARE DATA (Exact HTML Logic)
+        // Divider Line X
+        const DIVIDER_X = 105;
+
+        // --- 2. PREPARE DATA ---
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
-
-        if (!rawData || rawData.length === 0) throw new Error("No matching data found.");
-
-        // Allocation ensures correct Room/Seat data
         const dataWithRooms = performOriginalAllocation(rawData);
-        
-        let scribeRegNos = new Set();
-        if(typeof globalScribeList !== 'undefined' && globalScribeList) {
-            scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-        }
+        const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
 
-        // Group by Stream -> Session
         const sessionsMap = {};
         dataWithRooms.forEach(row => {
             const stream = row.Stream || "Regular";
-            const sessionKey = `${row.Date} | ${row.Time}`;
-            
+            const key = `${row.Date}|${row.Time}`;
             if (!sessionsMap[stream]) sessionsMap[stream] = {};
-            if (!sessionsMap[stream][sessionKey]) {
-                sessionsMap[stream][sessionKey] = { 
-                    date: row.Date, time: row.Time, students: [], scribes: [] 
-                };
-            }
-            sessionsMap[stream][sessionKey].students.push(row);
-            if(scribeRegNos.has(row['Register Number'])) {
-                sessionsMap[stream][sessionKey].scribes.push(row);
-            }
+            if (!sessionsMap[stream][key]) sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
+            sessionsMap[stream][key].students.push(row);
+            if(scribeRegNos.has(row['Register Number'])) sessionsMap[stream][key].scribes.push(row);
         });
 
-        // 4. GENERATE PAGES (Stream -> Session -> Page Chunks)
+        // --- 3. DRAWING LOOP ---
         const sortedStreams = Object.keys(sessionsMap).sort();
         let pageCount = 0;
 
-        sortedStreams.forEach(streamName => {
-            const sessions = sessionsMap[streamName];
-            const sortedKeys = Object.keys(sessions).sort(compareSessionStrings);
-
-            sortedKeys.forEach(sessionKey => {
-                const sessionData = sessions[sessionKey];
-
-                // A. FLATTEN DATA
-                // Sort: Course -> RegNo
-                sessionData.students.sort((a, b) => {
+        sortedStreams.forEach(stream => {
+            const sessions = sessionsMap[stream];
+            Object.keys(sessions).sort().forEach(key => {
+                const sData = sessions[key];
+                
+                // Sort
+                sData.students.sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                     return a['Register Number'].localeCompare(b['Register Number']);
                 });
 
-                const flatRows = [];
+                // Flatten to Print Rows
+                const printRows = [];
                 let lastCourse = "";
                 let lastLoc = "";
 
-                sessionData.students.forEach(s => {
-                    // Header Row
+                sData.students.forEach(s => {
                     if (s.Course !== lastCourse) {
-                        flatRows.push({ type: 'header', text: s.Course });
+                        printRows.push({ type: 'header', text: s.Course });
                         lastCourse = s.Course;
                         lastLoc = "";
                     }
                     
-                    // Data Row
                     const roomName = s['Room No'];
                     const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
                     const locText = roomInfo.location ? `${roomName}\n(${roomInfo.location})` : roomName;
                     
-                    // Merge Visuals
-                    let displayLoc = "";
-                    if (locText !== lastLoc) {
-                        displayLoc = locText;
-                        lastLoc = locText;
-                    }
+                    let displayLoc = (locText !== lastLoc) ? locText : "";
+                    if (locText !== lastLoc) lastLoc = locText;
 
-                    flatRows.push({
+                    printRows.push({
                         type: 'data',
                         loc: displayLoc,
                         reg: s['Register Number'],
@@ -1664,76 +1652,142 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // B. PAGE LOOP
-                let queue = [...flatRows];
+                // PAGINATION LOGIC
+                let currentY = START_Y;
+                let currentColumn = 1; // 1 = Left, 2 = Right
                 
-                while(queue.length > 0) {
-                    if (pageCount > 0) doc.addPage();
-                    
-                    // Header
-                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
-                    
-                    const startY = 45;
+                if (pageCount > 0) doc.addPage();
+                drawManualHeader(doc, stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
+                drawColumnHeader(doc, currentY, 1); // Left Header
+                drawColumnHeader(doc, currentY, 2); // Right Header
+                currentY += ROW_H;
 
-                    // Decision: 1 Col or 2 Col?
-                    // If queue is huge, use 2 Cols. If small tail remains, use 1 Col.
-                    const isTwoCol = queue.length > LIMIT_1_COL;
-                    const limit = isTwoCol ? LIMIT_2_COL : LIMIT_1_COL;
-                    
-                    const pageChunk = queue.splice(0, limit);
-
-                    if (isTwoCol) {
-                        // === 2 COLUMNS ===
-                        const mid = Math.ceil(pageChunk.length / 2);
-                        const leftData = pageChunk.slice(0, mid);
-                        const rightData = pageChunk.slice(mid);
-                        const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
-
-                        // 1. Draw Left
-                        const startPage = doc.internal.getCurrentPageInfo().pageNumber;
-                        drawPDFTable(doc, leftData, MARGIN, startY, colWidth, true);
-
-                        // 2. FORCE BACK TO SAME PAGE (Fixes Blank Page)
-                        doc.setPage(startPage);
-
-                        // 3. Draw Right
-                        drawPDFTable(doc, rightData, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
-
-                        // 4. Divider Line
-                        doc.setPage(startPage);
-                        doc.setDrawColor(200); doc.setLineWidth(0.1);
-                        doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
-
-                    } else {
-                        // === 1 COLUMN ===
-                        drawPDFTable(doc, pageChunk, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                printRows.forEach(row => {
+                    // Check for Page Break
+                    if (currentY > PAGE_H - 15) {
+                        // Switch Column or Page
+                        if (currentColumn === 1) {
+                            currentColumn = 2;
+                            currentY = START_Y + ROW_H; // Reset Y for Right Col
+                        } else {
+                            doc.addPage();
+                            drawManualHeader(doc, stream, sData.date, sData.time, "Seating Details", currentCollegeName);
+                            currentY = START_Y;
+                            drawColumnHeader(doc, currentY, 1);
+                            drawColumnHeader(doc, currentY, 2);
+                            currentY += ROW_H;
+                            currentColumn = 1;
+                        }
                     }
-                    pageCount++;
-                }
 
-                // C. SCRIBE SUMMARY PAGE
-                if (sessionData.scribes.length > 0) {
+                    // Draw Line Separator
+                    doc.setDrawColor(200); doc.setLineWidth(0.1);
+                    doc.line(DIVIDER_X, START_Y, DIVIDER_X, PAGE_H - 10);
+
+                    // Determine X Coords based on Column
+                    const xLoc  = currentColumn === 1 ? C1_LOC : C2_LOC;
+                    const xReg  = currentColumn === 1 ? C1_REG : C2_REG;
+                    const xName = currentColumn === 1 ? C1_NAME : C2_NAME;
+                    const xSeat = currentColumn === 1 ? C1_SEAT : C2_SEAT;
+
+                    if (row.type === 'header') {
+                        // Course Header (Black Bar)
+                        doc.setFillColor(0);
+                        const xStart = currentColumn === 1 ? MARGIN : DIVIDER_X + COL_GAP;
+                        const w = (PAGE_WIDTH - (MARGIN*2) - COL_GAP) / 2;
+                        doc.rect(xStart, currentY - 4, w, HEADER_H, 'F');
+                        
+                        doc.setTextColor(255);
+                        doc.setFontSize(8);
+                        doc.setFont("helvetica", "bold");
+                        
+                        // Truncate long course names
+                        let cText = row.text;
+                        if (cText.length > 45) cText = cText.substring(0, 42) + "...";
+                        doc.text(cText, xStart + 2, currentY);
+                        
+                        currentY += HEADER_H;
+                    } else {
+                        // Student Row
+                        doc.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); // Orange for scribe
+                        doc.setFont("helvetica", row.isScribe ? "bold" : "normal");
+                        doc.setFontSize(8);
+
+                        // Location (Tiny Font)
+                        if (row.loc) {
+                            doc.setFontSize(7);
+                            const lines = doc.splitTextToSize(row.loc, 20); // Wrap location
+                            doc.text(lines, xLoc, currentY, { align: 'center' });
+                        }
+
+                        // Reg No (Bold)
+                        doc.setFontSize(8);
+                        doc.setFont("helvetica", "bold");
+                        doc.text(row.reg, xReg, currentY);
+
+                        // Name (Normal, truncated)
+                        doc.setFont("helvetica", "normal");
+                        let nText = row.name;
+                        if (nText.length > 22) nText = nText.substring(0, 20) + "..";
+                        doc.text(nText, xName, currentY);
+
+                        // Seat (Center)
+                        doc.setFont("helvetica", "bold");
+                        doc.text(String(row.seat), xSeat, currentY, { align: 'center' });
+
+                        // Grid Line (Bottom)
+                        doc.setDrawColor(230);
+                        const lineStart = currentColumn === 1 ? MARGIN : DIVIDER_X + COL_GAP;
+                        const lineW = (PAGE_WIDTH - (MARGIN*2) - COL_GAP) / 2;
+                        doc.line(lineStart, currentY + 2, lineStart + lineW, currentY + 2);
+
+                        currentY += ROW_H;
+                    }
+                });
+                pageCount++;
+
+                // Scribe Summary
+                if (sData.scribes.length > 0) {
                     doc.addPage();
-                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
+                    drawManualHeader(doc, stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
                     
                     const map = {};
-                    sessionData.scribes.forEach(s => {
+                    sData.scribes.forEach(s => {
                         const r = s['Room No'];
                         if(!map[r]) map[r] = [];
                         map[r].push(`${s.Name} (${s['Register Number']})`);
                     });
-                    
-                    const scribeRows = Object.keys(map).sort().map(r => {
-                        const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
-                        const loc = info.location ? `${r}\n(${info.location})` : r;
-                        // Map explicitly to array for AutoTable body
-                        return [
-                            { content: loc, styles: { fontStyle: 'bold' } }, 
-                            map[r].join(', ')
-                        ];
-                    });
 
-                    drawPDFScribeTable(doc, scribeRows, MARGIN, 45);
+                    let sy = START_Y;
+                    doc.setFontSize(10);
+                    doc.setTextColor(0);
+                    
+                    // Header
+                    doc.setFillColor(220);
+                    doc.rect(MARGIN, sy, PAGE_WIDTH - (MARGIN*2), 8, 'F');
+                    doc.setFont("helvetica", "bold");
+                    doc.text("Room Location", MARGIN + 2, sy + 5);
+                    doc.text("Candidates", MARGIN + 60, sy + 5);
+                    sy += 12;
+
+                    Object.keys(map).sort().forEach(r => {
+                        const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
+                        const loc = info.location ? `${r} (${info.location})` : r;
+                        const cands = map[r].join(', ');
+                        
+                        const splitCands = doc.splitTextToSize(cands, 120);
+                        const h = splitCands.length * 5 + 4;
+                        
+                        doc.setFont("helvetica", "bold");
+                        doc.text(loc, MARGIN + 2, sy);
+                        
+                        doc.setFont("helvetica", "normal");
+                        doc.text(splitCands, MARGIN + 60, sy);
+                        
+                        doc.setDrawColor(200);
+                        doc.line(MARGIN, sy + h - 2, PAGE_WIDTH - MARGIN, sy + h - 2);
+                        sy += h;
+                    });
                     pageCount++;
                 }
             });
@@ -1743,21 +1797,19 @@ function generateDayWisePDF() {
         doc.save(`DayWise_Report_${dateStr}.pdf`);
 
     } catch (e) {
-        console.error("PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        console.error(e);
+        alert("PDF Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
 
-// --- HELPER 1: HEADER ---
-function drawHeader(doc, stream, date, time, title, collegeName) {
+// --- HELPERS ---
+function drawManualHeader(doc, stream, date, time, title, collegeName) {
     const w = doc.internal.pageSize.getWidth();
     let y = 10;
-    
     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
     doc.text(stream, w - 14, y, { align: 'right' });
-
     y += 10;
     doc.setFontSize(16); doc.text(collegeName, w/2, y, {align:'center'});
     y += 7;
@@ -1767,62 +1819,22 @@ function drawHeader(doc, stream, date, time, title, collegeName) {
     doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
 }
 
-// --- HELPER 2: STUDENT TABLE ---
-function drawPDFTable(doc, rows, x, y, width, isCompact) {
-    if (!rows || rows.length === 0) return;
-
-    // Explicit Mapping: Name stays in Name column
-    const body = rows.map(r => {
-        if (r.type === 'header') {
-            return [{ 
-                content: r.text, colSpan: 4, 
-                styles: { fillColor: 0, textColor: 255, fontStyle: 'bold', halign: 'left', fontSize: isCompact ? 9 : 10 } 
-            }];
-        } 
-        
-        const txtColor = r.isScribe ? [194, 65, 12] : 0;
-        const fontStyle = r.isScribe ? 'bold' : 'normal';
-        
-        return [
-            { content: r.loc, styles: { halign: 'center', textColor: txtColor, fontStyle: fontStyle } },
-            { content: r.reg, styles: { fontStyle: 'bold', textColor: txtColor } },
-            { content: r.name, styles: { textColor: txtColor, fontStyle: fontStyle } }, // Name is always index 2
-            { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: txtColor } } // Seat is always index 3
-        ];
-    });
-
-    doc.autoTable({
-        startY: y, margin: { left: x }, tableWidth: width,
-        head: [['Loc', 'Reg No', 'Name', 'Seat']],
-        body: body,
-        theme: 'grid',
-        styles: { 
-            lineColor: 0, lineWidth: 0.1, textColor: 0, valign: 'middle', 
-            fontSize: isCompact ? 7 : 10, cellPadding: isCompact ? 1 : 1.5, overflow: 'linebreak' 
-        },
-        headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', lineWidth: 0.1, halign: 'center' },
-        columnStyles: {
-            0: { cellWidth: isCompact ? 14 : 25 }, 
-            1: { cellWidth: isCompact ? 22 : 35 }, 
-            2: { cellWidth: 'auto' },              
-            3: { cellWidth: isCompact ? 8 : 15 }   
-        },
-        pageBreak: 'avoid' // Prevent auto-breaking since we handle pagination manually
-    });
-}
-
-// --- HELPER 3: SCRIBE TABLE ---
-function drawPDFScribeTable(doc, rows, margin, y) {
-    doc.autoTable({
-        startY: y,
-        head: [['Room Location', 'Candidates']],
-        body: rows,
-        theme: 'grid',
-        styles: { lineColor: 0, lineWidth: 0.1, textColor: 0, fontSize: 11, cellPadding: 3, valign: 'top' },
-        headStyles: { fillColor: [50, 50, 50], textColor: 255, fontStyle: 'bold', fontSize: 12 },
-        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } },
-        margin: { left: margin, right: margin }
-    });
+function drawColumnHeader(doc, y, col) {
+    const MARGIN = 10; 
+    const GAP = 5;
+    const PG_W = 210;
+    const W = (PG_W - (MARGIN*2) - GAP) / 2;
+    const X = col === 1 ? MARGIN : MARGIN + W + GAP;
+    
+    doc.setFillColor(220);
+    doc.rect(X, y, W, 6, 'F');
+    doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+    
+    // Relative offsets
+    doc.text("Loc", X + 2, y + 4);
+    doc.text("Reg No", X + 25, y + 4);
+    doc.text("Name", X + 55, y + 4);
+    doc.text("Seat", X + 85, y + 4, { align: 'center' });
 }
 
 
