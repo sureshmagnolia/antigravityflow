@@ -1555,7 +1555,7 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-// --- ULTIMATE PDF GENERATOR: STRICT CHUNK & RENDER ---
+// --- ULTIMATE PDF GENERATOR: THE "STAMP" STRATEGY (No Cursor Drift) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1574,14 +1574,16 @@ function generateDayWisePDF() {
         const PAGE_WIDTH = 210;
         const MARGIN = 10;
         const COL_GAP = 5;
-        const COL_WIDTH = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2; 
-        const START_Y = 45; // Fixed vertical start position for all tables
+        const START_Y = 45; // Fixed vertical start position
         
-        // Strict Limits (35 rows per column = 70 rows per page)
-        const ROWS_PER_COL = 35; 
-        const ROWS_PER_PAGE = 70; 
+        // We calculate column width to fit exactly two columns
+        const COL_WIDTH = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2; 
 
-        // 3. PREPARE DATA
+        // STRICT LIMITS (35 rows per column = 70 rows per page)
+        const LIMIT_1_COL = 35; 
+        const LIMIT_2_COL = 70; 
+
+        // 3. PREPARE DATA (Source of Truth)
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
 
@@ -1662,42 +1664,44 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // B. STRICT PAGE LOOP
+                // B. PAGE LOOP (The "Stamp" Method)
                 let queue = [...flatRows];
                 
                 while(queue.length > 0) {
                     if (pageCount > 0) doc.addPage();
                     
+                    // 1. Draw Header
                     drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
                     
-                    // 1. Determine Layout
-                    const isTwoCol = queue.length > ROWS_PER_COL;
-                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_COL;
+                    // 2. Decide Layout
+                    const isTwoCol = queue.length > LIMIT_1_COL;
+                    const limit = isTwoCol ? LIMIT_2_COL : LIMIT_1_COL;
                     
-                    // 2. Extract Data for this Page
+                    // 3. Slice Data for this Page
                     const pageData = queue.splice(0, limit);
 
                     if (isTwoCol) {
-                        // === 2 COLUMN MODE (Fixed Grid) ===
-                        
+                        // === 2 COLUMN STAMP ===
                         const mid = Math.ceil(pageData.length / 2);
                         const leftRows = pageData.slice(0, mid);
                         const rightRows = pageData.slice(mid);
 
-                        // Draw Left (x = Margin)
+                        // Draw Left
                         drawFixedTable(doc, leftRows, MARGIN, START_Y, COL_WIDTH, true);
 
-                        // Draw Right (x = Margin + Col + Gap)
+                        // CRITICAL: We DO NOT let AutoTable dictate the next position.
+                        // We manually calculate the Right Column X position and reuse START_Y.
                         const rightX = MARGIN + COL_WIDTH + COL_GAP;
+                        
                         drawFixedTable(doc, rightRows, rightX, START_Y, COL_WIDTH, true);
 
-                        // Draw Line
+                        // Draw Divider Line
                         const lineX = MARGIN + COL_WIDTH + (COL_GAP/2);
                         doc.setDrawColor(200); doc.setLineWidth(0.1);
                         doc.line(lineX, START_Y, lineX, 280);
 
                     } else {
-                        // === 1 COLUMN MODE (Full Width) ===
+                        // === 1 COLUMN STAMP ===
                         const fullWidth = PAGE_WIDTH - (MARGIN * 2);
                         drawFixedTable(doc, pageData, MARGIN, START_Y, fullWidth, false);
                     }
@@ -1705,7 +1709,7 @@ function generateDayWisePDF() {
                     pageCount++;
                 }
 
-                // C. SCRIBE SUMMARY
+                // C. SCRIBE SUMMARY (Standard Layout)
                 if (sessionData.scribes.length > 0) {
                     doc.addPage();
                     drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
@@ -1726,9 +1730,8 @@ function generateDayWisePDF() {
                         ];
                     });
 
-                    // Draw Scribe Table
                     doc.autoTable({
-                        startY: 45,
+                        startY: START_Y,
                         head: [['Room Location', 'Candidates']],
                         body: scribeRows,
                         theme: 'grid',
@@ -1768,6 +1771,9 @@ function drawHeader(doc, stream, date, time, title, collegeName) {
     y += 6;
     doc.setFontSize(11); doc.setFont("helvetica", "normal");
     doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
+    
+    // Reset global cursor to ensure safety
+    doc.lastAutoTable = { finalY: y + 5 }; 
 }
 
 // --- HELPER 2: FIXED COORDINATE TABLE ---
@@ -1795,8 +1801,7 @@ function drawFixedTable(doc, rows, x, y, width, isCompact) {
         }
     });
 
-    // We use 'startY' and 'margin-left' to force position. 
-    // We DISABLE auto-paging because we already sliced the data to fit perfectly.
+    // FORCE POSITION via startY and margin
     doc.autoTable({
         startY: y, 
         margin: { left: x }, 
@@ -1821,10 +1826,9 @@ function drawFixedTable(doc, rows, x, y, width, isCompact) {
             2: { cellWidth: 'auto' },              
             3: { cellWidth: isCompact ? 8 : 15 }   
         },
-        pageBreak: 'avoid' // CRITICAL: Prevents engine from creating unwanted blank pages
+        pageBreak: 'avoid' // CRITICAL: Stop auto-paging
     });
 }
-
 
 
 
