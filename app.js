@@ -1958,7 +1958,7 @@ function generateDayWisePDF() {
 
 //--------------QP Report to Print -------------------------------
 
-// --- QUESTION PAPER REPORT (Room-Wise QP Counts) ---
+// --- QUESTION PAPER REPORT (Room-Wise QP Count) ---
 function generateQuestionPaperReportPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1967,7 +1967,7 @@ function generateQuestionPaperReportPDF() {
         return alert("No data loaded to generate Report.");
     }
 
-    const btn = document.getElementById('download-qp-report-btn'); // Ensure button ID matches
+    const btn = document.getElementById('download-qp-report-btn'); 
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Report..."; }
 
     try {
@@ -1977,55 +1977,54 @@ function generateQuestionPaperReportPDF() {
         const PAGE_H = 297;
         const MARGIN = 10;
         const COL_GAP = 5;
-        const ROW_H = 7;
+        const ROW_H = 7; // Slightly taller for readability
         const HEADER_H = 7;
         
         const USABLE_W = 210 - (MARGIN * 2);
         const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm per column
         
-        // Column Widths (Room | QP Code | Subject | Count)
-        const W_ROOM  = 18;
-        const W_CODE  = 22;
-        const W_COUNT = 10;
-        const W_SUBJ  = COL_W - W_ROOM - W_CODE - W_COUNT; // Remaining width (~42.5mm)
-
-        // Offsets
-        const OFF_ROOM  = 0;
-        const OFF_CODE  = W_ROOM;
-        const OFF_SUBJ  = W_ROOM + W_CODE;
-        const OFF_COUNT = W_ROOM + W_CODE + W_SUBJ;
+        // Column Widths (Tuned for QP Data)
+        const OFF_ROOM  = 0;   const W_ROOM  = 18;
+        const OFF_CODE  = 18;  const W_CODE  = 22;
+        const OFF_COUNT = 40;  const W_COUNT = 10;
+        const OFF_SUBJ  = 50;  const W_SUBJ  = COL_W - 50; // Remainder (~42.5mm)
 
         // Limits
         const ROWS_PER_SIDE = 36; 
         const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
 
-        // --- 3. HELPER FUNCTIONS ---
-        
-        // Smart Text Scaler
-        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
+        // --- 3. HELPER: SMART TEXT ---
+        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 9) => {
             if (!text) return;
             doc.setFont("helvetica", isBold ? "bold" : "normal");
             
-            // Default font size
-            let fontSize = 9;
+            let fontSize = maxFontSize;
+            let lines = [];
             
-            // Check width
-            if (doc.getTextWidth(text) > w - 2) {
-                // Approximate scale
-                fontSize = fontSize * ((w - 2) / doc.getTextWidth(text));
-                if (fontSize < 6) fontSize = 6; // Min limit
+            // Shrink-to-Fit Logic
+            while (fontSize > 5) {
+                doc.setFontSize(fontSize);
+                lines = doc.splitTextToSize(String(text), w - 2); 
+                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
+                if (blockHeight <= (h - 1)) break; 
+                fontSize -= 0.5;
             }
+            
             doc.setFontSize(fontSize);
+            
+            // Vertical Centering
+            const lineHeight = fontSize * 0.3527 * 1.2;
+            const totalH = lines.length * lineHeight;
+            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
 
-            // Vertical Center Calculation
-            const typeOffset = (fontSize * 0.3527) / 2.5; 
-            const y = centerY + typeOffset;
-
-            if (align === "center") {
-                doc.text(text, x + (w / 2), y, { align: "center" });
-            } else {
-                doc.text(text, x + 1, y);
-            }
+            lines.forEach((line) => {
+                if (align === "center") {
+                    doc.text(line, x + (w / 2), startY, { align: "center" });
+                } else {
+                    doc.text(line, x + 1, startY);
+                }
+                startY += lineHeight;
+            });
         };
 
         const drawHeader = () => {
@@ -2037,7 +2036,7 @@ function generateQuestionPaperReportPDF() {
             doc.text(collegeName, 105, y, { align: 'center' });
             y += 6;
             doc.setFontSize(12); 
-            doc.text("Question Paper Report (Room-Wise Count)", 105, y, { align: 'center' });
+            doc.text("Question Paper Summary (Room-Wise)", 105, y, { align: 'center' });
             y += 5;
             doc.setFontSize(10); doc.setFont("helvetica", "normal");
             doc.text(`Generated: ${dateStr}`, 105, y, { align: 'center' });
@@ -2051,14 +2050,13 @@ function generateQuestionPaperReportPDF() {
             
             doc.text("Room", x + OFF_ROOM + 2, y + 4.5);
             doc.text("QP Code", x + OFF_CODE + 2, y + 4.5);
-            doc.text("Subject", x + OFF_SUBJ + 2, y + 4.5);
             doc.text("Qty", x + OFF_COUNT + (W_COUNT/2), y + 4.5, { align: 'center' });
+            doc.text("Subject", x + OFF_SUBJ + 2, y + 4.5);
         };
 
         // --- 4. PREPARE DATA ---
-        const reportType = 'day-wise'; 
-        // We reuse day-wise filter because QP report is usually generated for a specific day
-        const rawData = getFilteredReportData(reportType); 
+        // Use 'day-wise' filter because this report is usually context-specific to the day loaded
+        const rawData = getFilteredReportData('day-wise'); 
         
         if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
@@ -2069,8 +2067,7 @@ function generateQuestionPaperReportPDF() {
         
         dataWithRooms.forEach(s => {
             const room = s['Room No'] || "Unallocated";
-            // Prefer QP Code, fallback to Course Name
-            const qpCode = s.qpCode || s.Course || "Unknown";
+            const qpCode = s.qpCode || s.Course || "Unknown"; // Priority: QP Code -> Course
             const subject = s.Course || "";
 
             if (!roomMap[room]) roomMap[room] = {};
@@ -2085,19 +2082,15 @@ function generateQuestionPaperReportPDF() {
             roomMap[room][qpCode].count++;
         });
 
-        // Flatten to List
+        // Flatten to List & Sort
         const flatRows = [];
-        
-        // Sort Rooms naturally (1, 2, 10 instead of 1, 10, 2)
         const sortedRooms = Object.keys(roomMap).sort((a, b) => {
             return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
         });
 
         sortedRooms.forEach(room => {
             const qps = roomMap[room];
-            const sortedQPs = Object.keys(qps).sort();
-            
-            sortedQPs.forEach(qpKey => {
+            Object.keys(qps).sort().forEach(qpKey => {
                 const data = qps[qpKey];
                 flatRows.push({
                     room: room,
@@ -2118,7 +2111,6 @@ function generateQuestionPaperReportPDF() {
             let startY = drawHeader();
             let currentY = startY + HEADER_H;
             
-            // Layout Decision
             const isTwoCol = queue.length > ROWS_PER_SIDE;
             const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
             const pageData = queue.splice(0, limit);
@@ -2144,7 +2136,7 @@ function generateQuestionPaperReportPDF() {
                 
                 // Divider
                 const midX = MARGIN + COL_W + (COL_GAP/2);
-                doc.setDrawColor(200); 
+                doc.setDrawColor(0); 
                 doc.line(midX, startY, midX, PAGE_H - 10);
             }
 
@@ -2155,7 +2147,7 @@ function generateQuestionPaperReportPDF() {
         function drawDataColumn(pdf, rows, xBase, yStart) {
             let y = yStart;
             
-            // Pre-calculate Merges for Room Column
+            // Pre-calculate Merges for Room
             const mergeMap = [];
             for(let i=0; i<rows.length; i++) mergeMap[i] = { span: 1, skip: false };
 
@@ -2183,45 +2175,36 @@ function generateQuestionPaperReportPDF() {
                     const totalH = span * ROW_H;
                     const mergeCenterY = y + (totalH / 2);
                     
-                    // Draw Room Name
-                    drawSmartText(row.room, xBase + OFF_ROOM, mergeCenterY, W_ROOM, totalH, "center", true);
+                    drawSmartText(row.room, xBase + OFF_ROOM, mergeCenterY, W_ROOM, totalH, "center", true, 8);
                     
-                    // Room Borders
+                    // Borders for Room Block
                     const blockBottom = y + totalH;
                     pdf.line(xBase, y, xBase, blockBottom); // Left
                     pdf.line(xBase + W_ROOM, y, xBase + W_ROOM, blockBottom); // Right
                     pdf.line(xBase, blockBottom, xBase + W_ROOM, blockBottom); // Bottom
                 }
 
-                // QP CODE
-                drawSmartText(row.qp, xBase + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true);
+                // DATA FIELDS
+                drawSmartText(row.qp, xBase + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true, 8);
+                drawSmartText(String(row.count), xBase + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true, 9);
+                drawSmartText(row.subject, xBase + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left", false, 8);
 
-                // SUBJECT
-                drawSmartText(row.subject, xBase + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left");
-
-                // COUNT
-                drawSmartText(String(row.count), xBase + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true);
-
-                // GRID LINES
+                // BORDERS
                 const lineY = y + ROW_H;
-                
-                // Horizontal (Skip Room column if merged)
-                pdf.line(xBase + W_ROOM, lineY, xBase + COL_W, lineY);
+                pdf.line(xBase + W_ROOM, lineY, xBase + COL_W, lineY); // Bottom (skips Room col)
                 
                 // Vertical Lines
-                pdf.line(xBase + OFF_SUBJ, y, xBase + OFF_SUBJ, lineY); // QP/Subj
-                pdf.line(xBase + OFF_COUNT, y, xBase + OFF_COUNT, lineY); // Subj/Count
-                pdf.line(xBase + COL_W, y, xBase + COL_W, lineY); // Right Edge
+                pdf.line(xBase + OFF_COUNT, y, xBase + OFF_COUNT, lineY); 
+                pdf.line(xBase + OFF_SUBJ, y, xBase + OFF_SUBJ, lineY); 
+                pdf.line(xBase + COL_W, y, xBase + COL_W, lineY); 
 
                 y += ROW_H;
             }
-            
-            // Top Border
-            pdf.line(xBase, yStart, xBase + COL_W, yStart);
+            pdf.line(xBase, yStart, xBase + COL_W, yStart); // Top line
         }
 
         const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Report_RoomWise_${dateStr}.pdf`);
+        doc.save(`QP_Summary_RoomWise_${dateStr}.pdf`);
 
     } catch (e) {
         console.error("PDF Error:", e);
@@ -2230,8 +2213,6 @@ function generateQuestionPaperReportPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
-
     
 //----------------QP Distribution Report (QP-Wise Count)---------
     
