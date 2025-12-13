@@ -2422,225 +2422,235 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 // --- QP DISTRIBUTION PDF (HTML SCRAPER) ---
-// Scrapes the rendered HTML report to ensure PDF matches screen exactly (WYSIWYG)
+
+// --- QP DISTRIBUTION REPORT (Cards Layout like HTML) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. Check if HTML Report Exists
-    const reportContainer = document.getElementById('report-output-area');
-    const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
-
-    if (pages.length === 0) {
-        return alert("Please generate the HTML report first.");
+    // 1. Validation
+    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+        return alert("No data loaded.");
     }
 
     const btn = document.getElementById('download-qp-pdf-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Capturing Data..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Cards..."; }
 
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        
+        // --- 2. CONFIGURATION ---
+        const PAGE_H = 297;
         const PAGE_W = 210;
-        const MARGIN = 15;
-        let currentPageIndex = 0;
+        const MARGIN = 10;
+        const COL_GAP = 3;
+        
+        // Colors
+        const COL_REG_BG = "#ffffff";
+        const COL_OTH_BG = "#fffbeb"; // Light yellow for others
+        const COL_BORDER = "#000000";
 
-        // --- HELPER: Parse a QP Block Element ---
-        const scrapeBlockData = (blockElement) => {
-            // 1. Course Name & Stream
-            const headerDiv = blockElement.firstElementChild; // The border-b div
-            const titleDiv = headerDiv.querySelector('.font-bold.text-xs');
-            const courseName = titleDiv ? titleDiv.innerText.trim() : "Unknown Course";
+        // --- 3. HELPER FUNCTIONS ---
+        const drawHeader = () => {
+            let y = 15;
+            const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
+            const dateStr = new Date().toISOString().slice(0,10);
             
-            // Stream Badge
-            const streamSpan = headerDiv.querySelector('span.rounded.border');
-            const stream = streamSpan ? streamSpan.innerText.trim() : "Regular";
-            const isRegular = stream.toUpperCase() === "REGULAR";
-
-            // QP Code
-            // Text inside looks like "QP: CODE"
-            const qpDiv = headerDiv.querySelector('.text-gray-600');
-            let qpCode = "N/A";
-            if (qpDiv) {
-                const qpBadge = qpDiv.querySelector('span.bg-white'); // The badge inside
-                if (qpBadge) qpCode = qpBadge.innerText.trim();
-            }
-
-            // Total Count
-            const totalSpan = headerDiv.querySelector('.w-\\[10\\%\\] span'); // Right side span
-            const total = totalSpan ? totalSpan.innerText.trim() : "0";
-
-            // 2. Rooms
-            const gridDiv = blockElement.lastElementChild; // The grid div
-            const roomCards = gridDiv.querySelectorAll('.border.rounded');
-            const rooms = [];
-
-            roomCards.forEach(card => {
-                // Count (Big number)
-                const countSpan = card.querySelector('.text-lg.font-black');
-                const count = countSpan ? countSpan.innerText.trim() : "0";
-
-                // Room Text (e.g., "Room #1")
-                const roomNameSpan = card.querySelector('span.text-sm.font-black');
-                const roomName = roomNameSpan ? roomNameSpan.innerText.trim() : "";
-
-                // Location Text (e.g., "(G101...)")
-                const locSpan = card.querySelector('span.text-gray-500.truncate');
-                const location = locSpan ? locSpan.innerText.trim() : "";
-
-                if (count && roomName) {
-                    rooms.push({ count, roomName, location });
-                }
-            });
-
-            return { courseName, stream, qpCode, total, rooms, isRegular };
+            doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            doc.text(collegeName.toUpperCase(), PAGE_W/2, y, { align: 'center' });
+            y += 7;
+            doc.setFontSize(12); 
+            doc.text("QP Distribution Summary", PAGE_W/2, y, { align: 'center' });
+            y += 6;
+            
+            const rawData = getFilteredReportData('day-wise');
+            const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
+            doc.setFontSize(11); doc.setFont("helvetica", "normal");
+            doc.text(`${dateStr} | ${sessionTime}`, PAGE_W/2, y, { align: 'center' });
+            
+            return y + 10;
         };
 
-        // --- LOOP THROUGH HTML PAGES ---
-        pages.forEach((page, pageIndex) => {
-            if (pageIndex > 0) doc.addPage();
+        const drawStreamHeader = (text, y) => {
+            doc.setFillColor(230); // Light Grey
+            doc.setDrawColor(0);
+            doc.rect(MARGIN, y, PAGE_W - (MARGIN*2), 7, 'F');
+            doc.setFontSize(10); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            doc.text(`${text.toUpperCase()} STREAM`, MARGIN + 2, y + 5);
+            return y + 9;
+        };
 
-            let currentY = 15;
+        // --- 4. PREPARE DATA ---
+        // Force Allocation First
+        let rawData = getFilteredReportData('day-wise');
+        if (!rawData || rawData.length === 0) rawData = allStudentData;
+        const dataWithRooms = performOriginalAllocation(rawData); 
 
-            // 1. SCRAPE HEADER
-            const headerGroup = page.querySelector('.print-header-group');
-            if (headerGroup) {
-                const h1 = headerGroup.querySelector('h1')?.innerText || "COLLEGE NAME";
-                const h2 = headerGroup.querySelector('h2')?.innerText || "Report";
-                const h3 = headerGroup.querySelector('h3')?.innerText || "";
+        // Group by Stream -> QP Code
+        const streamMap = { "Regular": {}, "Others": {} }; // Explicit buckets
 
-                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(h1, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 7;
-                doc.setFontSize(12);
-                doc.text(h2, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 6;
-                doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(h3, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 10;
+        dataWithRooms.forEach(s => {
+            const strmRaw = s.Stream || "Regular";
+            // Bucket logic: Regular vs Others
+            const streamKey = (strmRaw === "Regular") ? "Regular" : "Others";
+            
+            // QP Identity
+            const qpCode = s.qpCode || s['QP Code'] || s.QPCode || s.qp_code || "N/A";
+            // Fallback for key: QPCode if valid, else Course Name
+            const uniqueKey = (qpCode !== "N/A") ? qpCode : s.Course; 
+
+            const targetMap = streamMap[streamKey];
+
+            if (!targetMap[uniqueKey]) {
+                targetMap[uniqueKey] = {
+                    course: s.Course,
+                    qpCode: qpCode,
+                    streamLabel: strmRaw,
+                    total: 0,
+                    rooms: {}
+                };
             }
-
-            // 2. SCRAPE CONTENT BLOCKS
-            // The HTML structure is linear: Title Div -> Block Div -> Block Div -> Title Div...
-            // We need to iterate through children of the main content area inside the page
             
-            // Get all direct children that are either "Title headers" or "Content Blocks"
-            // Title headers usually have class 'font-bold text-sm uppercase'
-            // Content blocks usually have 'margin-top: 8px' style or specific background classes
+            const entry = targetMap[uniqueKey];
+            entry.total++;
             
-            const elements = Array.from(page.children).filter(el => 
-                !el.classList.contains('print-header-group') && 
-                el.tagName === 'DIV'
-            );
+            const room = s['Room No'] || "Unallocated";
+            if (!entry.rooms[room]) entry.rooms[room] = 0;
+            entry.rooms[room]++;
+        });
 
-            elements.forEach(el => {
-                // A. Check if it's a STREAM HEADER
-                if (el.classList.contains('font-bold') && el.classList.contains('uppercase') && el.classList.contains('border-b-2')) {
-                    doc.setFillColor(230); doc.setDrawColor(0);
-                    doc.rect(MARGIN, currentY, PAGE_W - (MARGIN*2), 7, 'F');
-                    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    doc.text(el.innerText.trim(), MARGIN + 2, currentY + 5);
-                    currentY += 10;
-                }
+        // --- 5. RENDER LOOP ---
+        let currentY = drawHeader();
+        const roomSerialMap = getRoomSerialMap(rawData[0]?.Date + " | " + rawData[0]?.Time);
+
+        // Process Regular First, Then Others
+        const sections = [
+            { key: "Regular", title: "REGULAR STREAM" },
+            { key: "Others", title: "OTHER STREAMS" }
+        ];
+
+        sections.forEach(section => {
+            const qps = streamMap[section.key];
+            const qpKeys = Object.keys(qps).sort();
+
+            if (qpKeys.length === 0) return;
+
+            // Stream Header
+            if (currentY + 15 > PAGE_H - MARGIN) {
+                doc.addPage();
+                currentY = drawHeader();
+            }
+            currentY = drawStreamHeader(section.title, currentY);
+
+            // Iterate QPs
+            qpKeys.forEach(key => {
+                const data = qps[key];
                 
-                // B. Check if it's a QP DATA BLOCK
-                // Look for the grid inside or specific border styling
-                else if (el.querySelector('.grid')) {
-                    const data = scrapeBlockData(el);
+                // 1. Prepare Room Grid Data
+                const roomKeys = Object.keys(data.rooms).sort((a, b) => 
+                    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+                );
+                
+                // Calculate Height
+                // Header (Course+Meta): 10mm
+                // Grid: Rows * 8mm
+                const gridCols = 3;
+                const gridRows = Math.ceil(roomKeys.length / gridCols);
+                const blockHeight = 12 + (gridRows * 9) + 2;
+
+                // Page Break
+                if (currentY + blockHeight > PAGE_H - MARGIN) {
+                    doc.addPage();
+                    currentY = drawHeader();
+                    currentY = drawStreamHeader(`${section.title} (Cont.)`, currentY);
+                }
+
+                // DRAW CARD BACKGROUND
+                doc.setDrawColor(0); 
+                doc.setLineWidth(0.1);
+                
+                if (section.key === "Others") {
+                    doc.setFillColor(255, 251, 235); // Light Yellow
+                    doc.rect(MARGIN, currentY, PAGE_W - (MARGIN*2), blockHeight, 'FD');
+                } else {
+                    doc.rect(MARGIN, currentY, PAGE_W - (MARGIN*2), blockHeight);
+                }
+
+                // A. CARD HEADER
+                const headY = currentY + 5;
+                
+                // Course Name (Bold)
+                doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                let cName = data.course;
+                if(doc.getTextWidth(cName) > 130) cName = cName.substring(0, 70) + "...";
+                doc.text(cName, MARGIN + 2, headY);
+
+                // Stream Label (if Others)
+                if (section.key === "Others") {
+                    doc.setFontSize(7); doc.setTextColor(100);
+                    doc.text(`[${data.streamLabel}]`, MARGIN + 2, headY + 4);
+                }
+
+                // QP Code (Right side of header)
+                doc.setFontSize(8); doc.setTextColor(50);
+                doc.text("QP:", MARGIN + 120, headY);
+                doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(data.qpCode, MARGIN + 126, headY);
+
+                // Big Total (Far Right)
+                doc.setFontSize(12);
+                doc.text(String(data.total), PAGE_W - MARGIN - 4, headY + 2, { align: 'right' });
+
+                // Separator Line
+                doc.setDrawColor(200);
+                doc.line(MARGIN + 2, currentY + 10, PAGE_W - MARGIN - 2, currentY + 10);
+
+                // B. ROOM GRID
+                const startRoomY = currentY + 12;
+                const colWidth = (PAGE_W - (MARGIN*2) - 4) / 3; // Divide usable width by 3
+
+                roomKeys.forEach((rName, i) => {
+                    const rowIdx = Math.floor(i / 3);
+                    const colIdx = i % 3;
                     
-                    // --- RENDER BLOCK ON PDF ---
-                    // Background & Border
-                    const bg = data.isRegular ? "#ffffff" : "#fffbeb";
-                    if (!data.isRegular) {
-                        doc.setFillColor(255, 251, 235); // Light Yellow
-                        doc.rect(MARGIN, currentY, PAGE_W - (MARGIN*2), 0, 'F'); // Just fill background rect later based on height
+                    const boxX = MARGIN + 2 + (colIdx * colWidth);
+                    const boxY = startRoomY + (rowIdx * 9);
+                    const count = data.rooms[rName];
+
+                    // Room Box
+                    doc.setDrawColor(150); doc.setLineWidth(0.1); doc.setFillColor(255);
+                    doc.rect(boxX, boxY, colWidth - 2, 7, 'FD'); // White filled box
+
+                    // Count
+                    doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                    doc.text(String(count), boxX + 2, boxY + 5);
+                    doc.setFontSize(7); doc.setFont("helvetica", "normal");
+                    doc.text("Nos", boxX + 8, boxY + 5);
+
+                    // Divider
+                    doc.line(boxX + 15, boxY + 1, boxX + 15, boxY + 6);
+
+                    // Room Name & Loc
+                    const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[rName]) ? currentRoomConfig[rName] : {};
+                    let loc = roomInfo.location || "";
+                    if (loc) loc = loc.replace(/[()]/g, '').split(' ').slice(0,2).join(' '); // First 2 words
+
+                    doc.setFontSize(8); doc.setFont("helvetica", "bold");
+                    doc.text(rName, boxX + 17, boxY + 5);
+                    
+                    if(loc) {
+                        doc.setFontSize(6); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+                        doc.text(loc, boxX + 35, boxY + 5);
+                        doc.setTextColor(0);
                     }
 
-                    // Calculate Height needed
-                    const roomRows = Math.ceil(data.rooms.length / 3);
-                    const blockHeight = 12 + (roomRows * 10) + 4;
+                    // Checkbox
+                    doc.rect(boxX + colWidth - 7, boxY + 2, 3, 3);
+                });
 
-                    // Draw Container
-                    doc.setDrawColor(0); 
-                    if (data.isRegular) doc.setLineWidth(0.1); else doc.setLineWidth(0.3); // Thicker for others
-                    
-                    if (!data.isRegular) doc.rect(MARGIN, currentY, PAGE_W-(MARGIN*2), blockHeight, 'FD');
-                    else doc.rect(MARGIN, currentY, PAGE_W-(MARGIN*2), blockHeight);
-
-                    // 1. Header Line (Course + QP + Total)
-                    const headY = currentY + 5;
-                    doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                    
-                    // Truncate Course
-                    let cName = data.courseName;
-                    if (doc.getTextWidth(cName) > 120) cName = cName.substring(0, 55) + "...";
-                    doc.text(cName, MARGIN + 2, headY);
-
-                    // QP Code
-                    doc.setFontSize(9); doc.setFont("helvetica", "normal");
-                    doc.text("QP:", MARGIN + 125, headY);
-                    doc.setFont("helvetica", "bold");
-                    doc.text(data.qpCode, MARGIN + 133, headY);
-
-                    // Stream Badge (Text)
-                    doc.setFontSize(8); doc.setTextColor(100);
-                    doc.text(`[${data.stream}]`, MARGIN + 90, headY);
-                    doc.setTextColor(0);
-
-                    // Big Total
-                    doc.setFontSize(12); doc.setFont("helvetica", "bold");
-                    doc.text(data.total, PAGE_W - MARGIN - 5, headY, { align: 'right' });
-
-                    // Divider Line
-                    doc.setLineWidth(0.1); doc.setDrawColor(200);
-                    doc.line(MARGIN + 2, headY + 2, PAGE_W - MARGIN - 2, headY + 2);
-
-                    // 2. Room Grid
-                    let roomY = headY + 6;
-                    let roomX = MARGIN + 2;
-                    const colWidth = (PAGE_W - (MARGIN*2) - 4) / 3;
-
-                    doc.setFontSize(8);
-                    
-                    data.rooms.forEach((room, idx) => {
-                        if (idx > 0 && idx % 3 === 0) {
-                            roomX = MARGIN + 2;
-                            roomY += 9;
-                        }
-
-                        // Draw Room Box
-                        doc.setDrawColor(150);
-                        doc.rect(roomX, roomY, colWidth - 2, 7);
-
-                        // Count
-                        doc.setFont("helvetica", "bold");
-                        doc.text(room.count, roomX + 2, roomY + 5);
-                        doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-                        doc.text("Nos", roomX + 8, roomY + 5);
-
-                        // Separator
-                        doc.line(roomX + 16, roomY + 1, roomX + 16, roomY + 6);
-
-                        // Room Name
-                        doc.setFontSize(8); doc.setFont("helvetica", "bold");
-                        doc.text(room.roomName, roomX + 18, roomY + 5);
-
-                        // Location (Truncated)
-                        if (room.location) {
-                            doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-                            let loc = room.location.replace(/[()]/g, '');
-                            if (loc.length > 15) loc = loc.substring(0, 13) + "..";
-                            doc.text(loc, roomX + 38, roomY + 5);
-                            doc.setTextColor(0);
-                        }
-
-                        // Checkbox Square
-                        doc.rect(roomX + colWidth - 8, roomY + 2, 3, 3);
-
-                        roomX += colWidth;
-                    });
-
-                    currentY += blockHeight + 2;
-                }
+                currentY += blockHeight + 2; // Gap
             });
+            
+            currentY += 5;
         });
 
         const dateStr = new Date().toISOString().slice(0,10);
@@ -2652,8 +2662,9 @@ function generateQPDistributionPDF() {
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
-}    
+}
 
+    
 
 
     
