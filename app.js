@@ -2422,7 +2422,7 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (HTML SCRAPER: Single Line Layout) ---
+// --- QP DISTRIBUTION PDF (WYSIWYG Scraper: Robust QP & Inline Location) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2494,14 +2494,19 @@ function generateQPDistributionPDF() {
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
-                    // Extract Metadata
+                    // --- SCRAPE DATA ---
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
+                    
+                    // Robust QP Code Search
                     let qpCode = "N/A";
-                    headerRow.querySelectorAll('span').forEach(sp => {
-                        if (sp.className.includes('border-black') && !sp.innerText.includes('Nos')) {
-                            qpCode = sp.innerText.trim();
-                        }
-                    });
+                    // Find container with "QP:" text
+                    const qpContainer = Array.from(headerRow.querySelectorAll('div, span')).find(
+                        node => node.innerText.includes("QP:") && node.querySelector('span')
+                    );
+                    if (qpContainer) {
+                        const badge = qpContainer.querySelector('span.bg-white') || qpContainer.querySelector('span.border');
+                        if (badge) qpCode = badge.innerText.trim();
+                    }
 
                     let strmLabel = "";
                     const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
@@ -2510,16 +2515,18 @@ function generateQPDistributionPDF() {
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
+                    // Style & Height
                     let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
                     const gridRowsCount = Math.ceil(roomDivs.length / 3);
                     const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
 
+                    // Pagination
                     if (currentY + cardHeight > MAX_Y) {
                         doc.addPage();
                         currentY = MARGIN + 5;
                     }
 
-                    // Card Bg
+                    // Draw Background
                     doc.setDrawColor(0); doc.setLineWidth(0.1);
                     if (isOthers) {
                         doc.setFillColor(255, 251, 235);
@@ -2532,13 +2539,15 @@ function generateQPDistributionPDF() {
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); 
                     }
 
-                    // Header Info
+                    // --- HEADER ROW ---
                     const headY = currentY + 5;
                     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                    
                     let dispCourse = courseName;
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
+                    // QP Code & Stream
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2567,9 +2576,10 @@ function generateQPDistributionPDF() {
                             roomY += 8.5;
                         }
 
+                        // Extract
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
-                        const roomNameTxt = rDiv.querySelector('.text-sm')?.innerText.trim() || ""; // "Room #1"
-                        const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || ""; // "(G101)"
+                        const roomNameTxt = rDiv.querySelector('.text-sm')?.innerText.trim() || ""; 
+                        const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || "";
 
                         // Box
                         doc.setDrawColor(180); doc.setFillColor(255);
@@ -2581,36 +2591,41 @@ function generateQPDistributionPDF() {
                         doc.setFontSize(6); doc.setFont("helvetica", "normal");
                         doc.text("Nos", roomX + 8, roomY + 5);
 
-                        // Vertical Line
+                        // Vertical Separator
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- COMBINED TEXT LOGIC (Serial + Location) ---
-                        // "Room Serial No" + space + "Location"
-                        // Example: "Room #1 (G101)"
-                        let fullText = roomNameTxt;
-                        if (locTxt) {
-                            // Clean up location (remove parens if desired, or keep them)
-                            // User request: "Location alone next to room serail number"
-                            // We keep it simple: concat them.
-                            fullText += ` ${locTxt}`; 
-                        }
-
+                        // --- ROOM + LOCATION (Inline) ---
+                        // 1. Draw "Room #X"
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        doc.text(roomNameTxt, roomX + 16, roomY + 5);
                         
-                        // Check Width & Truncate
-                        const maxW = boxW - 22; // Box width - left area - checkbox area
-                        if (doc.getTextWidth(fullText) > maxW) {
-                            // Scale down font slightly if it barely doesn't fit
-                            doc.setFontSize(7);
-                            if (doc.getTextWidth(fullText) > maxW) {
-                                // Still too big? Truncate.
-                                const chars = Math.floor(maxW / 1.5);
-                                fullText = fullText.substring(0, chars) + "..";
-                            }
-                        }
+                        // 2. Measure "Room #X"
+                        const nameW = doc.getTextWidth(roomNameTxt);
 
-                        doc.text(fullText, roomX + 16, roomY + 5);
+                        // 3. Draw "(Loc)" next to it
+                        if (locTxt) {
+                            doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
+                            
+                            // Remove parens for cleaner look if desired, or keep them
+                            // Example: "(G101)" -> "G101"
+                            let cleanLoc = locTxt.replace(/[()]/g, '').trim();
+                            
+                            // Check available space
+                            const startX = roomX + 16 + nameW + 1.5;
+                            const maxW = boxW - (startX - roomX) - 5; // space left
+                            
+                            if (doc.getTextWidth(cleanLoc) > maxW) {
+                                const chars = Math.floor(maxW / 1.5);
+                                cleanLoc = cleanLoc.substring(0, chars) + "..";
+                            }
+                            
+                            // Draw in Parens
+                            if (maxW > 4) {
+                                doc.text(`(${cleanLoc})`, startX, roomY + 5);
+                            }
+                            doc.setTextColor(0);
+                        }
 
                         // Checkbox
                         doc.setDrawColor(0);
@@ -2636,7 +2651,6 @@ function generateQPDistributionPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
 
 
     
