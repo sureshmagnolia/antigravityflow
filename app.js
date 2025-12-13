@@ -15109,14 +15109,16 @@ window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
 //----------------Remunereation Bill PDF---------------------
-// --- REMUNERATION BILL PDF (Fixed: No Duplicates, No Overlap) ---
+// --- REMUNERATION BILL PDF (Multi-Bill Support + Layout Fixes) ---
 function generateRemunerationBillPDF() {
     const { jsPDF } = window.jspdf;
     
+    // 1. Target the output container
     const container = document.getElementById('remuneration-output');
-    const billDiv = container ? container.querySelector('.print-page') : null;
+    // SELECT ALL GENERATED BILLS (Not just the first one)
+    const billPages = container ? container.querySelectorAll('.print-page') : [];
 
-    if (!billDiv) return alert("No bill generated. Please click 'Generate Bill' first.");
+    if (billPages.length === 0) return alert("No bill generated. Please click 'Generate Bill' first.");
 
     const btn = document.getElementById('btn-download-bill-pdf');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
@@ -15128,242 +15130,233 @@ function generateRemunerationBillPDF() {
         const MARGIN = 10;
         const CONTENT_W = PAGE_W - (MARGIN * 2);
         
-        // --- HELPER: CLEAN TEXT (Remove Newlines & Fix Symbol) ---
+        // --- HELPER: CLEAN TEXT ---
         const clean = (text) => {
             if (!text) return "";
-            // 1. Replace Rupee symbol
-            // 2. Replace newlines with space (Fixes "Amount pushed to next line")
-            // 3. Trim extra spaces
+            // Replace Rupee, Newlines->Space, Trim
             return text.replace(/₹/g, "Rs. ").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
         };
 
-        // --- A. SCRAPE HEADER ---
-        const h2 = clean(billDiv.querySelector('h2')?.innerText);
-        const h3 = clean(billDiv.querySelector('h3')?.innerText);
-        const pStream = clean(billDiv.querySelector('p')?.innerText); 
-
-        // --- B. SCRAPE TABLE ---
-        const table = billDiv.querySelector('table');
-        const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
-        
-        const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-            // For table cells, we might WANT newlines (e.g. date vs time), so we use a lighter clean
-            return Array.from(tr.querySelectorAll('td')).map(td => {
-                return td.innerText.replace(/₹/g, "Rs. ").trim(); 
-            });
-        });
-
-        const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
-        const footerValues = tfootCells.map(td => clean(td.innerText));
-
-        // --- C. SCRAPE SUMMARY BOXES ---
-        const summaryBoxes = billDiv.querySelectorAll('.summary-box');
-        let supBreakdown = "";
-        let allowances = [];
-        let grandTotal = "";
-        let amountWords = "";
-        let signatureTitle = "Chief Superintendent";
-
-        if(summaryBoxes.length > 0) {
-            const box1 = summaryBoxes[0];
+        // --- MASTER LOOP: Iterate through each bill in the HTML ---
+        billPages.forEach((billDiv, billIndex) => {
             
-            // Supervision Breakdown
-            const breakdownDiv = box1.querySelector('div.border-b'); 
-            if(breakdownDiv && breakdownDiv.nextElementSibling) {
-                // Replace commas with newlines for list effect
-                supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n"); 
-            }
+            // --- A. SCRAPE DATA FOR THIS BILL ---
+            const h2 = clean(billDiv.querySelector('h2')?.innerText);
+            const h3 = clean(billDiv.querySelector('h3')?.innerText);
+            const pStream = clean(billDiv.querySelector('p')?.innerText); 
+
+            const table = billDiv.querySelector('table');
+            const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
             
-            // Allowances (FIXED LOGIC)
-            const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
-            allowanceDivs.forEach(div => {
-                const txt = clean(div.innerText);
-                // Filter out the header text to prevent duplication
-                if (!txt.toLowerCase().includes("other allowances")) {
-                    allowances.push(txt);
-                }
-            });
-        }
-        if(summaryBoxes.length > 1) {
-            const totalBox = summaryBoxes[1];
-            grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
-            amountWords = clean(totalBox.querySelector('.italic')?.innerText);
-        }
-        if(summaryBoxes.length > 2) {
-            signatureTitle = clean(summaryBoxes[2].innerText);
-        }
-
-        // --- D. LAYOUT CONFIG ---
-        const ROWS_PER_PAGE = 18;
-        const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
-
-        // Columns
-        const count = headers.length;
-        let colWidths = [];
-        if (count === 9) { // Regular
-            colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25]; 
-        } else { // SDE
-            colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
-        }
-        
-        const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
-        const scale = CONTENT_W / totalDefined;
-        colWidths = colWidths.map(w => w * scale);
-        const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a,b)=>a+b, 0);
-
-        // --- E. RENDER ---
-        for (let p = 0; p < totalPages; p++) {
-            if (p > 0) doc.addPage();
-            let y = 15;
-
-            // Header
-            doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-            doc.text(h2, PAGE_W/2, y, { align: 'center' });
-            y += 6;
-            doc.setFontSize(11);
-            doc.text(h3, PAGE_W/2, y, { align: 'center' });
-            y += 6;
-            doc.setFontSize(10); doc.setFont("helvetica", "normal");
-            doc.text(pStream, PAGE_W/2, y, { align: 'center' });
-            y += 10;
-
-            // Table Header
-            doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
-            doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
-            doc.setFontSize(8); doc.setFont("helvetica", "bold");
-            headers.forEach((h, i) => {
-                const cx = getX(i) + (colWidths[i]/2);
-                doc.text(h, cx, y + 5, { align: 'center' });
-                if (i < headers.length - 1) doc.line(getX(i+1), y, getX(i+1), y + 8);
-            });
-            doc.rect(MARGIN, y, CONTENT_W, 8); 
-            y += 8;
-
-            // Rows
-            const startIdx = p * ROWS_PER_PAGE;
-            const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
-            const pageRows = rows.slice(startIdx, endIdx);
-
-            doc.setFont("helvetica", "normal");
-            pageRows.forEach(row => {
-                let maxLines = 1;
-                row.forEach((cell, i) => {
-                    const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                    if (lines.length > maxLines) maxLines = lines.length;
+            const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+                return Array.from(tr.querySelectorAll('td')).map(td => {
+                    // Keep text raw-ish for table cells (preserve some formatting if needed)
+                    return td.innerText.replace(/₹/g, "Rs. ").trim(); 
                 });
-                
-                const rowH = 6 + ((maxLines - 1) * 3.5);
-
-                if (y + rowH > PAGE_H - MARGIN) {
-                    doc.addPage();
-                    y = MARGIN; 
-                }
-
-                row.forEach((cell, i) => {
-                    const cx = getX(i) + (colWidths[i]/2);
-                    let ty = y + 4; 
-                    
-                    doc.setFontSize(8);
-                    if (i === row.length - 1) doc.setFont("helvetica", "bold");
-                    else doc.setFont("helvetica", "normal");
-
-                    const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                    if (lines.length > 1) ty = y + (rowH / 2) - ((lines.length * 2.8) / 2) + 2; 
-                    
-                    doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
-                    if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
-                });
-
-                doc.rect(MARGIN, y, CONTENT_W, rowH);
-                y += rowH;
             });
 
-            // Footer (Last Page)
-            if (p === totalPages - 1) {
-                doc.setFont("helvetica", "bold");
-                doc.rect(MARGIN, y, CONTENT_W, 8);
-                
-                const valsReversed = [...footerValues].reverse();
-                const totalColIdx = colWidths.length - 1;
-                
-                doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
-                doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); 
+            const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
+            const footerValues = tfootCells.map(td => clean(td.innerText));
 
-                for(let k=1; k < valsReversed.length; k++) {
-                    const colIdx = totalColIdx - k;
-                    if(colIdx > 1) { 
-                        doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx]/2), y+5, {align:'center'});
-                        doc.line(getX(colIdx), y, getX(colIdx), y+8);
+            // Scrape Summary Boxes
+            const summaryBoxes = billDiv.querySelectorAll('.summary-box');
+            let supBreakdown = "";
+            let allowances = [];
+            let grandTotal = "";
+            let amountWords = "";
+            let signatureTitle = "Chief Superintendent";
+
+            if(summaryBoxes.length > 0) {
+                const box1 = summaryBoxes[0];
+                const breakdownDiv = box1.querySelector('div.border-b'); 
+                if(breakdownDiv && breakdownDiv.nextElementSibling) {
+                    supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n"); 
+                }
+                const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
+                allowanceDivs.forEach(div => {
+                    const txt = clean(div.innerText);
+                    if (!txt.toLowerCase().includes("other allowances")) {
+                        allowances.push(txt);
                     }
-                }
-                doc.text("Subtotals:", getX(1) + 15, y+5, { align: 'right' });
-
-                y += 12;
-
-                // --- BREAKDOWN BOXES (FIXED OVERLAP) ---
-                const boxW = (CONTENT_W / 2) - 3;
-                
-                // 1. Calculate Content Heights First
-                doc.setFontSize(8);
-                const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
-                
-                // Calculate height for Allowances safely
-                let allowTotalH = 0;
-                const allowItems = [];
-                allowances.forEach(l => {
-                    // Force splitting to ensure it fits width
-                    const itemLines = doc.splitTextToSize(l, boxW - 6);
-                    allowItems.push(itemLines);
-                    allowTotalH += (itemLines.length * 4) + 2; // Height per item
                 });
+            }
+            if(summaryBoxes.length > 1) {
+                const totalBox = summaryBoxes[1];
+                grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
+                amountWords = clean(totalBox.querySelector('.italic')?.innerText);
+            }
+            if(summaryBoxes.length > 2) {
+                signatureTitle = clean(summaryBoxes[2].innerText);
+            }
 
-                const h1 = (supLines.length * 4) + 15;
-                const h2 = allowTotalH + 15;
-                const boxH = Math.max(h1, h2, 35); // Ensure equal height
+            // --- B. LAYOUT CONFIG ---
+            const ROWS_PER_PAGE = 18;
+            const totalBillPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
 
-                // Draw Box 1 (Supervision)
-                doc.setDrawColor(0);
-                doc.rect(MARGIN, y, boxW, boxH);
-                doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-                doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
-                
-                doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                doc.text(supLines, MARGIN + 3, y + 10);
-
-                // Draw Box 2 (Allowances)
-                const box2X = MARGIN + boxW + 6;
-                doc.rect(box2X, y, boxW, boxH);
-                doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-                doc.text("2. Other Allowances", box2X + 3, y + 5);
-                
-                doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                let ay = y + 10;
-                
-                allowItems.forEach(lines => {
-                    doc.text(lines, box2X + 3, ay);
-                    ay += (lines.length * 4) + 2; // Dynamic move down
-                });
-
-                y += boxH + 8;
-
-                // Grand Total
-                doc.setFontSize(14); doc.setFont("helvetica", "bold");
-                doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
-                y += 6;
-                doc.setFontSize(10); doc.setFont("helvetica", "italic");
-                doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
-
-                // Signature
-                y += 20;
-                doc.setLineWidth(0.2);
-                doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
-                doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
+            // Determine Columns
+            const count = headers.length;
+            let colWidths = [];
+            if (count === 9) { // Regular
+                colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25]; 
+            } else { // SDE
+                colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
             }
             
-            doc.setFontSize(8); doc.setFont("helvetica", "italic");
-            doc.text(`Page ${p+1} of ${totalPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
-        }
+            const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
+            const scale = CONTENT_W / totalDefined;
+            colWidths = colWidths.map(w => w * scale);
+            const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a,b)=>a+b, 0);
+
+            // --- C. RENDER PAGES FOR THIS BILL ---
+            for (let p = 0; p < totalBillPages; p++) {
+                
+                // Add new page if:
+                // 1. We are on the 2nd+ page of the current bill
+                // 2. OR we are on the 1st page of the 2nd+ bill
+                if (billIndex > 0 || p > 0) {
+                    doc.addPage();
+                }
+
+                let y = 15;
+
+                // Header
+                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(h2, PAGE_W/2, y, { align: 'center' });
+                y += 6;
+                doc.setFontSize(11);
+                doc.text(h3, PAGE_W/2, y, { align: 'center' });
+                y += 6;
+                doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                doc.text(pStream, PAGE_W/2, y, { align: 'center' });
+                y += 10;
+
+                // Table Header
+                doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
+                doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+                doc.setFontSize(8); doc.setFont("helvetica", "bold");
+                headers.forEach((h, i) => {
+                    const cx = getX(i) + (colWidths[i]/2);
+                    doc.text(h, cx, y + 5, { align: 'center' });
+                    if (i < headers.length - 1) doc.line(getX(i+1), y, getX(i+1), y + 8);
+                });
+                doc.rect(MARGIN, y, CONTENT_W, 8); 
+                y += 8;
+
+                // Rows
+                const startIdx = p * ROWS_PER_PAGE;
+                const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
+                const pageRows = rows.slice(startIdx, endIdx);
+
+                doc.setFont("helvetica", "normal");
+                pageRows.forEach(row => {
+                    let maxLines = 1;
+                    row.forEach((cell, i) => {
+                        const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
+                        if (lines.length > maxLines) maxLines = lines.length;
+                    });
+                    
+                    const rowH = 6 + ((maxLines - 1) * 3.5);
+
+                    // Page break safety (rare within fixed chunking, but safe)
+                    if (y + rowH > PAGE_H - MARGIN) {
+                        doc.addPage();
+                        y = MARGIN; 
+                    }
+
+                    row.forEach((cell, i) => {
+                        const cx = getX(i) + (colWidths[i]/2);
+                        let ty = y + 4; 
+                        
+                        doc.setFontSize(8);
+                        if (i === row.length - 1) doc.setFont("helvetica", "bold");
+                        else doc.setFont("helvetica", "normal");
+
+                        const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
+                        if (lines.length > 1) ty = y + (rowH / 2) - ((lines.length * 2.8) / 2) + 2; 
+                        
+                        doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
+                        if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
+                    });
+                    doc.rect(MARGIN, y, CONTENT_W, rowH);
+                    y += rowH;
+                });
+
+                // Footer (Only on last page of this bill)
+                if (p === totalBillPages - 1) {
+                    doc.setFont("helvetica", "bold");
+                    doc.rect(MARGIN, y, CONTENT_W, 8);
+                    
+                    const valsReversed = [...footerValues].reverse();
+                    const totalColIdx = colWidths.length - 1;
+                    
+                    doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
+                    doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); 
+
+                    for(let k=1; k < valsReversed.length; k++) {
+                        const colIdx = totalColIdx - k;
+                        if(colIdx > 1) { 
+                            doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx]/2), y+5, {align:'center'});
+                            doc.line(getX(colIdx), y, getX(colIdx), y+8);
+                        }
+                    }
+                    doc.text("Subtotals:", getX(1) + 15, y+5, { align: 'right' });
+                    y += 12;
+
+                    // Breakdown Boxes
+                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                    const boxW = (CONTENT_W / 2) - 3;
+                    const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
+                    let allowTotalH = 0;
+                    const allowItems = [];
+                    allowances.forEach(l => {
+                        const itemLines = doc.splitTextToSize(l, boxW - 6);
+                        allowItems.push(itemLines);
+                        allowTotalH += (itemLines.length * 4) + 2;
+                    });
+
+                    const h1 = (supLines.length * 4) + 15;
+                    const h2 = allowTotalH + 15;
+                    const boxH = Math.max(h1, h2, 35); 
+
+                    // Box 1
+                    doc.setDrawColor(0);
+                    doc.rect(MARGIN, y, boxW, boxH);
+                    doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                    doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
+                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                    doc.text(supLines, MARGIN + 3, y + 10);
+
+                    // Box 2
+                    const box2X = MARGIN + boxW + 6;
+                    doc.rect(box2X, y, boxW, boxH);
+                    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+                    doc.text("2. Other Allowances", box2X + 3, y + 5);
+                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                    let ay = y + 10;
+                    allowItems.forEach(lines => {
+                        doc.text(lines, box2X + 3, ay);
+                        ay += (lines.length * 4) + 2; 
+                    });
+                    y += boxH + 8;
+
+                    // Grand Total
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                    doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
+                    y += 6;
+                    doc.setFontSize(10); doc.setFont("helvetica", "italic");
+                    doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
+                    y += 20;
+                    doc.setLineWidth(0.2);
+                    doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
+                    doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                    doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
+                }
+
+                // Page Number (Per Bill)
+                doc.setFontSize(8); doc.setFont("helvetica", "italic");
+                doc.text(`Page ${p+1} of ${totalBillPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
+            }
+        });
 
         const dateStr = new Date().toISOString().slice(0,10);
         doc.save(`Remuneration_Bill_${dateStr}.pdf`);
@@ -15375,8 +15368,6 @@ function generateRemunerationBillPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
     }
 }
-
-
 
 
     
