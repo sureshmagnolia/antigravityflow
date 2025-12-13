@@ -2422,7 +2422,7 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (WYSIWYG Scraper: Robust QP & Inline Location) ---
+// --- QP DISTRIBUTION PDF (HTML SCRAPER: Single Line Fix) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2494,25 +2494,33 @@ function generateQPDistributionPDF() {
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
-                    // --- SCRAPE DATA ---
+                    // --- 1. ROBUST DATA SCRAPING ---
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
                     
-                    // Robust QP Code Search
+                    // QP Code: Find the element containing "QP:" and get its text
                     let qpCode = "N/A";
-                    // Find container with "QP:" text
-                    const qpContainer = Array.from(headerRow.querySelectorAll('div, span')).find(
-                        node => node.innerText.includes("QP:") && node.querySelector('span')
-                    );
-                    if (qpContainer) {
-                        const badge = qpContainer.querySelector('span.bg-white') || qpContainer.querySelector('span.border');
-                        if (badge) qpCode = badge.innerText.trim();
+                    // Try badge first
+                    const qpBadge = headerRow.querySelector('span.border-black');
+                    if (qpBadge && !qpBadge.innerText.includes("Nos")) { // Avoid confusing with count
+                        qpCode = qpBadge.innerText.trim();
+                    } else {
+                        // Fallback: Text search
+                        const fullText = headerRow.innerText;
+                        if (fullText.includes("QP:")) {
+                            const parts = fullText.split("QP:");
+                            if (parts[1]) qpCode = parts[1].split('\n')[0].trim();
+                        }
                     }
 
+                    // Stream Label
                     let strmLabel = "";
                     const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
                     if (strmSpan) strmLabel = strmSpan.innerText.trim();
 
+                    // Total Count
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
+                    
+                    // Room Divs
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
                     // Style & Height
@@ -2520,13 +2528,13 @@ function generateQPDistributionPDF() {
                     const gridRowsCount = Math.ceil(roomDivs.length / 3);
                     const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
 
-                    // Pagination
+                    // Pagination Check
                     if (currentY + cardHeight > MAX_Y) {
                         doc.addPage();
                         currentY = MARGIN + 5;
                     }
 
-                    // Draw Background
+                    // --- 2. DRAW CARD ---
                     doc.setDrawColor(0); doc.setLineWidth(0.1);
                     if (isOthers) {
                         doc.setFillColor(255, 251, 235);
@@ -2539,15 +2547,13 @@ function generateQPDistributionPDF() {
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); 
                     }
 
-                    // --- HEADER ROW ---
+                    // Header Info
                     const headY = currentY + 5;
                     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    
                     let dispCourse = courseName;
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
-                    // QP Code & Stream
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2565,7 +2571,7 @@ function generateQPDistributionPDF() {
                     doc.setDrawColor(200);
                     doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
 
-                    // --- ROOM GRID ---
+                    // --- 3. DRAW ROOM GRID ---
                     let roomY = headY + 7;
                     let roomX = MARGIN + 2;
                     const boxW = (CONTENT_W - 4) / 3; 
@@ -2576,9 +2582,12 @@ function generateQPDistributionPDF() {
                             roomY += 8.5;
                         }
 
-                        // Extract
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
-                        const roomNameTxt = rDiv.querySelector('.text-sm')?.innerText.trim() || ""; 
+                        
+                        // Scrape Room Serial (e.g., "Room #1")
+                        const roomNameTxt = rDiv.querySelector('.text-sm.font-black')?.innerText.trim() || "";
+                        
+                        // Scrape Location (e.g., "(G101)")
                         const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || "";
 
                         // Box
@@ -2591,41 +2600,32 @@ function generateQPDistributionPDF() {
                         doc.setFontSize(6); doc.setFont("helvetica", "normal");
                         doc.text("Nos", roomX + 8, roomY + 5);
 
-                        // Vertical Separator
+                        // Vertical Line
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- ROOM + LOCATION (Inline) ---
-                        // 1. Draw "Room #X"
-                        doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                        doc.text(roomNameTxt, roomX + 16, roomY + 5);
-                        
-                        // 2. Measure "Room #X"
-                        const nameW = doc.getTextWidth(roomNameTxt);
-
-                        // 3. Draw "(Loc)" next to it
+                        // --- MERGED TEXT LOGIC ---
+                        // Combine "Room #1" and "(G101)" into one string "Room #1 (G101)"
+                        let mergedText = roomNameTxt;
                         if (locTxt) {
-                            doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-                            
-                            // Remove parens for cleaner look if desired, or keep them
-                            // Example: "(G101)" -> "G101"
-                            let cleanLoc = locTxt.replace(/[()]/g, '').trim();
-                            
-                            // Check available space
-                            const startX = roomX + 16 + nameW + 1.5;
-                            const maxW = boxW - (startX - roomX) - 5; // space left
-                            
-                            if (doc.getTextWidth(cleanLoc) > maxW) {
-                                const chars = Math.floor(maxW / 1.5);
-                                cleanLoc = cleanLoc.substring(0, chars) + "..";
-                            }
-                            
-                            // Draw in Parens
-                            if (maxW > 4) {
-                                doc.text(`(${cleanLoc})`, startX, roomY + 5);
-                            }
-                            doc.setTextColor(0);
+                            mergedText += " " + locTxt;
                         }
+
+                        // Fit Text
+                        doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        const maxTextW = boxW - 22; 
+                        
+                        if (doc.getTextWidth(mergedText) > maxTextW) {
+                            // Shrink font
+                            doc.setFontSize(7);
+                            if (doc.getTextWidth(mergedText) > maxTextW) {
+                                // Truncate
+                                const chars = Math.floor(maxTextW / 1.4);
+                                mergedText = mergedText.substring(0, chars) + "..";
+                            }
+                        }
+
+                        doc.text(mergedText, roomX + 16, roomY + 5);
 
                         // Checkbox
                         doc.setDrawColor(0);
