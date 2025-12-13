@@ -1301,19 +1301,39 @@ window.downloadReportPDF = function() {
                      ? lastGeneratedReportType 
                      : "Exam_Report";
 
+    console.log("📄 Generating PDF for type:", reportType);
+
     // 1. Room-wise Report
     if (reportType === "Roomwise_Seating_Report") {
-        generateRoomWisePDF();
+        if(typeof generateRoomWisePDF === 'function') {
+            generateRoomWisePDF();
+        } else {
+            alert("Room-wise PDF generator not loaded.");
+        }
         return;
     }
 
     // 2. Day-wise (Seating Details) Report
     if (reportType === "Daywise_Seating_Details") {
-        generateDayWisePDF();
+        if(typeof generateDayWisePDF === 'function') {
+            generateDayWisePDF();
+        } else {
+            alert("Day-wise PDF generator not loaded.");
+        }
         return;
     }
 
-    // 3. Fallback
+    // 3. QP Distribution Report (NEW)
+    if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
+        if(typeof generateQPDistributionPDF === 'function') {
+            generateQPDistributionPDF();
+        } else {
+            alert("QP Distribution PDF generator not loaded. Please reload.");
+        }
+        return;
+    }
+
+    // Fallback
     alert("PDF generation for '" + reportType + "' is coming next! For now, please use Print.");
 };
 
@@ -1920,12 +1940,246 @@ function generateDayWisePDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
-
-    
+//------------------------------------------------------------------
 
     
+//----------------QP Distribution Report (QP-Wise Count)---------
+    
+// --- QP DISTRIBUTION REPORT GENERATOR (Auto-Fit 1 Page Strategy) ---
+function generateQPDistributionPDF() {
+    const { jsPDF } = window.jspdf;
+    
+    // 1. VALIDATION
+    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+        return alert("No data loaded to generate Report.");
+    }
 
+    const btn = document.getElementById('download-qp-pdf-btn'); // Ensure your HTML button has this ID
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
+
+    try {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        
+        // --- 2. CONFIGURATION ---
+        const PAGE_H = 297;
+        const PAGE_W = 210;
+        const MARGIN = 10;
+        const COL_GAP = 5;
+        const HEADER_H = 8;
+        const ROW_H = 7; // Slightly taller for potential room wrapping
+        
+        const USABLE_W = PAGE_W - (MARGIN * 2);
+        
+        // Limits
+        const ROWS_PER_COL = 36; // Safe limit
+        const ROWS_PER_PAGE = ROWS_PER_COL * 2; 
+
+        // --- 3. HELPER: SMART TEXT (Scaling + Wrapping) ---
+        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 9) => {
+            if (!text) return;
+            
+            doc.setFont("helvetica", isBold ? "bold" : "normal");
+            let fontSize = maxFontSize;
+            let lines = [];
+            
+            // Shrink-to-Fit Logic
+            while (fontSize > 5) {
+                doc.setFontSize(fontSize);
+                lines = doc.splitTextToSize(String(text), w - 2); 
+                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
+                if (blockHeight <= (h - 1)) break; 
+                fontSize -= 0.5;
+            }
+            
+            doc.setFontSize(fontSize);
+            
+            // Vertical Centering
+            const lineHeight = fontSize * 0.3527 * 1.2;
+            const totalH = lines.length * lineHeight;
+            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
+
+            lines.forEach((line) => {
+                if (align === "center") {
+                    doc.text(line, x + (w / 2), startY, { align: "center" });
+                } else {
+                    doc.text(line, x + 1, startY);
+                }
+                startY += lineHeight;
+            });
+        };
+
+        // --- 4. DATA AGGREGATION ---
+        // Aggregate by QP Code
+        const qpMap = {};
+        
+        // Use filtered data if available, otherwise all data
+        const sourceData = (typeof getFilteredReportData === 'function') 
+                           ? getFilteredReportData('qp-wise') 
+                           : allStudentData;
+
+        sourceData.forEach(s => {
+            // Priority: QP Code -> Course Code -> Course Name
+            const rawCode = s.qpCode || s.courseCode || s.Course; 
+            const code = rawCode ? rawCode.trim() : "Unknown";
+            
+            if (!qpMap[code]) {
+                qpMap[code] = {
+                    code: code,
+                    subject: s.Course || "", // Full Subject Name
+                    count: 0,
+                    rooms: new Set()
+                };
+            }
+            
+            qpMap[code].count++;
+            if (s['Room No']) qpMap[code].rooms.add(s['Room No']);
+        });
+
+        // Convert to Array & Sort
+        const qpList = Object.values(qpMap).map(item => ({
+            code: item.code,
+            subject: item.subject,
+            count: item.count,
+            rooms: Array.from(item.rooms).sort(naturalSort).join(", ") // Ensure naturalSort helper exists or use default
+        })).sort((a, b) => a.code.localeCompare(b.code));
+
+        // --- 5. RENDER LOGIC ---
+        
+        let queue = [...qpList];
+        let pageCount = 0;
+
+        while(queue.length > 0) {
+            if (pageCount > 0) doc.addPage();
+
+            // HEADER
+            let y = 10;
+            const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
+            const dateStr = new Date().toISOString().slice(0,10);
+            
+            doc.setFontSize(16); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+            doc.text(collegeName, PAGE_W/2, y, { align: 'center' });
+            y += 7;
+            doc.setFontSize(14); 
+            doc.text("Question Paper Distribution Report", PAGE_W/2, y, { align: 'center' });
+            y += 6;
+            doc.setFontSize(11); doc.setFont("helvetica", "normal");
+            doc.text(`Generated: ${dateStr}`, PAGE_W/2, y, { align: 'center' });
+            
+            const startY = y + 10;
+
+            // DETERMINE LAYOUT
+            // If we have more rows than fit in 1 column, switch to 2 columns to save pages.
+            const isTwoCol = queue.length > ROWS_PER_COL;
+            const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_COL;
+            
+            // Extract Page Data
+            const pageData = queue.splice(0, limit);
+            
+            // Grid Settings based on layout
+            const colWidth = isTwoCol ? (USABLE_W - COL_GAP)/2 : USABLE_W;
+            
+            // Column Definitions (Percentages of Col Width)
+            // 2-Col: Code(20%), Subject(45%), Count(10%), Rooms(25%)
+            // 1-Col: Code(15%), Subject(55%), Count(10%), Rooms(20%)
+            
+            let wCode, wSubj, wCount, wRooms;
+            
+            if (isTwoCol) {
+                wCode = colWidth * 0.22;
+                wCount = colWidth * 0.12;
+                wRooms = colWidth * 0.25;
+                wSubj = colWidth - wCode - wCount - wRooms;
+            } else {
+                wCode = colWidth * 0.15;
+                wCount = colWidth * 0.10;
+                wRooms = colWidth * 0.25;
+                wSubj = colWidth - wCode - wCount - wRooms;
+            }
+
+            const drawQPTable = (rows, xBase) => {
+                let currentY = startY;
+                
+                // Offsets
+                const offSubj = wCode;
+                const offCount = wCode + wSubj;
+                const offRooms = wCode + wSubj + wCount;
+
+                // HEADER
+                doc.setFillColor(220); doc.setDrawColor(0);
+                doc.rect(xBase, currentY, colWidth, HEADER_H, 'FD');
+                doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                
+                doc.text("QP Code", xBase + 2, currentY + 5);
+                doc.text("Subject", xBase + offSubj + 2, currentY + 5);
+                doc.text("Count", xBase + offCount + (wCount/2), currentY + 5, { align: 'center' });
+                doc.text("Rooms", xBase + offRooms + 2, currentY + 5);
+                
+                currentY += HEADER_H;
+
+                // ROWS
+                rows.forEach(row => {
+                    const rowCenterY = currentY + (ROW_H/2);
+                    
+                    // QP Code
+                    drawSmartText(row.code, xBase, rowCenterY, wCode, ROW_H, "left", true, 9);
+                    
+                    // Subject
+                    drawSmartText(row.subject, xBase + offSubj, rowCenterY, wSubj, ROW_H, "left", false, 8);
+                    
+                    // Count
+                    drawSmartText(String(row.count), xBase + offCount, rowCenterY, wCount, ROW_H, "center", true, 9);
+                    
+                    // Rooms
+                    drawSmartText(row.rooms, xBase + offRooms, rowCenterY, wRooms, ROW_H, "left", false, 7);
+
+                    // Borders
+                    doc.setDrawColor(0);
+                    doc.rect(xBase, currentY, colWidth, ROW_H); // Outer Row
+                    
+                    // Vertical Dividers
+                    doc.line(xBase + offSubj, currentY, xBase + offSubj, currentY + ROW_H);
+                    doc.line(xBase + offCount, currentY, xBase + offCount, currentY + ROW_H);
+                    doc.line(xBase + offRooms, currentY, xBase + offRooms, currentY + ROW_H);
+
+                    currentY += ROW_H;
+                });
+            };
+
+            // RENDER COLUMNS
+            if (isTwoCol) {
+                const mid = Math.ceil(pageData.length / 2);
+                const left = pageData.slice(0, mid);
+                const right = pageData.slice(mid);
+                
+                drawQPTable(left, MARGIN);
+                drawQPTable(right, MARGIN + colWidth + COL_GAP);
+                
+                // Vertical Page Divider
+                const lineX = MARGIN + colWidth + (COL_GAP/2);
+                doc.setDrawColor(200); 
+                doc.line(lineX, startY, lineX, PAGE_H - 10);
+            } else {
+                drawQPTable(pageData, MARGIN);
+            }
+
+            pageCount++;
+        }
+
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`QP_Report_${dateStr}.pdf`);
+
+    } catch (e) {
+        console.error(e);
+        alert("Error: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
+// Optional Helper if you don't have one
+function naturalSort(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
 
 
 
