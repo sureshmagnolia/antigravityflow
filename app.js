@@ -1295,7 +1295,6 @@ function updateLocalSlotsFromStudents() {
         downloadReportPDF();
     });
 
-// --- MASTER PDF ROUTER ---
 // --- MASTER PDF DOWNLOAD DISPATCHER ---
 window.downloadReportPDF = function() {
     // 1. Get the current report type
@@ -1988,7 +1987,144 @@ function generateDayWisePDF() {
     }
 }
 //------------------------------------------------------------------
+//------------------SCRIBE REPORT-----------------------------
 
+// --- SCRIBE PROFORMA PDF (One Page Per Scribe - HTML Scraper) ---
+function generateScribeProformaPDF() {
+    const { jsPDF } = window.jspdf;
+    
+    // 1. Validation
+    const reportContainer = document.getElementById('report-output-area');
+    const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
+
+    if (pages.length === 0) {
+        return alert("Please generate the Scribe Proforma HTML report first.");
+    }
+
+    const btn = document.getElementById('download-pdf-report-btn'); 
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generatng Proforma..."; }
+
+    try {
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const PAGE_W = 210;
+        const PAGE_H = 297;
+        const MARGIN = 15;
+        const CONTENT_W = PAGE_W - (MARGIN * 2);
+
+        // --- RENDER LOOP ---
+        pages.forEach((page, index) => {
+            if (index > 0) doc.addPage();
+
+            let currentY = 20;
+
+            // 1. HEADER (Scrape from HTML)
+            const headerGroup = page.querySelector('.print-header-group');
+            if (headerGroup) {
+                const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "COLLEGE NAME";
+                const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "Scribe Proforma";
+                const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+
+                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(h1, PAGE_W/2, currentY, { align: 'center' });
+                currentY += 8;
+                
+                doc.setFontSize(14); doc.text(h2, PAGE_W/2, currentY, { align: 'center' });
+                currentY += 8;
+                
+                doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                doc.text(h3, PAGE_W/2, currentY, { align: 'center' });
+                currentY += 15;
+            }
+
+            // 2. TABLE (Scrape Rows)
+            const table = page.querySelector('table');
+            if (table) {
+                const rows = table.querySelectorAll('tr');
+                
+                // Column Widths
+                const colLabelW = 80; 
+                const colDataW = CONTENT_W - colLabelW;
+                
+                doc.setDrawColor(0); doc.setLineWidth(0.1);
+
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length === 2) {
+                        const label = cells[0].innerText.trim();
+                        const data = cells[1].innerText.trim();
+                        
+                        // Height Calculation
+                        // Give more space for signatures/fillable fields
+                        const isSignature = label.toLowerCase().includes("sign") || label.toLowerCase().includes("thumb");
+                        let rowHeight = isSignature ? 20 : 10;
+
+                        // Check Text Wrapping for Data
+                        doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                        const dataLines = doc.splitTextToSize(data, colDataW - 4);
+                        if (dataLines.length > 1) {
+                            rowHeight = Math.max(rowHeight, (dataLines.length * 5) + 4);
+                        }
+
+                        // Page Break Check (Unlikely for single page, but safe to have)
+                        if (currentY + rowHeight > PAGE_H - MARGIN) {
+                            doc.addPage();
+                            currentY = MARGIN;
+                        }
+
+                        // --- DRAW ROW ---
+                        // 1. Label Box
+                        doc.setFillColor(250); // Very light grey for label bg
+                        doc.rect(MARGIN, currentY, colLabelW, rowHeight, 'FD');
+                        
+                        // 2. Data Box
+                        doc.setFillColor(255);
+                        doc.rect(MARGIN + colLabelW, currentY, colDataW, rowHeight, 'FD');
+
+                        // 3. Label Text (Vertically Centered)
+                        doc.setFont("helvetica", "bold");
+                        doc.text(label, MARGIN + 2, currentY + (rowHeight/2) + 1);
+
+                        // 4. Data Text (Vertically Centered)
+                        doc.setFont("helvetica", "normal");
+                        // Highlight Scribe Room if present
+                        if (label.includes("Scribe Allotted Room")) {
+                            doc.setFontSize(12); doc.setFont("helvetica", "bold");
+                        }
+                        
+                        // Draw Data Lines
+                        const textY = currentY + (rowHeight/2) + 1 - ((dataLines.length - 1) * 2);
+                        doc.text(dataLines, MARGIN + colLabelW + 2, textY);
+
+                        // Reset Font
+                        doc.setFontSize(11); doc.setFont("helvetica", "normal");
+
+                        currentY += rowHeight;
+                    }
+                });
+            }
+            
+            // Footer text
+            doc.setFontSize(8); doc.setTextColor(100);
+            doc.text("Generated by ExamFlow", PAGE_W - MARGIN, PAGE_H - 10, { align: 'right' });
+        });
+
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`Scribe_Proforma_${dateStr}.pdf`);
+
+    } catch (e) {
+        console.error("PDF Error:", e);
+        alert("Error creating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
+
+
+
+
+
+    
 //--------------QP Report to Print -------------------------------
 
 // --- QUESTION PAPER SUMMARY (Stream -> Course Count) ---
