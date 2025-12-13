@@ -1553,8 +1553,10 @@ function generateRoomWisePDF() {
 
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
+//-----------------Notice Board Seating -----------------------
 
-// --- FIXED GENERATOR: HTML SCRAPER + AUTO-FIT ---
+
+// --- ULTIMATE PDF GENERATOR: CONSOLIDATED HTML SCRAPER ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1564,207 +1566,302 @@ function generateDayWisePDF() {
     if (pages.length === 0) return alert("No pages found.");
 
     const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Merging Data..."; }
 
-    // Constants
-    const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
-    const margin = 8;  
-    const midGap = 4;  
+    // CONSTANTS
+    const PAGE_WIDTH = 210;
+    const MARGIN = 10;
+    const COL_GAP = 6;
+    
+    // LAYOUT THRESHOLDS
+    const LIMIT_1_COL = 38; // If rows <= 38, use 1 Col
+    const LIMIT_2_COL = 80; // If rows > 38, use 2 Cols (40 per side)
 
-    pages.forEach((page, i) => {
-        if (i > 0) doc.addPage();
-        
-        let currentY = 12; 
+    try {
+        // --- STEP 1: SCRAPE & GROUP DATA ---
+        // We assume pages with the same "Stream | Date | Time" belong together.
+        const sessionMap = {};
+        const scribeTables = []; // Store scribe summaries separately
 
-        // --- 1. HEADER RECONSTRUCTION ---
-        const headerDiv = page.querySelector('.print-header-group');
-        if (headerDiv) {
-            // Absolute Divs (Page No / Stream)
-            const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
-            absoluteDivs.forEach(div => {
-                const text = div.innerText.trim().replace(/\s+/g, ' ');
-                const style = div.getAttribute('style');
-                if (style && style.includes('left')) doc.text(text, 14, 8);
-                if (style && style.includes('right')) doc.text(text, pageWidth - 14, 8, { align: 'right' });
-            });
-
-            // Center Titles
-            const titles = headerDiv.querySelectorAll('h1, h2, h3');
-            titles.forEach(el => {
-                const text = el.innerText.trim();
-                let size = 10;
-                if (el.tagName === 'H1') size = 16; 
-                else if (el.tagName === 'H2') size = 12;
-                else if (el.tagName === 'H3') size = 10;
-
-                doc.setFontSize(size);
-                doc.setFont("helvetica", "bold");
-                doc.text(text, pageWidth/2, currentY, {align:'center'});
-                currentY += (size * 0.35) + 3;
-            });
-        }
-        
-        currentY += 2; 
-
-        // --- 2. LAYOUT DETECTION & SCALING ---
-        const tables = page.querySelectorAll('table');
-        const isScribePage = page.innerText.includes("Scribe Assistance Summary");
-        const isTwoColumn = (tables.length === 2 && !isScribePage); 
-
-        // COUNT ROWS TO AUTO-SCALE FONT
-        let totalRows = 0;
-        tables.forEach(t => totalRows += t.querySelectorAll('tr').length);
-
-        // Dynamic Font Sizing (The Fix)
-        // If rows are dense (>35), shrink font even in 1-column mode to prevent overflow.
-        let fontSize = 10;
-        let cellPad = 2;
-        let locFontSize = 9;
-
-        if (isTwoColumn) {
-             fontSize = 7; 
-             cellPad = 1; 
-             locFontSize = 6;
-        } else {
-             // 1 Column Logic: Check density
-             if (totalRows > 55) { fontSize = 7; cellPad = 1; locFontSize = 7; }
-             else if (totalRows > 45) { fontSize = 8; cellPad = 1.2; locFontSize = 8; }
-             else if (totalRows > 35) { fontSize = 9; cellPad = 1.5; locFontSize = 9; }
-        }
-
-        // --- 3. RENDERING ---
-        if (isScribePage) {
-            // SCRIBE SUMMARY (Standard Layout)
-            if(tables.length > 0) {
-                doc.autoTable({
-                    html: tables[0],
-                    startY: currentY,
-                    theme: 'grid',
-                    styles: { 
-                        lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                        fontSize: 11, cellPadding: 3, valign: 'middle'
-                    },
-                    headStyles: { 
-                        fillColor: [220, 220, 220], textColor: [0, 0, 0], 
-                        fontStyle: 'bold', fontSize: 12, lineWidth: 0.1
-                    },
-                    columnStyles: {
-                        0: { cellWidth: 60, fontStyle: 'bold' }, 
-                        1: { cellWidth: 'auto' }                 
-                    },
-                    margin: { left: 14, right: 14 }
-                });
-                
-                // Footer
-                const footer = page.querySelector('.text-right');
-                if (footer && footer.innerText.includes("Total Scribes")) {
-                     doc.setFontSize(11);
-                     doc.text(footer.innerText.trim(), pageWidth - 14, doc.lastAutoTable.finalY + 8, { align: 'right' });
-                }
+        pages.forEach((page) => {
+            // Check for Scribe Summary first
+            if (page.innerText.includes("Scribe Assistance Summary")) {
+                const tables = page.querySelectorAll('table');
+                tables.forEach(t => scribeTables.push({ 
+                    html: t, 
+                    header: getHeaderInfo(page) 
+                }));
+                return;
             }
-        } 
-        else {
-            // STUDENT LISTS (Auto-Scaled)
+
+            // Extract Header Info
+            const meta = getHeaderInfo(page);
+            const sessionKey = `${meta.stream}|${meta.dateTime}`;
+
+            if (!sessionMap[sessionKey]) {
+                sessionMap[sessionKey] = { meta: meta, rows: [] };
+            }
+
+            // Extract Table Rows
+            const tables = page.querySelectorAll('table');
+            tables.forEach(table => {
+                const trs = table.querySelectorAll('tbody tr');
+                let lastLoc = ""; // Context for empty location cells
+
+                trs.forEach(tr => {
+                    const cells = Array.from(tr.querySelectorAll('td'));
+                    if (cells.length === 0) return;
+
+                    // A. Course Header (colspan=4)
+                    const colspan = parseInt(cells[0].getAttribute('colspan') || '1');
+                    if (colspan > 1 || tr.classList.contains('bg-gray-200') || cells[0].style.backgroundColor === 'rgb(238, 238, 238)') {
+                        sessionMap[sessionKey].rows.push({
+                            type: 'header',
+                            text: cells[0].innerText.trim()
+                        });
+                        lastLoc = ""; 
+                        return;
+                    }
+
+                    // B. Student Row
+                    // Robust Scraper: Handle missing cells (if rowspan was used in HTML)
+                    let loc = "", reg = "", name = "", seat = "";
+                    let isScribe = tr.className.includes('scribe') || tr.style.color.includes('194');
+
+                    if (cells.length === 4) {
+                        loc = cells[0].innerText.trim();
+                        reg = cells[1].innerText.trim();
+                        name = cells[2].innerText.trim();
+                        seat = cells[3].innerText.trim();
+                        if(loc) lastLoc = loc; else loc = lastLoc;
+                    } else if (cells.length === 3) {
+                        // Implied location
+                        loc = lastLoc;
+                        reg = cells[0].innerText.trim();
+                        name = cells[1].innerText.trim();
+                        seat = cells[2].innerText.trim();
+                    }
+
+                    sessionMap[sessionKey].rows.push({
+                        type: 'data',
+                        loc: loc,
+                        reg: reg,
+                        name: name,
+                        seat: seat,
+                        isScribe: isScribe
+                    });
+                });
+            });
+        });
+
+        // --- STEP 2: GENERATE PDF ---
+        const sessionKeys = Object.keys(sessionMap).sort();
+        let globalPageCount = 0;
+
+        sessionKeys.forEach(key => {
+            const session = sessionMap[key];
+            const allRows = session.rows;
+
+            // Recalculate RowSpans for the merged list
+            for(let i=0; i<allRows.length; i++) {
+                if(allRows[i].type !== 'data') continue;
+                let span = 1;
+                for(let j=i+1; j<allRows.length; j++) {
+                    if(allRows[j].type !== 'data') break;
+                    if(allRows[j].loc === allRows[i].loc) span++;
+                    else break;
+                }
+                allRows[i].rowSpan = span;
+            }
+
+            // PAGINATION LOOP
+            let remaining = [...allRows];
             
-            // Width Calculation
-            const availableWidth = pageWidth - (margin * 2) - (isTwoColumn ? midGap : 0);
-            const colWidth = isTwoColumn ? (availableWidth / 2) : availableWidth;
+            while (remaining.length > 0) {
+                if (globalPageCount > 0) doc.addPage();
+                
+                // Draw Header
+                drawHeader(doc, session.meta);
+                const startY = 45;
+
+                // Smart Layout Decision
+                // Check remaining rows to decide layout
+                const isTwoCol = remaining.length > LIMIT_1_COL;
+                const capacity = isTwoCol ? LIMIT_2_COL : LIMIT_1_COL;
+                
+                // Chunking
+                const chunk = remaining.splice(0, capacity);
+
+                if (isTwoCol) {
+                    // === 2 COLUMN ===
+                    const mid = Math.ceil(chunk.length / 2);
+                    const left = chunk.slice(0, mid);
+                    const right = chunk.slice(mid);
+                    const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
+
+                    // Draw Left
+                    const startPage = doc.internal.getCurrentPageInfo().pageNumber;
+                    drawAutoTable(doc, left, MARGIN, startY, colWidth, true);
+                    
+                    // Draw Right (Reset Page)
+                    doc.setPage(startPage);
+                    drawAutoTable(doc, right, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
+                    
+                    // Line
+                    doc.setPage(startPage);
+                    doc.setDrawColor(200); doc.setLineWidth(0.1);
+                    doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
+
+                } else {
+                    // === 1 COLUMN ===
+                    drawAutoTable(doc, chunk, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                }
+                globalPageCount++;
+            }
+        });
+
+        // --- STEP 3: SCRIBE SUMMARIES ---
+        scribeTables.forEach(item => {
+            doc.addPage();
+            drawHeader(doc, { ...item.header, exam: "Scribe Assistance Summary" });
             
-            const tableConfig = {
+            doc.autoTable({
+                html: item.html,
+                startY: 45,
                 theme: 'grid',
-                startY: currentY,
                 styles: { 
                     lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
-                    valign: 'middle', fontSize: fontSize, cellPadding: cellPad,
-                    overflow: 'linebreak', minCellHeight: 0 
+                    fontSize: 11, cellPadding: 3, valign: 'middle'
                 },
                 headStyles: { 
-                    fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
+                    fillColor: [50, 50, 50], textColor: [255, 255, 255], 
+                    fontStyle: 'bold', fontSize: 12
                 },
-                columnStyles: {
-                    // Adjust Location width based on layout
-                    0: { cellWidth: isTwoColumn ? 15 : 25, halign: 'center', fontSize: locFontSize }, 
-                    1: { cellWidth: isTwoColumn ? 22 : 35, fontStyle: 'bold' }, // Reg
-                    2: { cellWidth: 'auto' }, // Name
-                    3: { cellWidth: isTwoColumn ? 8 : 15, halign: 'center', fontStyle: 'bold' } // Seat
-                },
-                didParseCell: function(data) {
-                    const el = data.cell.raw;
-                    if (!el) return;
+                margin: { left: MARGIN, right: MARGIN }
+            });
+            globalPageCount++;
+        });
 
-                    // A. COURSE HEADERS (Black BG, White Text)
-                    const colspan = parseInt(el.getAttribute('colspan') || '1');
-                    if (data.section === 'body' && (colspan > 1 || el.style.backgroundColor === 'rgb(238, 238, 238)')) {
-                        data.cell.styles.fillColor = [0, 0, 0];       
-                        data.cell.styles.textColor = [255, 255, 255]; 
-                        data.cell.styles.fontStyle = 'bold';
-                        data.cell.styles.halign = 'left';
-                        data.cell.styles.fontSize = fontSize + 1;
-                    }
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`DayWise_Report_${dateStr}.pdf`);
 
-                    // B. Scribe Rows
-                    if (el.parentElement && (el.parentElement.className.includes('scribe') || el.style.color === 'rgb(194, 65, 12)')) {
-                        data.cell.styles.textColor = [194, 65, 12];
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-
-                    // C. Merged Locations
-                    if (el.hasAttribute('rowspan') && parseInt(el.getAttribute('rowspan')) > 1) {
-                        data.cell.styles.valign = 'middle';
-                    }
-                }
-            };
-
-            if (isTwoColumn) {
-                // LEFT TABLE
-                doc.autoTable({
-                    ...tableConfig,
-                    html: tables[0],
-                    margin: { left: margin },
-                    tableWidth: colWidth
-                });
-
-                // RIGHT TABLE
-                doc.autoTable({
-                    ...tableConfig,
-                    html: tables[1],
-                    startY: currentY, 
-                    margin: { left: margin + colWidth + midGap },
-                    tableWidth: colWidth
-                });
-
-                // Divider Line
-                const lineX = margin + colWidth + (midGap/2);
-                const lineBottom = doc.lastAutoTable.finalY;
-                doc.setDrawColor(200, 200, 200);
-                doc.setLineWidth(0.1);
-                doc.line(lineX, currentY, lineX, lineBottom);
-
-            } else {
-                // SINGLE COLUMN (Safe Mode)
-                doc.autoTable({
-                    ...tableConfig,
-                    html: tables[0],
-                    margin: { left: margin, right: margin }
-                });
-            }
-        }
-        
-        // Footer
-        doc.setFontSize(7);
-        doc.setTextColor(150);
-        doc.text("Generated by ExamFlow", pageWidth/2, 292, { align: 'center' });
-        doc.setTextColor(0);
-    });
-
-    const dateStr = new Date().toISOString().slice(0,10);
-    doc.save(`DayWise_Report_${dateStr}.pdf`);
-
-    if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    } catch (e) {
+        console.error(e);
+        alert("PDF Error: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
 }
 
+// --- HELPERS ---
+
+function getHeaderInfo(pageElement) {
+    const headerDiv = pageElement.querySelector('.print-header-group');
+    if (!headerDiv) return { college: "", exam: "", dateTime: "", stream: "" };
+
+    const h1 = headerDiv.querySelector('h1');
+    const h2 = headerDiv.querySelector('h2');
+    const h3 = headerDiv.querySelector('h3');
+    const streamDiv = headerDiv.querySelector('div[style*="right: 0"]');
+
+    return {
+        college: h1 ? h1.innerText.trim() : "",
+        exam: h2 ? h2.innerText.trim() : "",
+        dateTime: h3 ? h3.innerText.trim() : "",
+        stream: streamDiv ? streamDiv.innerText.trim() : ""
+    };
+}
+
+function drawHeader(doc, meta) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 10;
+    
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+    doc.text(meta.stream, pageWidth - 14, y, { align: 'right' });
+
+    y += 10;
+    doc.setFontSize(16); doc.text(meta.college, pageWidth/2, y, {align:'center'});
+    y += 7;
+    doc.setFontSize(14); doc.text(meta.exam, pageWidth/2, y, {align:'center'});
+    y += 6;
+    doc.setFontSize(11); doc.setFont("helvetica", "normal");
+    doc.text(meta.dateTime, pageWidth/2, y, {align:'center'});
+}
+
+function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
+    const body = rows.map(r => {
+        if (r.type === 'header') {
+            return [{ 
+                content: r.text, colSpan: 4, 
+                styles: { 
+                    fillColor: [0, 0, 0], textColor: [255, 255, 255], 
+                    fontStyle: 'bold', halign: 'left', fontSize: isCompact ? 8 : 10
+                } 
+            }];
+        } else {
+            const txtColor = r.isScribe ? [194, 65, 12] : [0, 0, 0];
+            const fontStyle = r.isScribe ? 'bold' : 'normal';
+            
+            const locCell = { 
+                content: r.loc, 
+                styles: { halign: 'center', textColor: txtColor, fontStyle: fontStyle } 
+            };
+            if (r.rowSpan > 1) locCell.rowSpan = r.rowSpan;
+
+            return [
+                locCell,
+                { content: r.reg, styles: { fontStyle: 'bold', textColor: txtColor } },
+                { content: r.name, styles: { textColor: txtColor, fontStyle: fontStyle } },
+                { content: r.seat, styles: { halign: 'center', fontStyle: 'bold', textColor: txtColor } }
+            ];
+        }
+    });
+
+    // Cleanup Duplicates for visual cleanliness
+    for(let i=body.length-1; i>0; i--) {
+        if (body[i].length === 4 && body[i-1].length === 4) {
+            if (body[i][0].content === body[i-1][0].content && body[i][0].content !== "") {
+                body[i][0].content = ""; 
+            }
+        }
+    }
+
+    doc.autoTable({
+        startY: startY,
+        margin: { left: startX },
+        tableWidth: width,
+        head: [['Loc', 'Reg No', 'Name', 'Seat']],
+        body: body,
+        theme: 'grid',
+        styles: { 
+            lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], 
+            valign: 'middle', 
+            fontSize: isCompact ? 7 : 10, 
+            cellPadding: isCompact ? 1 : 1.5,
+            overflow: 'linebreak'
+        },
+        headStyles: { 
+            fillColor: [220, 220, 220], textColor: [0, 0, 0], 
+            fontStyle: 'bold', lineWidth: 0.1, halign: 'center' 
+        },
+        columnStyles: {
+            0: { cellWidth: isCompact ? 14 : 25 }, 
+            1: { cellWidth: isCompact ? 22 : 35 }, 
+            2: { cellWidth: 'auto' },              
+            3: { cellWidth: isCompact ? 8 : 15 }   
+        },
+        pageBreak: 'auto'
+    });
+}
+
+
+
+
+
+
+
+    
+//-----------------------------------------------------------
 
 if (toggleButton && sidebar) {
         toggleButton.addEventListener('click', () => {
