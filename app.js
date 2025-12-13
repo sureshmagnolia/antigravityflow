@@ -2422,7 +2422,8 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
     
-// --- QP DISTRIBUTION SUMMARY (Stream -> QP Block -> Room Breakdown) ---
+
+// --- QP DISTRIBUTION REPORT (Detailed: Stream -> QP -> Rooms) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2443,23 +2444,19 @@ function generateQPDistributionPDF() {
         const MARGIN = 15;
         
         // --- 3. HELPER FUNCTIONS ---
-        
         const drawHeader = () => {
             let y = 15;
             const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
             const dateStr = new Date().toISOString().slice(0,10);
             
-            // College Name
             doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text(collegeName.toUpperCase(), PAGE_W/2, y, { align: 'center' });
             y += 7;
-            
-            // Report Title
             doc.setFontSize(12); 
             doc.text("QP Distribution Summary", PAGE_W/2, y, { align: 'center' });
             y += 6;
             
-            // Date/Time
+            // Get Time
             const rawData = getFilteredReportData('day-wise');
             const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
             doc.setFontSize(11); doc.setFont("helvetica", "normal");
@@ -2472,50 +2469,49 @@ function generateQPDistributionPDF() {
             doc.setFillColor(230); // Light Grey
             doc.setDrawColor(0);
             doc.rect(MARGIN, y, PAGE_W - (MARGIN*2), 8, 'F');
-            
             doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
             doc.text(`${text.toUpperCase()} STREAM`, MARGIN + 2, y + 5.5);
-            return y + 12; // Gap after header
+            return y + 12;
         };
 
         // --- 4. PREPARE DATA ---
-        const rawData = getFilteredReportData('day-wise');
-        if (!rawData || rawData.length === 0) throw new Error("No data found.");
+        // We use allStudentData or filtered data
+        const rawData = (typeof getFilteredReportData === 'function') 
+                        ? getFilteredReportData('day-wise') 
+                        : allStudentData;
 
-        // Hierarchy: Stream -> QP Code -> { Course, QPCode, Total, Rooms: {RoomName: Count} }
+        // Grouping: Stream -> Course Name -> Data
         const streamMap = {};
 
         rawData.forEach(s => {
-            // Determine Stream (Regular vs Others)
-            let stream = s.Stream || "Regular";
-            if (stream.toLowerCase() !== "regular") stream = "Other Streams"; // Group non-regular if needed, or keep distinct
-
-            const qpCode = s.qpCode || s.Course || "Unknown";
-            const courseName = s.Course || "";
+            const stream = s.Stream || "Regular";
+            const courseName = s.Course || "Unknown Course";
             const room = s['Room No'] || "Unallocated";
+            // Capture QP Code (check multiple properties)
+            const qp = s.qpCode || s.QPCode || s.qp_code || "";
 
             if (!streamMap[stream]) streamMap[stream] = {};
-            
-            if (!streamMap[stream][qpCode]) {
-                streamMap[stream][qpCode] = {
+            if (!streamMap[stream][courseName]) {
+                streamMap[stream][courseName] = {
                     course: courseName,
-                    code: qpCode,
-                    total: 0,
-                    rooms: {}
+                    qpCodes: new Set(), // Store all found codes to find the valid one
+                    rooms: {},
+                    total: 0
                 };
             }
             
-            const qpObj = streamMap[stream][qpCode];
-            qpObj.total++;
+            const entry = streamMap[stream][courseName];
+            entry.total++;
+            if (qp) entry.qpCodes.add(qp);
             
-            if (!qpObj.rooms[room]) qpObj.rooms[room] = 0;
-            qpObj.rooms[room]++;
+            if (!entry.rooms[room]) entry.rooms[room] = 0;
+            entry.rooms[room]++;
         });
 
         // --- 5. RENDER LOOP ---
         let currentY = drawHeader();
         
-        // Sort: Regular first, then others
+        // Sort Streams
         const sortedStreams = Object.keys(streamMap).sort((a, b) => {
             if(a.toLowerCase().includes("regular")) return -1;
             if(b.toLowerCase().includes("regular")) return 1;
@@ -2523,91 +2519,96 @@ function generateQPDistributionPDF() {
         });
 
         sortedStreams.forEach(stream => {
-            const qps = streamMap[stream];
-            const sortedQPs = Object.keys(qps).sort();
-
-            // Check space for Stream Header
+            // Stream Header
             if (currentY + 20 > PAGE_H - MARGIN) {
                 doc.addPage();
                 currentY = drawHeader();
             }
-
-            // Draw Stream Header
             currentY = drawStreamHeader(stream, currentY);
 
-            // Iterate QPs in this stream
-            sortedQPs.forEach(qpKey => {
-                const data = qps[qpKey];
+            // Sort Courses
+            const courses = streamMap[stream];
+            const sortedCourses = Object.keys(courses).sort();
+
+            sortedCourses.forEach(courseKey => {
+                const data = courses[courseKey];
                 
-                // 1. Calculate Block Height
-                // Header (Course+Code) approx 12mm
-                // Rooms: approx 5mm per room row
+                // Resolve QP Code (Pick the first valid one found, or "N/A")
+                const validQP = data.qpCodes.size > 0 ? Array.from(data.qpCodes)[0] : "N/A";
+                
+                // Prepare Room Lines
                 const roomKeys = Object.keys(data.rooms).sort((a, b) => 
                     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
                 );
-                
-                const roomsNeededHeight = Math.ceil(roomKeys.length) * 6; // 6mm per room line
-                const blockHeight = Math.max(15, 12 + roomsNeededHeight + 2); // Min 15mm
 
-                // 2. Page Break Check
+                // --- CALCULATE HEIGHT ---
+                // Header (Course) + Subheader (QP) + Room Lines + Gap
+                // Header: 6mm, QP: 6mm, Rooms: 6mm each
+                const blockHeight = 12 + (roomKeys.length * 6) + 4;
+
+                // Page Break Check
                 if (currentY + blockHeight > PAGE_H - MARGIN) {
                     doc.addPage();
                     currentY = drawHeader();
                     currentY = drawStreamHeader(`${stream} (Continued)`, currentY);
                 }
 
-                // 3. Draw Block Content
-                const startBlockY = currentY;
+                // --- DRAW BLOCK ---
                 
-                // A. Course Name (Bold)
+                // 1. Course Name (Bold) 
                 doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                // Truncate if needed
-                let cName = data.course;
-                if(doc.getTextWidth(cName) > 130) cName = cName.substring(0, 60) + "...";
-                doc.text(cName, MARGIN, currentY + 4);
+                // Truncate if super long
+                let displayCourse = data.course;
+                if(doc.getTextWidth(displayCourse) > 130) displayCourse = displayCourse.substring(0, 60) + "...";
+                doc.text(displayCourse, MARGIN, currentY + 4);
 
-                // B. Stream & QP Code (Small, below course)
+                // 2. QP Code Line 
+                // Format: "STREAM QP: CODE"
                 doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(50);
-                doc.text(`${stream.toUpperCase()}   QP: `, MARGIN, currentY + 9);
-                doc.setFont("helvetica", "bold");
-                doc.text(data.code, MARGIN + 35, currentY + 9); // QP Code bold
+                doc.text(`${stream.toUpperCase()} QP: `, MARGIN, currentY + 9);
+                
+                doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(validQP, MARGIN + 40, currentY + 9); // QP Code bolded next to label
 
-                // C. Room List (Loop)
+                // 3. Room Breakdown 
                 let roomY = currentY + 15;
-                doc.setFontSize(9); doc.setTextColor(0); doc.setFont("helvetica", "normal");
+                doc.setFont("helvetica", "normal"); doc.setTextColor(0);
                 
                 roomKeys.forEach(rKey => {
                     const count = data.rooms[rKey];
-                    // Checkbox
-                    doc.rect(MARGIN + 2, roomY - 3, 3, 3); // Small square
-                    // Text: "17 Nos Room #6 (Location)"
-                    // Get location info if available
+                    
+                    // Draw Checkbox Square
+                    doc.setDrawColor(0);
+                    doc.rect(MARGIN + 2, roomY - 3, 3, 3); 
+                    
+                    // Text: "17 Nos   Room #6 (Location)"
+                    // Retrieve Location Info if available
                     const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[rKey]) ? currentRoomConfig[rKey] : {};
                     const locText = roomInfo.location ? `(${roomInfo.location})` : "";
                     
-                    const text = `${count} Nos   Room #${rKey} ${locText}`;
+                    const text = `${count} Nos    Room #${rKey} ${locText}`;
                     doc.text(text, MARGIN + 8, roomY);
                     
                     roomY += 6;
                 });
 
-                // D. Large Total (Right Side)
-                doc.setFontSize(16); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(String(data.total), PAGE_W - MARGIN - 5, startBlockY + (blockHeight/2), { align: 'right' });
+                // 4. Large Total Count (Right Side) 
+                doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                doc.text(String(data.total), PAGE_W - MARGIN - 5, currentY + (blockHeight/2), { align: 'right' });
 
-                // E. Separator Line
+                // 5. Divider Line
                 currentY += blockHeight;
                 doc.setDrawColor(200); doc.setLineWidth(0.1);
                 doc.line(MARGIN, currentY, PAGE_W - MARGIN, currentY);
                 
-                currentY += 4; // Gap between blocks
+                currentY += 4; // Spacing between courses
             });
             
-            currentY += 6; // Gap between streams
+            currentY += 6; // Spacing between streams
         });
 
         const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Distribution_Summary_${dateStr}.pdf`);
+        doc.save(`QP_Distribution_${dateStr}.pdf`);
 
     } catch (e) {
         console.error("PDF Error:", e);
@@ -2616,8 +2617,6 @@ function generateQPDistributionPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
-
-
 
     
 
