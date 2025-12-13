@@ -2421,8 +2421,7 @@ function generateQuestionPaperReportPDF() {
 }
     
 //----------------QP Distribution Report (QP-Wise Count)---------
-
-// --- QP DISTRIBUTION PDF (FIXED: Single Line Room+Loc, Robust QP Scraper) ---
+// --- QP DISTRIBUTION PDF (FIXED: Loc Selector, QP Regex, Single Line) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2497,33 +2496,22 @@ function generateQPDistributionPDF() {
                     // --- 1. SCRAPE METADATA ---
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
                     
-                    // QP Code: Look specifically for the "QP:" text label
+                    // QP Code: Try badge first, then regex text search
                     let qpCode = "N/A";
-                    // Find the container that has "QP:" text
-                    const qpLabelContainer = Array.from(headerRow.querySelectorAll('div, span')).find(
-                        node => node.innerText.includes("QP:") && node.children.length > 0
-                    );
-                    
-                    if (qpLabelContainer) {
-                        // The code is usually in a nested span with a border
-                        const codeSpan = qpLabelContainer.querySelector('span.border');
-                        if (codeSpan) qpCode = codeSpan.innerText.trim();
-                        else {
-                            // Fallback: simple text split
-                            const parts = qpLabelContainer.innerText.split("QP:");
-                            if(parts[1]) qpCode = parts[1].trim();
-                        }
+                    const qpBadge = headerRow.querySelector('span.border-black');
+                    if (qpBadge && !qpBadge.innerText.includes('Nos')) {
+                        qpCode = qpBadge.innerText.trim();
+                    } else {
+                        // Regex fallback: "QP: D12345"
+                        const match = headerRow.innerText.match(/QP:\s*([A-Za-z0-9]+)/);
+                        if (match && match[1]) qpCode = match[1];
                     }
 
-                    // Stream Label
                     let strmLabel = "";
                     const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
                     if (strmSpan) strmLabel = strmSpan.innerText.trim();
 
-                    // Total Count
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
-                    
-                    // Room Divs
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
                     // Style & Height
@@ -2557,7 +2545,6 @@ function generateQPDistributionPDF() {
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
-                    // QP Code Label & Value
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2586,14 +2573,14 @@ function generateQPDistributionPDF() {
                             roomY += 8.5;
                         }
 
-                        // --- SCRAPE ROOM DATA (SPECIFIC SELECTORS) ---
+                        // --- SCRAPE ROOM DATA ---
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
                         
-                        // Select "Room #X" specifically by class 'text-sm'
+                        // Select Room # (e.g. "Room #1")
                         const roomNameSpan = rDiv.querySelector('span.text-sm');
                         const roomNameTxt = roomNameSpan ? roomNameSpan.innerText.trim() : ""; 
                         
-                        // Select Location "(G101)" specifically by class 'truncate' (on the span, not div)
+                        // Select Location (e.g. "(G101)") - Use 'truncate' class to avoid 'Nos'
                         const locSpan = rDiv.querySelector('span.truncate');
                         const locTxt = locSpan ? locSpan.innerText.trim() : "";
 
@@ -2611,28 +2598,26 @@ function generateQPDistributionPDF() {
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- CONCATENATE & DRAW TEXT (Single Line) ---
-                        let displayLine = roomNameTxt; // Start with "Room #1"
+                        // --- COMBINED TEXT LOGIC (Room # + Loc) ---
+                        let textToPrint = roomNameTxt;
                         if (locTxt) {
                             const cleanLoc = locTxt.replace(/[()]/g, '').trim();
-                            if (cleanLoc) {
-                                displayLine += ` (${cleanLoc})`; // Add location: "Room #1 (G101)"
-                            }
+                            if(cleanLoc) textToPrint += ` (${cleanLoc})`;
                         }
 
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                         
-                        // Truncate to fit box
-                        const maxW = boxW - 22; // space available
-                        if (doc.getTextWidth(displayLine) > maxW) {
-                            doc.setFontSize(7); // Shrink first
-                            if (doc.getTextWidth(displayLine) > maxW) {
+                        // Truncate
+                        const maxW = boxW - 22; 
+                        if (doc.getTextWidth(textToPrint) > maxW) {
+                            doc.setFontSize(7);
+                            if (doc.getTextWidth(textToPrint) > maxW) {
                                 const chars = Math.floor(maxW / 1.4);
-                                displayLine = displayLine.substring(0, chars) + "..";
+                                textToPrint = textToPrint.substring(0, chars) + "..";
                             }
                         }
 
-                        doc.text(displayLine, roomX + 16, roomY + 5);
+                        doc.text(textToPrint, roomX + 16, roomY + 5);
 
                         // Checkbox
                         doc.setDrawColor(0);
