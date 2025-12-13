@@ -1555,12 +1555,11 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-
-// --- ULTIMATE PDF GENERATOR: MANUAL RENDERER (Fixed Scope & Layout) ---
+// --- ULTIMATE PDF GENERATOR: MANUAL DRAWING ENGINE (Zero Layout Errors) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
-    // 1. VALIDATION
+    // 1. Validation
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
         return alert("No data loaded to generate PDF.");
     }
@@ -1571,72 +1570,51 @@ function generateDayWisePDF() {
     try {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         
-        // --- 2. CONFIGURATION (Global Constants for this scope) ---
+        // --- 2. CONFIGURATION (Manual Grid System) ---
         const PAGE_WIDTH = 210;
         const PAGE_HEIGHT = 297;
         const MARGIN = 10;
+        const START_Y = 45; // Start below header
+        const ROW_HEIGHT = 6; 
         const COL_GAP = 5;
-        const START_Y = 45;
-        const ROW_H = 6; 
-        const HEADER_H = 7;
         
-        // Column positions
-        // Left Col: 10mm to 102.5mm
-        // Right Col: 107.5mm to 200mm
-        const COL_WIDTH = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
-        const DIVIDER_X = MARGIN + COL_WIDTH + (COL_GAP / 2);
-
-        // Internal Column Offsets (Relative to Column Start X)
-        const OFF_LOC = 2;
-        const OFF_REG = 25;
-        const OFF_NAME = 55;
-        const OFF_SEAT = 85;
-
-        // --- 3. HELPER FUNCTIONS (Defined INSIDE to access constants) ---
+        // Column Dimensions
+        // We split the usable width into two equal columns
+        const USABLE_WIDTH = PAGE_WIDTH - (MARGIN * 2);
+        const COL_WIDTH = (USABLE_WIDTH - COL_GAP) / 2; // ~92.5mm
         
-        const drawHeader = (stream, date, time, title, collegeName) => {
-            const w = doc.internal.pageSize.getWidth();
-            let y = 10;
-            
-            doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-            doc.text(stream, w - 14, y, { align: 'right' });
-        
-            y += 10;
-            doc.setFontSize(16); doc.text(collegeName, w/2, y, {align:'center'});
-            y += 7;
-            doc.setFontSize(14); doc.text(title, w/2, y, {align:'center'});
-            y += 6;
-            doc.setFontSize(11); doc.setFont("helvetica", "normal");
-            doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
-        };
+        // Internal Column Offsets (relative to the column start)
+        const X_LOC = 2;
+        const X_REG = 28;
+        const X_NAME = 60;
+        const X_SEAT = 88;
 
-        const drawColumnHeader = (y, colIndex) => {
-            const xStart = colIndex === 1 ? MARGIN : MARGIN + COL_WIDTH + COL_GAP;
-            
-            // Background
-            doc.setFillColor(220);
-            doc.rect(xStart, y, COL_WIDTH, 6, 'F');
-            
-            // Text
-            doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text("Loc", xStart + OFF_LOC, y + 4);
-            doc.text("Reg No", xStart + OFF_REG, y + 4);
-            doc.text("Name", xStart + OFF_NAME, y + 4);
-            doc.text("Seat", xStart + OFF_SEAT, y + 4, { align: 'center' });
-        };
+        // Limits
+        // 40 rows fits comfortably (40 * 6mm = 240mm + 45mm header = 285mm)
+        const ROWS_PER_SIDE = 38; 
+        const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; // 76 total
 
-        const drawCourseHeader = (text, y, colIndex) => {
-            const xStart = colIndex === 1 ? MARGIN : MARGIN + COL_WIDTH + COL_GAP;
+        // --- 3. HELPER: Draw Cell Text ---
+        const drawCell = (text, x, y, type) => {
+            if (!text) return;
+            doc.setFontSize(8);
             
-            doc.setFillColor(0); // Black
-            doc.rect(xStart, y, COL_WIDTH, HEADER_H, 'F');
-            
-            doc.setTextColor(255); // White
-            doc.setFontSize(9); doc.setFont("helvetica", "bold");
-            
-            // Truncate if too long
-            let safeText = text.length > 45 ? text.substring(0, 42) + "..." : text;
-            doc.text(safeText, xStart + 2, y + 4.5);
+            if (type === 'bold') doc.setFont("helvetica", "bold");
+            else doc.setFont("helvetica", "normal");
+
+            // Handle truncation
+            let str = String(text);
+            if (str.length > 22 && type === 'name') str = str.substring(0, 20) + "..";
+            if (str.length > 25 && type === 'loc') {
+                doc.setFontSize(6.5); // Shrink font for long locations
+                str = str.substring(0, 35);
+            }
+
+            if (type === 'center') {
+                doc.text(str, x, y + 4, { align: 'center' });
+            } else {
+                doc.text(str, x, y + 4);
+            }
         };
 
         // --- 4. PREPARE DATA ---
@@ -1650,9 +1628,7 @@ function generateDayWisePDF() {
             const stream = row.Stream || "Regular";
             const key = `${row.Date}|${row.Time}`;
             if (!sessionsMap[stream]) sessionsMap[stream] = {};
-            if (!sessionsMap[stream][key]) {
-                sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
-            }
+            if (!sessionsMap[stream][key]) sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
             sessionsMap[stream][key].students.push(row);
             if(scribeRegNos.has(row['Register Number'])) sessionsMap[stream][key].scribes.push(row);
         });
@@ -1672,14 +1648,14 @@ function generateDayWisePDF() {
                     return a['Register Number'].localeCompare(b['Register Number']);
                 });
 
-                // Flatten
-                const printRows = [];
+                // Flatten Data
+                const flatRows = [];
                 let lastCourse = "";
                 let lastLoc = "";
 
                 sData.students.forEach(s => {
                     if (s.Course !== lastCourse) {
-                        printRows.push({ type: 'header', text: s.Course });
+                        flatRows.push({ type: 'header', text: s.Course });
                         lastCourse = s.Course;
                         lastLoc = "";
                     }
@@ -1691,7 +1667,7 @@ function generateDayWisePDF() {
                     let displayLoc = (locText !== lastLoc) ? locText : "";
                     if (locText !== lastLoc) lastLoc = locText;
 
-                    printRows.push({
+                    flatRows.push({
                         type: 'data',
                         loc: displayLoc,
                         reg: s['Register Number'],
@@ -1701,87 +1677,52 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // DRAWING
-                let currentY = START_Y;
-                let currentCol = 1; // 1 or 2
+                // PAGINATION LOOP
+                let queue = [...flatRows];
                 
-                // Start a new page for this session
-                if (pageCount > 0) doc.addPage();
-                drawHeader(stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
-                
-                // Initial Column Headers
-                drawColumnHeader(currentY, 1);
-                drawColumnHeader(currentY, 2);
-                currentY += 7; // Skip past header
+                while(queue.length > 0) {
+                    if (pageCount > 0) doc.addPage();
+                    
+                    // Header
+                    drawManualHeader(doc, stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
+                    
+                    // Extract Chunk
+                    // If <= 38, use 1 Col. If > 38, use 2 Cols.
+                    const isTwoCol = queue.length > ROWS_PER_SIDE;
+                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
+                    const pageRows = queue.splice(0, limit);
 
-                printRows.forEach(row => {
-                    // Check bounds (Reserve 15mm at bottom)
-                    if (currentY > PAGE_HEIGHT - 15) {
-                        if (currentCol === 1) {
-                            // Switch to Right Column
-                            currentCol = 2;
-                            currentY = START_Y + 7; // Reset to top (+ header gap)
-                        } else {
-                            // New Page
-                            doc.addPage();
-                            drawHeader(stream, sData.date, sData.time, "Seating Details", currentCollegeName);
-                            currentY = START_Y;
-                            drawColumnHeader(currentY, 1);
-                            drawColumnHeader(currentY, 2);
-                            currentY += 7;
-                            currentCol = 1;
-                        }
-                    }
+                    // Draw Table(s)
+                    if (isTwoCol) {
+                        const mid = Math.ceil(pageRows.length / 2);
+                        const left = pageRows.slice(0, mid);
+                        const right = pageRows.slice(mid);
 
-                    // Vertical Divider
-                    doc.setDrawColor(200); doc.setLineWidth(0.1);
-                    doc.line(DIVIDER_X, START_Y, DIVIDER_X, PAGE_HEIGHT - 10);
-
-                    // Draw Row
-                    if (row.type === 'header') {
-                        drawCourseHeader(row.text, currentY, currentCol);
-                        currentY += HEADER_H;
-                    } else {
-                        // Calc X based on column
-                        const xStart = currentCol === 1 ? MARGIN : MARGIN + COL_WIDTH + COL_GAP;
+                        // Draw Left
+                        drawManualTable(doc, left, MARGIN, START_Y, COL_WIDTH, ROW_HEIGHT);
+                        // Draw Right
+                        drawManualTable(doc, right, MARGIN + COL_WIDTH + COL_GAP, START_Y, COL_WIDTH, ROW_HEIGHT);
                         
-                        doc.setFontSize(8); 
-                        doc.setFont("helvetica", row.isScribe ? "bold" : "normal");
-                        doc.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0);
+                        // Vertical Divider
+                        const lineX = MARGIN + COL_WIDTH + (COL_GAP/2);
+                        doc.setDrawColor(200); doc.setLineWidth(0.1);
+                        doc.line(lineX, START_Y, lineX, PAGE_HEIGHT - 10);
 
-                        // Loc (Wrapped)
-                        if (row.loc) {
-                            doc.setFontSize(7);
-                            const locLines = doc.splitTextToSize(row.loc, 22);
-                            doc.text(locLines, xStart + OFF_LOC, currentY + 3);
-                        }
-
-                        // Reg
-                        doc.setFontSize(8);
-                        doc.text(String(row.reg), xStart + OFF_REG, currentY + 3);
-
-                        // Name (Truncated)
-                        let nText = row.name;
-                        if (nText.length > 25) nText = nText.substring(0, 23) + "..";
-                        doc.text(nText, xStart + OFF_NAME, currentY + 3);
-
-                        // Seat
-                        doc.setFont("helvetica", "bold");
-                        doc.text(String(row.seat), xStart + OFF_SEAT, currentY + 3, { align: 'center' });
-
-                        // Row Line
-                        doc.setDrawColor(230);
-                        doc.line(xStart, currentY + ROW_H, xStart + COL_WIDTH, currentY + ROW_H);
-
-                        currentY += ROW_H;
+                    } else {
+                        // 1 Column Centered (or Wide)
+                        // Let's use Full Width for better readability if 1 col
+                        const FULL_W = PAGE_WIDTH - (MARGIN*2);
+                        // Adjust offsets for full width
+                        drawManualTable(doc, pageRows, MARGIN, START_Y, FULL_W, ROW_HEIGHT, true); 
                     }
-                });
-                pageCount++;
+                    
+                    pageCount++;
+                }
 
-                // SCRIBE SUMMARY
+                // Scribe Summary
                 if (sData.scribes.length > 0) {
                     doc.addPage();
-                    drawHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
+                    drawManualHeader(doc, stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
                     
                     const map = {};
                     sData.scribes.forEach(s => {
@@ -1790,35 +1731,25 @@ function generateDayWisePDF() {
                         map[r].push(`${s.Name} (${s['Register Number']})`);
                     });
 
-                    let sy = START_Y;
-                    
-                    // Table Header
-                    doc.setFillColor(50);
-                    doc.rect(MARGIN, sy, PAGE_WIDTH - (MARGIN*2), 8, 'F');
-                    doc.setTextColor(255); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                    doc.text("Room Location", MARGIN + 2, sy + 5);
-                    doc.text("Candidates", MARGIN + 60, sy + 5);
-                    sy += 10;
-
-                    doc.setTextColor(0);
-                    
-                    Object.keys(map).sort().forEach(r => {
+                    // Using AutoTable for this simple summary is fine and safer
+                    const scribeRows = Object.keys(map).sort().map(r => {
                         const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
-                        const loc = info.location ? `${r} (${info.location})` : r;
-                        const cands = map[r].join(', ');
-                        
-                        const splitCands = doc.splitTextToSize(cands, 120);
-                        const h = Math.max(8, splitCands.length * 5 + 4);
-                        
-                        doc.setFont("helvetica", "bold");
-                        doc.text(loc, MARGIN + 2, sy + 4);
-                        
-                        doc.setFont("helvetica", "normal");
-                        doc.text(splitCands, MARGIN + 60, sy + 4);
-                        
-                        doc.setDrawColor(200);
-                        doc.rect(MARGIN, sy, PAGE_WIDTH - (MARGIN*2), h);
-                        sy += h;
+                        const loc = info.location ? `${r}\n(${info.location})` : r;
+                        return [
+                            { content: loc, styles: { fontStyle: 'bold' } }, 
+                            map[r].join(', ')
+                        ];
+                    });
+
+                    doc.autoTable({
+                        startY: START_Y,
+                        head: [['Room Location', 'Candidates']],
+                        body: scribeRows,
+                        theme: 'grid',
+                        styles: { lineColor: 0, lineWidth: 0.1, textColor: 0, fontSize: 11, cellPadding: 3, valign: 'top' },
+                        headStyles: { fillColor: [50, 50, 50], textColor: 255, fontStyle: 'bold', fontSize: 12 },
+                        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } },
+                        margin: { left: MARGIN, right: MARGIN }
                     });
                     pageCount++;
                 }
@@ -1829,11 +1760,98 @@ function generateDayWisePDF() {
         doc.save(`DayWise_Report_${dateStr}.pdf`);
 
     } catch (e) {
-        console.error("PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        console.error(e);
+        alert("PDF Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
+}
+
+// --- HELPER 1: HEADER ---
+function drawManualHeader(doc, stream, date, time, title, collegeName) {
+    const w = doc.internal.pageSize.getWidth();
+    let y = 10;
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+    doc.text(stream, w - 14, y, { align: 'right' });
+    y += 10;
+    doc.setFontSize(16); doc.text(collegeName, w/2, y, {align:'center'});
+    y += 7;
+    doc.setFontSize(14); doc.text(title, w/2, y, {align:'center'});
+    y += 6;
+    doc.setFontSize(11); doc.setFont("helvetica", "normal");
+    doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
+}
+
+// --- HELPER 2: MANUAL TABLE DRAWER (No AutoTable) ---
+function drawManualTable(doc, rows, startX, startY, width, rowH, isWide = false) {
+    let currentY = startY;
+    
+    // Column Offsets (Scaled if Wide)
+    const scale = isWide ? 1.5 : 1;
+    const offLoc = 2 * scale;
+    const offReg = 28 * scale;
+    const offName = 65 * scale;
+    const offSeat = width - (10 * scale);
+
+    // 1. Draw Column Headers
+    doc.setFillColor(220); // Grey
+    doc.rect(startX, currentY, width, 6, 'F');
+    doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+    
+    doc.text("Loc", startX + offLoc, currentY + 4);
+    doc.text("Reg No", startX + offReg, currentY + 4);
+    doc.text("Name", startX + offName, currentY + 4);
+    doc.text("Seat", startX + offSeat, currentY + 4, { align: 'center' });
+    
+    currentY += 7;
+
+    // 2. Draw Rows
+    rows.forEach(row => {
+        if (row.type === 'header') {
+            // Course Header
+            doc.setFillColor(0); // Black
+            doc.rect(startX, currentY - 4, width, rowH + 1, 'F');
+            doc.setTextColor(255); // White
+            doc.setFont("helvetica", "bold");
+            
+            let text = row.text;
+            if (text.length > (45 * scale)) text = text.substring(0, Math.floor(42 * scale)) + "...";
+            doc.text(text, startX + 2, currentY + 1);
+            
+            currentY += (rowH + 1);
+        } else {
+            // Student Data
+            doc.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); // Orange if Scribe
+            doc.setFont("helvetica", row.isScribe ? "bold" : "normal");
+            doc.setFontSize(8);
+
+            // LOC
+            if (row.loc) {
+                doc.setFontSize(7);
+                doc.text(row.loc, startX + offLoc, currentY + 1);
+            }
+            
+            // REG
+            doc.setFontSize(8);
+            doc.text(String(row.reg), startX + offReg, currentY + 1);
+            
+            // NAME
+            let nText = row.name;
+            const cut = isWide ? 40 : 22;
+            if (nText.length > cut) nText = nText.substring(0, cut-2) + "..";
+            doc.text(nText, startX + offName, currentY + 1);
+            
+            // SEAT
+            doc.setFont("helvetica", "bold");
+            doc.text(String(row.seat), startX + offSeat, currentY + 1, { align: 'center' });
+
+            // Line
+            doc.setDrawColor(220);
+            doc.line(startX, currentY + 3, startX + width, currentY + 3);
+
+            currentY += rowH;
+        }
+    });
 }
 
     
