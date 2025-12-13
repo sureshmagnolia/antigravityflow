@@ -1555,7 +1555,7 @@ function generateRoomWisePDF() {
 }
 //-----------------Notice Board Seating -----------------------
 
-// --- ULTIMATE PDF GENERATOR: PRECISION GRID & DATA INTEGRITY ---
+// --- ULTIMATE PDF GENERATOR: MERGED CELLS & AUTO-SCALING TEXT ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1582,21 +1582,50 @@ function generateDayWisePDF() {
         const USABLE_W = 210 - (MARGIN * 2);
         const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm per column
         
-        // Column Offsets (Manual Grid)
-        const OFF_LOC  = 1;
-        const OFF_REG  = 26;
-        const OFF_NAME = 58;
-        const OFF_SEAT = 86;
+        // Column Offsets (Precision Grid)
+        const OFF_LOC  = 0;
+        const W_LOC    = 25;
         
-        // Max Widths for Text (for truncation)
-        const W_LOC  = 24;
-        const W_REG  = 30;
-        const W_NAME = 27; // Strictly limit name width to avoid hitting Seat col
-        const W_SEAT = 6;
+        const OFF_REG  = 25;
+        const W_REG    = 30;
+        
+        const OFF_NAME = 55;
+        const W_NAME   = 30; // Strict width for Name
+        
+        const OFF_SEAT = 85;
+        const W_SEAT   = 7.5; // Remaining width
+
+        // Limits
+        const ROWS_PER_SIDE = 38; 
+        const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
 
         // --- 3. HELPER FUNCTIONS ---
 
-        // Draw the top "Government Victoria College..." header
+        // Helper: Draw Text with Auto-Scaling (Prevents Overlap)
+        const drawScaledText = (text, x, y, maxWidth, initialSize, style = "normal", align = "left") => {
+            doc.setFont("helvetica", style);
+            let fontSize = initialSize;
+            doc.setFontSize(fontSize);
+            
+            // Mathematically reduce font size if text is wider than box
+            let textWidth = doc.getTextWidth(text);
+            if (textWidth > maxWidth) {
+                // Calculate scale factor
+                fontSize = fontSize * (maxWidth / textWidth); 
+                // Don't go microscopic (limit to 5pt)
+                if (fontSize < 5) fontSize = 5;
+                doc.setFontSize(fontSize);
+            }
+
+            if (align === "center") {
+                // Center relative to maxWidth
+                const centerX = x + (maxWidth / 2);
+                doc.text(text, centerX, y, { align: "center" });
+            } else {
+                doc.text(text, x, y);
+            }
+        };
+
         const drawReportHeader = (stream, date, time, title, collegeName) => {
             const w = doc.internal.pageSize.getWidth();
             let y = 10;
@@ -1612,34 +1641,20 @@ function generateDayWisePDF() {
             doc.setFontSize(11); doc.setFont("helvetica", "normal");
             doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
             
-            return y + 8; // Return Y where content should start
+            return y + 8; 
         };
 
-        // Draw the "Loc | Reg | Name | Seat" grey bar
         const drawColumnHeader = (x, y) => {
             doc.setFillColor(220); // Grey
             doc.rect(x, y, COL_W, COL_HEADER_H, 'F');
             doc.setDrawColor(0); // Black Line
-            doc.rect(x, y, COL_W, COL_HEADER_H, 'S'); // Border
+            doc.rect(x, y, COL_W, COL_HEADER_H, 'S'); 
 
             doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text("Loc", x + OFF_LOC + 1, y + 4.5);
-            doc.text("Reg No", x + OFF_REG, y + 4.5);
-            doc.text("Name", x + OFF_NAME, y + 4.5);
-            doc.text("Seat", x + OFF_SEAT, y + 4.5, { align: 'center' });
-        };
-
-        // Truncate text to fit width
-        const fitText = (text, maxWidth, fontSize = 8, fontStyle = "normal") => {
-            doc.setFontSize(fontSize);
-            doc.setFont("helvetica", fontStyle);
-            if (doc.getTextWidth(text) <= maxWidth) return text;
-            
-            let len = text.length;
-            while (len > 0 && doc.getTextWidth(text.substring(0, len) + "..") > maxWidth) {
-                len--;
-            }
-            return text.substring(0, len) + "..";
+            doc.text("Loc", x + OFF_LOC + 2, y + 4.5);
+            doc.text("Reg No", x + OFF_REG + 2, y + 4.5);
+            doc.text("Name", x + OFF_NAME + 2, y + 4.5);
+            doc.text("Seat", x + OFF_SEAT + (W_SEAT/2), y + 4.5, { align: 'center' });
         };
 
         // --- 4. PREPARE DATA ---
@@ -1660,7 +1675,7 @@ function generateDayWisePDF() {
 
         // --- 5. RENDER LOOP ---
         
-        // Sort Streams: Regular First, then Alphabetical
+        // Sort Streams: Regular First
         const sortedStreams = Object.keys(sessionsMap).sort((a, b) => {
             if (a === 'Regular') return -1;
             if (b === 'Regular') return 1;
@@ -1684,8 +1699,6 @@ function generateDayWisePDF() {
                 const printRows = [];
                 let lastCourse = "";
                 
-                // We track location for "Display Logic" in the print loop, 
-                // but we need raw data here.
                 sData.students.forEach(s => {
                     if (s.Course !== lastCourse) {
                         printRows.push({ type: 'header', text: s.Course });
@@ -1707,114 +1720,50 @@ function generateDayWisePDF() {
                 });
 
                 // === DRAWING ===
-                if (pageCount > 0) doc.addPage();
-                
-                // Initial Page Setup
-                let startY = drawReportHeader(stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
-                let currentY = startY + COL_HEADER_H; // Data starts below col header
-                let currentCol = 1; 
-                
-                // Draw Initial Column Headers
-                drawColumnHeader(MARGIN, startY); // Left
-                drawColumnHeader(MARGIN + COL_W + COL_GAP, startY); // Right
+                let queue = [...printRows];
 
-                // Location Merging Trackers (Per Column)
-                let lastLocCol1 = "";
-                let lastLocCol2 = "";
+                while (queue.length > 0) {
+                    if (pageCount > 0) doc.addPage();
+                    
+                    // Header
+                    let startY = drawReportHeader(stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
+                    let currentY = startY + COL_HEADER_H;
+                    
+                    // Determine Layout
+                    const isTwoCol = queue.length > ROWS_PER_SIDE;
+                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
+                    const pageRows = queue.splice(0, limit);
 
-                printRows.forEach(row => {
-                    // 1. Check Page Break
-                    // Reserve space at bottom (15mm)
-                    if (currentY > PAGE_H - 15) {
-                        if (currentCol === 1) {
-                            // Switch to Column 2
-                            currentCol = 2;
-                            currentY = startY + COL_HEADER_H; 
-                            // Reset Loc Tracker for new column context
-                            lastLocCol2 = ""; 
-                        } else {
-                            // Add New Page
-                            doc.addPage();
-                            startY = drawReportHeader(stream, sData.date, sData.time, "Seating Details", currentCollegeName);
-                            drawColumnHeader(MARGIN, startY);
-                            drawColumnHeader(MARGIN + COL_W + COL_GAP, startY);
-                            currentY = startY + COL_HEADER_H;
-                            currentCol = 1;
-                            // Reset Loc Trackers
-                            lastLocCol1 = "";
-                            lastLocCol2 = "";
-                        }
-                    }
-
-                    // 2. Draw Divider Line
-                    const midX = MARGIN + COL_W + (COL_GAP/2);
-                    doc.setDrawColor(0); 
-                    doc.line(midX, startY, midX, PAGE_H - 10);
-
-                    // 3. Draw Content
-                    const xBase = currentCol === 1 ? MARGIN : MARGIN + COL_W + COL_GAP;
-
-                    if (row.type === 'header') {
-                        // Course Header (Black Bar)
-                        doc.setFillColor(0); // Black
-                        doc.rect(xBase, currentY, COL_W, COURSE_HEADER_H, 'F');
-                        
-                        doc.setTextColor(255); // White
-                        doc.setFontSize(9); doc.setFont("helvetica", "bold");
-                        
-                        // Fit Text
-                        const safeText = fitText(row.text, COL_W - 4, 9, "bold");
-                        doc.text(safeText, xBase + 2, currentY + 4.5);
-                        
-                        currentY += COURSE_HEADER_H;
-                        
-                        // Course header breaks location merging group logic naturally
-                        if(currentCol === 1) lastLocCol1 = ""; else lastLocCol2 = "";
-
+                    // Divide into Left/Right arrays
+                    let leftRows = [], rightRows = [];
+                    if (isTwoCol) {
+                        const mid = Math.ceil(pageRows.length / 2);
+                        leftRows = pageRows.slice(0, mid);
+                        rightRows = pageRows.slice(mid);
                     } else {
-                        // Student Data
-                        doc.setDrawColor(0); // Black Lines
-                        doc.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); // Scribe Color
-                        
-                        // A. Location Merging Logic
-                        // Check against the LAST printed location in THIS column
-                        let printLoc = false;
-                        if (currentCol === 1) {
-                            if (row.loc !== lastLocCol1) { printLoc = true; lastLocCol1 = row.loc; }
-                        } else {
-                            if (row.loc !== lastLocCol2) { printLoc = true; lastLocCol2 = row.loc; }
-                        }
-
-                        // B. Draw Location
-                        if (printLoc) {
-                            doc.setFontSize(7); doc.setFont("helvetica", "normal");
-                            // Wrap text if needed
-                            const lines = doc.splitTextToSize(row.loc, W_LOC);
-                            doc.text(lines, xBase + OFF_LOC + 1, currentY + 3);
-                        }
-
-                        // C. Draw Reg No
-                        doc.setFontSize(8); doc.setFont("helvetica", "bold");
-                        doc.text(String(row.reg), xBase + OFF_REG, currentY + 4);
-
-                        // D. Draw Name (Strict Fit)
-                        const safeName = fitText(row.name, W_NAME, 8, row.isScribe ? "bold" : "normal");
-                        doc.text(safeName, xBase + OFF_NAME, currentY + 4);
-
-                        // E. Draw Seat
-                        doc.setFont("helvetica", "bold");
-                        doc.text(String(row.seat), xBase + OFF_SEAT, currentY + 4, { align: 'center' });
-
-                        // F. Bottom Line
-                        doc.setDrawColor(200); // Light Grey for rows
-                        doc.line(xBase, currentY + ROW_H, xBase + COL_W, currentY + ROW_H);
-
-                        currentY += ROW_H;
+                        leftRows = pageRows;
                     }
-                });
-                pageCount++;
 
-                // SCRIBE SUMMARY (Simple Table)
+                    // --- DRAW LEFT COLUMN ---
+                    drawColumnHeader(MARGIN, startY);
+                    drawDataColumn(doc, leftRows, MARGIN, currentY, COL_W, ROW_HEIGHT, COURSE_HEADER_H);
+
+                    // --- DRAW RIGHT COLUMN ---
+                    if (rightRows.length > 0) {
+                        const rightX = MARGIN + COL_W + COL_GAP;
+                        drawColumnHeader(rightX, startY);
+                        drawDataColumn(doc, rightRows, rightX, currentY, COL_W, ROW_HEIGHT, COURSE_HEADER_H);
+                        
+                        // Vertical Divider
+                        const midX = MARGIN + COL_W + (COL_GAP/2);
+                        doc.setDrawColor(0); 
+                        doc.line(midX, startY, midX, PAGE_H - 10);
+                    }
+
+                    pageCount++;
+                }
+
+                // SCRIBE SUMMARY (Standard AutoTable)
                 if (sData.scribes.length > 0) {
                     doc.addPage();
                     let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
@@ -1826,7 +1775,6 @@ function generateDayWisePDF() {
                         map[r].push(`${s.Name} (${s['Register Number']})`);
                     });
 
-                    // Manual Scribe Table to ensure black lines
                     const sRows = Object.keys(map).sort();
                     
                     // Header
@@ -1851,13 +1799,109 @@ function generateDayWisePDF() {
                         doc.setFont("helvetica", "normal");
                         doc.text(splitCands, MARGIN + 60, sY + 5);
                         
-                        doc.rect(MARGIN, sY, USABLE_W, h); // Border
+                        doc.rect(MARGIN, sY, USABLE_W, h); 
                         sY += h;
                     });
                     pageCount++;
                 }
             });
         });
+
+        // --- INTERNAL HELPER: DRAW COLUMN CONTENT ---
+        function drawDataColumn(pdf, rows, xBase, yStart, colW, rowH, headerH) {
+            let y = yStart;
+            
+            // Offsets
+            const xLoc  = xBase + OFF_LOC;
+            const xReg  = xBase + OFF_REG;
+            const xName = xBase + OFF_NAME;
+            const xSeat = xBase + OFF_SEAT;
+
+            // Dimensions for Borders
+            const wLoc  = W_LOC; 
+            const wReg  = W_REG;
+            const wName = W_NAME;
+            const wSeat = W_SEAT;
+
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                
+                if (row.type === 'header') {
+                    // Course Header
+                    pdf.setFillColor(0); 
+                    pdf.rect(xBase, y, colW, headerH, 'F');
+                    
+                    pdf.setTextColor(255);
+                    // Fit Course Name (No Truncation, Scale Down)
+                    drawScaledText(row.text, xBase + 2, y + 4.5, colW - 4, 9, "bold");
+                    
+                    y += headerH;
+                } else {
+                    // Student Row
+                    pdf.setDrawColor(0); // Black Lines
+                    pdf.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); 
+
+                    // 1. LOOK AHEAD for Location Merging
+                    // Check if next row exists, is data type, and has same location
+                    let isMerged = false;
+                    if (i < rows.length - 1 && rows[i+1].type === 'data' && rows[i+1].loc === row.loc) {
+                        isMerged = true;
+                    }
+
+                    // 2. CHECK BEHIND to see if we should print text
+                    // Print text only if it's the first in the group or previous was header
+                    let printLocText = false;
+                    if (i === 0 || rows[i-1].type === 'header' || rows[i-1].loc !== row.loc) {
+                        printLocText = true;
+                    }
+
+                    // LOC (Draw Text)
+                    if (printLocText && row.loc) {
+                        // Use smaller font for Loc by default
+                        drawScaledText(row.loc, xLoc + 1, y + 4, wLoc - 2, 7, "normal");
+                    }
+
+                    // REG
+                    drawScaledText(String(row.reg), xReg + 1, y + 4, wReg - 2, 8, "bold");
+
+                    // NAME (Strictly Scaled)
+                    drawScaledText(row.name, xName + 1, y + 4, wName, 8, row.isScribe ? "bold" : "normal");
+
+                    // SEAT
+                    drawScaledText(String(row.seat), xSeat, y + 4, wSeat, 8, "bold", "center");
+
+                    // --- BORDERS ---
+                    // Draw bottom line for Reg, Name, Seat always
+                    const lineY = y + rowH;
+                    
+                    // Loc Column Border Logic:
+                    // If merged, DO NOT draw bottom line for Loc column
+                    // Unless it is the last row of the entire table/column
+                    if (!isMerged) {
+                        pdf.line(xBase, lineY, xBase + wLoc, lineY); // Loc Bottom
+                    }
+                    
+                    // Vertical Lines for Loc
+                    pdf.line(xBase, y, xBase, lineY); // Left Edge
+                    pdf.line(xBase + wLoc, y, xBase + wLoc, lineY); // Right of Loc
+
+                    // Rest of the Row Borders
+                    pdf.line(xBase + wLoc, lineY, xBase + colW, lineY); // Bottom of rest
+                    
+                    // Verticals
+                    pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY); // Right of Loc (Shared)
+                    pdf.line(xBase + OFF_NAME, y, xBase + OFF_NAME, lineY); // Right of Reg
+                    pdf.line(xBase + OFF_SEAT, y, xBase + OFF_SEAT, lineY); // Right of Name
+                    pdf.line(xBase + colW, y, xBase + colW, lineY); // Far Right Edge
+
+                    y += rowH;
+                }
+            }
+            
+            // Closing line at the very bottom of the column to ensure closure
+            pdf.setDrawColor(0);
+            pdf.line(xBase, y, xBase + colW, y);
+        }
 
         const dateStr = new Date().toISOString().slice(0,10);
         doc.save(`DayWise_Report_${dateStr}.pdf`);
