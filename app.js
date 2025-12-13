@@ -1554,8 +1554,7 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 //-----------------Notice Board Seating -----------------------
-
-// --- ULTIMATE PDF GENERATOR: PRE-CALCULATED LAYOUT (The Planner Strategy) ---
+// --- ULTIMATE PDF GENERATOR: PRE-PLANNED LAYOUT (Fixes Pagination & Columns) ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     
@@ -1569,11 +1568,13 @@ function generateDayWisePDF() {
 
     try {
         // --- STEP 1: PREPARE SOURCE DATA ---
+        // We use the exact same data retrieval as the HTML view
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
+
         if (!rawData || rawData.length === 0) throw new Error("No matching data found.");
 
-        // Run Allocation Logic
+        // Run Allocation Logic to get Room/Seat numbers
         const dataWithRooms = performOriginalAllocation(rawData);
         
         let scribeRegNos = new Set();
@@ -1599,20 +1600,23 @@ function generateDayWisePDF() {
             }
         });
 
-        // --- STEP 2: THE PLANNER (Calculate Pages) ---
-        // We will build a list of "Virtual Pages" to draw later.
+        // --- STEP 2: THE PLANNER (Calculate Pages in Memory) ---
         const virtualPages = [];
         
-        // Limits
-        const LIMIT_1_COL = 38; 
-        const LIMIT_2_COL_PER_SIDE = 40; // Total 80 per page
+        // Limits: How many rows fit per column?
+        const ROWS_PER_COL = 38; 
+        const ROWS_PER_PAGE_2COL = 76; // 38 * 2
 
         Object.keys(sessionsMap).sort().forEach(stream => {
             const streamSessions = sessionsMap[stream];
-            Object.keys(streamSessions).sort().forEach(sessionKey => {
+            
+            // Sort sessions by date/time
+            const sortedKeys = Object.keys(streamSessions).sort(compareSessionStrings);
+
+            sortedKeys.forEach(sessionKey => {
                 const sessionData = streamSessions[sessionKey];
 
-                // A. Flatten Students & Headers
+                // A. Flatten Students & Headers into a single list
                 sessionData.students.sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                     return a['Register Number'].localeCompare(b['Register Number']);
@@ -1623,12 +1627,14 @@ function generateDayWisePDF() {
                 let lastLoc = "";
 
                 sessionData.students.forEach(s => {
+                    // Header Row
                     if (s.Course !== lastCourse) {
                         flatRows.push({ type: 'header', text: s.Course });
                         lastCourse = s.Course;
-                        lastLoc = "";
+                        lastLoc = ""; // Reset merge
                     }
                     
+                    // Data Row
                     const roomName = s['Room No'];
                     const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
                     const locText = roomInfo.location ? `${roomName}\n(${roomInfo.location})` : roomName;
@@ -1649,14 +1655,18 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // B. Paginate this Session
-                // Decision: If TOTAL rows > 38, we use 2-Col layout for ALL pages of this session
-                const useTwoCols = flatRows.length > LIMIT_1_COL;
-                const rowsPerPage = useTwoCols ? (LIMIT_2_COL_PER_SIDE * 2) : LIMIT_1_COL;
-
+                // B. Create Pages for this Session
                 let queue = [...flatRows];
+                
                 while(queue.length > 0) {
-                    const pageChunk = queue.splice(0, rowsPerPage);
+                    // Decision: Do we have enough data for 2 columns?
+                    // If queue > 38, we use 2 columns to save paper.
+                    // If queue <= 38, we use 1 column for better readability.
+                    const isTwoCol = queue.length > ROWS_PER_COL;
+                    const limit = isTwoCol ? ROWS_PER_PAGE_2COL : ROWS_PER_COL;
+                    
+                    // Extract chunk
+                    const pageChunk = queue.splice(0, limit);
                     
                     const pageObj = {
                         type: 'student_list',
@@ -1664,18 +1674,18 @@ function generateDayWisePDF() {
                         date: sessionData.date,
                         time: sessionData.time,
                         title: "Seating Details",
-                        layout: useTwoCols ? '2col' : '1col',
+                        layout: isTwoCol ? '2col' : '1col',
                         leftData: [],
                         rightData: []
                     };
 
-                    if (useTwoCols) {
-                        // Split chunk into Left/Right
+                    if (isTwoCol) {
+                        // Split chunk evenly for this page
                         const mid = Math.ceil(pageChunk.length / 2);
                         pageObj.leftData = pageChunk.slice(0, mid);
                         pageObj.rightData = pageChunk.slice(mid);
                     } else {
-                        pageObj.leftData = pageChunk; // 1 Col uses 'leftData' as main
+                        pageObj.leftData = pageChunk; // 1 Col uses leftData
                     }
                     
                     virtualPages.push(pageObj);
@@ -1683,7 +1693,6 @@ function generateDayWisePDF() {
 
                 // C. Scribe Summary Page (If needed)
                 if (sessionData.scribes.length > 0) {
-                    // Group scribes
                     const map = {};
                     sessionData.scribes.forEach(s => {
                         const r = s['Room No'];
@@ -1720,7 +1729,7 @@ function generateDayWisePDF() {
         virtualPages.forEach((vPage, index) => {
             if (index > 0) doc.addPage();
 
-            // Draw Header
+            // Header
             drawPDFHeader(doc, vPage.stream, vPage.date, vPage.time, vPage.title, (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
             
             const startY = 45;
@@ -1729,16 +1738,16 @@ function generateDayWisePDF() {
                 if (vPage.layout === '2col') {
                     const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
                     
-                    // Left Column
+                    // 1. Draw Left Column
                     drawPDFTable(doc, vPage.leftData, MARGIN, startY, colWidth, true);
                     
-                    // Right Column (Reset Y not needed as AutoTable tracks it, but we force startY)
-                    // Note: AutoTable might page break if we don't control it, but we chunked data to fit.
-                    // To be safe, we retrieve the PDF context to ensure drawing on same page.
+                    // 2. FORCE CURSOR BACK TO TOP (Fixes the "Next Page" issue)
                     doc.setPage(index + 1); 
+                    
+                    // 3. Draw Right Column
                     drawPDFTable(doc, vPage.rightData, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
 
-                    // Divider
+                    // 4. Draw Divider
                     doc.setPage(index + 1);
                     doc.setDrawColor(200); doc.setLineWidth(0.1);
                     doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
@@ -1806,10 +1815,6 @@ function drawPDFTable(doc, rows, startX, startY, width, isCompact) {
         }
     });
 
-    // Cleanup: Visual merge
-    // (If the location is empty string, AutoTable draws a cell border but no text. 
-    // This gives the clean look we want).
-
     doc.autoTable({
         startY: startY,
         margin: { left: startX },
@@ -1834,17 +1839,13 @@ function drawPDFTable(doc, rows, startX, startY, width, isCompact) {
             2: { cellWidth: 'auto' },              
             3: { cellWidth: isCompact ? 8 : 15 }   
         },
-        // We handle pagination manually, so we disable auto page break logic 
-        // that creates new pages automatically.
+        // IMPORTANT: Prevent auto page breaks since we planned the layout
         pageBreak: 'avoid' 
     });
 }
 
 function drawPDFScribeTable(doc, rows, margin, startY) {
-    const body = rows.map(r => [
-        { content: r.col1, styles: { fontStyle: 'bold' } }, 
-        { content: r.col2 }
-    ]);
+    const body = rows.map(r => [{ content: r.col1, styles: { fontStyle: 'bold' } }, { content: r.col2 }]);
 
     doc.autoTable({
         startY: startY,
@@ -1857,6 +1858,7 @@ function drawPDFScribeTable(doc, rows, margin, startY) {
         margin: { left: margin, right: margin }
     });
 }
+
 
 
 
