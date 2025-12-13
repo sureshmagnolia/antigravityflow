@@ -2422,7 +2422,7 @@ function generateQuestionPaperReportPDF() {
     
 //----------------QP Distribution Report (QP-Wise Count)---------
 
-// --- QP DISTRIBUTION PDF (Smart Scraper: Inline Room & Location) ---
+// --- QP DISTRIBUTION PDF (HTML SCRAPER: Hide Serial if Location Exists) ---
 function generateQPDistributionPDF() {
     const { jsPDF } = window.jspdf;
     
@@ -2447,7 +2447,6 @@ function generateQPDistributionPDF() {
 
         let pageCount = 0;
 
-        // --- HELPER: Draw Main Header ---
         const drawMainHeader = (pageEl) => {
             let y = 15;
             const headerGroup = pageEl.querySelector('.print-header-group');
@@ -2469,12 +2468,10 @@ function generateQPDistributionPDF() {
             return y;
         };
 
-        // --- PROCESS HTML PAGES ---
         pages.forEach((pageEl) => {
             if (pageCount > 0) doc.addPage();
             
             let currentY = drawMainHeader(pageEl);
-            
             const children = Array.from(pageEl.children).filter(el => !el.classList.contains('print-header-group'));
 
             children.forEach(el => {
@@ -2494,15 +2491,12 @@ function generateQPDistributionPDF() {
                 
                 // B. QP CARD
                 else if (el.querySelector('.grid')) {
-                    
                     const headerRow = el.children[0]; 
                     const gridRow = el.children[1];   
 
-                    // Extract Metadata
                     const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
                     let qpCode = "N/A";
-                    const allSpans = headerRow.querySelectorAll('span');
-                    allSpans.forEach(sp => {
+                    headerRow.querySelectorAll('span').forEach(sp => {
                         if (sp.className.includes('border-black') && !sp.innerText.includes('Nos')) {
                             qpCode = sp.innerText.trim();
                         }
@@ -2515,21 +2509,19 @@ function generateQPDistributionPDF() {
                     const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
                     const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
                     
-                    // Style & Height
                     let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
                     const gridRowsCount = Math.ceil(roomDivs.length / 3);
                     const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
 
-                    // Page Break
                     if (currentY + cardHeight > MAX_Y) {
                         doc.addPage();
                         currentY = MARGIN + 5;
                     }
 
-                    // Draw Card
+                    // Card Bg
                     doc.setDrawColor(0); doc.setLineWidth(0.1);
                     if (isOthers) {
-                        doc.setFillColor(255, 251, 235); // Light Yellow
+                        doc.setFillColor(255, 251, 235);
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'FD');
                         doc.setLineDash([1, 1], 0); 
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight); 
@@ -2539,14 +2531,13 @@ function generateQPDistributionPDF() {
                         doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); 
                     }
 
-                    // Header Text
+                    // Header Info
                     const headY = currentY + 5;
                     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                     let dispCourse = courseName;
                     if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
                     doc.text(dispCourse, MARGIN + 2, headY);
 
-                    // QP Code & Stream
                     doc.setFontSize(8); doc.setTextColor(50);
                     doc.text("QP:", MARGIN + 130, headY);
                     doc.setFont("helvetica", "bold"); doc.setTextColor(0);
@@ -2558,11 +2549,9 @@ function generateQPDistributionPDF() {
                         doc.setTextColor(0);
                     }
 
-                    // Total
                     doc.setFontSize(11); doc.setFont("helvetica", "bold");
                     doc.text(totalCount, PAGE_W - MARGIN - 4, headY + 2, { align: 'right' });
 
-                    // Divider
                     doc.setDrawColor(200);
                     doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
 
@@ -2577,12 +2566,11 @@ function generateQPDistributionPDF() {
                             roomY += 8.5;
                         }
 
-                        // Scrape Data
                         const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
                         const roomNameTxt = rDiv.querySelector('.text-sm')?.innerText.trim() || ""; // "Room #1"
                         const locTxt = rDiv.querySelector('.truncate')?.innerText.trim() || ""; // "(G101)"
 
-                        // Draw Box
+                        // Box
                         doc.setDrawColor(180); doc.setFillColor(255);
                         doc.rect(roomX, roomY, boxW - 2, 7, 'FD');
 
@@ -2592,44 +2580,32 @@ function generateQPDistributionPDF() {
                         doc.setFontSize(6); doc.setFont("helvetica", "normal");
                         doc.text("Nos", roomX + 8, roomY + 5);
 
-                        // Vertical Separator
+                        // Vertical Line
                         doc.setDrawColor(220);
                         doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
 
-                        // --- SMART INLINE LAYOUT (Room # + Loc) ---
-                        // 1. Draw Room #
+                        // --- ROOM IDENTITY LOGIC ---
+                        // "Location info dont need Room serial number again"
                         doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                        doc.text(roomNameTxt, roomX + 16, roomY + 5);
                         
-                        // 2. Measure Room # Width
-                        const roomNameWidth = doc.getTextWidth(roomNameTxt);
+                        let textToPrint = roomNameTxt; // Default: "Room #1"
+                        let cleanLoc = "";
 
-                        // 3. Draw Location (if exists) immediately after
                         if (locTxt) {
-                            doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(80);
-                            
-                            // Clean parens
-                            let cleanLoc = locTxt.replace(/[()]/g, '');
-                            
-                            // Calculate Start Position
-                            const locX = roomX + 16 + roomNameWidth + 1.5; // 1.5mm gap
-                            
-                            // Calculate Max Width allowed (Box Width - checkbox area - current X relative to box)
-                            const maxLocW = (boxW - 10) - (16 + roomNameWidth);
-                            
-                            // Truncate logic
-                            let displayLoc = cleanLoc;
-                            if (doc.getTextWidth(displayLoc) > maxLocW) {
-                                // Simple char truncation estimate
-                                const approxChars = Math.floor(maxLocW / 1.5);
-                                displayLoc = cleanLoc.substring(0, Math.max(0, approxChars)) + "..";
-                            }
-
-                            if (maxLocW > 3) { // Only draw if we have meaningful space
-                                doc.text(`(${displayLoc})`, locX, roomY + 5);
-                            }
-                            doc.setTextColor(0);
+                            cleanLoc = locTxt.replace(/[()]/g, '').trim(); 
+                            // If location exists, use it INSTEAD of the serial number
+                            if (cleanLoc) textToPrint = cleanLoc;
                         }
+
+                        // Truncate to fit
+                        const maxTextW = boxW - 22; // Box width - left offsets
+                        if (doc.getTextWidth(textToPrint) > maxTextW) {
+                            // Approx char width
+                            const chars = Math.floor(maxTextW / 1.5);
+                            textToPrint = textToPrint.substring(0, chars) + "..";
+                        }
+
+                        doc.text(textToPrint, roomX + 16, roomY + 5);
 
                         // Checkbox
                         doc.setDrawColor(0);
