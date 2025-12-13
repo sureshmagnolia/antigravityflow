@@ -1554,41 +1554,45 @@ function generateRoomWisePDF() {
     if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
 }
 //-----------------Notice Board Seating -----------------------
-
-// --- ULTIMATE PDF GENERATOR: SOURCE DATA + ROBUST LAYOUT ---
+// --- ULTIMATE PDF GENERATOR: SOURCE DATA + REPLICATED HTML LOGIC ---
 function generateDayWisePDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
     // 1. DATA VALIDATION
-    if (!allStudentData || allStudentData.length === 0) return alert("No data loaded to generate PDF.");
+    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+        return alert("No data loaded to generate PDF.");
+    }
 
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
 
     // 2. CONFIGURATION
     const PAGE_WIDTH = 210;
+    const PAGE_HEIGHT = 297;
     const MARGIN = 10;
     const COL_GAP = 6;
     
-    // LAYOUT LIMITS
-    const LIMIT_1_COL = 38;  // If <= 38 rows, use 1 Column (Big & Clear)
-    const LIMIT_2_COL = 80;  // If > 38 rows, use 2 Columns (40 per side to save paper)
+    // LIMITS: How many rows fit on one page?
+    const ROWS_PER_PAGE_1COL = 38; 
+    const ROWS_PER_PAGE_2COL = 80; // 40 rows per column * 2 columns
 
     try {
-        // 3. PREPARE DATA (Source of Truth)
+        // 3. PREPARE DATA (Exact Same Logic as HTML Report)
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
 
         if (!rawData || rawData.length === 0) throw new Error("No matching data found.");
 
-        // Run Allocation Logic to get correct Room/Seat info
+        // IMPORTANT: Run allocation to get Room/Seat numbers
         const dataWithRooms = performOriginalAllocation(rawData);
         
         let scribeRegNos = new Set();
-        if(globalScribeList) scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+        if(typeof globalScribeList !== 'undefined' && globalScribeList) {
+            scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+        }
 
-        // Group by Stream -> Session
+        // Grouping: Stream -> Session
         const tree = {};
         dataWithRooms.forEach(row => {
             const stream = row.Stream || "Regular";
@@ -1619,8 +1623,8 @@ function generateDayWisePDF() {
             sortedKeys.forEach(sessionKey => {
                 const sessionData = sessions[sessionKey];
 
-                // --- A. FLATTEN DATA (Headers + Students) ---
-                // Sort by Course, then Register Number
+                // --- A. FLATTEN DATA ---
+                // Sort: Course -> RegNo
                 sessionData.students.sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                     return a['Register Number'].localeCompare(b['Register Number']);
@@ -1631,20 +1635,21 @@ function generateDayWisePDF() {
                 let lastLocRaw = "";
 
                 sessionData.students.forEach(s => {
-                    // 1. Insert Course Header
+                    // Header Row (Black/White Course Name)
                     if (s.Course !== lastCourse) {
                         flatRows.push({ type: 'header', text: s.Course });
                         lastCourse = s.Course;
                         lastLocRaw = ""; // Reset merge context
                     }
 
-                    // 2. Insert Student Row
+                    // Data Row
                     const roomName = s['Room No'];
-                    const roomInfo = currentRoomConfig[roomName] || {};
+                    const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
+                    // Format Location matching HTML: "Room 101 \n (Block A)"
                     const locText = roomInfo.location ? `${roomName}\n(${roomInfo.location})` : roomName;
                     const isScribe = scribeRegNos.has(s['Register Number']);
                     
-                    // Handle Location Merging (Visual Only)
+                    // Handle "Merged" Look
                     let showLoc = true;
                     if (locText === lastLocRaw) {
                         showLoc = false;
@@ -1655,7 +1660,7 @@ function generateDayWisePDF() {
                     flatRows.push({
                         type: 'data',
                         loc: showLoc ? locText : "", 
-                        locRaw: locText, // Keep strictly for logic
+                        locRaw: locText, 
                         reg: s['Register Number'],
                         name: s.Name,
                         seat: s.seatNumber,
@@ -1663,7 +1668,7 @@ function generateDayWisePDF() {
                     });
                 });
 
-                // Calculate RowSpans (For proper border rendering if needed)
+                // Calculate Visual Spans
                 for(let i=0; i<flatRows.length; i++) {
                     if(flatRows[i].type !== 'data' || flatRows[i].loc === "") continue;
                     let span = 1;
@@ -1675,73 +1680,77 @@ function generateDayWisePDF() {
                     flatRows[i].rowSpan = span;
                 }
 
-                // --- B. PAGINATION LOOP ---
+                // --- B. SMART PAGINATION LOOP ---
+                // We consume 'flatRows' in chunks. 
                 let remainingRows = [...flatRows];
 
                 while (remainingRows.length > 0) {
                     if (pageCount > 0) doc.addPage();
                     
                     // Header
-                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", currentCollegeName);
+                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
                     
-                    const startY = 45; // Fixed Start Y
+                    const startY = 45; // Below header
 
-                    // DECISION: 1 Col or 2 Cols?
-                    const isTwoCol = remainingRows.length > LIMIT_1_COL;
-                    const capacity = isTwoCol ? LIMIT_2_COL : LIMIT_1_COL;
+                    // 1. Determine Capacity for this page
+                    // Check if the TOTAL remaining is huge or small.
+                    // Actually, we should check if the remaining fits in 1 column.
+                    const isTwoCol = remainingRows.length > ROWS_PER_PAGE_1COL;
                     
-                    const pageChunk = remainingRows.splice(0, capacity);
+                    // 2. Slice off the chunk for this page
+                    const limit = isTwoCol ? ROWS_PER_PAGE_2COL : ROWS_PER_PAGE_1COL;
+                    const chunk = remainingRows.splice(0, limit);
 
                     if (isTwoCol) {
                         // === 2 COLUMNS ===
-                        const mid = Math.ceil(pageChunk.length / 2);
-                        const leftRows = pageChunk.slice(0, mid);
-                        const rightRows = pageChunk.slice(mid);
+                        const mid = Math.ceil(chunk.length / 2);
+                        const leftRows = chunk.slice(0, mid);
+                        const rightRows = chunk.slice(mid);
                         const colWidth = (PAGE_WIDTH - (MARGIN * 2) - COL_GAP) / 2;
 
-                        // 1. Draw Left
+                        // Save current page info
                         const startPage = doc.internal.getCurrentPageInfo().pageNumber;
+
+                        // Draw Left
                         drawAutoTable(doc, leftRows, MARGIN, startY, colWidth, true);
 
-                        // 2. FORCE RETURN TO START PAGE (Fixes "Blank Page" bug)
-                        doc.setPage(startPage);
-
-                        // 3. Draw Right
+                        // Reset to Top of Page for Right Column
+                        doc.setPage(startPage); 
                         drawAutoTable(doc, rightRows, MARGIN + colWidth + COL_GAP, startY, colWidth, true);
 
-                        // 4. Divider Line
+                        // Divider Line
                         doc.setPage(startPage);
                         doc.setDrawColor(200); doc.setLineWidth(0.1);
                         doc.line(MARGIN + colWidth + (COL_GAP/2), startY, MARGIN + colWidth + (COL_GAP/2), 280);
 
                     } else {
                         // === 1 COLUMN ===
-                        drawAutoTable(doc, pageChunk, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
+                        drawAutoTable(doc, chunk, MARGIN, startY, PAGE_WIDTH - (MARGIN*2), false);
                     }
+                    
                     pageCount++;
                 }
 
-                // --- C. SCRIBE SUMMARY (Fixes [object Object] error) ---
+                // --- C. SCRIBE SUMMARY (Fixes [object Object]) ---
                 if (sessionData.scribes.length > 0) {
                     doc.addPage();
-                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", currentCollegeName);
+                    drawHeader(doc, streamName, sessionData.date, sessionData.time, "Scribe Assistance Summary", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
                     
                     // Group by Room
                     const scribesByRoom = {};
                     sessionData.scribes.forEach(s => {
                         const r = s['Room No'];
                         if(!scribesByRoom[r]) scribesByRoom[r] = [];
-                        // FIX: Store string directly
+                        // FIX: Push a STRING, not the object
                         scribesByRoom[r].push(`${s.Name} (${s['Register Number']})`);
                     });
 
-                    const scribeRows = [];
-                    Object.keys(scribesByRoom).sort().forEach(room => {
-                        const roomInfo = currentRoomConfig[room] || {};
-                        const locText = roomInfo.location ? `${room}\n(${roomInfo.location})` : room;
-                        const candidates = scribesByRoom[room].join(', '); // Join array to string
+                    const scribeRows = Object.keys(scribesByRoom).sort().map(r => {
+                        const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
+                        const loc = info.location ? `${r}\n(${info.location})` : r;
+                        const candidates = scribesByRoom[r].join(', ');
                         
-                        scribeRows.push([{ content: locText, styles: { fontStyle: 'bold' } }, candidates]);
+                        return [{ content: loc, styles: { fontStyle: 'bold' } }, candidates];
                     });
 
                     drawScribeTable(doc, scribeRows);
@@ -1761,7 +1770,7 @@ function generateDayWisePDF() {
     }
 }
 
-// --- HELPER: DRAW HEADER ---
+// --- HELPERS ---
 function drawHeader(doc, stream, date, time, title, collegeName) {
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 10;
@@ -1780,11 +1789,10 @@ function drawHeader(doc, stream, date, time, title, collegeName) {
     doc.lastAutoTable = { finalY: y + 5 }; 
 }
 
-// --- HELPER: DRAW MAIN TABLE ---
 function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
     const body = rows.map(r => {
-        // Course Header: Black BG, White Text
         if (r.type === 'header') {
+            // Course Header Style: Black BG, White Text
             return [{ 
                 content: r.text, colSpan: 4, 
                 styles: { 
@@ -1793,6 +1801,7 @@ function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
                 } 
             }];
         } else {
+            // Student Row
             const txtColor = r.isScribe ? [194, 65, 12] : [0, 0, 0];
             const fontStyle = r.isScribe ? 'bold' : 'normal';
             
@@ -1836,10 +1845,9 @@ function drawAutoTable(doc, rows, startX, startY, width, isCompact) {
     });
 }
 
-// --- HELPER: DRAW SCRIBE TABLE ---
 function drawScribeTable(doc, rows) {
     doc.autoTable({
-        startY: doc.lastAutoTable.finalY + 5,
+        startY: 45, // Fixed start below header
         head: [['Room Location', 'Candidates']],
         body: rows,
         theme: 'grid',
@@ -1849,6 +1857,7 @@ function drawScribeTable(doc, rows) {
         margin: { left: 14, right: 14 }
     });
 }
+
 
 
 
