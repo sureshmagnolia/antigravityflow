@@ -8958,7 +8958,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         saveRoomAllotment(); // Update Local Storage
         
         hasUnsavedAllotment = true; // Flag for "Save" button
-
+        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
         // 4. Update UI
         updateAllotmentDisplay();
 
@@ -9154,6 +9154,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         // MODULAR SYNC (V2)
         // This handles both Room Allotment and Scribes for this session
         hasUnsavedAllotment = true; // ADD THIS FLAG
+        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
         // ------------------------
 
         roomSelectionModal.classList.add('hidden');
@@ -9887,6 +9888,7 @@ function renderScribeAllotmentList(sessionKey) {
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
         hasUnsavedScribes = true; // ADD THIS FLAG
+        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
     }
 
     scribeCloseRoomModal.addEventListener('click', () => {
@@ -13965,6 +13967,7 @@ Are you sure?
         // 3. Sync & Refresh
         if (typeof syncDataToCloud === 'function') 
             hasUnsavedScribes = true; // ADD THIS FLAG
+            updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
         renderScribeAllotmentList(currentSessionKey);
     };
 
