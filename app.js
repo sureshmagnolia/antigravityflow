@@ -9621,8 +9621,8 @@ if (saveScribeBtn) {
         }
     }
 
-    // Render the list of scribe students for the selected session (Lock-Aware)
 
+// Render the list of scribe students for the selected session (Lock-Aware + Auto-Save)
 function renderScribeAllotmentList(sessionKey) {
     const [date, time] = sessionKey.split(' | ');
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -9639,7 +9639,6 @@ function renderScribeAllotmentList(sessionKey) {
     // UI: No Scribes
     if (sessionScribeStudents.length === 0) {
         scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
-        // Hide save button if no scribes
         const saveSection = document.getElementById('save-scribe-section');
         if (saveSection) saveSection.classList.add('hidden');
         return;
@@ -9742,19 +9741,32 @@ function renderScribeAllotmentList(sessionKey) {
         scribeAllotmentList.appendChild(item);
     });
 
-    // --- NEW: MANAGE SAVE BUTTON VISIBILITY ---
+    // --- NEW: AUTO-SAVE WHEN ALL SCRIBES COMPLETED ---
+    // Check if every student in the list has an assigned room
+    const allScribesAllotted = uniqueSessionScribeStudents.every(student => 
+        currentScribeAllotment[student['Register Number']]
+    );
+
+    if (allScribesAllotted && hasUnsavedScribes) {
+        setTimeout(() => {
+            const saveBtn = document.getElementById('save-scribe-allotment-button');
+            if (saveBtn) saveBtn.click();
+        }, 800); // 0.8s delay for UX
+    }
+    // ------------------------------------------------
+
+    // --- MANAGE SAVE BUTTON VISIBILITY ---
     const saveSection = document.getElementById('save-scribe-section');
     const saveBtn = document.getElementById('save-scribe-allotment-button');
     
     if (saveSection && saveBtn) {
-        // Show the save section if we have scribes
         saveSection.classList.remove('hidden');
         
         if (hasUnsavedScribes) {
             // DIRTY STATE: Needs Saving
             saveBtn.innerHTML = "Save Scribe Allotment";
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-green-800'); // Remove "Saved" styles
-            saveBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white'); // Add "Active" styles
+            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-green-800');
+            saveBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
             saveBtn.disabled = false;
         } else {
             // CLEAN STATE: Already Saved
@@ -9762,12 +9774,15 @@ function renderScribeAllotmentList(sessionKey) {
                 <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 Synced to Cloud
             `;
-            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-green-800'); // Add "Saved" styles
-            saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700'); // Remove "Active" styles
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-green-800');
+            saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
             saveBtn.disabled = true;
         }
     }
 }
+
+
+    
 
 
     
