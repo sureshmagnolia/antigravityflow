@@ -17,7 +17,7 @@
     </style>
 
     <script type="module">
-        // 1. UPDATED IMPORTS: Added 'collection' and 'getDocs'
+        // 1. UPDATED IMPORTS: V2 Modular Architecture
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -43,7 +43,7 @@
             collegeId = parts[parts.length - 1];
         }
 
-        // 2. NEW GLOBAL VARIABLES FOR MODULAR DATA
+        // Global Data Variables
         let allSessions = []; 
         let roomConfigs = {};
         let collegeName = "Exam Centre";
@@ -58,10 +58,10 @@
             statusEl.textContent = "Loading Live Exam Data...";
 
             try {
-                // A. FETCH SETTINGS (College Name & Rooms)
+                // A. FETCH SETTINGS
                 const settingsRef = doc(db, "colleges", collegeId, "system_data", "settings");
                 
-                // B. FETCH SESSIONS (New Modular Collection)
+                // B. FETCH SESSIONS (V2 Modular)
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
 
                 const [settingsSnap, sessionsSnap] = await Promise.all([
@@ -93,7 +93,11 @@
                     const savedRegNo = localStorage.getItem('myExamRegNo');
                     if (savedRegNo) {
                         document.getElementById('reg-input').value = savedRegNo;
-                        setTimeout(() => window.searchStudent(), 300);
+                        
+                        // Only auto-search if authorized (prevent premature search before modal)
+                        if (typeof isAuthorized !== 'undefined' && isAuthorized) {
+                            setTimeout(() => window.searchStudent(), 300);
+                        }
                     }
                 } else {
                     statusEl.textContent = "No active exam sessions found.";
@@ -120,12 +124,22 @@
             let studentName = "";
             let myExams = [];
 
-            // 3. UPDATED SEARCH LOGIC (Iterate Modular Sessions)
+            // --- FILTER: Upcoming Exams Only ---
+            const todayMidnight = new Date();
+            todayMidnight.setHours(0, 0, 0, 0);
+
+            // Iterate Modular Sessions
             allSessions.forEach(session => {
                 const dateStr = session.date;
                 const timeStr = session.time;
                 
-                // Find student in this session's list
+                // 1. DATE CHECK: Skip past exams
+                const examDayStart = parseSessionTime(dateStr, "00:00 AM");
+                if (examDayStart < todayMidnight) {
+                    return; // Skip past exams
+                }
+
+                // 2. FIND STUDENT
                 const studentRecord = session.students ? session.students.find(s => s['Register Number'] === regNo) : null;
 
                 if (studentRecord) {
@@ -138,11 +152,9 @@
                     // A. Check Regular Allotment
                     if (session.roomAllotment) {
                         for (const room of session.roomAllotment) {
-                            // Handle both Object (new) and String (legacy) formats in allotment
                             const index = room.students.findIndex(s => 
                                 (typeof s === 'object' ? s['Register Number'] : s) === regNo
                             );
-                            
                             if (index !== -1) {
                                 studentRoom = room.roomName;
                                 seatNumber = index + 1;
@@ -159,10 +171,10 @@
                     }
 
                     if (studentRoom !== "Not Allotted") {
-                        const paperName = studentRecord.Course || "Subject Details N/A";
-
                         myExams.push({
-                            dateStr, timeStr, studentRoom, seatNumber, paperName, isScribeRoom,
+                            dateStr, timeStr, studentRoom, seatNumber, 
+                            paperName: studentRecord.Course, 
+                            isScribeRoom,
                             fullDate: parseSessionTime(dateStr, timeStr)
                         });
                     }
@@ -176,6 +188,11 @@
                 localStorage.setItem('myExamRegNo', regNo);
 
                 myExams.forEach(exam => {
+                    // *** TIME LOCK REMOVED FOR TEST MODE *** // We calculate it just to show what *would* happen in student view
+                    const now = new Date();
+                    const unlockTime = new Date(exam.fullDate.getTime() - (45 * 60 * 1000));
+                    const isActuallyLocked = now < unlockTime;
+
                     const roomInfo = roomConfigs[exam.studentRoom] || {};
                     const displayLocation = (roomInfo.location && roomInfo.location.trim() !== "")
                         ? roomInfo.location
@@ -185,10 +202,16 @@
                         ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>`
                         : "";
 
+                    // Visual indicator if this exam is technically locked for students
+                    const lockIndicator = isActuallyLocked 
+                        ? `<div class="bg-yellow-50 text-yellow-700 text-[10px] px-2 py-1 rounded mb-3 border border-yellow-200 text-center font-bold">🔒 Hidden for students until 45m prior</div>`
+                        : `<div class="bg-green-50 text-green-700 text-[10px] px-2 py-1 rounded mb-3 border border-green-200 text-center font-bold">🔓 Visible to students</div>`;
+
                     const card = document.createElement('div');
                     card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100 mb-5 animate-fade-in";
 
                     let content = `
+                        ${lockIndicator}
                         <div class="border-b border-gray-200 pb-3 mb-3">
                             <div class="text-center mb-3">
                                 <div class="text-lg font-black text-gray-800 leading-tight">${studentName}</div>
@@ -213,7 +236,7 @@
                         </div>
                     `;
 
-                    // *** ALWAYS UNLOCKED (TEST MODE) ***
+                    // *** ALWAYS RENDER UNLOCKED VIEW ***
                     content += `
                         <div class="text-center py-2">
                             <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">
@@ -296,6 +319,12 @@
                 isAuthorized = true;
                 const content = document.getElementById('protected-content');
                 if (content) content.style.display = 'block';
+                
+                // Trigger auto-search if Reg No is saved
+                const savedRegNo = localStorage.getItem('myExamRegNo');
+                if (savedRegNo) {
+                    window.searchStudent();
+                }
             } else {
                 if (pass !== null) { 
                     await UiModal.alert("🚫 Access Denied", "Incorrect password.");
