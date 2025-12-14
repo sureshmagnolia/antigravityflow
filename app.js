@@ -8915,7 +8915,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
     }
 
-    // Delete a room from allotment (Updated: Cleans up Invigilator & Scribe mappings)
+  // Delete a room from allotment (Fixed: Actually removes the room now)
     window.deleteRoom = async function (index) {
         if (!confirm('Are you sure you want to remove this room allotment?')) return;
 
@@ -8932,34 +8932,29 @@ window.real_populate_qp_code_session_dropdown = function () {
             });
         }
 
-        // 2. Cleanup Invigilator Assignment (NEW FIX)
-        // We must remove the invigilator mapping for this room so they become "Free" again
+        // 2. Cleanup Invigilator Assignment (Existing)
         const allInvigMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-
         if (allInvigMappings[currentSessionKey] && allInvigMappings[currentSessionKey][roomName]) {
-            // Remove the assignment from storage
             delete allInvigMappings[currentSessionKey][roomName];
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvigMappings));
-
-            // Update the global variable if it's currently loaded
             if (currentInvigMapping) {
                 delete currentInvigMapping[roomName];
             }
         }
 
-        // --- AUTO SAVE & SYNC ---
-        // 1. Save Room Allotment (Updates student seating and scribe cleanup)
-        saveRoomAllotment(); // Update Local Storage (Room & Scribe)
+        // --- CRITICAL FIX: REMOVE THE ROOM FROM THE ARRAY ---
+        currentSessionAllotment.splice(index, 1); 
+        // ---------------------------------------------------
 
-        // MODULAR SYNC (V2)
-        // This updates the Session Document + Triggering Slot Sync automatically
-        hasUnsavedAllotment = true; // ADD THIS FLAG
-// ------------------------
-        // ------------------------
+        // 3. Save Changes (Manual Save Mode)
+        saveRoomAllotment(); // Update Local Storage
+        
+        hasUnsavedAllotment = true; // Flag for "Save" button
 
+        // 4. Update UI
         updateAllotmentDisplay();
 
-        // Refresh Invig Panel if it's visible
+        // Refresh Invig Panel if visible
         if (typeof renderInvigilationPanel === 'function') {
             renderInvigilationPanel();
         }
