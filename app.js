@@ -9298,13 +9298,7 @@ if (saveScribeBtn) {
             renderAllottedRooms(); // Re-render to update buttons
         });
     }
-    // *** NEW: SCRIBE FUNCTIONALITY ***
 
-    // *** FIX: This is the REAL implementation of the function Python calls ***
-    window.real_loadGlobalScribeList = function () {
-        globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-        renderGlobalScribeList();
-    }
     // *** SCRIBE FUNCTIONALITY WITH SAFETY LOCK ***
 
     let isScribeListLocked = true; // Default state: Locked
@@ -15449,7 +15443,27 @@ function generateRemunerationBillPDF() {
     }
 }
 
-
+// --- Helper: Trigger Safety Backup (Used by Reset & Nuke) ---
+async function triggerSafetyBackup() {
+    const csvBtn = document.getElementById('master-download-csv-btn');
+    const jsonBtn = document.getElementById('backup-data-button');
+    
+    // Trigger CSV
+    if (csvBtn) {
+        console.log("Triggering Safety CSV Backup...");
+        csvBtn.click();
+    }
+    // Wait for CSV download initiation
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // Trigger JSON
+    if (jsonBtn) {
+        console.log("Triggering Safety JSON Backup...");
+        jsonBtn.click();
+    }
+    // Wait for JSON download initiation
+    await new Promise(r => setTimeout(r, 1000));
+}
     
     
 
