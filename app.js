@@ -4664,10 +4664,13 @@ if (toggleButton && sidebar) {
                             previousRegNoPrefix = prefix;
                         } else { previousRegNoPrefix = ""; }
 
-                        const regLen = displayRegNo.length;
+                        // --- PASTE THE NEW LOGIC HERE ---
                         let regFontSize = "12pt";
-                        if (regLen > 12) regFontSize = "10pt";
-                        else if (regLen > 10) regFontSize = "11pt";
+                        if (/[a-zA-Z]/.test(displayRegNo)) {
+                        regFontSize = "9pt"; 
+                        } else if (displayRegNo.length > 5) {
+                        regFontSize = "11pt";
+                        }
 
                         const courseKey = getQpKey(student.Course, student.Stream);
                         const qpCode = sessionQPCodes[courseKey] || "";
