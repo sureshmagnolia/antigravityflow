@@ -12,7 +12,6 @@
     </style>
 
     <script type="module">
-        // 1. UPDATED IMPORTS: Added 'collection' and 'getDocs' for modular fetching
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -33,13 +32,11 @@
         const urlParams = new URLSearchParams(window.location.search);
         let collegeId = urlParams.get('id');
 
-        // Cleanup ID if it comes as a path
         if (collegeId && collegeId.includes('/')) {
             const parts = collegeId.split('/');
             collegeId = parts[parts.length - 1]; 
         }
 
-        // 2. NEW GLOBAL VARIABLES FOR MODULAR DATA
         let allSessions = []; 
         let roomConfigs = {};
         let collegeName = "Exam Centre";
@@ -54,10 +51,10 @@
             statusEl.textContent = "Loading Live Exam Data...";
             
             try {
-                // A. FETCH SETTINGS (College Name & Rooms)
+                // A. FETCH SETTINGS
                 const settingsRef = doc(db, "colleges", collegeId, "system_data", "settings");
                 
-                // B. FETCH SESSIONS (New Modular Collection)
+                // B. FETCH SESSIONS (V2 Modular)
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
 
                 const [settingsSnap, sessionsSnap] = await Promise.all([
@@ -65,21 +62,15 @@
                     getDocs(sessionsRef)
                 ]);
 
-                // Process Settings
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     collegeName = settings.examCollegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
-                    
                     if (settings.examRoomConfig) {
                         roomConfigs = JSON.parse(settings.examRoomConfig);
                     }
-                } else {
-                    // Try legacy path just in case, or default
-                    console.log("Settings not found in system_data.");
                 }
 
-                // Process Sessions
                 if (!sessionsSnap.empty) {
                     allSessions = [];
                     sessionsSnap.forEach(doc => {
@@ -89,7 +80,6 @@
                     statusEl.textContent = ""; 
                     document.getElementById('search-section').classList.remove('hidden');
 
-                    // Auto-search if saved
                     const savedRegNo = localStorage.getItem('myExamRegNo');
                     if (savedRegNo) {
                         document.getElementById('reg-input').value = savedRegNo;
@@ -120,32 +110,37 @@
             let studentName = "";
             let myExams = [];
 
-            // 3. UPDATED SEARCH LOGIC (Iterate Modular Sessions)
+            // --- FILTER: Only show Upcoming Exams ---
+            const todayMidnight = new Date();
+            todayMidnight.setHours(0, 0, 0, 0);
+
             allSessions.forEach(session => {
                 const dateStr = session.date;
                 const timeStr = session.time;
+
+                // 1. DATE CHECK: Skip past exams
+                // We construct a date object for the exam day (at 00:00) to compare with todayMidnight
+                const examDayStart = parseSessionTime(dateStr, "00:00 AM");
+                if (examDayStart < todayMidnight) {
+                    return; // Skip this session (it's in the past)
+                }
                 
-                // Find student in this session's list (V2 Data)
-                // We look in the 'students' array saved within the session doc
+                // 2. FIND STUDENT
                 const studentRecord = session.students ? session.students.find(s => s['Register Number'] === regNo) : null;
 
                 if (studentRecord) {
-                    // Found the student!
-                    if (!studentName) studentName = studentRecord.Name; // Capture name
+                    if (!studentName) studentName = studentRecord.Name;
 
                     let studentRoom = "Not Allotted";
                     let seatNumber = "-";
                     let isScribeRoom = false;
 
-                    // A. Check Regular Allotment (Saved in doc.roomAllotment)
+                    // Check Regular Allotment
                     if (session.roomAllotment) {
-                        // roomAllotment is array of room objects
                         for (const room of session.roomAllotment) {
-                            // Check if student is in this room's student list
                             const index = room.students.findIndex(s => 
                                 (typeof s === 'object' ? s['Register Number'] : s) === regNo
                             );
-                            
                             if (index !== -1) {
                                 studentRoom = room.roomName;
                                 seatNumber = index + 1;
@@ -154,29 +149,25 @@
                         }
                     }
 
-                    // B. Check Scribe Allotment (Saved in doc.scribeAllotment)
+                    // Check Scribe Allotment
                     if (session.scribeAllotment && session.scribeAllotment[regNo]) {
                         studentRoom = session.scribeAllotment[regNo];
                         isScribeRoom = true;
                         seatNumber = "Scribe";
                     }
 
-                    // Only show if allotted (or maybe show "Processing" if you prefer)
                     if (studentRoom !== "Not Allotted") {
-                        // Get QP Code
-                        let paperName = studentRecord.Course; // Default to Course Name
-                        // Try to find QP Code from map
-                        // QP Key logic from app.js: btoa(unescape(encodeURIComponent(`${Course}|${Stream}`)))
-                        // Simplified: We just use Course name for display usually
-                        
                         myExams.push({
-                            dateStr, timeStr, studentRoom, seatNumber, paperName, isScribeRoom,
+                            dateStr, timeStr, studentRoom, seatNumber, 
+                            paperName: studentRecord.Course, 
+                            isScribeRoom,
                             fullDate: parseSessionTime(dateStr, timeStr)
                         });
                     }
                 }
             });
 
+            // Sort by Date/Time
             myExams.sort((a, b) => a.fullDate - b.fullDate);
 
             if (myExams.length > 0) {
@@ -185,6 +176,7 @@
                 const now = new Date();
 
                 myExams.forEach(exam => {
+                    // --- TIME LOCK LOGIC (45 Mins Before) ---
                     const unlockTime = new Date(exam.fullDate.getTime() - (45 * 60 * 1000));
                     
                     const roomInfo = roomConfigs[exam.studentRoom] || {};
@@ -199,6 +191,7 @@
                     const card = document.createElement('div');
                     card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100 mb-5 animate-fade-in";
                     
+                    // HEADER (Always Visible)
                     let content = `
                         <div class="border-b border-gray-200 pb-3 mb-3">
                             <div class="text-center mb-3">
@@ -224,8 +217,9 @@
                         </div>
                     `;
 
-                    // Time Lock Logic
+                    // BODY (Conditional based on Time Lock)
                     if (now >= unlockTime) {
+                        // UNLOCKED: Show Seat & Room
                         content += `
                             <div class="text-center py-2">
                                 <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">
@@ -249,6 +243,7 @@
                             </div>
                         `;
                     } else {
+                        // LOCKED: Show Countdown
                         const diffMs = unlockTime - now;
                         const diffMins = Math.ceil(diffMs / (1000 * 60));
                         let timeDisplay = `${diffMins} mins`;
@@ -274,9 +269,9 @@
             if (!found) {
                 resultContainer.innerHTML = `
                     <div class="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200">
-                        <p class="text-gray-800 font-bold text-lg">No Seat Allotted Yet</p>
-                        <p class="text-gray-500 text-sm mt-1">Reg No: <span class="font-mono font-bold text-black">${regNo}</span></p>
-                        <p class="text-xs text-gray-400 mt-2">Check if seating plan is published for your session.</p>
+                        <p class="text-gray-800 font-bold text-lg">No Upcoming Exams</p>
+                        <p class="text-gray-500 text-sm mt-1">for register number <span class="font-mono font-bold text-black">${regNo}</span></p>
+                        <p class="text-xs text-gray-400 mt-2">Past exams are hidden.</p>
                     </div>
                 `;
             } else {
