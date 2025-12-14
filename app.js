@@ -8680,7 +8680,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
     }
 
-    // Update display (Auto-Save Version + Button Disable Logic)
+
+
+// Update display (Auto-Save Version + Button Disable Logic)
     function updateAllotmentDisplay() {
         const [date, time] = currentSessionKey.split(' | ');
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -8746,26 +8748,21 @@ window.real_populate_qp_code_session_dropdown = function () {
             container.insertAdjacentHTML('beforeend', cardHtml);
         });
 
+        // --- AUTO-SAVE WHEN ALL STREAMS COMPLETE ---
+        const allStreamsComplete = Object.values(streamStats).every(s => 
+            s.total === 0 || (s.total - s.allotted <= 0)
+        );
 
-        // --- NEW: AUTO-SAVE WHEN ALL STREAMS COMPLETE ---
-    const allStreamsComplete = Object.values(streamStats).every(s => 
-        s.total === 0 || (s.total - s.allotted <= 0)
-    );
+        if (allStreamsComplete && hasUnsavedAllotment) {
+            // Trigger save automatically if everything is done & unsaved
+            setTimeout(() => {
+                const saveBtn = document.getElementById('save-room-allotment-button');
+                // We click the button programmatically to reuse its logic (Save + Sync + UI Update)
+                if (saveBtn) saveBtn.click();
+            }, 800); // Slight delay so user sees the "Completed" badges appear first
+        }
+        // ------------------------------------------------
 
-    if (allStreamsComplete && hasUnsavedAllotment) {
-        // Trigger save automatically if everything is done & unsaved
-        setTimeout(() => {
-            const saveBtn = document.getElementById('save-room-allotment-button');
-            // We click the button programmatically to reuse its logic (Save + Sync + UI Update)
-            if (saveBtn) saveBtn.click();
-        }, 800); // Slight delay so user sees the "Completed" badges appear first
-    }
-
-
-
-
-
-        
         // 3. Handle Add Room Button State
         const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
         const addSection = document.getElementById('add-room-section');
@@ -8798,25 +8795,31 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         renderAllottedRooms();
 
-        // Update Save Button to indicate Auto-Save
-        const saveSection = document.getElementById('save-allotment-section');
+        // 4. Manage Sections Visibility
+        // List Section: Only show if rooms exist
         const allottedSection = document.getElementById('allotted-rooms-section');
-
         if (currentSessionAllotment.length > 0) {
             allottedSection.classList.remove('hidden');
+        } else {
+            allottedSection.classList.add('hidden');
+        }
+
+        // Save Section: Show if rooms exist OR if we have pending changes (like deleting all rooms)
+        const saveSection = document.getElementById('save-allotment-section');
+        
+        if (currentSessionAllotment.length > 0 || hasUnsavedAllotment) {
             saveSection.classList.remove('hidden');
 
-            // --- FIXED: Manual Save Button Logic ---
             const saveBtn = document.getElementById('save-room-allotment-button');
             if (saveBtn) {
                 if (hasUnsavedAllotment) {
-                    // UNSAVED STATE: Enable Button
+                    // UNSAVED STATE: Active & Clickable
                     saveBtn.innerHTML = `Save Room Allotment`;
                     saveBtn.classList.remove('bg-green-50', 'text-green-700', 'border-green-200', 'cursor-default');
                     saveBtn.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
                     saveBtn.disabled = false;
                 } else {
-                    // SAVED STATE: Disable Button
+                    // SAVED STATE: Disabled
                     saveBtn.innerHTML = `
                     <svg class="w-4 h-4 text-green-500 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                     <span>Synced to Cloud</span>
@@ -8826,12 +8829,17 @@ window.real_populate_qp_code_session_dropdown = function () {
                     saveBtn.disabled = true;
                 }
             }
-            
         } else {
-            allottedSection.classList.add('hidden');
+            // Only hide if empty AND saved (Clean State)
             saveSection.classList.add('hidden');
         }
     }
+
+
+
+
+
+    
 
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
     function renderAllottedRooms() {
