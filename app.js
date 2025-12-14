@@ -8746,6 +8746,26 @@ window.real_populate_qp_code_session_dropdown = function () {
             container.insertAdjacentHTML('beforeend', cardHtml);
         });
 
+
+        // --- NEW: AUTO-SAVE WHEN ALL STREAMS COMPLETE ---
+    const allStreamsComplete = Object.values(streamStats).every(s => 
+        s.total === 0 || (s.total - s.allotted <= 0)
+    );
+
+    if (allStreamsComplete && hasUnsavedAllotment) {
+        // Trigger save automatically if everything is done & unsaved
+        setTimeout(() => {
+            const saveBtn = document.getElementById('save-room-allotment-button');
+            // We click the button programmatically to reuse its logic (Save + Sync + UI Update)
+            if (saveBtn) saveBtn.click();
+        }, 800); // Slight delay so user sees the "Completed" badges appear first
+    }
+
+
+
+
+
+        
         // 3. Handle Add Room Button State
         const totalRemaining = Object.values(streamStats).reduce((sum, s) => sum + (s.total - s.allotted), 0);
         const addSection = document.getElementById('add-room-section');
