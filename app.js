@@ -193,6 +193,7 @@ let opsUnsub = null;
 let allocUnsub = null;
 let staffUnsub = null;
 let slotsUnsub = null;
+let hasUnsavedScribes = false; // NEW FLAG
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -8922,7 +8923,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // MODULAR SYNC (V2)
         // This updates the Session Document + Triggering Slot Sync automatically
-        await syncSessionToCloud(currentSessionKey);
+        hasUnsavedAllotment = true; // ADD THIS FLAG
 // ------------------------
         // ------------------------
 
@@ -9119,7 +9120,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // MODULAR SYNC (V2)
         // This handles both Room Allotment and Scribes for this session
-        await syncSessionToCloud(currentSessionKey);
+        hasUnsavedAllotment = true; // ADD THIS FLAG
         // ------------------------
 
         roomSelectionModal.classList.add('hidden');
@@ -9134,6 +9135,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             // 1. Reset Dirty Flag (New session loaded fresh)
             hasUnsavedAllotment = false;
+            hasUnsavedScribes = false;   // ADD THIS
 
             populateAbsenteeQpFilter(sessionKey);
 
@@ -9161,6 +9163,41 @@ window.real_populate_qp_code_session_dropdown = function () {
         roomSelectionModal.classList.add('hidden');
     });
 
+
+// --- NEW LISTENER: Scribe Save Button ---
+const saveScribeBtn = document.getElementById('save-scribe-allotment-button');
+if (saveScribeBtn) {
+    saveScribeBtn.addEventListener('click', async () => {
+        if (!currentSessionKey) return;
+        
+        saveScribeBtn.disabled = true;
+        saveScribeBtn.textContent = "Saving...";
+
+        // Force Sync
+        if (typeof syncSessionToCloud === 'function') {
+            await syncSessionToCloud(currentSessionKey);
+        }
+
+        hasUnsavedScribes = false;
+        
+        // UI Feedback
+        const status = document.getElementById('scribe-save-status');
+        if(status) {
+            status.textContent = "✅ Scribe allotment saved!";
+            setTimeout(() => status.textContent = "", 3000);
+        }
+        
+        // Refresh to update button state
+        renderScribeAllotmentList(currentSessionKey);
+    });
+}
+
+
+
+
+
+
+    
     // --- NEW: Room Search Filter Listener ---
     const roomSearchInput = document.getElementById('room-selection-search');
     if (roomSearchInput) {
@@ -9558,117 +9595,156 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
 
     // Render the list of scribe students for the selected session (Lock-Aware)
-    function renderScribeAllotmentList(sessionKey) {
-        const [date, time] = sessionKey.split(' | ');
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-        // Filter to get only scribe students *in this session*
-        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-        const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
+function renderScribeAllotmentList(sessionKey) {
+    const [date, time] = sessionKey.split(' | ');
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-        scribeAllotmentList.innerHTML = '';
-        if (sessionScribeStudents.length === 0) {
-            scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
-            return;
-        }
+    // Filter to get only scribe students *in this session*
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
 
-        const uniqueSessionScribeStudents = [];
-        const seenRegNos = new Set();
-        for (const student of sessionScribeStudents) {
-            if (!seenRegNos.has(student['Register Number'])) {
-                seenRegNos.add(student['Register Number']);
-                uniqueSessionScribeStudents.push(student);
-            }
-        }
+    const scribeAllotmentList = document.getElementById('scribe-allotment-list');
+    if (!scribeAllotmentList) return;
 
-        uniqueSessionScribeStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
-
-        // Update Count Header with Badge
-        const headerEl = document.getElementById('scribe-session-header');
-        if (headerEl) {
-            headerEl.innerHTML = `Scribe Students: <span class="ml-2 bg-orange-100 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
-        }
-
-        const roomSerialMap = getRoomSerialMap(sessionKey);
-
-        uniqueSessionScribeStudents.forEach(student => {
-            const regNo = student['Register Number'];
-            const allottedRoom = currentScribeAllotment[regNo];
-
-            const item = document.createElement('div');
-            item.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:shadow-md transition';
-
-            let actionContent = '';
-
-            // Check Lock State for Buttons
-            if (isScribeAllotmentLocked) {
-                // LOCKED STATE
-                if (allottedRoom) {
-                    const serialNo = roomSerialMap[allottedRoom] || '-';
-                    const roomInfo = currentRoomConfig[allottedRoom];
-                    const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
-                    const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
-
-                    actionContent = `
-                    <div class="bg-gray-50 border border-gray-200 rounded p-2 text-sm font-bold text-gray-600 flex items-center gap-2">
-                        <span>🔒</span> ${displayRoom}
-                    </div>`;
-                } else {
-                    actionContent = `<span class="text-xs text-gray-400 italic bg-gray-50 px-2 py-1 rounded border border-gray-100">Not Assigned (Locked)</span>`;
-                }
-            } else {
-                // UNLOCKED STATE (Editable)
-                if (allottedRoom) {
-                    const serialNo = roomSerialMap[allottedRoom] || '-';
-                    const roomInfo = currentRoomConfig[allottedRoom];
-                    const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
-                    const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
-
-                    actionContent = `
-                    <div class="w-full md:w-auto bg-green-50 border border-green-100 rounded p-2 md:bg-transparent md:border-0 md:p-0 flex flex-col md:flex-row md:items-center gap-2">
-                        <div class="text-xs text-gray-500 uppercase font-bold md:hidden">Allotted Room</div>
-                        <div class="text-sm font-bold text-green-700 md:text-gray-800 md:mr-4">${displayRoom}</div>
-                        
-                        <div class="flex gap-2 w-full md:w-auto">
-                            <button class="flex-1 md:flex-none inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-1.5 px-3 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50"
-                                    onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
-                                Change
-                            </button>
-                            <button class="flex-1 md:flex-none inline-flex justify-center items-center rounded-md border border-red-200 bg-white py-1.5 px-3 text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
-                                    onclick="removeScribeRoom('${regNo}')" title="Unassign Room">
-                                Clear
-                            </button>
-                        </div>
-                    </div>
-                `;
-                } else {
-                    actionContent = `
-                    <button class="w-full md:w-auto inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                            onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
-                        Assign Room
-                    </button>
-                `;
-                }
-            }
-
-            item.innerHTML = `
-            <div class="flex items-center gap-3 w-full md:w-auto">
-                <div class="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0 border border-orange-200">
-                    Scr
-                </div>
-                <div class="min-w-0">
-                    <h4 class="font-bold text-gray-800 text-sm font-mono">${regNo}</h4>
-                    <p class="text-xs text-gray-600 truncate font-medium">${student.Name}</p>
-                </div>
-            </div>
-            
-            <div class="w-full md:w-auto border-t md:border-0 border-gray-100 pt-2 md:pt-0 mt-1 md:mt-0">
-                ${actionContent}
-            </div>
-        `;
-            scribeAllotmentList.appendChild(item);
-        });
+    scribeAllotmentList.innerHTML = '';
+    
+    // UI: No Scribes
+    if (sessionScribeStudents.length === 0) {
+        scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
+        // Hide save button if no scribes
+        const saveSection = document.getElementById('save-scribe-section');
+        if (saveSection) saveSection.classList.add('hidden');
+        return;
     }
+
+    const uniqueSessionScribeStudents = [];
+    const seenRegNos = new Set();
+    for (const student of sessionScribeStudents) {
+        if (!seenRegNos.has(student['Register Number'])) {
+            seenRegNos.add(student['Register Number']);
+            uniqueSessionScribeStudents.push(student);
+        }
+    }
+
+    uniqueSessionScribeStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
+
+    // Update Count Header with Badge
+    const headerEl = document.getElementById('scribe-session-header');
+    if (headerEl) {
+        headerEl.innerHTML = `Scribe Students: <span class="ml-2 bg-orange-100 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
+    }
+
+    const roomSerialMap = getRoomSerialMap(sessionKey);
+
+    uniqueSessionScribeStudents.forEach(student => {
+        const regNo = student['Register Number'];
+        const allottedRoom = currentScribeAllotment[regNo];
+
+        const item = document.createElement('div');
+        item.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:shadow-md transition';
+
+        let actionContent = '';
+
+        // Check Lock State for Buttons
+        if (typeof isScribeAllotmentLocked !== 'undefined' && isScribeAllotmentLocked) {
+            // LOCKED STATE
+            if (allottedRoom) {
+                const serialNo = roomSerialMap[allottedRoom] || '-';
+                const roomInfo = currentRoomConfig[allottedRoom];
+                const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
+                const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
+
+                actionContent = `
+                <div class="bg-gray-50 border border-gray-200 rounded p-2 text-sm font-bold text-gray-600 flex items-center gap-2">
+                    <span>🔒</span> ${displayRoom}
+                </div>`;
+            } else {
+                actionContent = `<span class="text-xs text-gray-400 italic bg-gray-50 px-2 py-1 rounded border border-gray-100">Not Assigned (Locked)</span>`;
+            }
+        } else {
+            // UNLOCKED STATE (Editable)
+            if (allottedRoom) {
+                const serialNo = roomSerialMap[allottedRoom] || '-';
+                const roomInfo = currentRoomConfig[allottedRoom];
+                const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
+                const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
+
+                actionContent = `
+                <div class="w-full md:w-auto bg-green-50 border border-green-100 rounded p-2 md:bg-transparent md:border-0 md:p-0 flex flex-col md:flex-row md:items-center gap-2">
+                    <div class="text-xs text-gray-500 uppercase font-bold md:hidden">Allotted Room</div>
+                    <div class="text-sm font-bold text-green-700 md:text-gray-800 md:mr-4">${displayRoom}</div>
+                    
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <button class="flex-1 md:flex-none inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-1.5 px-3 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50"
+                                onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
+                            Change
+                        </button>
+                        <button class="flex-1 md:flex-none inline-flex justify-center items-center rounded-md border border-red-200 bg-white py-1.5 px-3 text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
+                                onclick="removeScribeRoom('${regNo}')" title="Unassign Room">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            `;
+            } else {
+                actionContent = `
+                <button class="w-full md:w-auto inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
+                    Assign Room
+                </button>
+            `;
+            }
+        }
+
+        item.innerHTML = `
+        <div class="flex items-center gap-3 w-full md:w-auto">
+            <div class="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0 border border-orange-200">
+                Scr
+            </div>
+            <div class="min-w-0">
+                <h4 class="font-bold text-gray-800 text-sm font-mono">${regNo}</h4>
+                <p class="text-xs text-gray-600 truncate font-medium">${student.Name}</p>
+            </div>
+        </div>
+        
+        <div class="w-full md:w-auto border-t md:border-0 border-gray-100 pt-2 md:pt-0 mt-1 md:mt-0">
+            ${actionContent}
+        </div>
+    `;
+        scribeAllotmentList.appendChild(item);
+    });
+
+    // --- NEW: MANAGE SAVE BUTTON VISIBILITY ---
+    const saveSection = document.getElementById('save-scribe-section');
+    const saveBtn = document.getElementById('save-scribe-allotment-button');
+    
+    if (saveSection && saveBtn) {
+        // Show the save section if we have scribes
+        saveSection.classList.remove('hidden');
+        
+        if (hasUnsavedScribes) {
+            // DIRTY STATE: Needs Saving
+            saveBtn.innerHTML = "Save Scribe Allotment";
+            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-green-800'); // Remove "Saved" styles
+            saveBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white'); // Add "Active" styles
+            saveBtn.disabled = false;
+        } else {
+            // CLEAN STATE: Already Saved
+            saveBtn.innerHTML = `
+                <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Synced to Cloud
+            `;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-green-800'); // Add "Saved" styles
+            saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700'); // Remove "Active" styles
+            saveBtn.disabled = true;
+        }
+    }
+}
+
+
+    
+    
 
     // Find available rooms for scribes
     async function findAvailableRooms(sessionKey) {
@@ -9768,7 +9844,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        syncSessionToCloud(sessionKey);
+        hasUnsavedScribes = true; // ADD THIS FLAG
     }
 
     scribeCloseRoomModal.addEventListener('click', () => {
@@ -13845,7 +13921,8 @@ Are you sure?
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
-        if (typeof syncDataToCloud === 'function') syncSessionToCloud(currentSessionKey);
+        if (typeof syncDataToCloud === 'function') 
+            hasUnsavedScribes = true; // ADD THIS FLAG
         renderScribeAllotmentList(currentSessionKey);
     };
 
