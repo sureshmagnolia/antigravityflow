@@ -8786,17 +8786,27 @@ window.real_populate_qp_code_session_dropdown = function () {
             allottedSection.classList.remove('hidden');
             saveSection.classList.remove('hidden');
 
-            // Indicate Auto-Save Status
+            // --- FIXED: Manual Save Button Logic ---
             const saveBtn = document.getElementById('save-room-allotment-button');
             if (saveBtn) {
-                saveBtn.innerHTML = `
-                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                <span>Auto-Saved</span>
-            `;
-                saveBtn.classList.add('bg-green-50', 'text-green-700', 'border-green-200', 'cursor-default');
-                saveBtn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
-                saveBtn.disabled = true;
+                if (hasUnsavedAllotment) {
+                    // UNSAVED STATE: Enable Button
+                    saveBtn.innerHTML = `Save Room Allotment`;
+                    saveBtn.classList.remove('bg-green-50', 'text-green-700', 'border-green-200', 'cursor-default');
+                    saveBtn.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+                    saveBtn.disabled = false;
+                } else {
+                    // SAVED STATE: Disable Button
+                    saveBtn.innerHTML = `
+                    <svg class="w-4 h-4 text-green-500 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    <span>Synced to Cloud</span>
+                    `;
+                    saveBtn.classList.add('bg-green-50', 'text-green-700', 'border-green-200', 'cursor-default');
+                    saveBtn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700');
+                    saveBtn.disabled = true;
+                }
             }
+            
         } else {
             allottedSection.classList.add('hidden');
             saveSection.classList.add('hidden');
