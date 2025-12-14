@@ -10,25 +10,16 @@
 
     <style>
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease-out;
-        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
     </style>
 
     <script type="module">
+        // 1. UPDATED IMPORTS: Added 'collection' and 'getDocs'
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
@@ -42,7 +33,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        window.firebase = { db, doc, getDoc };
+        window.firebase = { db, doc, getDoc, collection, getDocs };
 
         const urlParams = new URLSearchParams(window.location.search);
         let collegeId = urlParams.get('id');
@@ -52,11 +43,9 @@
             collegeId = parts[parts.length - 1];
         }
 
-        let allAllotments = {};
-        let allScribes = {};
+        // 2. NEW GLOBAL VARIABLES FOR MODULAR DATA
+        let allSessions = []; 
         let roomConfigs = {};
-        let studentNames = {};
-        let examPapers = {};
         let collegeName = "Exam Centre";
 
         async function loadData() {
@@ -66,58 +55,53 @@
                 return;
             }
 
-            statusEl.textContent = "Loading Exam Data...";
+            statusEl.textContent = "Loading Live Exam Data...";
 
             try {
-                const mainRef = doc(db, "public_seating", collegeId);
-                const namesRef = doc(db, "public_seating", collegeId + "_names");
-                const coursesRef = doc(db, "public_seating", collegeId + "_courses");
+                // A. FETCH SETTINGS (College Name & Rooms)
+                const settingsRef = doc(db, "colleges", collegeId, "system_data", "settings");
+                
+                // B. FETCH SESSIONS (New Modular Collection)
+                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
 
-                const [mainSnap, nameSnap, courseSnap] = await Promise.all([
-                    getDoc(mainRef),
-                    getDoc(namesRef),
-                    getDoc(coursesRef)
+                const [settingsSnap, sessionsSnap] = await Promise.all([
+                    getDoc(settingsRef),
+                    getDocs(sessionsRef)
                 ]);
 
-                if (mainSnap.exists()) {
-                    const data = mainSnap.data();
-                    collegeName = data.collegeName || "Exam Centre";
+                // Process Settings
+                if (settingsSnap.exists()) {
+                    const settings = settingsSnap.data();
+                    collegeName = settings.examCollegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
-
-                    if (data.seatingData) allAllotments = JSON.parse(data.seatingData);
-                    if (data.scribeData) allScribes = JSON.parse(data.scribeData);
-                    if (data.roomData) roomConfigs = JSON.parse(data.roomData);
-
-                    if (nameSnap.exists() && nameSnap.data().json) {
-                        studentNames = JSON.parse(nameSnap.data().json);
-                    } else if (data.studentNames) {
-                        studentNames = JSON.parse(data.studentNames);
+                    
+                    if (settings.examRoomConfig) {
+                        roomConfigs = JSON.parse(settings.examRoomConfig);
                     }
+                }
 
-                    if (courseSnap.exists() && courseSnap.data().json) {
-                        examPapers = JSON.parse(courseSnap.data().json);
-                    } else if (data.examPapers) {
-                        examPapers = JSON.parse(data.examPapers);
-                    }
+                // Process Sessions
+                if (!sessionsSnap.empty) {
+                    allSessions = [];
+                    sessionsSnap.forEach(doc => {
+                        allSessions.push(doc.data());
+                    });
 
-                    if (Object.keys(allAllotments).length > 0) {
-                        statusEl.textContent = "";
-                        document.getElementById('search-section').classList.remove('hidden');
+                    statusEl.textContent = "";
+                    document.getElementById('search-section').classList.remove('hidden');
 
-                        const savedRegNo = localStorage.getItem('myExamRegNo');
-                        if (savedRegNo) {
-                            document.getElementById('reg-input').value = savedRegNo;
-                            setTimeout(() => window.searchStudent(), 300);
-                        }
-                    } else {
-                        statusEl.textContent = "No seating data available yet.";
+                    const savedRegNo = localStorage.getItem('myExamRegNo');
+                    if (savedRegNo) {
+                        document.getElementById('reg-input').value = savedRegNo;
+                        setTimeout(() => window.searchStudent(), 300);
                     }
                 } else {
-                    statusEl.innerHTML = `<span class="text-red-500">ID Not Found. Please check the link.</span>`;
+                    statusEl.textContent = "No active exam sessions found.";
                 }
+
             } catch (error) {
                 console.error("Load Error:", error);
-                statusEl.textContent = "Connection failed. Please refresh.";
+                statusEl.innerHTML = `<span class="text-red-500">Connection failed. Check Internet or Link.</span>`;
             }
         }
 
@@ -127,62 +111,63 @@
             const resultContainer = document.getElementById('result-container');
             resultContainer.innerHTML = '';
 
-            if (regNo.length < 3) {
+            if (regNo.length < 2) {
                 alert("Please enter a valid Register Number.");
                 return;
             }
 
             let found = false;
-            // Removed date check so old exams also show up for testing
-            const now = new Date();
-
-            // To test past dates, we can disable this filter or keep it. 
-            // I'll keep the midnight filter but remove the 45min lock.
-            const todayMidnight = new Date();
-            todayMidnight.setHours(0, 0, 0, 0);
-
-            const myName = studentNames[regNo] || "";
-
+            let studentName = "";
             let myExams = [];
 
-            for (const [sessionKey, rooms] of Object.entries(allAllotments)) {
-                const [dateStr, timeStr] = sessionKey.split(' | ');
+            // 3. UPDATED SEARCH LOGIC (Iterate Modular Sessions)
+            allSessions.forEach(session => {
+                const dateStr = session.date;
+                const timeStr = session.time;
+                
+                // Find student in this session's list
+                const studentRecord = session.students ? session.students.find(s => s['Register Number'] === regNo) : null;
 
-                const examDateObject = parseSessionTime(dateStr, "00:00 AM");
-                // if (examDateObject < todayMidnight) continue; // Un-comment this line if you still want to hide past days
+                if (studentRecord) {
+                    if (!studentName) studentName = studentRecord.Name;
 
-                let studentRoom = null;
-                let seatNumber = 0;
-                let isScribeRoom = false;
+                    let studentRoom = "Not Allotted";
+                    let seatNumber = "-";
+                    let isScribeRoom = false;
 
-                // 1. Check for Regular Room Allotment
-                for (const room of rooms) {
-                    const index = room.students.indexOf(regNo);
-                    if (index !== -1) {
-                        studentRoom = room.roomName;
-                        seatNumber = index + 1;
-                        break;
+                    // A. Check Regular Allotment
+                    if (session.roomAllotment) {
+                        for (const room of session.roomAllotment) {
+                            // Handle both Object (new) and String (legacy) formats in allotment
+                            const index = room.students.findIndex(s => 
+                                (typeof s === 'object' ? s['Register Number'] : s) === regNo
+                            );
+                            
+                            if (index !== -1) {
+                                studentRoom = room.roomName;
+                                seatNumber = index + 1;
+                                break;
+                            }
+                        }
+                    }
+
+                    // B. Check Scribe Allotment
+                    if (session.scribeAllotment && session.scribeAllotment[regNo]) {
+                        studentRoom = session.scribeAllotment[regNo];
+                        isScribeRoom = true;
+                        seatNumber = "Scribe";
+                    }
+
+                    if (studentRoom !== "Not Allotted") {
+                        const paperName = studentRecord.Course || "Subject Details N/A";
+
+                        myExams.push({
+                            dateStr, timeStr, studentRoom, seatNumber, paperName, isScribeRoom,
+                            fullDate: parseSessionTime(dateStr, timeStr)
+                        });
                     }
                 }
-
-                // 2. Check for Scribe Override
-                const sessionScribes = allScribes[sessionKey] || {};
-                if (sessionScribes[regNo]) {
-                    studentRoom = sessionScribes[regNo];
-                    isScribeRoom = true;
-                    seatNumber = "Scribe";
-                }
-
-                if (studentRoom) {
-                    const paperKey = `${regNo}_${dateStr}_${timeStr}`;
-                    const paperName = examPapers[paperKey] || "Subject Details N/A";
-
-                    myExams.push({
-                        dateStr, timeStr, studentRoom, seatNumber, paperName, isScribeRoom,
-                        fullDate: parseSessionTime(dateStr, timeStr)
-                    });
-                }
-            }
+            });
 
             myExams.sort((a, b) => a.fullDate - b.fullDate);
 
@@ -191,8 +176,6 @@
                 localStorage.setItem('myExamRegNo', regNo);
 
                 myExams.forEach(exam => {
-                    // *** TIME LOCK REMOVED *** // We no longer check unlockTime. We just show the result.
-
                     const roomInfo = roomConfigs[exam.studentRoom] || {};
                     const displayLocation = (roomInfo.location && roomInfo.location.trim() !== "")
                         ? roomInfo.location
@@ -208,7 +191,7 @@
                     let content = `
                         <div class="border-b border-gray-200 pb-3 mb-3">
                             <div class="text-center mb-3">
-                                <div class="text-lg font-black text-gray-800 leading-tight">${myName}</div>
+                                <div class="text-lg font-black text-gray-800 leading-tight">${studentName}</div>
                                 <div class="text-xs font-bold text-indigo-500 font-mono">${regNo}</div>
                             </div>
                             
@@ -230,7 +213,7 @@
                         </div>
                     `;
 
-                    // *** ALWAYS UNLOCKED ***
+                    // *** ALWAYS UNLOCKED (TEST MODE) ***
                     content += `
                         <div class="text-center py-2">
                             <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">
@@ -282,12 +265,14 @@
         };
 
         function parseSessionTime(dateStr, timeStr) {
-            const [d, m, y] = dateStr.split('.');
-            let [time, modifier] = timeStr.split(' ');
-            let [hours, minutes] = time.split(':');
-            if (hours === '12') hours = '00';
-            if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-            return new Date(y, m - 1, d, hours, minutes);
+            try {
+                const [d, m, y] = dateStr.split('.');
+                let [time, modifier] = timeStr.split(' ');
+                let [hours, minutes] = time.split(':');
+                if (hours === '12') hours = '00';
+                if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+                return new Date(y, m - 1, d, hours, minutes);
+            } catch(e) { return new Date(); }
         }
 
         loadData();
@@ -311,22 +296,16 @@
                 isAuthorized = true;
                 const content = document.getElementById('protected-content');
                 if (content) content.style.display = 'block';
-                // Trigger load if needed, though loadData() runs on init. 
-                // Maybe we want to hide everything until auth? 
-                // Currently loadData() runs nicely in background.
             } else {
-                if (pass !== null) { // If not cancelled
+                if (pass !== null) { 
                     await UiModal.alert("🚫 Access Denied", "Incorrect password.");
-                    // Retry? or just leave blank.
                     document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;background:#f3f4f6;font-family:sans-serif;color:#ef4444;'><h1>🚫 Access Denied</h1></div>";
                 } else {
-                    // Cancelled
                     document.body.innerHTML = "<div style='display:flex;justify-content:center;align-items:center;height:100vh;background:#f3f4f6;font-family:sans-serif;color:#6b7280;'><h1>Access Cancelled</h1></div>";
                 }
             }
         }
 
-        // Wait for DOM to be ready for UiModal
         document.addEventListener('DOMContentLoaded', checkAccess);
     </script>
 
@@ -335,16 +314,13 @@
         <div class="w-full max-w-md mx-auto">
             <div class="text-center mb-6 mt-2">
                 <h1 class="text-xl font-black text-gray-900 tracking-tight" id="college-name">Exam Centre</h1>
-                <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal (Test
-                    Mode)</p>
+                <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal (Test Mode)</p>
             </div>
 
             <div id="status" class="text-center text-sm font-medium text-indigo-600 mb-4 animate-pulse"></div>
 
-            <div id="search-section"
-                class="hidden bg-white p-6 rounded-2xl shadow-xl shadow-indigo-50 border border-indigo-100">
-                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Enter Register
-                    Number</label>
+            <div id="search-section" class="hidden bg-white p-6 rounded-2xl shadow-xl shadow-indigo-50 border border-indigo-100">
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Enter Register Number</label>
                 <div class="flex gap-2">
                     <input type="text" id="reg-input"
                         class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-indigo-500 outline-none uppercase font-mono text-lg font-bold text-gray-800 placeholder-gray-300 transition-all"
@@ -368,5 +344,4 @@
     </div>
 
 </body>
-
 </html>
