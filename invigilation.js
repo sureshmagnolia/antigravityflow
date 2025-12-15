@@ -3859,13 +3859,22 @@ window.openCompletedDutiesModal = function (email) {
             
             // Build Message
             let msg = `*Duty History: ${staffName}*\nAY: ${acYear.label}\n----------------\n`;
+
             history.forEach((h, i) => {
                 const [dStr, tStr] = h.key.split(' | ');
-                const [d, m] = dStr.split('.');
+                const [d, m, y] = dStr.split('.'); // Get full date components
+                const shortYear = y.slice(-2);     // Extract last 2 digits (e.g., 2025 -> 25)
+                
                 const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
                 const sess = isAN ? "AN" : "FN";
-                msg += `${i+1}. ${d}.${m} (${sess}) - ${h.role}\n`;
+                
+                // Format: DD.MM.YY
+                msg += `${i+1}. ${d}.${m}.${shortYear} (${sess}) - ${h.role}\n`;
             });
+
+
+
+            
             msg += `----------------\n*Total: ${history.length}*`;
             
             const link = validPhone ? `https://wa.me/${validPhone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
