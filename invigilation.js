@@ -1029,7 +1029,8 @@ function renderStaffTable() {
                         <div class="text-xs text-gray-500 mt-0.5"><span class="font-semibold text-gray-600">${safeDept}</span> | ${staff.designation || ""} ${activeRoleLabel}</div>
                     </div>
                 </div>
-                <div class="md:hidden">
+
+<div class="md:hidden">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
                              <div class="mr-1">${liveIcon}</div> 
@@ -1040,11 +1041,53 @@ function renderStaffTable() {
                             </div>
                         </div>
                     </div>
+                    
+                    <div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100 text-xs mb-3">
+                        <div class="text-center w-1/3">
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Target</div>
+                            <div class="font-mono text-gray-600 font-bold text-sm">${target}</div>
+                        </div>
+                        <div class="text-center w-1/3 border-l border-gray-200">
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Done</div>
+                            <div>
+                                <button onclick="openCompletedDutiesModal('${staff.email}')" 
+                                        class="font-mono text-blue-600 font-bold text-sm hover:underline decoration-blue-300">
+                                    ${done}
+                                </button>
+                            </div>
+                        </div>
+                        <div class="text-center w-1/3 border-l border-gray-200">
+                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Pending</div>
+                            <div class="font-mono font-bold text-sm ${statusColor}">${pending}</div>
+                        </div>
+                    </div>
                 </div>
+
+
+
+
+
+                
             </td>
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600">${target}</td>
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">${done}</td>
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}">${pending}</td>
+
+
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600" title="Target Duty Load">${target}</td>
+            
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">
+                <button onclick="openCompletedDutiesModal('${staff.email}')" 
+                        class="text-blue-600 hover:text-blue-800 hover:underline decoration-blue-300 underline-offset-4 transition px-2 py-1 rounded hover:bg-blue-50" 
+                        title="Click to view duty history">
+                    ${done}
+                </button>
+            </td>
+            
+            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}" title="Pending Duties">${pending}</td>
+
+
+
+
+
+
             <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">${actionButtons}</td>
         `;
         ui.staffTableBody.appendChild(row);
