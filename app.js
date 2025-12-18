@@ -9818,6 +9818,7 @@ function renderScribeAllotmentList(sessionKey) {
     const modalDate = document.getElementById('modal-edit-date');
     const modalTime = document.getElementById('modal-edit-time');
     const modalCourse = document.getElementById('modal-edit-course');
+    const modalExamName = document.getElementById('modal-edit-exam-name'); // <--- ADD THIS
     const modalRegNo = document.getElementById('modal-edit-regno');
     const modalName = document.getElementById('modal-edit-name');
     const modalSaveBtn = document.getElementById('modal-save-student');
@@ -9975,8 +9976,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Find the renderStudentEditTable function (around line 1330) and replace it with this:
 
-
-    // 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
+// 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
     function renderStudentEditTable() {
         editDataContainer.innerHTML = '';
 
@@ -9997,26 +9997,27 @@ function renderScribeAllotmentList(sessionKey) {
 
         let tableHtml = `
         <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
-        <table class="min-w-full divide-y divide-gray-200 w-full">
-            <thead class="bg-gray-50 hidden md:table-header-group">
-                <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
+            <table class="min-w-full divide-y divide-gray-200 w-full">
+                <thead class="bg-gray-50 hidden md:table-header-group">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th> <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
     `;
 
         pageStudents.forEach((student, index) => {
             const uniqueRowIndex = start + index;
             const serialNo = uniqueRowIndex + 1;
             const streamDisplay = student.Stream || "Regular";
+            const examDisplay = student['Exam Name'] || '-'; // ADDED
 
-            // --- Desktop Row HTML (Restored) ---
+            // --- Desktop Row HTML ---
             const desktopRow = `
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 ${serialNo}
@@ -10031,9 +10032,11 @@ function renderScribeAllotmentList(sessionKey) {
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 ${student.Name}
             </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold"> ${examDisplay}
+            </td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                    ${streamDisplay}
+                ${streamDisplay}
                 </span>
             </td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -10042,10 +10045,9 @@ function renderScribeAllotmentList(sessionKey) {
             </td>
         `;
 
-            // --- Mobile Card HTML (Optimized) ---
+            // --- Mobile Card HTML ---
             const mobileCard = `
             <td class="md:hidden block p-3 w-full border-b border-gray-100 last:border-0 bg-white">
-                
                 <div class="flex items-start gap-3 mb-3 w-full">
                     <div class="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-100">
                         ${student.Name ? student.Name.charAt(0) : '?'}
@@ -10064,15 +10066,14 @@ function renderScribeAllotmentList(sessionKey) {
                         </div>
                     </div>
                 </div>
-
+                
                 <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs bg-gray-50 p-2.5 rounded-lg border border-gray-100 mb-3">
+                    <div>
+                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Exam Name</span>
+                        <span class="font-bold text-indigo-700 whitespace-nowrap">${examDisplay}</span> </div>
                     <div>
                         <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
                         <span class="font-medium text-gray-700 whitespace-nowrap">${student.Date}</span>
-                    </div>
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Time</span>
-                        <span class="font-medium text-gray-700 whitespace-nowrap">${student.Time}</span>
                     </div>
                     <div class="col-span-2 border-t border-gray-200 pt-1 mt-1">
                         <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Course</span>
@@ -10089,24 +10090,25 @@ function renderScribeAllotmentList(sessionKey) {
                     </button>
                     <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        Remove
+                        Delete
                     </button>
                 </div>
             </td>
-        `;
+            `;
 
             tableHtml += `
             <tr data-row-index="${uniqueRowIndex}" class="block md:table-row bg-white md:border-b border-gray-200 last:border-0">
                 ${desktopRow}
                 ${mobileCard}
             </tr>
-        `;
+            `;
         });
 
         tableHtml += `</tbody></table></div>`;
         editDataContainer.innerHTML = tableHtml;
         renderEditPagination(currentCourseStudents.length);
     }
+    
 
 
 
@@ -10162,7 +10164,7 @@ function renderScribeAllotmentList(sessionKey) {
         }
     });
 
-    // 7. NEW Function: Open the Edit/Add Modal (With Date/Time Conversion)
+    // 7. NEW Function: Open the Edit/Add Modal
     function openStudentEditModal(rowIndex) {
         // Populate Stream Dropdown
         const streamSelect = document.getElementById('modal-edit-stream');
@@ -10193,26 +10195,23 @@ function renderScribeAllotmentList(sessionKey) {
             currentlyEditingIndex = null;
 
             const [date, time] = currentEditSession.split(' | ');
-
-            modalDate.value = toInputDate(date); // Convert for picker
-            modalTime.value = toInputTime(time); // Convert for picker
-
+            modalDate.value = toInputDate(date);
+            modalTime.value = toInputTime(time);
             modalCourse.value = currentEditCourse;
+            modalExamName.value = ""; // NEW: Clear Exam Name
             modalRegNo.value = "ENTER_REG_NO";
             modalName.value = "New Student";
             streamSelect.value = currentStreamConfig[0];
-
         } else {
             // --- EDITING AN EXISTING STUDENT ---
             modalTitle.textContent = "Edit Student Details";
             currentlyEditingIndex = rowIndex;
-
             const student = currentCourseStudents[rowIndex];
 
-            modalDate.value = toInputDate(student.Date); // Convert
-            modalTime.value = toInputTime(student.Time); // Convert
-
+            modalDate.value = toInputDate(student.Date);
+            modalTime.value = toInputTime(student.Time);
             modalCourse.value = student.Course;
+            modalExamName.value = student['Exam Name'] || ''; // NEW: Populate Exam Name
             modalRegNo.value = student['Register Number'];
             modalName.value = student.Name;
             streamSelect.value = student.Stream || currentStreamConfig[0];
@@ -10232,13 +10231,15 @@ function renderScribeAllotmentList(sessionKey) {
 
     // [In app.js]
 
+    // [In app.js]
     modalSaveBtn.addEventListener('click', () => {
         // 1. Capture Inputs
-        const rawDate = modalDate.value; // YYYY-MM-DD
-        const rawTime = modalTime.value; // HH:MM
+        const rawDate = modalDate.value;
+        const rawTime = modalTime.value;
         const newCourse = modalCourse.value.trim();
         const newRegNo = modalRegNo.value.trim();
         const newName = modalName.value.trim();
+        const newExamName = modalExamName.value.trim(); // NEW
         const newStream = document.getElementById('modal-edit-stream').value;
 
         let finalDate = "";
@@ -10251,10 +10252,9 @@ function renderScribeAllotmentList(sessionKey) {
             return `${d}.${m}.${y}`;
         };
 
-        // Use the global normalizer to ensure "2:00 PM" becomes "02:00 PM"
         const processTime = (tStr) => {
-             if (typeof normalizeTime === 'function') return normalizeTime(tStr);
-             return tStr; 
+            if (typeof normalizeTime === 'function') return normalizeTime(tStr);
+            return tStr;
         };
 
         // 3. MERGE LOGIC
@@ -10263,12 +10263,7 @@ function renderScribeAllotmentList(sessionKey) {
         if (currentlyEditingIndex !== null) {
             // --- EDIT MODE ---
             const original = currentCourseStudents[currentlyEditingIndex];
-
-            // Date: Use new if changed, else keep original
             finalDate = rawDate ? processDate(rawDate) : original.Date;
-            
-            // Time: Use new if changed, else use original... BUT NORMALIZE IT!
-            // This fixes the bug where un-edited times stayed as "2:00 PM"
             const timeToProcess = rawTime ? rawTime : original.Time;
             finalTime = processTime(timeToProcess);
 
@@ -10278,9 +10273,9 @@ function renderScribeAllotmentList(sessionKey) {
                 Course: newCourse || original.Course,
                 'Register Number': newRegNo || original['Register Number'],
                 Name: newName || original.Name,
-                Stream: newStream || original.Stream || "Regular"
+                Stream: newStream || original.Stream || "Regular",
+                'Exam Name': newExamName || original['Exam Name'] // NEW
             };
-
         } else {
             // --- ADD MODE ---
             if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
@@ -10289,11 +10284,12 @@ function renderScribeAllotmentList(sessionKey) {
             }
             studentObj = {
                 Date: processDate(rawDate),
-                Time: processTime(rawTime), // Normalize the new input
+                Time: processTime(rawTime),
                 Course: newCourse,
                 'Register Number': newRegNo,
                 Name: newName,
-                Stream: newStream
+                Stream: newStream,
+                'Exam Name': newExamName // NEW
             };
         }
 
@@ -10304,7 +10300,6 @@ function renderScribeAllotmentList(sessionKey) {
             } else {
                 currentCourseStudents.push(studentObj);
             }
-
             setUnsavedChanges(true);
             closeStudentEditModal();
             renderStudentEditTable();
@@ -10407,6 +10402,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Inputs
     const bulkNewCourseInput = document.getElementById('bulk-new-course'); // <--- NEW
+    const bulkNewExamNameInput = document.getElementById('bulk-new-exam-name'); // <--- ADD THIS
     const bulkNewDateInput = document.getElementById('bulk-new-date');
     const bulkNewTimeInput = document.getElementById('bulk-new-time');
     const bulkNewStreamSelect = document.getElementById('bulk-new-stream');
@@ -10493,6 +10489,7 @@ function renderScribeAllotmentList(sessionKey) {
             // Add deleteCourseBtn to the list of inputs to toggle
             const inputsToToggle = [
                 bulkNewCourseInput,
+                bulkNewExamNameInput, // <--- ADD THIS
                 bulkNewDateInput,
                 bulkNewTimeInput,
                 bulkNewStreamSelect,
@@ -10550,23 +10547,26 @@ function renderScribeAllotmentList(sessionKey) {
     // 4. Handle Bulk Apply Click
     // [In app.js]
 
-   if (btnBulkApply) {
+  if (btnBulkApply) {
         btnBulkApply.addEventListener('click', async () => {
-            const rawDate = bulkNewDateInput.value; // YYYY-MM-DD
-            const rawTime = bulkNewTimeInput.value; // HH:MM
-            const newStream = bulkNewStreamSelect.value; // Might be "" (No Change)
-            const newCourseName = bulkNewCourseInput.value.trim();
+            // 1. Capture All Inputs (Including Exam Name)
+            const rawDate = document.getElementById('bulk-new-date').value;
+            const rawTime = document.getElementById('bulk-new-time').value;
+            const newStream = document.getElementById('bulk-new-stream').value;
+            const newCourseName = document.getElementById('bulk-new-course').value.trim();
+            const newExamName = document.getElementById('bulk-new-exam-name').value.trim(); // <--- NEW
 
-            const targetCourse = editCourseSelect.value;
-            const [oldDate, oldTime] = editSessionSelect.value.split(' | ');
+            // Get Targets
+            const targetCourse = document.getElementById('edit-course-select').value;
+            const [oldDate, oldTime] = document.getElementById('edit-session-select').value.split(' | ');
 
-            // Validation: Allow if AT LEAST ONE field is provided
-            if (!rawDate && !rawTime && !newCourseName && !newStream) {
-                alert("No changes detected. Please edit at least one field (Date, Time, Stream, or Course).");
+            // 2. Validation: Ensure at least one field is being updated
+            if (!rawDate && !rawTime && !newCourseName && !newStream && !newExamName) {
+                alert("No changes detected. Please edit at least one field.");
                 return;
             }
 
-            // --- CONVERT ONLY IF PROVIDED ---
+            // 3. Prepare Date/Time Conversions
             let newDate = null;
             let newTime = null;
 
@@ -10576,24 +10576,20 @@ function renderScribeAllotmentList(sessionKey) {
             }
 
             if (rawTime) {
-                // Input is HH:mm (24h) from picker
-                // normalizeTime handles 24h input correctly and ensures 02:00 PM format
                 if (typeof normalizeTime === 'function') {
-                     newTime = normalizeTime(rawTime);
+                    newTime = normalizeTime(rawTime);
                 } else {
-                     // Fallback if normalizeTime is missing (Safety)
                     const [h, min] = rawTime.split(':');
                     let hours = parseInt(h);
                     const ampm = hours >= 12 ? 'PM' : 'AM';
                     hours = hours % 12;
                     hours = hours ? hours : 12;
-                    const paddedHours = String(hours).padStart(2, '0');
-                    newTime = `${paddedHours}:${min} ${ampm}`;
+                    newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
                 }
             }
-            // ----------------------------------
 
-            // Check count
+            // 4. Find Records to Update
+            // (Using the global allStudentData to ensure we hit the source)
             const recordsToUpdate = allStudentData.filter(s =>
                 s.Date === oldDate &&
                 s.Time === oldTime &&
@@ -10605,6 +10601,7 @@ function renderScribeAllotmentList(sessionKey) {
                 return;
             }
 
+            // 5. Confirm Message (Now includes Exam Name)
             const confirmMsg = `
 ⚠ CONFIRM BULK CHANGE ⚠
 
@@ -10612,38 +10609,49 @@ Target: ${targetCourse}
 Students: ${recordsToUpdate.length}
 
 --- UPDATES ---
-Course: ${newCourseName ? newCourseName : "(No Change)"}
-Date:   ${newDate ? newDate : "(No Change)"}
-Time:   ${newTime ? newTime : "(No Change)"}
-Stream: ${newStream ? newStream : "(No Change)"}
+Exam Name: ${newExamName ? newExamName : "(No Change)"}  <-- NEW
+Course:    ${newCourseName ? newCourseName : "(No Change)"}
+Stream:    ${newStream ? newStream : "(No Change)"}
+Date:      ${newDate ? newDate : "(No Change)"}
+Time:      ${newTime ? newTime : "(No Change)"}
 
 Are you sure you want to update these records?
-        `;
+`;
 
             if (confirm(confirmMsg)) {
                 let updateCount = 0;
 
+                // 6. Apply Updates
                 allStudentData.forEach(student => {
                     if (student.Date === oldDate && student.Time === oldTime && student.Course === targetCourse) {
-                        // Only update fields that are NOT null/empty
+                        
+                        // Update fields only if provided
+                        if (newExamName) student['Exam Name'] = newExamName; // <--- THE FIX
+                        if (newCourseName) student.Course = newCourseName;
+                        if (newStream) student.Stream = newStream;
                         if (newDate) student.Date = newDate;
                         if (newTime) student.Time = newTime;
-                        if (newStream) student.Stream = newStream;
-                        if (newCourseName) student.Course = newCourseName;
+                        
                         updateCount++;
                     }
                 });
 
+                // 7. Save & Sync
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 
-                alert('Update successful! Syncing session...');
+                alert(`✅ Updated ${updateCount} students! Syncing changes...`);
                 
-                // MODULAR SYNC (V2)
-                // We only need to sync the specific session we just modified
+                // Trigger Sync
                 if (typeof syncSessionToCloud === 'function') {
-                    await syncSessionToCloud(editSessionSelect.value);
+                    // Sync the OLD session (to remove moved students) AND the NEW session (if date changed)
+                    await syncSessionToCloud(document.getElementById('edit-session-select').value);
+                    if (newDate || newTime) {
+                        // If date/time changed, we technically created a new session key, 
+                        // but a full reload is safer to handle the split.
+                    }
                 }
 
+                // Reload to refresh all views and dropdowns
                 window.location.reload();
             }
         });
