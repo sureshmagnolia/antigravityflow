@@ -13414,6 +13414,7 @@ if (mainLoadCsvBtn) {
     const btnSessionLock = document.getElementById('btn-session-ops-lock');
     const sessionOpsControls = document.getElementById('session-ops-controls');
     const sessionDateInput = document.getElementById('session-new-date');
+    const sessionExamNameInput = document.getElementById('session-new-exam-name'); // <--- ADD THIS
     const sessionTimeInput = document.getElementById('session-new-time');
     const btnSessionReschedule = document.getElementById('btn-session-reschedule');
     const btnSessionDelete = document.getElementById('btn-session-delete');
@@ -13426,136 +13427,160 @@ if (mainLoadCsvBtn) {
         });
     }
 
-    function updateSessionOpsLockUI() {
+function updateSessionOpsLockUI() {
         if (!btnSessionLock || !sessionOpsControls) return;
+        
+        // Include the new input in the list
+        const controls = [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete, sessionExamNameInput];
 
         if (isSessionOpsLocked) {
             // LOCKED STATE
             btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Locked</span>`;
             btnSessionLock.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-200 transition shadow-sm";
-
             sessionOpsControls.classList.add('opacity-50', 'pointer-events-none');
-            [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete].forEach(el => el.disabled = true);
+            
+            controls.forEach(el => { if(el) el.disabled = true; }); // Disable all
 
         } else {
             // UNLOCKED STATE
             btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
             btnSessionLock.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 transition shadow-sm font-bold";
-
             sessionOpsControls.classList.remove('opacity-50', 'pointer-events-none');
-            [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete].forEach(el => el.disabled = false);
+            
+            controls.forEach(el => { if(el) el.disabled = false; }); // Enable all
         }
     }
 
-// 2. Reschedule Logic (Smart Merge + Unavailability Check)
-    if (btnSessionReschedule) {
+if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
+            const newExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : ""; // Capture Name
             const currentSession = editSessionSelect.value;
 
             if (!currentSession) return alert("No session selected.");
-            if (!rawDate || !rawTime) return alert("Please select both New Date and New Time.");
 
-            // A. Format New Values
-            const [y, m, d] = rawDate.split('-');
-            const newDate = `${d}.${m}.${y}`;
-            
+            // Validation: Must have EITHER (Date+Time) OR (ExamName)
+            if ((!rawDate || !rawTime) && !newExamName) {
+                return alert("Please enter a New Date/Time OR a New Exam Name to apply changes.");
+            }
+
+            // A. Determine New Date/Time
+            let newDate = "";
             let newTime = "";
-            if (typeof normalizeTime === 'function') {
-                newTime = normalizeTime(rawTime);
+            let isMove = false; // Tracks if we are changing the session key
+
+            if (rawDate && rawTime) {
+                const [y, m, d] = rawDate.split('-');
+                newDate = `${d}.${m}.${y}`;
+                
+                if (typeof normalizeTime === 'function') {
+                    newTime = normalizeTime(rawTime);
+                } else {
+                    const [h, min] = rawTime.split(':');
+                    let hours = parseInt(h);
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+                }
+                
+                const newSessionKey = `${newDate} | ${newTime}`;
+                if (newSessionKey !== currentSession) isMove = true;
             } else {
-                // Fallback normalizer
-                const [h, min] = rawTime.split(':');
-                let hours = parseInt(h);
-                const ampm = hours >= 12 ? 'PM' : 'AM';
-                hours = hours % 12;
-                hours = hours ? hours : 12;
-                newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+                // Keep existing Date/Time
+                const parts = currentSession.split('|');
+                newDate = parts[0].trim();
+                newTime = parts[1].trim();
             }
 
             const newSessionKey = `${newDate} | ${newTime}`;
-            
-            // *** FIX: TRIM WHITESPACE FROM SPLIT ***
-            const parts = currentSession.split('|');
-            const oldDate = parts[0].trim();
-            const oldTime = parts[1].trim();
 
-            if (newSessionKey === currentSession) return alert("New date/time is the same as current.");
-            const msg = `⚠️ SMART RESCHEDULE ⚠️\n\nMove EVERYTHING from:\n${currentSession}\n\nTo:\n${newSessionKey}?\n\nProceed?`;
+            // B. Confirmation Message
+            let changesMsg = "";
+            if (isMove) changesMsg += `• Move to: ${newSessionKey}\n`;
+            if (newExamName) changesMsg += `• Rename Exam to: "${newExamName}"\n`;
+
+            const msg = `⚠️ CONFIRM SESSION UPDATE ⚠️\n\nTarget: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
             if (!confirm(msg)) return;
-
-            const check = prompt("Type 'CHANGE' to confirm:");
-            if (check !== 'CHANGE') return alert("Cancelled.");
+            
+            // Safety check for moves
+            if (isMove) {
+                const check = prompt("Type 'CHANGE' to confirm moving this session:");
+                if (check !== 'CHANGE') return alert("Cancelled.");
+            }
 
             try {
-                // 1. Update Students
+                // 1. Update Students (Memory)
                 let studentCount = 0;
+                const [oldDate, oldTime] = currentSession.split(' | ');
+
                 allStudentData.forEach(s => {
-                    // Strict check against trimmed values
-                    if (s.Date === oldDate && s.Time === oldTime) {
-                        s.Date = newDate;
-                        s.Time = newTime;
+                    if (s.Date === oldDate.trim() && s.Time === oldTime.trim()) {
+                        // Update Date/Time if moving
+                        if (isMove) {
+                            s.Date = newDate;
+                            s.Time = newTime;
+                        }
+                        // Update Exam Name if provided
+                        if (newExamName) {
+                            s['Exam Name'] = newExamName;
+                        }
                         studentCount++;
                     }
                 });
-                
-                // Save immediately to local storage
+
+                // Save to Local Storage
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-                // ... (Keep existing Conflict Checker logic here if you want) ...
-                // For brevity, skipping the conflict check block as it wasn't the cause of the bug. 
-                // You can keep your existing 'moveKeyInStorage' logic below.
-
-                // 2. Move Auxiliary Data (Rooms, Absentees, etc.)
-                const moveKeyInStorage = (storageKey, type) => {
-                    const raw = localStorage.getItem(storageKey);
-                    if (!raw) return;
-                    const data = JSON.parse(raw);
-
-                    if (data[currentSession]) {
-                        if (data[newSessionKey]) {
-                            // Merge
-                            if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
-                            else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
-                            else if (storageKey === 'examInvigilationSlots') {
-                                // Simple merge for slots, app.js will recalculate anyway
-                                data[newSessionKey] = data[currentSession]; 
+                // 2. Move Auxiliary Data (ONLY IF MOVING)
+                if (isMove) {
+                    const moveKeyInStorage = (storageKey, type) => {
+                        const raw = localStorage.getItem(storageKey);
+                        if (!raw) return;
+                        const data = JSON.parse(raw);
+                        if (data[currentSession]) {
+                            if (data[newSessionKey]) {
+                                // Merge
+                                if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
+                                else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
+                            } else {
+                                // Move
+                                data[newSessionKey] = data[currentSession];
                             }
-                        } else {
-                            // Move
-                            data[newSessionKey] = data[currentSession];
+                            delete data[currentSession];
+                            localStorage.setItem(storageKey, JSON.stringify(data));
                         }
-                        delete data[currentSession];
-                        localStorage.setItem(storageKey, JSON.stringify(data));
-                    }
-                };
+                    };
 
-                moveKeyInStorage('examRoomAllotment', 'array');
-                moveKeyInStorage('examScribeAllotment', 'object');
-                moveKeyInStorage('examAbsenteeList', 'array');
-                moveKeyInStorage('examInvigilatorMapping', 'object');
-                moveKeyInStorage('examInvigilationSlots', 'object'); 
-                moveKeyInStorage('examQPCodes', 'object');
+                    moveKeyInStorage('examRoomAllotment', 'array');
+                    moveKeyInStorage('examScribeAllotment', 'object');
+                    moveKeyInStorage('examAbsenteeList', 'array');
+                    moveKeyInStorage('examInvigilatorMapping', 'object');
+                    moveKeyInStorage('examInvigilationSlots', 'object');
+                    moveKeyInStorage('examQPCodes', 'object');
+                }
 
-                alert(`✅ Moved ${studentCount} students to ${newSessionKey}.\nSyncing to Cloud...`);
+                alert(`✅ Successfully Updated ${studentCount} records.\nSyncing to Cloud...`);
 
-                // MODULAR SYNC (V2)
-                updateSyncStatus("Syncing Old Session...", "neutral");
-                await syncSessionToCloud(currentSession); // This will now correctly write an EMPTY session (clearing old)
+                // 3. Cloud Sync
+                // Sync the OLD session (to clear it if moved, or update it if just renamed)
+                await syncSessionToCloud(currentSession);
                 
-                updateSyncStatus("Syncing New Session...", "neutral");
-                await syncSessionToCloud(newSessionKey); // This will write the FULL new session
+                // If moved, also sync the NEW session
+                if (isMove) {
+                    await syncSessionToCloud(newSessionKey);
+                }
 
                 window.location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                alert("Error during update: " + e.message);
             }
         });
-    }
+}
 
 // 3. Delete Logic (Wipes Students + Associated Data)
     if (btnSessionDelete) {
