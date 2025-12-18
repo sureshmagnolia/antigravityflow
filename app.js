@@ -196,7 +196,7 @@ let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
 
 document.addEventListener('DOMContentLoaded', () => {
-
+    populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
     const loaderMessages = [
         "Summoning the Exam Spirits... 👻",
@@ -483,6 +483,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+// --- CENTRALIZED EXAM DROPDOWN POPULATOR ---
+function populateAllExamDropdowns() {
+    // 1. Get the Master List
+    const rulesRaw = localStorage.getItem('examRulesConfig'); 
+    const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
+    const uniqueNames = [...new Set(rules.map(r => r.examName))].sort();
+
+    // 2. Define all dropdowns to update
+    const dropdowns = [
+        { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
+        { id: 'session-new-exam-name', defaultText: '-- Select New Exam Name --' }, // Session Ops
+        { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
+        { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
+        { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
+    ];
+
+    // 3. Populate them
+    dropdowns.forEach(dd => {
+        const select = document.getElementById(dd.id);
+        if (select) {
+            // Keep current value if possible
+            const currentVal = select.value;
+            
+            select.innerHTML = `<option value="">${dd.defaultText}</option>`;
+            
+            if (uniqueNames.length === 0) {
+                // If list is empty, show warning option
+                const opt = document.createElement('option');
+                opt.textContent = "(No Exams Configured in Settings)";
+                opt.disabled = true;
+                select.appendChild(opt);
+            } else {
+                uniqueNames.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    select.appendChild(opt);
+                });
+            }
+
+            // Restore selection if it still exists in the new list
+            if (currentVal && uniqueNames.includes(currentVal)) {
+                select.value = currentVal;
+            }
+        }
+    });
+}
+
+
+
+
+
+    
 // --- HELPER: Calculate Slot Requirements from Student Data ---
 function updateLocalSlotsFromStudents() {
     const localBaseData = localStorage.getItem('examBaseData');
@@ -3360,7 +3413,7 @@ if (toggleButton && sidebar) {
                 }
 
                 localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
-
+                populateAllExamDropdowns(); // <--- ADD THIS LINE to refresh all dropdowns instantly
                 isAddingExamSchedule = false;
                 renderExamRulesInModal();
                 renderExamNameSettings();
@@ -10211,14 +10264,29 @@ function renderScribeAllotmentList(sessionKey) {
             modalDate.value = toInputDate(student.Date);
             modalTime.value = toInputTime(student.Time);
             modalCourse.value = student.Course;
-            modalExamName.value = student['Exam Name'] || ''; // NEW: Populate Exam Name
+            // Inside openStudentEditModal...
+    
+            const existingExam = student['Exam Name'] || '';
+    
+    // Check if the student's exam exists in our dropdown
+            const examOptionExists = [...modalExamName.options].some(o => o.value === existingExam);
+    
+            if (existingExam && !examOptionExists) {
+        // If the student has a weird/old exam name not in the list, add it temporarily so we don't lose it
+            const tempOpt = document.createElement('option');
+            tempOpt.value = existingExam;
+            tempOpt.textContent = `${existingExam} (Not in Master List)`;
+            modalExamName.appendChild(tempOpt);
+            }
+    
+            modalExamName.value = existingExam;
             modalRegNo.value = student['Register Number'];
             modalName.value = student.Name;
             streamSelect.value = student.Stream || currentStreamConfig[0];
-        }
+            }
 
-        studentEditModal.classList.remove('hidden');
-    }
+            studentEditModal.classList.remove('hidden');
+            }
 
     // 8. NEW Function: Close the modal
     function closeStudentEditModal() {
