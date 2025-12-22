@@ -7534,39 +7534,63 @@ window.real_populate_session_dropdown = function () {
         });
     }
 
+// 4. Add Absentee Button Click (Robust Version)
+    if (addAbsenteeButton) {
+        addAbsenteeButton.addEventListener('click', () => {
+            // Ensure we have a selected student
+            if (!window.selectedAbsenteeStudent && !selectedAbsenteeStudent) {
+                console.warn("No student selected for absentee.");
+                return;
+            }
+            // robustly get the student object
+            const studentToAdd = window.selectedAbsenteeStudent || selectedAbsenteeStudent;
 
-    // 4. Add Absentee Button Click (Updated to Reset UI)
-    addAbsenteeButton.addEventListener('click', () => {
-        if (!selectedAbsenteeStudent) return;
-        
-        const sessionKey = sessionSelect.value;
-        let absentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
-        if (!absentees[sessionKey]) absentees[sessionKey] = [];
+            const sessionKey = sessionSelect.value;
+            if (!sessionKey) return; // Guard clause
 
-        // Check for duplicates
-        if (absentees[sessionKey].includes(selectedAbsenteeStudent['Register Number'])) {
-            alert("Student already in absentee list!");
-            return;
-        }
+            // Use the string 'absentees' directly if the constant isn't reliable
+            const storageKey = (typeof ABSENTEE_LIST_KEY !== 'undefined') ? ABSENTEE_LIST_KEY : 'absentees';
 
-        // Add to list
-        absentees[sessionKey].push(selectedAbsenteeStudent['Register Number']);
-        localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(absentees));
+            let absentees = JSON.parse(localStorage.getItem(storageKey) || '{}');
+            if (!absentees[sessionKey]) absentees[sessionKey] = [];
 
-        // Sync if cloud enabled
-        if(typeof syncSessionToCloud === 'function') syncSessionToCloud(sessionKey);
+            // Robust register number extraction
+            const regNo = studentToAdd['Register Number'] || studentToAdd.RegisterNo; 
+            if (!regNo) {
+                alert("Error: Student has no Register Number.");
+                return;
+            }
 
-        // Update List UI
-        loadAbsenteeList(sessionKey);
-        
-        // RESET SEARCH UI (Hide search, show "Add" button again)
-        absenteeSearchInput.value = '';
-        selectedStudentDetails.classList.add('hidden');
-        absenteeSearchSection.classList.add('hidden'); 
-        triggerSection.classList.remove('hidden'); 
-        
-        selectedAbsenteeStudent = null;
-    });
+            // Check for duplicates
+            if (absentees[sessionKey].includes(regNo)) {
+                alert("Student already in absentee list!");
+                return;
+            }
+
+            // Add to list
+            absentees[sessionKey].push(regNo);
+            localStorage.setItem(storageKey, JSON.stringify(absentees));
+
+            // Sync if cloud enabled
+            if(typeof syncSessionToCloud === 'function') syncSessionToCloud(sessionKey);
+
+            // Update List UI
+            if (typeof loadAbsenteeList === 'function') {
+                loadAbsenteeList(sessionKey);
+            }
+
+            // RESET SEARCH UI
+            if(absenteeSearchInput) absenteeSearchInput.value = '';
+            if(selectedStudentDetails) selectedStudentDetails.classList.add('hidden');
+            if(absenteeSearchSection) absenteeSearchSection.classList.add('hidden');
+            if(triggerSection) triggerSection.classList.remove('hidden');
+
+            // Reset selection
+            if(typeof selectedAbsenteeStudent !== 'undefined') selectedAbsenteeStudent = null;
+            if(typeof window.selectedAbsenteeStudent !== 'undefined') window.selectedAbsenteeStudent = null;
+        });
+    }
+    
     
 
     function loadAbsenteeList(sessionKey) {
