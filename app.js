@@ -7351,12 +7351,13 @@ window.real_populate_session_dropdown = function () {
   
    
 
-    // 1. Session Select Change
+   // 1. Session Select Change
     sessionSelect.addEventListener('change', () => {
         const sessionKey = sessionSelect.value;
         
         // Reset UI State
-        if(absenteeListContainer) absenteeListContainer.innerHTML = '';
+        // FIX: Use the correct variable name 'currentAbsenteeListDiv'
+        if(currentAbsenteeListDiv) currentAbsenteeListDiv.innerHTML = '';
         if(selectedStudentDetails) selectedStudentDetails.classList.add('hidden');
         if(absenteeSearchInput) absenteeSearchInput.value = '';
         
