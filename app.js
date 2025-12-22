@@ -1227,10 +1227,7 @@ function updateLocalSlotsFromStudents() {
     // NEW UI ELEMENTS
     const btnShowSearch = document.getElementById('btn-show-absentee-search');
     const btnCloseSearch = document.getElementById('btn-close-absentee-search');
-    const triggerSection = document.getElementById('add-absentee-trigger-section');
-    const absenteeSearchSection = document.getElementById('absentee-search-section');
-    const absenteeListSection = document.getElementById('absentee-list-section');
-    
+    const triggerSection = document.getElementById('add-absentee-trigger-section');    
 
     // --- (V58) Get references to QP Code elements ---
     const qpcodeLoader = document.getElementById('qpcode-loader');
