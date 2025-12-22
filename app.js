@@ -1224,11 +1224,6 @@ function updateLocalSlotsFromStudents() {
     const currentAbsenteeListDiv = document.getElementById('current-absentee-list');
     const generateAbsenteeReportButton = document.getElementById('generate-absentee-report-button');
 
-    // NEW UI ELEMENTS
-    const btnShowSearch = document.getElementById('btn-show-absentee-search');
-    const btnCloseSearch = document.getElementById('btn-close-absentee-search');
-    const triggerSection = document.getElementById('add-absentee-trigger-section');    
-
     // --- (V58) Get references to QP Code elements ---
     const qpcodeLoader = document.getElementById('qpcode-loader');
     const qpcodeContentWrapper = document.getElementById('qpcode-content-wrapper');
@@ -7351,55 +7346,30 @@ window.real_populate_session_dropdown = function () {
   
    
 
-   // 1. Session Select Change
     sessionSelect.addEventListener('change', () => {
         const sessionKey = sessionSelect.value;
-        
-        // Reset UI State
-        // FIX: Use the correct variable name 'currentAbsenteeListDiv'
-        if(currentAbsenteeListDiv) currentAbsenteeListDiv.innerHTML = '';
-        if(selectedStudentDetails) selectedStudentDetails.classList.add('hidden');
-        if(absenteeSearchInput) absenteeSearchInput.value = '';
-        
-        // Hide Search initially
-        if(absenteeSearchSection) absenteeSearchSection.classList.add('hidden');
-        
         if (sessionKey) {
-            // Show "Add" button and List
-            if(triggerSection) triggerSection.classList.remove('hidden');
-            if(absenteeListSection) absenteeListSection.classList.remove('hidden');
-            if(generateAbsenteeReportButton) generateAbsenteeReportButton.disabled = false;
-            
-            loadAbsenteeList(sessionKey);
-            if(typeof populateAbsenteeQpFilter === 'function') populateAbsenteeQpFilter(sessionKey);
-        } else {
-            // Hide everything if no session selected
-            if(triggerSection) triggerSection.classList.add('hidden');
-            if(absenteeListSection) absenteeListSection.classList.add('hidden');
-            if(generateAbsenteeReportButton) generateAbsenteeReportButton.disabled = true;
-            if(typeof populateAbsenteeQpFilter === 'function') populateAbsenteeQpFilter(null);
-        }
-        // clearSearch() is defined below in original code, or inline here:
-        if(absenteeResultsContainer) absenteeResultsContainer.classList.add('hidden');
-    });
-
-    // 2. Toggle Buttons Logic
-    if(btnShowSearch) {
-        btnShowSearch.addEventListener('click', () => {
             absenteeSearchSection.classList.remove('hidden');
-            triggerSection.classList.add('hidden'); // Hide the "Add" button while searching
-            if(absenteeSearchInput) absenteeSearchInput.focus();
-        });
-    }
+            absenteeListSection.classList.remove('hidden');
+            generateAbsenteeReportButton.disabled = false;
+            loadAbsenteeList(sessionKey);
 
-    if(btnCloseSearch) {
-        btnCloseSearch.addEventListener('click', () => {
+            // *** FIX: Populate the QP Filter Dropdown ***
+            populateAbsenteeQpFilter(sessionKey);
+            // ******************************************
+        } else {
             absenteeSearchSection.classList.add('hidden');
-            triggerSection.classList.remove('hidden'); // Show "Add" button again
-            if(absenteeSearchInput) absenteeSearchInput.value = '';
-            if(selectedStudentDetails) selectedStudentDetails.classList.add('hidden');
-        });
-    }
+            absenteeListSection.classList.add('hidden');
+            generateAbsenteeReportButton.disabled = true;
+            currentAbsenteeListDiv.innerHTML = "";
+
+            // Optional: Reset the filter if no session
+            if (typeof populateAbsenteeQpFilter === 'function') {
+                populateAbsenteeQpFilter(null);
+            }
+        }
+        clearSearch();
+    });
 
     absenteeSearchInput.addEventListener('input', () => {
         const query = absenteeSearchInput.value.trim().toUpperCase();
@@ -7532,64 +7502,25 @@ window.real_populate_session_dropdown = function () {
         });
     }
 
-// 4. Add Absentee Button Click (Robust Version)
-    if (addAbsenteeButton) {
-        addAbsenteeButton.addEventListener('click', () => {
-            // Ensure we have a selected student
-            if (!window.selectedAbsenteeStudent && !selectedAbsenteeStudent) {
-                console.warn("No student selected for absentee.");
-                return;
-            }
-            // robustly get the student object
-            const studentToAdd = window.selectedAbsenteeStudent || selectedAbsenteeStudent;
+    addAbsenteeButton.addEventListener('click', () => {
+        if (!selectedStudent) return;
 
-            const sessionKey = sessionSelect.value;
-            if (!sessionKey) return; // Guard clause
+        const sessionKey = sessionSelect.value;
+        const regNo = selectedStudent['Register Number'];
 
-            // Use the string 'absentees' directly if the constant isn't reliable
-            const storageKey = (typeof ABSENTEE_LIST_KEY !== 'undefined') ? ABSENTEE_LIST_KEY : 'absentees';
+        if (currentAbsenteeList.includes(regNo)) {
+            alert(`${regNo} is already on the absentee list.`);
+            clearSearch();
+            return;
+        }
 
-            let absentees = JSON.parse(localStorage.getItem(storageKey) || '{}');
-            if (!absentees[sessionKey]) absentees[sessionKey] = [];
-
-            // Robust register number extraction
-            const regNo = studentToAdd['Register Number'] || studentToAdd.RegisterNo; 
-            if (!regNo) {
-                alert("Error: Student has no Register Number.");
-                return;
-            }
-
-            // Check for duplicates
-            if (absentees[sessionKey].includes(regNo)) {
-                alert("Student already in absentee list!");
-                return;
-            }
-
-            // Add to list
-            absentees[sessionKey].push(regNo);
-            localStorage.setItem(storageKey, JSON.stringify(absentees));
-
-            // Sync if cloud enabled
-            if(typeof syncSessionToCloud === 'function') syncSessionToCloud(sessionKey);
-
-            // Update List UI
-            if (typeof loadAbsenteeList === 'function') {
-                loadAbsenteeList(sessionKey);
-            }
-
-            // RESET SEARCH UI
-            if(absenteeSearchInput) absenteeSearchInput.value = '';
-            if(selectedStudentDetails) selectedStudentDetails.classList.add('hidden');
-            if(absenteeSearchSection) absenteeSearchSection.classList.add('hidden');
-            if(triggerSection) triggerSection.classList.remove('hidden');
-
-            // Reset selection
-            if(typeof selectedAbsenteeStudent !== 'undefined') selectedAbsenteeStudent = null;
-            if(typeof window.selectedAbsenteeStudent !== 'undefined') window.selectedAbsenteeStudent = null;
-        });
-    }
-    
-    
+        // Add to list and save
+        currentAbsenteeList.push(regNo);
+        saveAbsenteeList(sessionKey);
+        renderAbsenteeList();
+        clearSearch();
+        syncSessionToCloud(sessionKey);
+    });
 
     function loadAbsenteeList(sessionKey) {
         const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
@@ -12981,15 +12912,14 @@ if (mainLoadCsvBtn) {
 
                 if (mode === 'exam') {
                     // Get the Exam Name
-                    // FIX: Check the student record ('s') for the updated name first!
-                    const foundName = s['Exam Name'] || getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
+                    const foundName = getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
 
                     // *** FILTER LOGIC ***
                     if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
                         return; // Skip if it doesn't match selected exam
                     }
                     groupKey = foundName;
-                    } else {
+                } else {
                     const sStr = document.getElementById('bill-start-date').value || "Start";
                     const eStr = document.getElementById('bill-end-date').value || "End";
                     groupKey = `Period: ${sStr} to ${eStr}`;
