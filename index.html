@@ -1484,96 +1484,71 @@
 
 
 
+<div id="view-absentees" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Mark Absentees</h1>
 
-
-                        
-                <div class="bg-white p-8 rounded-lg shadow-xl w-full">
-                    <h1 class="text-3xl font-bold text-gray-800 mb-6">Mark Absentees</h1>
-
-                    <div id="absentee-content-wrapper" class="hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label for="session-select" class="block text-sm font-medium text-gray-700 mb-1">Select
-                                    Exam Session:</label>
-                                <select id="session-select"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option value="">-- Select a Session --</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label for="absentee-qp-filter"
-                                    class="block text-sm font-medium text-gray-700 mb-1">Filter by QP Code
-                                    (Report):</label>
-                                <select id="absentee-qp-filter"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100 disabled:text-gray-400"
-                                    disabled>
-                                    <option value="all">All QP Codes (Bulk)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button id="generate-absentee-report-button"
-                            class="mt-6 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
-                            disabled>
-                            Generate Absentee Statement
-                        </button>
-
-                        <div id="absentee-search-section" class="mb-6 hidden">
-                            <label for="absentee-search" class="block text-sm font-medium text-gray-700 mb-1">Search
-                                Register Number:</label>
-                            <div class="autocomplete-container">
-                                <input type="text" id="absentee-search"
-                                    class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm"
-                                    placeholder="Type 3 chars...">
-                                <div id="autocomplete-results" class="autocomplete-results hidden"></div>
-                            </div>
-
-                            <div id="selected-student-details"
-                                class="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md hidden">
-                                <div class="font-medium text-gray-800" id="selected-student-name"></div>
-                                <div class="text-sm text-gray-600" id="selected-student-course"></div>
-                                <div class="text-sm text-gray-600" id="selected-student-room"></div>
-                                <button id="add-absentee-button"
-                                    class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-red-700">
-                                    Add to Absentee List
-                                </button>
-                            </div>
-                        </div>
-
-                        <div id="absentee-list-section" class="hidden">
-                            <div class="flex justify-between items-center mb-2">
-                                <h3 class="text-lg font-medium text-gray-900 flex items-center gap-2">
-                                    Current Absentee List
-                                    <span id="absentee-count-badge"
-                                        class="bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full border border-red-200">0</span>
-                                </h3>
-
-                                <button id="toggle-absentee-lock-btn"
-                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                                    </svg>
-                                    <span>List Locked</span>
-                                </button>
-                            </div>
-
-                            <div id="current-absentee-list"
-                                class="min-h-[50px] bg-gray-50 border border-gray-200 rounded-md p-3 space-y-2">
-                            </div>
-                        </div>
-
-
-                    </div>
-
-                    <div id="absentee-loader" class="text-center text-gray-600">
-                        <p>Please run a data extraction or load a corrected CSV on the "Reports" tab to enable this
-                            feature.</p>
-                    </div>
-
+            <div id="absentee-content-wrapper" class="hidden">
+                <div class="mb-4">
+                    <label for="session-select" class="block text-sm font-medium text-gray-700 mb-1">Select Exam Session:</label>
+                    <select id="session-select" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                        <option value="">-- Select a Session --</option>
+                    </select>
                 </div>
+
+                <div id="add-absentee-trigger-section" class="mb-4 hidden">
+                    <button id="btn-show-absentee-search" class="w-full inline-flex justify-center items-center rounded-md border border-dashed border-red-400 bg-red-50 py-2 px-4 text-sm font-medium text-red-700 shadow-sm hover:bg-red-100 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Absentee
+                    </button>
+                </div>
+
+                <div id="absentee-search-section" class="mb-6 hidden bg-gray-50 p-4 rounded-lg border border-gray-200 relative">
+                    <button id="btn-close-absentee-search" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600" title="Close Search">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+
+                    <label for="absentee-search" class="block text-sm font-medium text-gray-700 mb-1">Search Register Number:</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="absentee-search" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm" placeholder="Type 3 chars...">
+                        <div id="autocomplete-results" class="autocomplete-results hidden"></div>
+                    </div>
+
+                    <div id="selected-student-details" class="mt-3 p-3 bg-white border border-gray-200 rounded-md hidden shadow-sm">
+                        <div class="font-medium text-gray-800" id="selected-student-name"></div>
+                        <div class="text-sm text-gray-600" id="selected-student-course"></div>
+                        <div class="text-sm text-gray-600" id="selected-student-room"></div>
+                        
+                        <button id="add-absentee-button" class="mt-2 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-3 text-sm font-medium text-white shadow-sm hover:bg-red-700">
+                            Confirm & Add to List
+                        </button>
+                    </div>
+                </div>
+
+                <div id="absentee-list-section" class="hidden">
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Current Absentee List:</h3>
+                    <div id="current-absentee-list" class="min-h-[50px] bg-white border border-gray-200 rounded-md p-3 space-y-2 max-h-64 overflow-y-auto shadow-inner">
+                        <p class="text-gray-400 text-sm italic text-center py-2">No absentees marked yet.</p>
+                    </div>
+                </div>
+
+                <button id="generate-absentee-report-button" class="mt-6 w-full inline-flex justify-center items-center rounded-md border border-transparent bg-blue-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" disabled>
+                    Generate Absentee Statement
+                </button>
             </div>
 
+            <div id="absentee-loader" class="text-center text-gray-600">
+                <p>Please run a data extraction or load a corrected CSV to enable this feature.</p>
+            </div>
+        </div>
+    </div>
+
+                        
+                
 
 
 <div id="view-scribe-settings" class="container max-w-2xl mx-auto p-4 min-h-screen hidden">
