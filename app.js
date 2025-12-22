@@ -12911,15 +12911,16 @@ if (mainLoadCsvBtn) {
                 let groupKey = "Consolidated Bill";
 
                 if (mode === 'exam') {
-                    // Get the Exam Name
-                    const foundName = getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
+                        // Get the Exam Name
+                        // FIX: Check the student record ('s') for the updated name first!
+                        const foundName = s['Exam Name'] || getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
 
-                    // *** FILTER LOGIC ***
-                    if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
-                        return; // Skip if it doesn't match selected exam
-                    }
-                    groupKey = foundName;
-                } else {
+                        // *** FILTER LOGIC ***
+                        if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
+                            return; // Skip if it doesn't match selected exam
+                        }
+                        groupKey = foundName;
+                    } else {
                     const sStr = document.getElementById('bill-start-date').value || "Start";
                     const eStr = document.getElementById('bill-end-date').value || "End";
                     groupKey = `Period: ${sStr} to ${eStr}`;
