@@ -12023,110 +12023,109 @@ function parseCsvRaw(csvText, streamName = "Regular") {
         return str;
     }
 
-    // --- Helper: Load Data into App & Cloud ---
-    function loadStudentData(dataArray) {
-        // 1. Update Global Var
-        allStudentData = dataArray;
 
-        // 2. Update Data Stores
-        const jsonStr = JSON.stringify(dataArray);
-        jsonDataStore.innerHTML = jsonStr;
-        localStorage.setItem(BASE_DATA_KEY, jsonStr);
+// ==========================================
+// 🚀 SMART LOADER (Targeted Cloud Sync)
+// ==========================================
+window.loadStudentData = function(dataArray, sessionsToSync = null) {
+    // 1. Update Global Var
+    allStudentData = dataArray;
 
-        // 3. Update UI
-        updateUniqueStudentList();
-        populate_session_dropdown();
-        populate_qp_code_session_dropdown();
-        populate_room_allotment_session_dropdown();
-        updateDashboard();
+    // 2. Update Data Stores
+    const jsonStr = JSON.stringify(dataArray);
+    if(typeof jsonDataStore !== 'undefined') jsonDataStore.innerHTML = jsonStr;
+    localStorage.setItem(BASE_DATA_KEY, jsonStr);
 
-        // 4. ENABLE ALL TABS AND BUTTONS
-        disable_absentee_tab(false);
-        disable_qpcode_tab(false);
-        disable_room_allotment_tab(false);
-        disable_scribe_settings_tab(false);
-        disable_edit_data_tab(false);
+    // 3. Update UI
+    if(typeof updateUniqueStudentList === 'function') updateUniqueStudentList();
+    if(typeof populate_session_dropdown === 'function') populate_session_dropdown();
+    if(typeof populate_qp_code_session_dropdown === 'function') populate_qp_code_session_dropdown();
+    if(typeof populate_room_allotment_session_dropdown === 'function') populate_room_allotment_session_dropdown();
+    if(typeof updateDashboard === 'function') updateDashboard();
 
-        // Enable Report Buttons
-        const reportBtns = [
-            'generate-report-button',
-            'generate-daywise-report-button',
-            'generate-qpaper-report-button',
-            'generate-qp-distribution-report-button',
-            'generate-scribe-report-button',
-            'generate-scribe-proforma-button',
-            'generate-invigilator-report-button',
-            'generate-absentee-report-button'
-        ];
+    // 4. ENABLE ALL TABS AND BUTTONS
+    if(typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
+    if(typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
+    if(typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
+    if(typeof disable_scribe_settings_tab === 'function') disable_scribe_settings_tab(false);
+    if(typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
+    if(typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
 
-        reportBtns.forEach(id => {
-            const btn = document.getElementById(id);
-            if (btn) btn.disabled = false;
-        });
+    // Enable Report Buttons
+    const reportBtns = [
+        'generate-report-button',
+        'generate-daywise-report-button',
+        'generate-qpaper-report-button',
+        'generate-qp-distribution-report-button',
+        'generate-scribe-report-button',
+        'generate-scribe-proforma-button',
+        'generate-invigilator-report-button',
+        'generate-absentee-report-button'
+    ];
+    reportBtns.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = false;
+    });
 
-        // 5. MODULAR SYNC (V2) - Sync all affected sessions
+    // 5. SMART SYNC LOGIC (The Fix)
+    // If we provided a specific set of sessions (from PDF/CSV), ONLY sync those.
+    if (sessionsToSync && sessionsToSync.size > 0) {
         if (typeof syncSessionToCloud === 'function') {
-            // We use an IIFE (Immediately Invoked Function Expression) to handle async inside this sync function
+            console.log(`☁️ Smart Sync: Uploading only ${sessionsToSync.size} modified session(s)...`);
+            
             (async () => {
-                updateSyncStatus("Analyzing sessions...", "neutral");
-                
-                // 1. Identify all unique sessions in the loaded data
-                const sessionsToSync = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-                
-                // 2. Iterate and sync each session document individually
                 let count = 0;
                 for (const sessionKey of sessionsToSync) {
                     count++;
                     updateSyncStatus(`Syncing ${count}/${sessionsToSync.size}: ${sessionKey}`, "neutral");
                     await syncSessionToCloud(sessionKey);
+                    // Small delay to prevent network congestion
+                    await new Promise(r => setTimeout(r, 200));
                 }
-
-                // 3. Ensure global slots/counts are updated
+                // Ensure global slots/counts are updated
                 if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots');
-
-                updateSyncStatus("Import & Sync Complete", "success");
+                
+                updateSyncStatus("Smart Sync Complete", "success");
             })();
         }
-
-        // 6. Feedback
-
-        // 6. Feedback
-        if (mainCsvStatus) {
-            mainCsvStatus.textContent = `Success! Loaded ${allStudentData.length} records.`;
-            mainCsvStatus.className = "text-sm font-medium text-green-600";
-        }
-
-        // [REMOVED] Step 7. CSV Download Logic
-        // This prevents the "Option 2" button from being overwritten with total data.
+    } else {
+        console.log("☁️ Local Load Complete. No automatic cloud sync triggered.");
     }
 
-   // ==========================================
-// 🐍 PYTHON INTEGRATION (Connects PDF to Interactive Merge)
+    // 6. Feedback
+    const mainCsvStatus = document.getElementById('main-csv-status'); // Ensure ID matches your HTML
+    if (mainCsvStatus) {
+        mainCsvStatus.textContent = `Success! Loaded ${allStudentData.length} records.`;
+        mainCsvStatus.className = "text-sm font-medium text-green-600";
+    }
+};
+
+    
+
+// ==========================================
+// 🐍 PYTHON INTEGRATION (With Write-Saver Logic)
 // ==========================================
 window.handlePythonExtraction = function (jsonString) {
     console.log("Received data from Python...");
 
-    // 1. GET GLOBAL SETTINGS
     const examSelect = document.getElementById('upload-exam-select');
     const streamSelect = document.getElementById('global-stream-select');
     const selectedExamName = examSelect ? examSelect.value : "";
     const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
-    // 2. VALIDATION
     if (!selectedExamName) {
-        alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the 'Upload Configuration' box above so we can tag these students.");
+        alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
         return;
     }
 
     try {
         let newJsonData = JSON.parse(jsonString);
-
         if (newJsonData.length === 0) {
-            alert("Extraction completed, but no student data was found.");
+            alert("No student data found in PDF.");
             return;
         }
 
-        // 3. INJECT METADATA & NORMALIZE
+        // 1. Normalize & Tag Data
         newJsonData = newJsonData.map(item => ({
             ...item,
             "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
@@ -12134,74 +12133,69 @@ window.handlePythonExtraction = function (jsonString) {
             "Exam Name": selectedExamName
         }));
 
-        // --- 🟢 INTERACTIVE MERGE LOGIC START (Same as CSV) 🟢 ---
-
-        // 4. DEFINE SCOPE (Course + Date)
-        // We only care about matching existing data for the exams present in this new batch.
+        // 2. Identify Affected Sessions (The "Write-Saver")
+        // We create a list of ONLY the sessions present in this new PDF.
+        const affectedSessions = new Set();
         const scopesToUpdate = new Set();
+
         newJsonData.forEach(s => {
-            if (s.Course && s.Date) {
+            if (s.Course && s.Date && s.Time) {
+                // Scope for Merge Logic (Course + Date)
                 scopesToUpdate.add(`${s.Course}|${s.Date}`);
+                
+                // Scope for Cloud Sync (Date + Time)
+                affectedSessions.add(`${s.Date} | ${s.Time}`);
             }
         });
 
-        // 5. Get Current DB
+        // 3. Merge Logic (Interactive Diff)
         const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
-
-        // A. IRRELEVANT DATA (Exams not in this file) -> Keep 100%
         const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
-
-        // B. RELEVANT DATA (Old version of exams in this file) -> Compare these
         const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
 
-        // 6. CALCULATE DIFF
         const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
         const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
 
-        // A. UPDATES (Present in both) - Automatically take NEW version
         const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
-
-        // B. ADDS (In File, not in DB)
         const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
-
-        // C. DELETES (In DB, missing from File)
         const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
 
-        // 7. INTERACTIVE PROMPTS
         let finalBatch = [...commonStudents];
 
-        // Prompt 1: Additions
+        // Prompts
         if (potentialAdds.length > 0) {
-            const confirmMsg = `🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this PDF.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`;
-            if (confirm(confirmMsg)) {
+            if (confirm(`Found ${potentialAdds.length} new students. Add them?`)) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
         }
-
-        // Prompt 2: Deletions
         if (potentialDeletes.length > 0) {
-            const confirmMsg = `🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this PDF.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`;
-            if (!confirm(confirmMsg)) {
-                // User said Cancel (Keep), so put them back
+            if (confirm(`Found ${potentialDeletes.length} missing students (previously in database). Delete them from system?`)) {
+                // Do nothing, they are excluded from finalBatch. 
+                // If user clicks Cancel (false), we keep them:
+            } else {
                 finalBatch = finalBatch.concat(potentialDeletes);
             }
         }
 
-        // 8. FINAL MERGE & SAVE
-        // Merge ignored data + the resolved batch
+        // 4. Final Data Construction
         const finalData = [...ignoredData, ...finalBatch];
 
-        // Call the loader with the FINAL resolved list
-        // (This function handles sorting, saving to localStorage, and refreshing UI)
-        loadStudentData(finalData);
-
-        alert(`✅ PDF Processed Successfully!\n\n• Updated: ${scopesToUpdate.size} Session(s)\n• Total Students: ${finalData.length}`);
+        // 5. Call Loader with Targeted Sync
+        // We pass 'affectedSessions' so the system knows to ONLY sync those specific dates/times.
+        window.loadStudentData(finalData, affectedSessions);
+        
+        alert(`✅ PDF Processed!\n\n• Updated Database\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
 
     } catch (e) {
         console.error("Bridge Error:", e);
-        alert("Error processing extracted data: " + e.message);
+        alert("Error processing data: " + e.message);
     }
 };
+
+
+
+
+    
 
 
     // ==========================================
