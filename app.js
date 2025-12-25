@@ -11917,77 +11917,87 @@ if (mainLoadCsvBtn) {
         });
     }
 
-    // --- Helper: Parse CSV String to JSON (Smart Stream & Source) ---
-    function parseCsvRaw(csvText, streamName = "Regular") {
-        const lines = csvText.trim().split('\n');
-        const headersLine = lines.shift().trim();
-        const headers = headersLine.split(',');
 
-        const dateIndex = headers.indexOf('Date');
-        const timeIndex = headers.indexOf('Time');
-        const courseIndex = headers.indexOf('Course');
-        const regNumIndex = headers.indexOf('Register Number');
-        const nameIndex = headers.indexOf('Name');
-        const streamIndex = headers.indexOf('Stream');
-        const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
+// --- Helper: Parse CSV String to JSON (Smart Stream & Source) ---
+function parseCsvRaw(csvText, streamName = "Regular") {
+    const lines = csvText.trim().split('\n');
+    const headersLine = lines.shift().trim();
+    const headers = headersLine.split(',');
 
-        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-            throw new Error("Missing required headers (Register Number, Name, Course)");
-        }
+    const dateIndex = headers.indexOf('Date');
+    const timeIndex = headers.indexOf('Time');
+    const courseIndex = headers.indexOf('Course');
+    const regNumIndex = headers.indexOf('Register Number');
+    const nameIndex = headers.indexOf('Name');
+    const streamIndex = headers.indexOf('Stream');
+    const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
 
-        const parsedData = [];
-
-        for (const line of lines) {
-            if (!line.trim()) continue;
-
-            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-
-            if (values.length === headers.length) {
-
-                // 1. Stream Priority
-                let rowStream = streamName;
-                if (streamIndex !== -1) {
-                    const csvValue = values[streamIndex];
-                    if (csvValue && csvValue.trim() !== "") {
-                        rowStream = csvValue.trim();
-                    }
-                }
-
-                // 2. Source File Priority (Capture or Default)
-                let rowSource = "Manual Upload";
-                if (sourceIndex !== -1) {
-                    const sourceVal = values[sourceIndex];
-                    if (sourceVal && sourceVal.trim() !== "") {
-                        rowSource = sourceVal.trim();
-                    }
-                }
-
-                parsedData.push({
-                    'Date': values[dateIndex],
-                    'Time': cleanTime, // <--- USE NORMALIZED TIME
-                    'Course': values[courseIndex],
-                    'Register Number': values[regNumIndex],
-                    'Name': values[nameIndex],
-                    'Stream': rowStream,
-                    'Source File': rowSource // <--- NEW Field
-                });
-            }
-        }
-
-        // Sort the new data
-        try {
-            parsedData.sort((a, b) => {
-                const keyA = getJsSortKey(a);
-                const keyB = getJsSortKey(b);
-                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
-                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
-                return keyA.courseName.localeCompare(keyB.courseName);
-            });
-        } catch (e) { console.warn("Sort failed", e); }
-
-        return parsedData;
+    if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+        throw new Error("Missing required headers (Register Number, Name, Course)");
     }
+
+    const parsedData = [];
+
+    for (const line of lines) {
+        if (!line.trim()) continue;
+        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+        const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+
+        if (values.length === headers.length) {
+            // 1. Stream Priority
+            let rowStream = streamName;
+            if (streamIndex !== -1) {
+                const csvValue = values[streamIndex];
+                if (csvValue && csvValue.trim() !== "") {
+                    rowStream = csvValue.trim();
+                }
+            }
+
+            // 2. Source File Priority (Capture or Default)
+            let rowSource = "Manual Upload";
+            if (sourceIndex !== -1) {
+                const sourceVal = values[sourceIndex];
+                if (sourceVal && sourceVal.trim() !== "") {
+                    rowSource = sourceVal.trim();
+                }
+            }
+
+            // 🟢 FIX: Define cleanTime using the helper function
+            const rawTime = values[timeIndex];
+            const cleanTime = (typeof normalizeTime === 'function') ? normalizeTime(rawTime) : rawTime;
+
+            parsedData.push({
+                'Date': values[dateIndex],
+                'Time': cleanTime, // <--- Now this variable exists!
+                'Course': values[courseIndex],
+                'Register Number': values[regNumIndex],
+                'Name': values[nameIndex],
+                'Stream': rowStream,
+                'Source File': rowSource
+            });
+        }
+    }
+
+    // Sort the new data
+    try {
+        parsedData.sort((a, b) => {
+            const keyA = getJsSortKey(a);
+            const keyB = getJsSortKey(b);
+            if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+            if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
+            return keyA.courseName.localeCompare(keyB.courseName);
+        });
+    } catch (e) {
+        console.warn("Sort failed", e);
+    }
+
+    return parsedData;
+}
+    
+
+
+
+    
     // --- Helper: Convert JSON Data to CSV String (With Source File) ---
     function convertToCSV(objArray) {
         const array = typeof objArray != 'object' ? JSON.parse(objArray) : objArray;
