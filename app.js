@@ -597,7 +597,7 @@ function updateLocalSlotsFromStudents() {
                     reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
-                    isLocked: false,
+                    isLocked: true, // 🟢 CHANGED: Now Locked by Default
                     scribeCount: stats.totalScribes,
                     studentCount: stats.totalStudents
                 };
