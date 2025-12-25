@@ -7128,139 +7128,120 @@ if (toggleButton && sidebar) {
 
         return { dateObj, timeObj, courseName };
     }
-    // V33: This function parses the CSV and overwrites the data stores
-    function parseCsvAndLoadData(csvText) {
-        try {
-            const lines = csvText.trim().split('\n');
-            const headersLine = lines.shift().trim();
-            const headers = headersLine.split(',');
+   // V33: PARSE CSV AND SMART MERGE (Fixes Overwrite Issue)
+function parseCsvAndLoadData(csvText) {
+    try {
+        const lines = csvText.trim().split('\n');
+        const headersLine = lines.shift().trim();
+        const headers = headersLine.split(',');
 
-            // Find indices, this is more robust
-            const dateIndex = headers.indexOf('Date');
-            const timeIndex = headers.indexOf('Time');
-            const courseIndex = headers.indexOf('Course');
-            const regNumIndex = headers.indexOf('Register Number');
-            const nameIndex = headers.indexOf('Name');
+        // Find indices
+        const dateIndex = headers.indexOf('Date');
+        const timeIndex = headers.indexOf('Time');
+        const courseIndex = headers.indexOf('Course');
+        const regNumIndex = headers.indexOf('Register Number');
+        const nameIndex = headers.indexOf('Name');
 
-            if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-                csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
-                csvLoadStatus.classList.add('text-red-600');
-                csvLoadStatus.classList.remove('text-green-600');
-                // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
-                return;
-            }
-
-            const jsonData = [];
-            const qPaperSummary = {}; // Use an object for quick lookup
-
-            for (const line of lines) {
-                if (!line.trim()) continue;
-
-                // Regex parser that handles quoted fields (commas inside courses)
-                const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-                const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, '')); // Trim and remove surrounding quotes
-
-                if (values.length !== headers.length) {
-                    console.warn("Skipping malformed CSV line:", line);
-                    continue;
-                }
-
-                const student = {
-                    'Date': values[dateIndex],
-                    'Time': values[timeIndex],
-                    'Course': values[courseIndex], // V60: This name should be normalized already
-                    'Register Number': values[regNumIndex],
-                    'Name': values[nameIndex]
-                };
-
-                jsonData.push(student);
-
-                // --- Regenerate Q-Paper Summary ---
-                const key = `${student.Date}_${student.Time}_${student.Course}`;
-                if (!qPaperSummary[key]) {
-                    qPaperSummary[key] = {
-                        Date: student.Date,
-                        Time: student.Time,
-                        Course: student.Course,
-                        'Student Count': 0
-                    };
-                }
-                qPaperSummary[key]['Student Count']++;
-            }
-
-            const qPaperArray = Object.values(qPaperSummary);
-
-            // --- NEW: Sort the loaded CSV data by Date, Time, and Course ---
-            try {
-                jsonData.sort((a, b) => {
-                    const keyA = getJsSortKey(a);
-                    const keyB = getJsSortKey(b);
-
-                    if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) {
-                        return keyA.dateObj - keyB.dateObj;
-                    }
-                    if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) {
-                        return keyA.timeObj - keyB.timeObj;
-                    }
-                    return keyA.courseName.localeCompare(keyB.courseName);
-                });
-            } catch (e) {
-                console.error("Error during CSV sorting:", e);
-                // Don't block, just log the error
-            }
-            // --- END NEW ---
-
-            // --- Update Data Stores ---
-            jsonDataStore.innerHTML = JSON.stringify(jsonData);
-            qPaperDataStore.innerHTML = JSON.stringify(qPaperArray);
-
-            // V65: Save the base data to localStorage
-            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(jsonData));
-
-            // --- Update UI ---
-            csvLoadStatus.textContent = `Successfully loaded and parsed ${jsonData.length} student records.`;
-            csvLoadStatus.classList.remove('text-red-600');
-            csvLoadStatus.classList.add('text-green-600');
-
-            // Enable report buttons
-            generateReportButton.disabled = false;
-            generateQPaperReportButton.disabled = false;
-            generateQpDistributionReportButton.disabled = false; // <-- ADD THIS
-            generateDaywiseReportButton.disabled = false;
-            generateScribeReportButton.disabled = false; // <-- NEW
-            generateScribeProformaButton.disabled = false; // <-- ADD THIS
-            generateInvigilatorReportButton.disabled = false; // <-- ADD THIS
-
-            // V56: Enable and populate absentee tab
-            disable_absentee_tab(false);
-            populate_session_dropdown();
-
-            // V61: Enable and populate QP Code tab
-            disable_qpcode_tab(false);
-            populate_qp_code_session_dropdown();
-
-            // Enable and populate Room Allotment tab
-            disable_room_allotment_tab(false);
-            populate_room_allotment_session_dropdown();
-
-            // *** NEW: Enable Scribe Tabs ***
-            disable_scribe_settings_tab(false); // MODIFIED
-            loadGlobalScribeList();
-            // *****************************
-            // *** NEW: Enable Edit Data Tab ***
-            disable_edit_data_tab(false);
-            // *********************************
-            // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
-
-
-        } catch (e) {
-            console.error("Error parsing CSV:", e);
-            csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
+        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+            csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
             csvLoadStatus.classList.add('text-red-600');
-            csvLoadStatus.classList.remove('text-green-600');
-            // *** WORKFLOW FIX: Removed logic that re-enables PDF buttons ***
+            return;
         }
+
+        const newJsonData = [];
+        
+        // Parse New Data
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            // Regex for quoted CSV fields
+            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+
+            if (values.length !== headers.length) continue;
+
+            const student = {
+                'Date': values[dateIndex],
+                'Time': values[timeIndex],
+                'Course': values[courseIndex],
+                'Register Number': values[regNumIndex],
+                'Name': values[nameIndex]
+            };
+            newJsonData.push(student);
+        }
+
+        // --- 🟢 SMART MERGE LOGIC START 🟢 ---
+        
+        // 1. Get Existing Data
+        const existingData = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
+        
+        // 2. Identify "Scopes" to Update (Course + Date)
+        // We assume the new file contains the *complete and latest* list for these specific exams.
+        const scopesToUpdate = new Set();
+        newJsonData.forEach(s => {
+            if (s.Course && s.Date) {
+                scopesToUpdate.add(`${s.Course}|${s.Date}`);
+            }
+        });
+
+        // 3. Filter Existing Data
+        // Keep a record ONLY if it does NOT belong to the exams we are currently updating.
+        const keptData = existingData.filter(s => {
+            const key = `${s.Course}|${s.Date}`;
+            return !scopesToUpdate.has(key);
+        });
+
+        // 4. Combine (Old Data + New Data)
+        const mergedData = [...keptData, ...newJsonData];
+        
+        // --- 🔴 SMART MERGE LOGIC END 🔴 ---
+
+        // Sort Data
+        try {
+            mergedData.sort((a, b) => {
+                const keyA = getJsSortKey(a);
+                const keyB = getJsSortKey(b);
+                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
+                return keyA.courseName.localeCompare(keyB.courseName);
+            });
+        } catch (e) { console.error("Sort error:", e); }
+
+        // Update Global Vars & Storage
+        allStudentData = mergedData; // Update global variable
+        jsonDataStore.innerHTML = JSON.stringify(allStudentData);
+        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+
+        // Update UI
+        csvLoadStatus.textContent = `Successfully merged ${newJsonData.length} records. Total students: ${allStudentData.length}.`;
+        csvLoadStatus.classList.remove('text-red-600');
+        csvLoadStatus.classList.add('text-green-600');
+
+        // Enable Buttons & Tabs
+        generateReportButton.disabled = false;
+        generateQPaperReportButton.disabled = false;
+        generateQpDistributionReportButton.disabled = false;
+        generateDaywiseReportButton.disabled = false;
+        generateScribeReportButton.disabled = false;
+        generateScribeProformaButton.disabled = false;
+        generateInvigilatorReportButton.disabled = false;
+
+        disable_absentee_tab(false);
+        populate_session_dropdown();
+        disable_qpcode_tab(false);
+        populate_qp_code_session_dropdown();
+        disable_room_allotment_tab(false);
+        populate_room_allotment_session_dropdown();
+        disable_scribe_settings_tab(false);
+        loadGlobalScribeList();
+        disable_edit_data_tab(false);
+        updateDashboard(); // Update Dashboard Stats
+
+    } catch (e) {
+        console.error("Error parsing CSV:", e);
+        csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
+        csvLoadStatus.classList.add('text-red-600');
     }
+}
 
 window.real_populate_session_dropdown = function () {
         try {
