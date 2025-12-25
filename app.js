@@ -12090,17 +12090,15 @@ if (mainLoadCsvBtn) {
         // This prevents the "Option 2" button from being overwritten with total data.
     }
 
-    // ==========================================
-    // 🐍 PYTHON INTEGRATION (Connects PDF to Merge Logic)
-    // ==========================================
-
-    window.handlePythonExtraction = function (jsonString) {
+   // ==========================================
+// 🐍 PYTHON INTEGRATION (Connects PDF to Interactive Merge)
+// ==========================================
+window.handlePythonExtraction = function (jsonString) {
     console.log("Received data from Python...");
-    
+
     // 1. GET GLOBAL SETTINGS
     const examSelect = document.getElementById('upload-exam-select');
     const streamSelect = document.getElementById('global-stream-select');
-    
     const selectedExamName = examSelect ? examSelect.value : "";
     const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
@@ -12111,25 +12109,83 @@ if (mainLoadCsvBtn) {
     }
 
     try {
-        let parsedData = JSON.parse(jsonString);
+        let newJsonData = JSON.parse(jsonString);
 
-        if (parsedData.length === 0) {
+        if (newJsonData.length === 0) {
             alert("Extraction completed, but no student data was found.");
             return;
         }
 
-        // 3. INJECT METADATA (Time normalization + Stream + Exam Name)
-        parsedData = parsedData.map(item => ({
+        // 3. INJECT METADATA & NORMALIZE
+        newJsonData = newJsonData.map(item => ({
             ...item,
             "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
-            "Stream": selectedStream,        // <--- Tag Stream
-            "Exam Name": selectedExamName    // <--- Tag Exam Name
+            "Stream": selectedStream,
+            "Exam Name": selectedExamName
         }));
 
-        // 4. LOAD DATA (Calls existing loader)
-        // Note: You might want to run the same duplicate check logic as CSV here, 
-        // but for now, we load directly as per previous PDF flow.
-        loadStudentData(parsedData);
+        // --- 🟢 INTERACTIVE MERGE LOGIC START (Same as CSV) 🟢 ---
+
+        // 4. DEFINE SCOPE (Course + Date)
+        // We only care about matching existing data for the exams present in this new batch.
+        const scopesToUpdate = new Set();
+        newJsonData.forEach(s => {
+            if (s.Course && s.Date) {
+                scopesToUpdate.add(`${s.Course}|${s.Date}`);
+            }
+        });
+
+        // 5. Get Current DB
+        const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
+
+        // A. IRRELEVANT DATA (Exams not in this file) -> Keep 100%
+        const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
+
+        // B. RELEVANT DATA (Old version of exams in this file) -> Compare these
+        const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
+
+        // 6. CALCULATE DIFF
+        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
+        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+
+        // A. UPDATES (Present in both) - Automatically take NEW version
+        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
+
+        // B. ADDS (In File, not in DB)
+        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
+
+        // C. DELETES (In DB, missing from File)
+        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+
+        // 7. INTERACTIVE PROMPTS
+        let finalBatch = [...commonStudents];
+
+        // Prompt 1: Additions
+        if (potentialAdds.length > 0) {
+            const confirmMsg = `🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this PDF.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`;
+            if (confirm(confirmMsg)) {
+                finalBatch = finalBatch.concat(potentialAdds);
+            }
+        }
+
+        // Prompt 2: Deletions
+        if (potentialDeletes.length > 0) {
+            const confirmMsg = `🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this PDF.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`;
+            if (!confirm(confirmMsg)) {
+                // User said Cancel (Keep), so put them back
+                finalBatch = finalBatch.concat(potentialDeletes);
+            }
+        }
+
+        // 8. FINAL MERGE & SAVE
+        // Merge ignored data + the resolved batch
+        const finalData = [...ignoredData, ...finalBatch];
+
+        // Call the loader with the FINAL resolved list
+        // (This function handles sorting, saving to localStorage, and refreshing UI)
+        loadStudentData(finalData);
+
+        alert(`✅ PDF Processed Successfully!\n\n• Updated: ${scopesToUpdate.size} Session(s)\n• Total Students: ${finalData.length}`);
 
     } catch (e) {
         console.error("Bridge Error:", e);
