@@ -7128,14 +7128,16 @@ if (toggleButton && sidebar) {
 
         return { dateObj, timeObj, courseName };
     }
-   // V33: PARSE CSV AND SMART MERGE (Fixes Overwrite Issue)
+
+
+// V34: INTERACTIVE DIFF MERGE (With Add/Delete Permissions)
 function parseCsvAndLoadData(csvText) {
     try {
+        // --- 1. PARSE THE CSV ---
         const lines = csvText.trim().split('\n');
         const headersLine = lines.shift().trim();
         const headers = headersLine.split(',');
 
-        // Find indices
         const dateIndex = headers.indexOf('Date');
         const timeIndex = headers.indexOf('Time');
         const courseIndex = headers.indexOf('Course');
@@ -7143,39 +7145,34 @@ function parseCsvAndLoadData(csvText) {
         const nameIndex = headers.indexOf('Name');
 
         if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-            csvLoadStatus.textContent = "Error: CSV must contain 'Register Number', 'Name', and 'Course' headers.";
+            csvLoadStatus.textContent = "Error: Missing required headers (Register Number, Name, Course).";
             csvLoadStatus.classList.add('text-red-600');
             return;
         }
 
         const newJsonData = [];
-        
-        // Parse New Data
         for (const line of lines) {
             if (!line.trim()) continue;
-            // Regex for quoted CSV fields
             const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
             const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-
             if (values.length !== headers.length) continue;
 
-            const student = {
+            newJsonData.push({
                 'Date': values[dateIndex],
                 'Time': values[timeIndex],
                 'Course': values[courseIndex],
                 'Register Number': values[regNumIndex],
                 'Name': values[nameIndex]
-            };
-            newJsonData.push(student);
+            });
         }
 
-        // --- 🟢 SMART MERGE LOGIC START 🟢 ---
-        
-        // 1. Get Existing Data
-        const existingData = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
-        
-        // 2. Identify "Scopes" to Update (Course + Date)
-        // We assume the new file contains the *complete and latest* list for these specific exams.
+        if (newJsonData.length === 0) {
+            alert("No valid data found in file.");
+            return;
+        }
+
+        // --- 2. DEFINE SCOPE (Course + Date) ---
+        // We only care about matching existing data for the exams present in this file.
         const scopesToUpdate = new Set();
         newJsonData.forEach(s => {
             if (s.Course && s.Date) {
@@ -7183,48 +7180,77 @@ function parseCsvAndLoadData(csvText) {
             }
         });
 
-        // 3. Filter Existing Data
-        // Keep a record ONLY if it does NOT belong to the exams we are currently updating.
-        const keptData = existingData.filter(s => {
-            const key = `${s.Course}|${s.Date}`;
-            return !scopesToUpdate.has(key);
+        // Get current DB data
+        const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
+
+        // Split DB into:
+        // A. IRRELEVANT DATA (Exams not in this file) -> We keep these 100%
+        const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
+        
+        // B. RELEVANT DATA (Old version of exams in this file) -> We compare these
+        const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
+
+
+        // --- 3. CALCULATE DIFF ---
+        // Create Sets of Register Numbers for fast lookup
+        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
+        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+
+        // A. Students to UPDATE (Present in both) - We automatically take the NEW version (to fix times/names)
+        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
+
+        // B. Students to ADD (In File, not in DB)
+        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
+
+        // C. Students to DELETE (In DB, missing from File)
+        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+
+
+        // --- 4. INTERACTIVE PROMPTS ---
+        
+        let finalBatch = [...commonStudents]; // Start with the updates
+
+        // PROMPT 1: ADDITIONS
+        if (potentialAdds.length > 0) {
+            const userWantsToAdd = confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`);
+            if (userWantsToAdd) {
+                finalBatch = finalBatch.concat(potentialAdds);
+            }
+        }
+
+        // PROMPT 2: DELETIONS
+        if (potentialDeletes.length > 0) {
+            const userWantsToDelete = confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
+            
+            if (!userWantsToDelete) {
+                // User said "Cancel" (Don't delete), so we put the old records back into the batch
+                finalBatch = finalBatch.concat(potentialDeletes);
+            }
+            // If User said "OK", we simply do nothing (they are left out of finalBatch, effectively deleted)
+        }
+
+
+        // --- 5. FINAL MERGE & SAVE ---
+        allStudentData = [...ignoredData, ...finalBatch];
+
+        // Sort
+        allStudentData.sort((a, b) => {
+            const keyA = getJsSortKey(a);
+            const keyB = getJsSortKey(b);
+            if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+            return keyA.courseName.localeCompare(keyB.courseName);
         });
 
-        // 4. Combine (Old Data + New Data)
-        const mergedData = [...keptData, ...newJsonData];
-        
-        // --- 🔴 SMART MERGE LOGIC END 🔴 ---
-
-        // Sort Data
-        try {
-            mergedData.sort((a, b) => {
-                const keyA = getJsSortKey(a);
-                const keyB = getJsSortKey(b);
-                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
-                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
-                return keyA.courseName.localeCompare(keyB.courseName);
-            });
-        } catch (e) { console.error("Sort error:", e); }
-
-        // Update Global Vars & Storage
-        allStudentData = mergedData; // Update global variable
+        // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
         localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
         // Update UI
-        csvLoadStatus.textContent = `Successfully merged ${newJsonData.length} records. Total students: ${allStudentData.length}.`;
+        csvLoadStatus.textContent = `Processed. Total Students: ${allStudentData.length}`;
         csvLoadStatus.classList.remove('text-red-600');
         csvLoadStatus.classList.add('text-green-600');
-
-        // Enable Buttons & Tabs
-        generateReportButton.disabled = false;
-        generateQPaperReportButton.disabled = false;
-        generateQpDistributionReportButton.disabled = false;
-        generateDaywiseReportButton.disabled = false;
-        generateScribeReportButton.disabled = false;
-        generateScribeProformaButton.disabled = false;
-        generateInvigilatorReportButton.disabled = false;
-
+        
+        // Refresh Everything
         disable_absentee_tab(false);
         populate_session_dropdown();
         disable_qpcode_tab(false);
@@ -7234,14 +7260,21 @@ function parseCsvAndLoadData(csvText) {
         disable_scribe_settings_tab(false);
         loadGlobalScribeList();
         disable_edit_data_tab(false);
-        updateDashboard(); // Update Dashboard Stats
+        
+        // Re-enable Report Buttons
+        document.querySelectorAll('#view-reports button').forEach(btn => btn.disabled = false);
+
+        updateDashboard();
+        
+        alert("✅ Data Processing Complete!");
 
     } catch (e) {
         console.error("Error parsing CSV:", e);
-        csvLoadStatus.textContent = "Error parsing CSV file. See console for details.";
+        csvLoadStatus.textContent = "Error parsing file.";
         csvLoadStatus.classList.add('text-red-600');
     }
 }
+    
 
 window.real_populate_session_dropdown = function () {
         try {
