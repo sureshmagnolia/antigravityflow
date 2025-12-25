@@ -14877,19 +14877,31 @@ if (btnSessionReschedule) {
         });
     }
 
+
 // ==========================================
-    // 🛡️ THE BUNKER: FULL BACKUP & RESTORE
+    // 🛡️ THE BUNKER: FULL BACKUP & RESTORE (FIXED)
     // ==========================================
 
     // 1. FULL BACKUP (Download JSON)
     if (backupDataButton) {
-        backupDataButton.addEventListener('click', () => {
+        // Remove old listeners to prevent duplicates
+        const newBackupBtn = backupDataButton.cloneNode(true);
+        backupDataButton.parentNode.replaceChild(newBackupBtn, backupDataButton);
+
+        newBackupBtn.addEventListener('click', () => {
             const backup = {};
             // Gather all data defined in your ALL_DATA_KEYS constant
-            ALL_DATA_KEYS.forEach(key => {
-                const val = localStorage.getItem(key);
-                if (val) backup[key] = val;
-            });
+            if (typeof ALL_DATA_KEYS !== 'undefined') {
+                ALL_DATA_KEYS.forEach(key => {
+                    const val = localStorage.getItem(key);
+                    if (val) backup[key] = val;
+                });
+            } else {
+                // Fallback if constant missing
+                Object.keys(localStorage).forEach(key => {
+                    if(key.startsWith('exam')) backup[key] = localStorage.getItem(key);
+                });
+            }
 
             // Create and download file
             const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -14904,62 +14916,61 @@ if (btnSessionReschedule) {
     }
 
     // 2. FULL RESTORE (Upload JSON)
-    if (restoreDataButton && restoreFileInput) {
-        // Link the button to the hidden file input
-        restoreDataButton.addEventListener('click', () => {
-            restoreFileInput.click();
-        });
+    // We attach the listener directly to the file input that the button clicks
+    const fullRestoreInput = document.getElementById('restore-file-input');
+    
+    if (fullRestoreInput) {
+        // Remove old listeners
+        const newInput = fullRestoreInput.cloneNode(true);
+        fullRestoreInput.parentNode.replaceChild(newInput, fullRestoreInput);
 
-        // Handle the file selection
-        restoreFileInput.addEventListener('change', (e) => {
+        newInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 try {
                     const data = JSON.parse(event.target.result);
                     
-                    // Validate: Check if it looks like our backup
                     if (!data || Object.keys(data).length === 0) {
-                        throw new Error("Empty or invalid file.");
+                        throw new Error("Invalid or empty backup file.");
                     }
 
-                    // Restore Data
+                    // Restore to Local Storage
                     let count = 0;
                     Object.keys(data).forEach(key => {
-                        // Only restore if it's a known app key (security) or just restore everything
-                        if (ALL_DATA_KEYS.includes(key) || key.startsWith('exam')) {
+                        // Restore known keys or all keys that look like app data
+                        if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
                             localStorage.setItem(key, data[key]);
                             count++;
                         }
                     });
 
-                    // Sync changes to cloud if online
+                    // Sync to Cloud (if online)
                     if (typeof syncDataToCloud === 'function' && count > 0) {
-                        // Trigger syncs for major sections
-                        syncDataToCloud('settings');
-                        syncDataToCloud('ops');
-                        syncDataToCloud('allocation');
-                        syncDataToCloud('slots');
+                        updateSyncStatus("Restoring Cloud...", "neutral");
+                        await syncDataToCloud('settings');
+                        await syncDataToCloud('ops');
+                        await syncDataToCloud('allocation');
+                        await syncDataToCloud('staff');
+                        await syncDataToCloud('slots');
                     }
 
-                    alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload to apply changes.`);
+                    alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
                     window.location.reload();
 
                 } catch (err) {
-                    console.error("Restore Error:", err);
-                    alert("❌ Restore Failed!\n\nThe file appears to be corrupt or not a valid ExamFlow backup.");
+                    console.error("Full Restore Error:", err);
+                    alert("❌ Restore Failed!\n\nThe file appears to be corrupt or invalid.\n" + err.message);
                 }
             };
             reader.readAsText(file);
             
-            // Reset input so you can select the same file again if needed
-            restoreFileInput.value = '';
+            // Reset input so same file can be selected again
+            newInput.value = '';
         });
     }
-
-
 
 
 
