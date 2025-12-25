@@ -14878,6 +14878,94 @@ if (btnSessionReschedule) {
     }
 
 // ==========================================
+    // 🛡️ THE BUNKER: FULL BACKUP & RESTORE
+    // ==========================================
+
+    // 1. FULL BACKUP (Download JSON)
+    if (backupDataButton) {
+        backupDataButton.addEventListener('click', () => {
+            const backup = {};
+            // Gather all data defined in your ALL_DATA_KEYS constant
+            ALL_DATA_KEYS.forEach(key => {
+                const val = localStorage.getItem(key);
+                if (val) backup[key] = val;
+            });
+
+            // Create and download file
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `ExamFlow_Full_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+    }
+
+    // 2. FULL RESTORE (Upload JSON)
+    if (restoreDataButton && restoreFileInput) {
+        // Link the button to the hidden file input
+        restoreDataButton.addEventListener('click', () => {
+            restoreFileInput.click();
+        });
+
+        // Handle the file selection
+        restoreFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    
+                    // Validate: Check if it looks like our backup
+                    if (!data || Object.keys(data).length === 0) {
+                        throw new Error("Empty or invalid file.");
+                    }
+
+                    // Restore Data
+                    let count = 0;
+                    Object.keys(data).forEach(key => {
+                        // Only restore if it's a known app key (security) or just restore everything
+                        if (ALL_DATA_KEYS.includes(key) || key.startsWith('exam')) {
+                            localStorage.setItem(key, data[key]);
+                            count++;
+                        }
+                    });
+
+                    // Sync changes to cloud if online
+                    if (typeof syncDataToCloud === 'function' && count > 0) {
+                        // Trigger syncs for major sections
+                        syncDataToCloud('settings');
+                        syncDataToCloud('ops');
+                        syncDataToCloud('allocation');
+                        syncDataToCloud('slots');
+                    }
+
+                    alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload to apply changes.`);
+                    window.location.reload();
+
+                } catch (err) {
+                    console.error("Restore Error:", err);
+                    alert("❌ Restore Failed!\n\nThe file appears to be corrupt or not a valid ExamFlow backup.");
+                }
+            };
+            reader.readAsText(file);
+            
+            // Reset input so you can select the same file again if needed
+            restoreFileInput.value = '';
+        });
+    }
+
+
+
+
+
+
+    
+// ==========================================
     // 🛠️ MODAL HELPERS (Fixes the "not a function" error)
     // ==========================================
     window.openModal = function(modalId) {
