@@ -3806,8 +3806,12 @@ if (toggleButton && sidebar) {
     // --- Update Dashboard Function (Global + Today + Smart Date Picker + Data Status) ---
     // [In app.js - Replace the existing updateDashboard function]
 
+
+// --- Update Dashboard Function (Remaining / Past / Total) ---
     function updateDashboard() {
         const dashContainer = document.getElementById('data-snapshot');
+        
+        // Target Elements
         const dashStudent = document.getElementById('dash-student-count');
         const dashCourse = document.getElementById('dash-course-count');
         const dashDay = document.getElementById('dash-day-count');
@@ -3828,29 +3832,74 @@ if (toggleButton && sidebar) {
             return;
         }
 
-        // 1. UPDATE GLOBAL STATS
-        const totalStudents = allStudentData.length;
-        const uniqueCourses = new Set(allStudentData.map(s => s.Course)).size;
-        const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
-        const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
-            const d1 = a.split('.').reverse().join('');
-            const d2 = b.split('.').reverse().join('');
-            return d1.localeCompare(d2);
+        // --- 1. CALCULATE METRICS (REMAINING / PAST / TOTAL) ---
+        
+        // A. Setup Dates
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Midnight today
+
+        // B. Filter Data
+        const upcomingData = []; // Date >= Today
+        const pastData = [];     // Date < Today
+
+        allStudentData.forEach(s => {
+            if (!s.Date) return;
+            // Parse DD.MM.YYYY
+            const [d, m, y] = s.Date.trim().split('.').map(Number);
+            const examDate = new Date(y, m - 1, d);
+            
+            if (examDate >= today) {
+                upcomingData.push(s);
+            } else {
+                pastData.push(s);
+            }
         });
 
-        if (dashStudent) dashStudent.textContent = totalStudents.toLocaleString();
-        if (dashCourse) dashCourse.textContent = uniqueCourses.toLocaleString();
-        if (dashDay) dashDay.textContent = uniqueDays.length.toLocaleString();
+        // C. Calculate Metrics
+        // 1. Students
+        const remStudents = upcomingData.length;
+        const pstStudents = pastData.length;
+        const totStudents = allStudentData.length;
+
+        // 2. Courses (Unique)
+        const remCourses = new Set(upcomingData.map(s => s.Course)).size;
+        const pstCourses = new Set(pastData.map(s => s.Course)).size;
+        const totCourses = new Set(allStudentData.map(s => s.Course)).size;
+
+        // 3. Days (Unique)
+        const remDays = new Set(upcomingData.map(s => s.Date)).size;
+        const pstDays = new Set(pastData.map(s => s.Date)).size;
+        const totDays = new Set(allStudentData.map(s => s.Date)).size;
+
+        // --- 2. UPDATE UI (Format: Remaining / Past / Total) ---
+        
         if (dashContainer) dashContainer.classList.remove('hidden');
 
-        // Ensure scribe list is loaded
-        if (globalScribeList.length === 0) {
-            globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-        }
+        // Helper: "455 / 100 / 555"
+        const formatMetric3 = (rem, past, total, label) => {
+            const remClass = rem > 0 ? "text-indigo-600" : "text-gray-400";
+            return `
+                <div class="flex items-baseline gap-1.5">
+                    <span class="${remClass} text-2xl md:text-3xl font-bold" title="Remaining">${rem.toLocaleString()}</span>
+                    <span class="text-gray-300 text-xl font-light">/</span>
+                    <span class="text-gray-500 text-lg md:text-xl font-medium" title="Past">${past.toLocaleString()}</span>
+                    <span class="text-gray-300 text-xl font-light">/</span>
+                    <span class="text-gray-400 text-sm md:text-base font-medium" title="Total">${total.toLocaleString()}</span>
+                </div>
+                <div class="text-[9px] md:text-[10px] text-gray-500 font-medium uppercase tracking-wide mt-[-2px]">
+                    Remaining / Past / Total ${label}
+                </div>
+            `;
+        };
 
-        // 2. UPDATE "TODAY'S EXAM" STATS
-        const today = new Date();
-        const todayStr = formatDateToCSV(today);
+        // Inject HTML
+        if (dashStudent) dashStudent.innerHTML = formatMetric3(remStudents, pstStudents, totStudents, "Students");
+        if (dashCourse) dashCourse.innerHTML = formatMetric3(remCourses, pstCourses, totCourses, "Courses");
+        if (dashDay) dashDay.innerHTML = formatMetric3(remDays, pstDays, totDays, "Days");
+
+
+        // --- 3. UPDATE "TODAY'S EXAM" STATS ---
+        const todayStr = formatDateToCSV(today); // Helper returns DD.MM.YYYY
 
         if (todayDateDisplay) todayDateDisplay.textContent = today.toDateString();
 
@@ -3862,7 +3911,7 @@ if (toggleButton && sidebar) {
                 if (todayGrid) todayGrid.innerHTML = todayHtml;
                 todayContainer.classList.remove('hidden');
             } else {
-                // Show "No Exams" Message (Instead of hiding)
+                // Show "No Exams" Message
                 if (todayGrid) todayGrid.innerHTML = `
                 <div class="col-span-full bg-gray-50 p-6 rounded-lg border border-gray-200 text-center">
                     <p class="text-gray-500 font-medium">No exams scheduled for today (${todayStr}).</p>
@@ -3872,34 +3921,30 @@ if (toggleButton && sidebar) {
             }
         }
 
-        // 3. POPULATE SMART DATE DROPDOWN
-        if (dateSelect && specificDateGrid) {
-            dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
+        // --- 4. POPULATE SMART DATE DROPDOWN ---
+        const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
+        const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
+            const d1 = a.split('.').reverse().join('');
+            const d2 = b.split('.').reverse().join('');
+            return d1.localeCompare(d2);
+        });
 
+        if (dateSelect && specificDateGrid) {
+            const currentVal = dateSelect.value;
+            dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
             uniqueDays.forEach(dateStr => {
                 const option = document.createElement('option');
                 option.value = dateStr;
                 option.textContent = dateStr;
                 dateSelect.appendChild(option);
             });
-
-            // Auto-select tomorrow if applicable (optional feature)
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = formatDateToCSV(tomorrow);
-
-            if (uniqueDaysSet.has(tomorrowStr)) {
-                // Optional: Pre-select tomorrow if desired
-                // dateSelect.value = tomorrowStr;
-                // updateSpecificDateGrid(tomorrowStr, specificDateGrid);
-            }
-
+            if (currentVal) dateSelect.value = currentVal;
             dateSelect.onchange = (e) => {
                 updateSpecificDateGrid(e.target.value, specificDateGrid);
             };
         }
 
-        // 4. UPDATE DATA LOADING TAB STATUS
+        // --- 5. UPDATE DATA LOADING TAB STATUS ---
         const dataTabStatusText = document.getElementById('data-tab-status-text');
         const btnDownloadCurrentCsv = document.getElementById('btn-download-current-csv');
 
@@ -3925,11 +3970,11 @@ if (toggleButton && sidebar) {
             }
         }
 
-        // 5. REFRESH CALENDAR & SETTINGS
+        // --- 6. REFRESH CALENDAR & SETTINGS ---
         if (typeof renderCalendar === 'function') renderCalendar();
         if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
 
-        // --- NEW: Check for Invigilation Slots (Only if Logged In) ---
+        // Check for Invigilation Slots
         if (currentUser) {
             renderDashboardInvigilation();
         } else {
@@ -3937,6 +3982,8 @@ if (toggleButton && sidebar) {
             if (invigWrapper) invigWrapper.classList.add('hidden');
         }
     }
+
+    
 
     // ==========================================
     // 📅 CALENDAR LOGIC
