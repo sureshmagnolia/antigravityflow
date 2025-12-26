@@ -544,13 +544,12 @@ function updateLocalSlotsFromStudents() {
         const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
         const sessionStats = {};
 
-        // 1. Count Candidates
+        // 1. Process Student Data
         students.forEach(s => {
             const d = s.Date ? s.Date.trim() : "";
             const t = s.Time ? s.Time.trim() : "";
             if (!d || !t) return;
 
-            // Standardize Key
             const key = `${d} | ${t}`;
             
             if (!sessionStats[key]) {
@@ -559,11 +558,10 @@ function updateLocalSlotsFromStudents() {
                     scribeStreams: {},
                     totalScribes: 0,
                     totalStudents: 0,
-                    dateStr: d, // Store for checking past dates
+                    dateStr: d,
                     timeStr: t
                 };
             }
-
             sessionStats[key].totalStudents++;
             const strm = s.Stream || "Regular";
 
@@ -577,70 +575,85 @@ function updateLocalSlotsFromStudents() {
             }
         });
 
-        // 2. Merge with Existing Slots
+        // 2. Merge with Existing Slots (Smart FN/AN Logic)
         let existingSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         let hasChanges = false;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // Helper to check Period (FN < 1 PM <= AN)
+        const getPeriod = (timeStr) => {
+            let [t, mod] = timeStr.trim().split(' ');
+            let [h] = t.split(':').map(Number);
+            if (mod === 'PM' && h !== 12) h += 12;
+            if (mod === 'AM' && h === 12) h = 0;
+            return h < 13 ? 'FN' : 'AN';
+        };
+
         Object.keys(sessionStats).forEach(generatedKey => {
             const stats = sessionStats[generatedKey];
+            const genPeriod = getPeriod(stats.timeStr);
             
-            // --- 🟢 FIX 1: FUZZY KEY MATCHING (Prevent Duplicates) ---
-            // Try to find the slot even if time formatting differs (e.g. "09:30 AM" vs "9:30 AM")
+            // --- 🟢 SMART MATCH: Find existing Virtual Slot in same FN/AN block ---
             let targetKey = generatedKey;
             
             if (!existingSlots[generatedKey]) {
-                const genTimeClean = stats.timeStr.replace(/^0+/, ''); // Remove leading zero
-                
-                // Look for a matching key in existing slots
-                const foundKey = Object.keys(existingSlots).find(k => {
+                // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
+                const virtualMatchKey = Object.keys(existingSlots).find(k => {
                     if (!k.includes('|')) return false;
                     const [exDate, exTime] = k.split('|').map(s => s.trim());
+                    
+                    // Must be same Date
                     if (exDate !== stats.dateStr) return false;
-                    return exTime.replace(/^0+/, '') === genTimeClean;
+                    
+                    // Must be same Period (FN or AN)
+                    if (getPeriod(exTime) !== genPeriod) return false;
+
+                    // Must be "Virtual" (Created by attendance, so 0 students or undefined)
+                    const slot = existingSlots[k];
+                    return (!slot.studentCount || slot.studentCount === 0);
                 });
 
-                if (foundKey) {
-                    targetKey = foundKey; // Use the EXISTING key (Virtual Slot)
+                if (virtualMatchKey) {
+                    // FOUND IT! We will Migrate this virtual slot to the real time key
+                    targetKey = generatedKey; // We use the new (Correct) time
+                    existingSlots[targetKey] = { ...existingSlots[virtualMatchKey] }; // Copy staff data
+                    delete existingSlots[virtualMatchKey]; // Remove the old 9:30 slot
+                    hasChanges = true; 
                 }
             }
 
-            // --- 🟢 FIX 2: CHECK PAST DATES (Prevent Locking) ---
+            // --- DATE CHECK (For Locking) ---
             const [dd, mm, yyyy] = stats.dateStr.split('.').map(Number);
             const sessionDate = new Date(yyyy, mm - 1, dd);
             const isPastSession = sessionDate < today;
 
-            // Calculate Requirements
+            // Calculate Required Invigilators
             let baseRequirement = 0;
             Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
             Object.values(stats.scribeStreams).forEach(count => baseRequirement += Math.ceil(count / 5));
             const reserve = Math.ceil(baseRequirement * 0.10);
             const totalRequired = baseRequirement + reserve;
 
-
             if (!existingSlots[targetKey]) {
-                // CASE A: Create Brand New Slot
+                // Create Brand New
                 existingSlots[targetKey] = {
                     required: totalRequired,
                     reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
-                    isLocked: !isPastSession, // 🟢 Lock ONLY if Future
+                    isLocked: !isPastSession, // Don't lock past dates
                     scribeCount: stats.totalScribes,
                     studentCount: stats.totalStudents
                 };
                 hasChanges = true;
             } else {
-                // CASE B: Update Existing Slot (Virtual or Real)
+                // Update Existing
                 const slot = existingSlots[targetKey];
                 
-                // Smart Lock Logic: Only lock if it was empty AND is in the future
+                // If it was empty and is now filling up (and is Future), Lock it
                 if ((!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0) {
-                     if (!isPastSession) {
-                        slot.isLocked = true; // 🟢 Lock ONLY if Future
-                     }
-                     // If Past, we leave the lock status alone (likely false or user-managed)
+                     if (!isPastSession) slot.isLocked = true;
                      hasChanges = true;
                 }
 
@@ -664,6 +677,8 @@ function updateLocalSlotsFromStudents() {
     }
     return false;
 }
+
+    
 
     
 
