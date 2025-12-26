@@ -533,13 +533,10 @@ function populateAllExamDropdowns() {
 
 
 
-
-
-    
 // --- HELPER: Calculate Slot Requirements from Student Data ---
 function updateLocalSlotsFromStudents() {
     const localBaseData = localStorage.getItem('examBaseData');
-    if (!localBaseData) return false; // No data to process
+    if (!localBaseData) return false;
 
     try {
         const students = JSON.parse(localBaseData);
@@ -553,13 +550,17 @@ function updateLocalSlotsFromStudents() {
             const t = s.Time ? s.Time.trim() : "";
             if (!d || !t) return;
 
+            // Standardize Key
             const key = `${d} | ${t}`;
+            
             if (!sessionStats[key]) {
                 sessionStats[key] = {
                     normalStreams: {},
                     scribeStreams: {},
                     totalScribes: 0,
-                    totalStudents: 0
+                    totalStudents: 0,
+                    dateStr: d, // Store for checking past dates
+                    timeStr: t
                 };
             }
 
@@ -579,32 +580,71 @@ function updateLocalSlotsFromStudents() {
         // 2. Merge with Existing Slots
         let existingSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         let hasChanges = false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-        Object.keys(sessionStats).forEach(key => {
-            const stats = sessionStats[key];
+        Object.keys(sessionStats).forEach(generatedKey => {
+            const stats = sessionStats[generatedKey];
+            
+            // --- 🟢 FIX 1: FUZZY KEY MATCHING (Prevent Duplicates) ---
+            // Try to find the slot even if time formatting differs (e.g. "09:30 AM" vs "9:30 AM")
+            let targetKey = generatedKey;
+            
+            if (!existingSlots[generatedKey]) {
+                const genTimeClean = stats.timeStr.replace(/^0+/, ''); // Remove leading zero
+                
+                // Look for a matching key in existing slots
+                const foundKey = Object.keys(existingSlots).find(k => {
+                    if (!k.includes('|')) return false;
+                    const [exDate, exTime] = k.split('|').map(s => s.trim());
+                    if (exDate !== stats.dateStr) return false;
+                    return exTime.replace(/^0+/, '') === genTimeClean;
+                });
+
+                if (foundKey) {
+                    targetKey = foundKey; // Use the EXISTING key (Virtual Slot)
+                }
+            }
+
+            // --- 🟢 FIX 2: CHECK PAST DATES (Prevent Locking) ---
+            const [dd, mm, yyyy] = stats.dateStr.split('.').map(Number);
+            const sessionDate = new Date(yyyy, mm - 1, dd);
+            const isPastSession = sessionDate < today;
+
+            // Calculate Requirements
             let baseRequirement = 0;
-
-            // Calculate Norms
             Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
             Object.values(stats.scribeStreams).forEach(count => baseRequirement += Math.ceil(count / 5));
             const reserve = Math.ceil(baseRequirement * 0.10);
             const totalRequired = baseRequirement + reserve;
 
-            if (!existingSlots[key]) {
-                // Create New Slot
-                existingSlots[key] = {
+
+            if (!existingSlots[targetKey]) {
+                // CASE A: Create Brand New Slot
+                existingSlots[targetKey] = {
                     required: totalRequired,
                     reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
-                    isLocked: true, // 🟢 CHANGED: Now Locked by Default
+                    isLocked: !isPastSession, // 🟢 Lock ONLY if Future
                     scribeCount: stats.totalScribes,
                     studentCount: stats.totalStudents
                 };
                 hasChanges = true;
             } else {
-                // Update Existing (Only if counts changed)
-                const slot = existingSlots[key];
+                // CASE B: Update Existing Slot (Virtual or Real)
+                const slot = existingSlots[targetKey];
+                
+                // Smart Lock Logic: Only lock if it was empty AND is in the future
+                if ((!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0) {
+                     if (!isPastSession) {
+                        slot.isLocked = true; // 🟢 Lock ONLY if Future
+                     }
+                     // If Past, we leave the lock status alone (likely false or user-managed)
+                     hasChanges = true;
+                }
+
+                // Update Counts
                 if (slot.required !== totalRequired || slot.studentCount !== stats.totalStudents) {
                     slot.required = totalRequired;
                     slot.reserveCount = reserve;
@@ -617,13 +657,20 @@ function updateLocalSlotsFromStudents() {
 
         if (hasChanges) {
             localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
-            return true; // Indicates slots were updated
+            return true;
         }
     } catch (e) {
         console.error("Slot Calc Error:", e);
     }
     return false;
 }
+
+    
+
+
+
+
+    
     // ==========================================
     // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
     // ==========================================
