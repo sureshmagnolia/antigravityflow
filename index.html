@@ -2098,53 +2098,42 @@
 <div id="view-help" class="container max-w-5xl mx-auto p-4 min-h-screen hidden">
     <div class="bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200">
         
-        <div class="bg-indigo-700 p-8 text-white relative overflow-hidden">
+        <div class="bg-indigo-800 p-8 text-white relative overflow-hidden">
             <div class="absolute top-0 right-0 opacity-10">
                 <svg class="w-64 h-64 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
             </div>
-            <h1 class="text-4xl font-extrabold mb-2 tracking-tight relative z-10">📘 ExamFlow User Manual</h1>
-            <p class="text-indigo-200 font-medium text-lg relative z-10">Comprehensive Guide for Exam Cell Coordinators</p>
+            <h1 class="text-4xl font-extrabold mb-2 tracking-tight relative z-10">📘 ExamFlow Master Manual</h1>
+            <p class="text-indigo-200 font-medium text-lg relative z-10">Operational Guide for Exam Cell Coordinators & Staff</p>
         </div>
 
-        <div class="flex flex-col md:flex-row">
+        <div class="flex flex-col md:flex-row h-[80vh]">
             
-            <div class="md:w-64 bg-gray-50 border-r border-gray-200 p-4 hidden md:block">
-                <nav class="space-y-1 sticky top-4">
-                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">Quick Jump</p>
+            <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto">
+                <nav class="space-y-1 sticky top-0">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">Workflow</p>
                     <a href="#step1" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">1. Initial Setup</a>
                     <a href="#step2" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">2. Loading Data</a>
                     <a href="#step3" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">3. Managing Students</a>
                     <a href="#step4" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">4. Room Allotment</a>
                     <a href="#step5" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">5. Scribes & QP Codes</a>
-                    <a href="#step6" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">6. Reports</a>
+                    <a href="#step6" class="block px-3 py-2 text-sm font-bold text-indigo-700 bg-indigo-50 rounded-md border border-indigo-200">6. Generating Reports</a>
                     <a href="#step7" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">7. Remuneration</a>
                 </nav>
             </div>
 
-            <div class="flex-1 p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto h-[80vh] custom-scroll">
+            <div class="flex-1 p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto custom-scroll scroll-smooth">
 
                 <section id="step1" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-4">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">1</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Initial Setup (One Time)</h2>
+                        <h2 class="text-2xl font-bold text-gray-800">Initial Setup</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">Before you start any exam work, you must tell the software about your college infrastructure.</p>
-                    
-                    <div class="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-md space-y-3">
-                        <div>
-                            <h4 class="font-bold text-indigo-900">A. Set College Name</h4>
-                            <p class="text-sm text-indigo-800">Go to <strong>Settings</strong> tab. Enter your official college name (e.g., <em>"Government Victoria College, Palakkad"</em>). This name appears on all printed reports.</p>
-                        </div>
-                        <div>
-                            <h4 class="font-bold text-indigo-900">B. Configure Rooms</h4>
-                            <p class="text-sm text-indigo-800">In <strong>Settings</strong>, find the "Room Capacity" section. Add every exam hall available in your college.</p>
-                            <ul class="list-disc list-inside text-xs text-indigo-700 mt-1 ml-2">
-                                <li><strong>Name:</strong> Room 101, Main Hall, etc.</li>
-                                <li><strong>Capacity:</strong> Max students (e.g., 30 or 40).</li>
-                                <li><strong>Location:</strong> (Optional) E.g., "Commerce Block, First Floor". This helps in printing directional stickers.</li>
-                            </ul>
-                            <p class="text-xs font-bold text-indigo-900 mt-2">⚠️ IMPORTANT: Click "Save Changes" after adding rooms!</p>
-                        </div>
+                    <p class="text-gray-600 mb-4">Before starting, configure your college details.</p>
+                    <div class="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <ul class="list-disc list-inside space-y-2 text-sm">
+                            <li><strong>College Name:</strong> Go to <em>Settings</em>. Enter the name (e.g., "Govt Victoria College"). This appears on every printed report.</li>
+                            <li><strong>Room Master:</strong> Go to <em>Settings > Room Capacity</em>. Add every exam hall (e.g., "Room 101", Capacity: 30). This is crucial for allotment.</li>
+                        </ul>
                     </div>
                 </section>
 
@@ -2155,58 +2144,10 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">2</span>
                         <h2 class="text-2xl font-bold text-gray-800">Loading Student Data</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">Navigate to the <strong>Data Loading</strong> tab. You have two ways to import data.</p>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-green-700 mb-2 flex items-center gap-2">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                Option A: CSV Upload (Recommended)
-                            </h3>
-                            <p class="text-sm text-gray-600 mb-3">Best for clean, error-free data loading. Create an Excel file with these exact headers:</p>
-                            <code class="block bg-gray-100 p-2 rounded text-xs text-red-600 font-mono mb-3">Register Number, Name, Course, Date, Time</code>
-                            <p class="text-xs text-gray-500">1. Select "Stream" (e.g., Regular).<br>2. Select/Create "Exam Name" (e.g., "B.Sc S5").<br>3. Upload file & click <strong>Load Data</strong>.</p>
-                        </div>
-
-                        <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-blue-700 mb-2 flex items-center gap-2">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                                Option B: PDF Extraction
-                            </h3>
-                            <p class="text-sm text-gray-600 mb-3">Use this if you only have the Nominal Roll PDF from the University.</p>
-                            <ul class="list-disc list-inside text-xs text-gray-500 space-y-1">
-                                <li>Requires active internet.</li>
-                                <li>Select <strong>Exam Name</strong> (Mandatory).</li>
-                                <li>Select PDF files.</li>
-                                <li>Click <strong>Run Batch Extraction</strong>.</li>
-                            </ul>
-                        </div>
-                    </div>
-                </section>
-
-                <hr class="border-gray-200">
-
-                <section id="step3" class="scroll-mt-4">
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">3</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Editing & Managing Data</h2>
-                    </div>
-                    <p class="text-gray-600 mb-4">Mistakes happen. Use the <strong>Data Editor</strong> tab to fix them.</p>
-
-                    <div class="space-y-4">
-                        <div class="flex items-start gap-3">
-                            <div class="bg-yellow-100 p-2 rounded text-yellow-700 font-bold text-xs mt-1">NEW</div>
-                            <div>
-                                <h4 class="font-bold text-gray-800">Bulk Rescheduling (The Yellow Box)</h4>
-                                <p class="text-sm text-gray-600">If an exam date changes for a whole subject:</p>
-                                <ol class="list-decimal list-inside text-sm text-gray-600 mt-1 ml-2">
-                                    <li>Go to <strong>Data Editor</strong> tab.</li>
-                                    <li>Select the specific <strong>Course</strong> from the dropdown.</li>
-                                    <li>A yellow box will appear. Enter the <strong>New Date/Time</strong>.</li>
-                                    <li>Click <strong>"Apply Changes to All Students"</strong>. This updates everyone in one click.</li>
-                                </ol>
-                            </div>
-                        </div>
+                    <p class="text-gray-600 mb-4">Go to <strong>Data Loading</strong> tab. Use <strong>CSV Upload</strong> for best results.</p>
+                    <div class="bg-green-50 p-4 rounded-lg border border-green-200 text-sm">
+                        <strong>Required CSV Columns:</strong><br>
+                        <code class="text-red-600">Register Number, Name, Course, Date, Time</code>
                     </div>
                 </section>
 
@@ -2217,113 +2158,147 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">4</span>
                         <h2 class="text-2xl font-bold text-gray-800">Room Allotment</h2>
                     </div>
-                    <p class="text-gray-600 mb-2">This is where you assign students to seats. Go to <strong>Room Allotment</strong> tab.</p>
-                    
-                    <div class="bg-gray-50 rounded-lg p-5 border border-gray-200">
-                        <ol class="space-y-4 text-sm text-gray-700">
-                            <li>
-                                <strong>Step 1: Select Session</strong>
-                                <p class="text-xs text-gray-500 mt-1">Choose the Date & Time (e.g., "15.10.2025 | 09:30 AM"). Look at the orange "Awaiting" counter.</p>
-                            </li>
-                            <li>
-                                <strong>Step 2: Add Rooms</strong>
-                                <p class="text-xs text-gray-500 mt-1">Click <strong>+ Add Room</strong>. A popup lists your configured rooms. Select one.</p>
-                            </li>
-                            <li>
-                                <strong>Step 3: Auto-Fill</strong>
-                                <p class="text-xs text-gray-500 mt-1">The system automatically fills the room up to its capacity with "Awaiting" students.</p>
-                            </li>
-                            <li>
-                                <strong>Step 4: Save</strong>
-                                <p class="text-xs text-gray-500 mt-1">Click <strong>Save Room Allotment</strong> (Green Button) when the "Awaiting" count reaches 0.</p>
-                            </li>
-                        </ol>
-                    </div>
-                </section>
-
-                <hr class="border-gray-200">
-
-                <section id="step5" class="scroll-mt-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 mb-3">Scribe Management</h3>
-                            <p class="text-sm text-gray-600 mb-2">For students who need writing assistance:</p>
-                            <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                                <li>Go to <strong>Scribe Assistance</strong> tab.</li>
-                                <li>Search the student by Reg No. Click "Add".</li>
-                                <li>This marks them globally as a Scribe Candidate.</li>
-                                <li><strong>Allocation:</strong> In the "Room Allotment" tab, scroll down to the "Scribe Allotment" section to assign them a separate small room.</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 mb-3">QP Codes</h3>
-                            <p class="text-sm text-gray-600 mb-2">Required for accurate Reports.</p>
-                            <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                                <li>Go to <strong>QP Codes</strong> tab.</li>
-                                <li>Select a Session.</li>
-                                <li>You will see a list of Courses appearing in that session.</li>
-                                <li>Type the University Question Paper Code (e.g., A01) for each.</li>
-                                <li>Click Save.</li>
-                            </ul>
-                        </div>
-                    </div>
+                    <p class="text-gray-600 mb-2">Go to <strong>Room Allotment</strong> tab. Select a Session.</p>
+                    <ol class="list-decimal list-inside text-sm text-gray-700 space-y-2 bg-gray-50 p-4 rounded-lg">
+                        <li>Check the orange "Awaiting" count.</li>
+                        <li>Click <strong>+ Add Room</strong> and pick a room from your list.</li>
+                        <li>The system fills it automatically.</li>
+                        <li>Repeat until "Awaiting" is 0.</li>
+                        <li><strong>Save</strong> the allotment (Green Button).</li>
+                    </ol>
                 </section>
 
                 <hr class="border-gray-200">
 
                 <section id="step6" class="scroll-mt-4">
-                    <div class="flex items-center gap-3 mb-4">
+                    <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">6</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Generating Reports</h2>
+                        <h2 class="text-2xl font-bold text-gray-800">Detailed Report Guide</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">Go to <strong>Reports</strong> tab. Select your Session.</p>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="border p-4 rounded-lg hover:bg-gray-50">
-                            <h4 class="font-bold text-gray-800">Room-wise Report</h4>
-                            <p class="text-xs text-gray-500 mt-1">The master list for the Notice Board. Shows who sits where.</p>
+                    <p class="text-gray-600 mb-6">Each report in the <strong>Reports Tab</strong> serves a specific stage of the exam process. Below is the guide on when and why to use them.</p>
+
+                    <div class="space-y-6">
+
+                        <div class="border-l-4 border-blue-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                1. Room-wise Seating Report (Candidates List)
+                                <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full uppercase">For Invigilators</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> The official attendance document for the exam hall.</p>
+                                <p><strong>Usage:</strong> The Invigilator takes this to the room. It contains the list of students allotted to that room. They use it to verify student identity, obtain signatures, and <strong>mark absentees</strong>.</p>
+                                <p class="text-xs font-bold text-blue-600 mt-2">🔒 Active Only After: Room Allotment is saved.</p>
+                            </div>
                         </div>
-                        <div class="border p-4 rounded-lg hover:bg-gray-50">
-                            <h4 class="font-bold text-gray-800">Seating Details</h4>
-                            <p class="text-xs text-gray-500 mt-1">A compact list for students to check their room number quickly.</p>
+
+                        <div class="border-l-4 border-green-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                2. Seating Details for Candidates
+                                <span class="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full uppercase">For Students</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Notice Board Display.</p>
+                                <p><strong>Usage:</strong> Print and paste this on the main notice board entrance. Students check this list to find their <strong>Room Number</strong> and <strong>Seat Number</strong> before entering the exam block.</p>
+                                <p class="text-xs font-bold text-green-600 mt-2">🔒 Active Only After: Room Allotment is saved.</p>
+                            </div>
                         </div>
-                        <div class="border p-4 rounded-lg hover:bg-gray-50">
-                            <h4 class="font-bold text-gray-800">Room Stickers</h4>
-                            <p class="text-xs text-gray-500 mt-1">Prints A4 pages (2 per sheet) to stick on the classroom door.</p>
+
+                        <div class="border-l-4 border-purple-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                3. Question Paper (QP) Report
+                                <span class="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full uppercase">For Chief Supt. (CS)</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Inventory & Counting.</p>
+                                <p><strong>Usage:</strong> The CS uses this to know the <strong>Total Count</strong> of question papers required for the entire session. Helps in opening the correct number of question paper packets from the locker.</p>
+                                <p class="text-xs font-bold text-purple-600 mt-2">🔒 Active After: Data Loading (Exam Names must be set).</p>
+                            </div>
                         </div>
+
+                        <div class="border-l-4 border-orange-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                4. QP Distribution by QP-Code
+                                <span class="text-[10px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full uppercase">For Control Room</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Packing Room Covers.</p>
+                                <p><strong>Usage:</strong> Used by staff to distribute Question Papers to halls. It tells you exactly how many copies of each QP Code (e.g., A01, B02) go into <strong>Room 101's cover</strong> based on the allotment.</p>
+                                <p class="text-xs font-bold text-orange-600 mt-2">🔒 Active Only After: Room Allotment AND QP Codes are entered.</p>
+                            </div>
+                        </div>
+
+                        <div class="border-l-4 border-teal-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                5. Room Stickers (2 per Page)
+                                <span class="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full uppercase">For Room Doors</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Hall Identification.</p>
+                                <p><strong>Usage:</strong> Paste these on the door of the respective exam halls. It displays the Room Number and the range of Register Numbers sitting inside.</p>
+                                <p class="text-xs font-bold text-teal-600 mt-2">🔒 Active Only After: Room Allotment is saved.</p>
+                            </div>
+                        </div>
+
+                         <div class="border-l-4 border-red-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                6. Invigilator Requirement Summary
+                                <span class="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded-full uppercase">For Chief Supt.</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Staff Allocation Statistics.</p>
+                                <p><strong>Usage:</strong> Gives a summary of how many rooms are used and how many Invigilators are required for the session.</p>
+                                <p class="text-xs font-bold text-red-600 mt-2">🔒 Active Only After: Room Allotment is saved.</p>
+                            </div>
+                        </div>
+
+                        <div class="border-l-4 border-indigo-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                7. Room Allotment Summary
+                                <span class="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full uppercase">For Chief Supt.</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Session Overview.</p>
+                                <p><strong>Usage:</strong> A high-level summary of the room statistics for the session (Total Students, Total Capacity Used, etc.).</p>
+                                <p class="text-xs font-bold text-indigo-600 mt-2">🔒 Active Only After: Room Allotment is saved.</p>
+                            </div>
+                        </div>
+
+                        <div class="border-l-4 border-yellow-500 bg-white shadow-sm p-4 rounded-r-lg">
+                            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                8. Scribe Proforma
+                                <span class="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full uppercase">For Scribes</span>
+                            </h3>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1">
+                                <p><strong>Purpose:</strong> Scribe Documentation.</p>
+                                <p><strong>Usage:</strong> Generates a form (One Page Per Scribe) to record details of the scribe assistance provided to disabled candidates.</p>
+                                <p class="text-xs font-bold text-yellow-600 mt-2">🔒 Active Only After: Scribes are allotted to rooms.</p>
+                            </div>
+                        </div>
+
                     </div>
                 </section>
 
                 <hr class="border-gray-200">
 
                 <section id="step7" class="scroll-mt-4">
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">7</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Remuneration Bills</h2>
+                    <div class="bg-red-50 p-6 rounded-xl border border-red-100">
+                        <h2 class="text-2xl font-bold text-red-800 mb-3 flex items-center gap-2">
+                            <span>🛡️</span> 10. Backup & Recovery
+                        </h2>
+                        <p class="text-sm text-red-900 mb-3">Always backup your data. Navigate to <strong>Settings -> Danger Zone</strong>.</p>
+                        <div class="space-y-2 text-sm text-red-800">
+                            <p><strong>Full Backup (JSON):</strong> Downloads everything (Students, Rooms, Settings). Do this after every major change.</p>
+                            <p><strong>Restore:</strong> Use this file to restore your work if you switch computers or clear browser cache.</p>
+                        </div>
                     </div>
-                    <div class="bg-white border-l-4 border-green-500 p-4 shadow-sm">
-                        <p class="text-sm text-gray-700">
-                            1. Go to <strong>Remuneration</strong> tab.<br>
-                            2. <strong>Rate Card:</strong> Adjust the rates for Chief Supt, Invigilator, etc.<br>
-                            3. <strong>Generate:</strong> Select a date range (e.g., Nov 1 to Nov 30).<br>
-                            4. Click <strong>Generate Bill</strong>. The system calculates total sessions and creates a printable invoice table.
-                        </p>
-                    </div>
-                </section>
-
-                <section class="mt-12 p-6 bg-red-50 rounded-xl border border-red-100">
-                    <h3 class="text-xl font-bold text-red-800 mb-2 flex items-center gap-2">
-                        <span>🛡️</span> Data Safety (The "Danger Zone")
-                    </h3>
-                    <p class="text-sm text-red-700 mb-4">Found in <strong>Settings</strong> tab at the bottom.</p>
-                    <ul class="list-disc list-inside text-sm text-red-800 space-y-2">
-                        <li><strong>Backup Data (JSON):</strong> Downloads a full copy of your work (Students + Rooms + Settings). Do this weekly!</li>
-                        <li><strong>Restore Data:</strong> Loads a previously saved backup file.</li>
-                        <li><strong>Master Reset (Nuke):</strong> Completely wipes all student data to start a new semester. <strong>Cannot be undone.</strong></li>
-                    </ul>
                 </section>
 
             </div>
+        </div>
+        
+        <div class="bg-gray-50 p-6 text-center border-t border-gray-200">
+            <p class="text-xs text-gray-400">ExamFlow v12.8 • Developed by Exam Wing</p>
         </div>
     </div>
 </div>
