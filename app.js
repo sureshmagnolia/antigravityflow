@@ -1323,7 +1323,26 @@ function updateLocalSlotsFromStudents() {
     const filterSessionRadio = document.getElementById('filter-session');
     const reportsSessionDropdownContainer = document.getElementById('reports-session-dropdown-container');
     const reportsSessionSelect = document.getElementById('reports-session-select');
+// --- NEW: Toggle Visibility of Future Filter ---
+    const futureFilterWrapper = document.getElementById('bulk-future-filter-wrapper');
+    const filterFutureCheckbox = document.getElementById('filter-future-only');
+    
+    function toggleFutureFilterVisibility() {
+        if (filterAllRadio && filterAllRadio.checked) {
+            if(futureFilterWrapper) futureFilterWrapper.classList.remove('hidden');
+        } else {
+            if(futureFilterWrapper) futureFilterWrapper.classList.add('hidden');
+            // Optional: Uncheck it when hiding so it doesn't stick
+            if(filterFutureCheckbox) filterFutureCheckbox.checked = false;
+        }
+    }
 
+    if (filterAllRadio && filterSessionRadio) {
+        filterAllRadio.addEventListener('change', toggleFutureFilterVisibility);
+        filterSessionRadio.addEventListener('change', toggleFutureFilterVisibility);
+        // Run once on load
+        toggleFutureFilterVisibility();
+    }
     // --- Room Allotment Elements ---
     const roomAllotmentLoader = document.getElementById('room-allotment-loader');
     const roomAllotmentContentWrapper = document.getElementById('room-allotment-content-wrapper');
@@ -10871,14 +10890,16 @@ Are you sure you want to update these records?
     }
 
 
-    // --- Event listener for Invigilator Report (Stream-Wise V2) ---
+// --- Event listener for Invigilator Report (Stream-Wise V2 + Upcoming Filter) ---
     generateInvigilatorReportButton.addEventListener('click', async () => {
         generateInvigilatorReportButton.disabled = true;
         generateInvigilatorReportButton.textContent = "Calculating...";
+        
         reportOutputArea.innerHTML = "";
         reportControls.classList.add('hidden');
         roomCsvDownloadContainer.innerHTML = "";
         lastGeneratedReportType = "";
+
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
@@ -10901,7 +10922,6 @@ Are you sure you want to update these records?
 
             for (const student of data) {
                 const sessionKey = `${student.Date} | ${student.Time}`;
-
                 if (!sessionStats[sessionKey]) {
                     sessionStats[sessionKey] = {
                         streams: {}, // Object to hold stream-wise counts
@@ -10910,7 +10930,6 @@ Are you sure you want to update these records?
                 }
 
                 const isScribe = scribeRegNos.has(student['Register Number']);
-
                 if (isScribe) {
                     sessionStats[sessionKey].scribeCount++;
                 } else {
@@ -10924,9 +10943,35 @@ Are you sure you want to update these records?
             }
 
             // 4. Build Report Data
-            const sortedSessionKeys = Object.keys(sessionStats).sort(compareSessionStrings);
-            let tableRowsHtml = '';
+            let sortedSessionKeys = Object.keys(sessionStats).sort(compareSessionStrings);
 
+            // --- NEW: Filter "Upcoming Exams only" if checkbox is checked ---
+            const filterFutureOnly = document.getElementById('filter-future-only');
+            if (filterFutureOnly && filterFutureOnly.checked && !document.getElementById('bulk-future-filter-wrapper').classList.contains('hidden')) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Midnight today
+
+                sortedSessionKeys = sortedSessionKeys.filter(key => {
+                    // key format: "DD.MM.YYYY | HH:MM AM"
+                    const [dStr, tStr] = key.split('|');
+                    if(!dStr) return false;
+                    
+                    // Robust Date Parsing
+                    const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                    const sessionDate = new Date(yyyy, mm - 1, dd);
+                    
+                    // Keep if Date is Today or Future
+                    return sessionDate >= today;
+                });
+            }
+            // -------------------------------------------------------------
+
+            if (sortedSessionKeys.length === 0) {
+                alert("No upcoming exams found.");
+                return;
+            }
+
+            let tableRowsHtml = '';
             // Grand Totals
             let grandTotalInvigs = 0;
 
@@ -10948,17 +10993,15 @@ Are you sure you want to update these records?
                     const count = stats.streams[strm];
                     const requiredInvigs = Math.ceil(count / 30); // 1 per 30 rule PER STREAM
                     streamInvigTotal += requiredInvigs;
-
+                    
                     streamHtmlParts.push(`
-                    <div class="flex justify-between items-center text-sm mb-1 border-b border-gray-200 pb-1 last:border-0">
-                        <span class="font-medium text-gray-700">${strm}:</span>
-                        <span class="text-gray-600">
-                            <strong>${count}</strong> Students 
-                            <span class="text-xs text-gray-400">→</span> 
-                            <strong class="text-blue-600">${requiredInvigs}</strong> Inv
-                        </span>
-                    </div>
-                `);
+                        <div class="flex justify-between items-center text-sm mb-1 border-b border-gray-200 pb-1 last:border-0">
+                            <span class="font-medium text-gray-700">${strm}:</span>
+                            <span class="text-gray-600">
+                                <strong>${count}</strong> Students <span class="text-xs text-gray-400">→</span> <strong class="text-blue-600">${requiredInvigs}</strong> Inv
+                            </span>
+                        </div>
+                    `);
                 });
 
                 // B. Scribe Breakdown
@@ -10970,80 +11013,75 @@ Are you sure you want to update these records?
                 grandTotalInvigs += sessionTotalInvigs;
 
                 tableRowsHtml += `
-                <tr>
-                    <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">${key}</td>
-                    <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
-                        ${streamHtmlParts.join('')}
-                    </td>
-                    <td style="border: 1px solid #ccc; padding: 8px; text-align: center; vertical-align: top;">
-                        <div class="text-sm">
-                            <strong>${scribeCount}</strong> Students<br>
-                            <span class="text-xs text-gray-500">↓</span><br>
-                            <strong class="text-orange-600">${scribeInvigs}</strong> Inv
-                        </div>
-                    </td>
-                    <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; vertical-align: middle; background-color: #f9fafb;">
-                        ${sessionTotalInvigs}
-                    </td>
-                </tr>
-            `;
+                    <tr>
+                        <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">${key}</td>
+                        <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
+                            ${streamHtmlParts.join('')}
+                        </td>
+                        <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
+                             ${scribeCount > 0 ? `<strong>${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">${scribeInvigs}</strong> Inv` : '<span class="text-gray-400">-</span>'}
+                        </td>
+                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #0d9488;">
+                            ${sessionTotalInvigs}
+                        </td>
+                    </tr>
+                `;
             });
 
-            // 5. Generate HTML
-            const allPagesHtml = `
-            <div class="print-page">
-                <div class="print-header-group" style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px;">
-                    <h1>${currentCollegeName}</h1>
-                    <h2>Invigilator Requirement Summary (Stream-Wise)</h2>
-                    <h3 style="font-size: 10pt; font-style: italic; margin-top: 5px; color: #555;">
-                        <strong>Norms:</strong> 1 Invigilator per 30 Candidates (Calculated separately per stream) | 1 Invigilator per 5 Scribes
-                    </h3>
-                </div>
-                
-                <table class="invigilator-report-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                    <thead>
-                        <tr style="background-color: #f3f4f6;">
-                            <th style="border: 1px solid #000; padding: 10px; width: 20%;">Session</th>
-                            <th style="border: 1px solid #000; padding: 10px; width: 45%;">Candidate Breakdown (Stream-wise)</th>
-                            <th style="border: 1px solid #000; padding: 10px; width: 20%; text-align: center;">Scribe Req.</th>
-                            <th style="border: 1px solid #000; padding: 10px; width: 15%; text-align: center;">Total Required</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${tableRowsHtml}
-                    </tbody>
-                    <tfoot>
-                        <tr style="background-color: #eee;">
-                            <td colspan="3" style="border: 1px solid #000; padding: 10px; text-align: right; font-weight: bold; text-transform: uppercase;">Grand Total Invigilator Duties:</td>
-                            <td style="border: 1px solid #000; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em;">${grandTotalInvigs}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-                
-                <div style="margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div style="font-size: 9pt; color: #666;">Generated by ExamFlow</div>
-                    <div class="signature" style="text-align: center; width: 200px; border-top: 1px solid #000; padding-top: 5px;">
-                        Chief Superintendent
+            // Summary Row
+            tableRowsHtml += `
+                <tr style="background-color: #f0fdf4; border-top: 2px solid #0d9488;">
+                    <td colspan="3" style="border: 1px solid #ccc; padding: 10px; text-align: right; font-weight: bold;">GRAND TOTAL DUTIES REQUIRED:</td>
+                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em; color: #0d9488;">${grandTotalInvigs}</td>
+                </tr>
+            `;
+
+            const fullHtml = `
+                <div class="print-page">
+                    <div class="print-header-group text-center mb-6 border-b-2 border-black pb-4">
+                        <h1 class="text-xl font-bold text-gray-900 uppercase">${currentCollegeName}</h1>
+                        <h2 class="text-lg font-bold text-gray-700 mt-1">Invigilator Requirement Summary</h2>
+                        <p class="text-sm text-gray-500 mt-1">Generated on: ${new Date().toLocaleString()}</p>
+                        ${filterFutureOnly && filterFutureOnly.checked ? '<span class="inline-block mt-1 px-2 py-0.5 bg-teal-100 text-teal-800 text-xs font-bold rounded">Filtered: Upcoming Exams Only</span>' : ''}
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 10pt;">
+                        <thead>
+                            <tr style="background-color: #f3f4f6;">
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 25%;">Date | Time</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Stream-wise Requirements (1:30)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 20%;">Scribe Requirements (1:5)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 10%;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRowsHtml}
+                        </tbody>
+                    </table>
+                    
+                    <div class="mt-8 text-xs text-gray-500">
+                        <p><strong>Note:</strong> Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.</p>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
 
-            reportOutputArea.innerHTML = allPagesHtml;
+            reportOutputArea.innerHTML = fullHtml;
             reportOutputArea.style.display = 'block';
-            reportStatus.textContent = `Generated Invigilator Requirement Summary.`;
+            reportStatus.textContent = `Generated summary for ${sortedSessionKeys.length} sessions.`;
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "Invigilator_Summary";
 
         } catch (e) {
-            console.error("Error generating invigilator report:", e);
-            reportStatus.textContent = "An error occurred generating the report.";
-            reportControls.classList.remove('hidden');
+            console.error("Report Error:", e);
+            alert("Error: " + e.message);
         } finally {
             generateInvigilatorReportButton.disabled = false;
             generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
         }
     });
+
+
+    
    
     // --- Event listener for the "Print" button ---
     if (finalPrintButton) {
