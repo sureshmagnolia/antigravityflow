@@ -1211,6 +1211,9 @@ function renderStaffCalendar(myEmail) {
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    // --- 1. CURRENT TIME CHECK ---
+    const now = new Date();
 
     // Group Slots
     const slotsByDate = {};
@@ -1255,30 +1258,38 @@ function renderStaffCalendar(myEmail) {
                 const needed = slot.required;
                 const available = Math.max(0, needed - filled);
 
+                // --- 2. TIME & STATUS CALCULATIONS ---
+                const slotDateObj = parseDate(slot.key);
+                // Assume session ends 3 hours after start for visual purposes
+                const sessionEndTime = new Date(slotDateObj);
+                sessionEndTime.setHours(sessionEndTime.getHours() + 3);
+                const isPast = sessionEndTime < now;
+
                 const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
                 const isAssigned = slot.assigned.includes(myEmail);
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
-                const isCompleted = slot.attendance && slot.attendance.includes(myEmail);
                 const isAdminLocked = slot.isAdminLocked || false;
+                
+                // --- 3. SMART COMPLETION CHECK ---
+                // It is "Done" if: 
+                // A) Attendance explicitly marked OR 
+                // B) I was assigned AND the time has passed
+                const isCompleted = (slot.attendance && slot.attendance.includes(myEmail)) || (isAssigned && isPast);
 
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
                 let icon = "🟢";
                 let statusText = `<span class="md:hidden text-[8px] font-bold">${available}</span><span class="hidden md:inline">${available} Left</span>`;
                 let glowClass = "";
 
-                // ... inside slots.forEach ...
-
                 if (isCompleted) {
-                    // MODIFIED: Dark Green background, White Text
+                    // COMPLETED / PAST DUTY -> DARK GREEN
                     badgeClass = "bg-green-800 text-white border-green-900 md:bg-gradient-to-br md:from-green-700 md:to-green-800 md:border-green-600";
                     icon = "✅"; 
-                    // Empty status text so it just shows "FN ✅" (Prevents truncation)
-                    statusText = ""; 
+                    statusText = ""; // Minimal text
                     glowClass = "md:shadow-lg md:shadow-green-900";
                 }
                 else if (isPostedByMe) {
-                    // ... (keep existing logic for other statuses) ...
                     if (isAdminLocked) {
                         badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300";
                         icon = "🛡️";
@@ -1326,13 +1337,18 @@ function renderStaffCalendar(myEmail) {
                     icon = "🔒";
                     statusText = "Locked";
                 }
+                // --- 4. PAST UNASSIGNED SLOTS (Fixes "Light Green" Issue) ---
+                else if (isPast) {
+                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75";
+                    icon = "⏹️";
+                    statusText = "Done";
+                }
                 else if (filled >= needed) {
                     badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200";
                     icon = "🈵";
                     statusText = "Full";
                 }
 
-                // FIX: Dynamic Padding (Tight for 'Completed' on mobile, normal for others)
                 const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
 
                 contentHtml += `
