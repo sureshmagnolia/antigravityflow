@@ -623,10 +623,26 @@ function updateLocalSlotsFromStudents() {
                 }
             }
 
-            // --- DATE CHECK (For Locking) ---
-            const [dd, mm, yyyy] = stats.dateStr.split('.').map(Number);
-            const sessionDate = new Date(yyyy, mm - 1, dd);
-            const isPastSession = sessionDate < today;
+            // --- DATE CHECK (Robust Parsing) ---
+            let isPastSession = false;
+            try {
+                // Handle DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY
+                const parts = stats.dateStr.split(/[\.\-\/]/); 
+                let day, month, year;
+                
+                if (parts[0].length === 4) { // YYYY-MM-DD
+                    year = parts[0]; month = parts[1]; day = parts[2];
+                } else { // DD.MM.YYYY
+                    day = parts[0]; month = parts[1]; year = parts[2];
+                }
+                
+                const sessionDate = new Date(year, month - 1, day);
+                sessionDate.setHours(0,0,0,0); // Compare dates only
+                isPastSession = sessionDate < today;
+            } catch(e) {
+                console.warn("Date parse error, assuming Future:", stats.dateStr);
+                isPastSession = false; // Default to Future (Locked) if date is weird
+            }
 
             // Calculate Required Invigilators
             let baseRequirement = 0;
@@ -636,24 +652,30 @@ function updateLocalSlotsFromStudents() {
             const totalRequired = baseRequirement + reserve;
 
             if (!existingSlots[targetKey]) {
-                // Create Brand New
+                // CASE A: Create Brand New Slot
                 existingSlots[targetKey] = {
                     required: totalRequired,
                     reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
-                    isLocked: !isPastSession, // Don't lock past dates
+                    isLocked: !isPastSession, // 🔒 Lock Future, Unlock Past
                     scribeCount: stats.totalScribes,
                     studentCount: stats.totalStudents
                 };
                 hasChanges = true;
             } else {
-                // Update Existing
+                // CASE B: Update Existing Slot
                 const slot = existingSlots[targetKey];
                 
-                // If it was empty and is now filling up (and is Future), Lock it
-                if ((!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0) {
-                     if (!isPastSession) slot.isLocked = true;
+                // 🟢 RE-LOCKING LOGIC:
+                // If the slot WAS empty (Virtual) and is NOW getting students (Real Data),
+                // we treat it as a "New Upload" and FORCE LOCK if it is in the future.
+                const isNewDataUpload = (!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0;
+                
+                if (isNewDataUpload) {
+                     if (!isPastSession) {
+                         slot.isLocked = true; // Force Lock
+                     }
                      hasChanges = true;
                 }
 
