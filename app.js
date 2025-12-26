@@ -15463,8 +15463,7 @@ window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
 
-
-// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Nice & Tidy) ---
+// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
 function generateInvigilatorSummaryPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -15528,17 +15527,22 @@ function generateInvigilatorSummaryPDF() {
             didParseCell: function(data) {
                 // Formatting Hacks: Clean up HTML content inside cells
                 if (data.section === 'body' && data.column.index === 1) {
-                    // Clean up the "Stream-wise" column text
-                    let text = data.cell.raw.innerText || "";
-                    // Replace double newlines with single to save vertical space
-                    data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
+                    // Safety check for cell raw data
+                    if (data.cell && data.cell.raw && data.cell.raw.innerText) {
+                        let text = data.cell.raw.innerText;
+                        // Replace double newlines with single to save vertical space
+                        data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
+                    }
                 }
                 
                 // Style the Grand Total Row (Green Background)
-                if (data.row.raw.innerText.includes("GRAND TOTAL")) {
-                    data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
-                    data.cell.styles.textColor = [13, 148, 136];  // Teal Text
-                    data.cell.styles.fontStyle = 'bold';
+                // 🟢 FIX: Added robust safety check for row.raw and innerText
+                if (data.row && data.row.raw && typeof data.row.raw.innerText === 'string') {
+                    if (data.row.raw.innerText.toUpperCase().includes("GRAND TOTAL")) {
+                        data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
+                        data.cell.styles.textColor = [13, 148, 136];  // Teal Text
+                        data.cell.styles.fontStyle = 'bold';
+                    }
                 }
             }
         });
@@ -15559,6 +15563,7 @@ function generateInvigilatorSummaryPDF() {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
 }
+
 
 
     
