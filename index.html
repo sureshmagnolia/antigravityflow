@@ -2093,6 +2093,192 @@
             </div>
 
 
+    
+
+
+<div id="view-help" class="container max-w-4xl mx-auto p-4 min-h-screen hidden">
+        <div class="bg-white shadow-xl rounded-xl overflow-hidden">
+            <div class="bg-indigo-600 p-8 text-center border-b border-indigo-700 text-white">
+                <h1 class="text-3xl font-bold mb-2 tracking-wide">📘 ExamFlow User Manual</h1>
+                <p class="text-indigo-100 font-medium">Version 11.9 (Cloud Sync)</p>
+            </div>
+
+            <div class="p-8 space-y-10 text-gray-800 leading-relaxed">
+
+                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                    <h3 class="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wide">Table of Contents</h3>
+                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-indigo-600 font-medium cursor-pointer">
+                        <li>1. Getting Started & Configuration</li>
+                        <li>2. Loading Student Data</li>
+                        <li>3. Editing & Managing Data</li>
+                        <li>4. Scribe Assistance Management</li>
+                        <li>5. Room Allotment</li>
+                        <li>6. QP Codes Assignment</li>
+                        <li>7. Generating Reports</li>
+                        <li>8. Exam Day: Marking Absentees</li>
+                        <li>9. Remuneration Bills</li>
+                        <li>10. Backup & Recovery</li>
+                    </ul>
+                </div>
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">1</span>
+                        Getting Started & Configuration
+                    </h2>
+                    <p class="mb-3 text-gray-600">Before loading any student data, you must configure the basic settings of your college.</p>
+                    <div class="bg-white border-l-4 border-indigo-500 pl-4 py-2 space-y-2 text-sm text-gray-700">
+                        <p><strong>College Name:</strong> Navigate to Settings. Enter name (e.g., Govt Victoria College). Click Save.</p>
+                        <p><strong>Exam Streams:</strong> Define types (Regular, Supplementary). Click Add.</p>
+                        <p><strong>Room Capacity:</strong> Enter Room Name, Capacity (30/40), and Location. Click <strong>+ Add New Room</strong>.</p>
+                    </div>
+                    <p class="mt-2 text-xs text-orange-600 font-bold">Note: You must click "Save Room Settings" to persist these changes.</p>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">2</span>
+                        Loading Student Data
+                    </h2>
+                    <p class="mb-3 text-gray-600">Navigate to the <strong>Data Loading</strong> tab.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                            <h4 class="font-bold text-green-800 mb-2">Option A: Upload CSV (Fastest)</h4>
+                            <ul class="list-disc list-inside text-sm text-green-900 space-y-1">
+                                <li>Requires Excel/Spreadsheet file.</li>
+                                <li>Headers: Register Number, Name, Course, Date, Time.</li>
+                                <li>Select Stream -> Click Load Data.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <h4 class="font-bold text-blue-800 mb-2">Option B: PDF Extraction</h4>
+                            <ul class="list-disc list-inside text-sm text-blue-900 space-y-1">
+                                <li>Select Stream & Exam Name.</li>
+                                <li>Select PDF files.</li>
+                                <li>Click <strong>Run Batch Extraction</strong>.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-400 text-sm text-yellow-800">
+                        <strong>Interactive Merge:</strong> If new data overlaps with existing data, the system will ask if you want to Update, Add New, or Remove Missing students.
+                    </div>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">3</span>
+                        Editing & Managing Data
+                    </h2>
+                    <p class="mb-3 text-gray-600">Navigate to <strong>Data Editor</strong> to fix errors or reschedule.</p>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 mb-4">
+                        <li><strong>Individual:</strong> Click the Pencil icon next to a student to modify details.</li>
+                        <li><strong>Bulk Rescheduling:</strong> Select a specific Course. Use the <span class="bg-yellow-100 px-1 rounded font-bold">Yellow Box</span> to change the Date/Time for all students in that course instantly.</li>
+                    </ul>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <section>
+                        <h2 class="text-xl font-bold text-gray-800 mb-3">4. Scribe Management</h2>
+                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Scribe Assistance</strong>.</p>
+                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                            <li>Search student by Name/RegNo.</li>
+                            <li>Click "Add to Scribe List".</li>
+                            <li><strong>Global:</strong> Applies to all their exams.</li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h2 class="text-xl font-bold text-gray-800 mb-3">5. Room Allotment</h2>
+                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Room Allotment</strong>.</p>
+                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                            <li>Select Session. Check "Awaiting" count.</li>
+                            <li>Click <strong>+ Add Room</strong>.</li>
+                            <li>System auto-fills capacity. Repeat until count is 0.</li>
+                            <li><strong>Scribes:</strong> Assign manually to special rooms.</li>
+                        </ul>
+                    </section>
+                </div>
+
+                <hr class="border-gray-100">
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">6</span>
+                        QP Codes Assignment
+                    </h2>
+                    <p class="text-sm text-gray-700 mb-2">Essential for Absentee Statements. Navigate to <strong>QP Codes</strong>.</p>
+                    <p class="text-sm text-gray-600">Select Session -> Enter Code (e.g. A123) for each course -> Click Save.</p>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <section>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
+                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">7</span>
+                        Generating Reports
+                    </h2>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Seating Report:</strong> Notice board list.</div>
+                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Candidates List:</strong> For signature collection.</div>
+                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>QP Report:</strong> Paper count summary.</div>
+                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Stickers:</strong> Desk labels (2/page).</div>
+                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Room Summary:</strong> Chief Supt overview.</div>
+                    </div>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <section>
+                        <h2 class="text-xl font-bold text-gray-800 mb-3">8. Exam Day: Absentees</h2>
+                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Absentees</strong>.</p>
+                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                            <li>Select Session -> Add Absentee (Search RegNo).</li>
+                            <li>Click <strong>Generate Absentee Statement</strong> (University Format).</li>
+                        </ul>
+                    </section>
+
+                    <section>
+                        <h2 class="text-xl font-bold text-gray-800 mb-3">9. Remuneration Bills</h2>
+                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Remuneration</strong>.</p>
+                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                            <li>Set Rates (Chief, Invigilator, etc.).</li>
+                            <li>Select Date Range -> <strong>Generate Bill</strong>.</li>
+                            <li>Calculates total sessions & staff allowance.</li>
+                        </ul>
+                    </section>
+                </div>
+
+                <hr class="border-gray-100">
+
+                <section class="bg-red-50 p-6 rounded-xl border border-red-100">
+                    <h2 class="text-2xl font-bold text-red-800 mb-3 flex items-center gap-2">
+                        <span>🛡️</span> 10. Backup & Recovery (The Bunker)
+                    </h2>
+                    <p class="text-sm text-red-900 mb-3">Always backup your data. Navigate to <strong>Settings -> Danger Zone</strong>.</p>
+                    <div class="space-y-2 text-sm text-red-800">
+                        <p><strong>Full Backup:</strong> Saves a .json file with EVERYTHING (Students, Settings, Allocations).</p>
+                        <p><strong>Restore:</strong> Upload the .json file to recover the system to that exact state.</p>
+                        <p><strong>Master Reset:</strong> "NUKE IT ALL" wipes data but keeps settings. Use only after exam season ends.</p>
+                    </div>
+                </section>
+
+            </div>
+            
+            <div class="bg-gray-50 p-6 text-center border-t border-gray-200">
+                <p class="text-xs text-gray-400">ExamFlow v11.9 • Developed by Exam Wing</p>
+            </div>
+        </div>
+    </div>
+
+    
 
 
         </main>
@@ -2557,189 +2743,6 @@
 </div>
 
 
-
-<div id="view-help" class="container max-w-4xl mx-auto p-4 min-h-screen hidden">
-        <div class="bg-white shadow-xl rounded-xl overflow-hidden">
-            <div class="bg-indigo-600 p-8 text-center border-b border-indigo-700 text-white">
-                <h1 class="text-3xl font-bold mb-2 tracking-wide">📘 ExamFlow User Manual</h1>
-                <p class="text-indigo-100 font-medium">Version 11.9 (Cloud Sync)</p>
-            </div>
-
-            <div class="p-8 space-y-10 text-gray-800 leading-relaxed">
-
-                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                    <h3 class="text-lg font-bold text-gray-700 mb-4 uppercase tracking-wide">Table of Contents</h3>
-                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-indigo-600 font-medium cursor-pointer">
-                        <li>1. Getting Started & Configuration</li>
-                        <li>2. Loading Student Data</li>
-                        <li>3. Editing & Managing Data</li>
-                        <li>4. Scribe Assistance Management</li>
-                        <li>5. Room Allotment</li>
-                        <li>6. QP Codes Assignment</li>
-                        <li>7. Generating Reports</li>
-                        <li>8. Exam Day: Marking Absentees</li>
-                        <li>9. Remuneration Bills</li>
-                        <li>10. Backup & Recovery</li>
-                    </ul>
-                </div>
-
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
-                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">1</span>
-                        Getting Started & Configuration
-                    </h2>
-                    <p class="mb-3 text-gray-600">Before loading any student data, you must configure the basic settings of your college.</p>
-                    <div class="bg-white border-l-4 border-indigo-500 pl-4 py-2 space-y-2 text-sm text-gray-700">
-                        <p><strong>College Name:</strong> Navigate to Settings. Enter name (e.g., Govt Victoria College). Click Save.</p>
-                        <p><strong>Exam Streams:</strong> Define types (Regular, Supplementary). Click Add.</p>
-                        <p><strong>Room Capacity:</strong> Enter Room Name, Capacity (30/40), and Location. Click <strong>+ Add New Room</strong>.</p>
-                    </div>
-                    <p class="mt-2 text-xs text-orange-600 font-bold">Note: You must click "Save Room Settings" to persist these changes.</p>
-                </section>
-
-                <hr class="border-gray-100">
-
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
-                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">2</span>
-                        Loading Student Data
-                    </h2>
-                    <p class="mb-3 text-gray-600">Navigate to the <strong>Data Loading</strong> tab.</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div class="bg-green-50 p-4 rounded-lg border border-green-100">
-                            <h4 class="font-bold text-green-800 mb-2">Option A: Upload CSV (Fastest)</h4>
-                            <ul class="list-disc list-inside text-sm text-green-900 space-y-1">
-                                <li>Requires Excel/Spreadsheet file.</li>
-                                <li>Headers: Register Number, Name, Course, Date, Time.</li>
-                                <li>Select Stream -> Click Load Data.</li>
-                            </ul>
-                        </div>
-                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <h4 class="font-bold text-blue-800 mb-2">Option B: PDF Extraction</h4>
-                            <ul class="list-disc list-inside text-sm text-blue-900 space-y-1">
-                                <li>Select Stream & Exam Name.</li>
-                                <li>Select PDF files.</li>
-                                <li>Click <strong>Run Batch Extraction</strong>.</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="bg-yellow-50 p-4 rounded border-l-4 border-yellow-400 text-sm text-yellow-800">
-                        <strong>Interactive Merge:</strong> If new data overlaps with existing data, the system will ask if you want to Update, Add New, or Remove Missing students.
-                    </div>
-                </section>
-
-                <hr class="border-gray-100">
-
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
-                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">3</span>
-                        Editing & Managing Data
-                    </h2>
-                    <p class="mb-3 text-gray-600">Navigate to <strong>Data Editor</strong> to fix errors or reschedule.</p>
-                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-2 mb-4">
-                        <li><strong>Individual:</strong> Click the Pencil icon next to a student to modify details.</li>
-                        <li><strong>Bulk Rescheduling:</strong> Select a specific Course. Use the <span class="bg-yellow-100 px-1 rounded font-bold">Yellow Box</span> to change the Date/Time for all students in that course instantly.</li>
-                    </ul>
-                </section>
-
-                <hr class="border-gray-100">
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <section>
-                        <h2 class="text-xl font-bold text-gray-800 mb-3">4. Scribe Management</h2>
-                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Scribe Assistance</strong>.</p>
-                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                            <li>Search student by Name/RegNo.</li>
-                            <li>Click "Add to Scribe List".</li>
-                            <li><strong>Global:</strong> Applies to all their exams.</li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 class="text-xl font-bold text-gray-800 mb-3">5. Room Allotment</h2>
-                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Room Allotment</strong>.</p>
-                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                            <li>Select Session. Check "Awaiting" count.</li>
-                            <li>Click <strong>+ Add Room</strong>.</li>
-                            <li>System auto-fills capacity. Repeat until count is 0.</li>
-                            <li><strong>Scribes:</strong> Assign manually to special rooms.</li>
-                        </ul>
-                    </section>
-                </div>
-
-                <hr class="border-gray-100">
-
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
-                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">6</span>
-                        QP Codes Assignment
-                    </h2>
-                    <p class="text-sm text-gray-700 mb-2">Essential for Absentee Statements. Navigate to <strong>QP Codes</strong>.</p>
-                    <p class="text-sm text-gray-600">Select Session -> Enter Code (e.g. A123) for each course -> Click Save.</p>
-                </section>
-
-                <hr class="border-gray-100">
-
-                <section>
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-3">
-                        <span class="bg-indigo-100 text-indigo-700 w-8 h-8 flex items-center justify-center rounded-full text-sm">7</span>
-                        Generating Reports
-                    </h2>
-                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Seating Report:</strong> Notice board list.</div>
-                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Candidates List:</strong> For signature collection.</div>
-                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>QP Report:</strong> Paper count summary.</div>
-                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Stickers:</strong> Desk labels (2/page).</div>
-                        <div class="p-3 bg-gray-50 rounded border border-gray-200"><strong>Room Summary:</strong> Chief Supt overview.</div>
-                    </div>
-                </section>
-
-                <hr class="border-gray-100">
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <section>
-                        <h2 class="text-xl font-bold text-gray-800 mb-3">8. Exam Day: Absentees</h2>
-                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Absentees</strong>.</p>
-                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                            <li>Select Session -> Add Absentee (Search RegNo).</li>
-                            <li>Click <strong>Generate Absentee Statement</strong> (University Format).</li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 class="text-xl font-bold text-gray-800 mb-3">9. Remuneration Bills</h2>
-                        <p class="text-sm text-gray-600 mb-2">Navigate to <strong>Remuneration</strong>.</p>
-                        <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-                            <li>Set Rates (Chief, Invigilator, etc.).</li>
-                            <li>Select Date Range -> <strong>Generate Bill</strong>.</li>
-                            <li>Calculates total sessions & staff allowance.</li>
-                        </ul>
-                    </section>
-                </div>
-
-                <hr class="border-gray-100">
-
-                <section class="bg-red-50 p-6 rounded-xl border border-red-100">
-                    <h2 class="text-2xl font-bold text-red-800 mb-3 flex items-center gap-2">
-                        <span>🛡️</span> 10. Backup & Recovery (The Bunker)
-                    </h2>
-                    <p class="text-sm text-red-900 mb-3">Always backup your data. Navigate to <strong>Settings -> Danger Zone</strong>.</p>
-                    <div class="space-y-2 text-sm text-red-800">
-                        <p><strong>Full Backup:</strong> Saves a .json file with EVERYTHING (Students, Settings, Allocations).</p>
-                        <p><strong>Restore:</strong> Upload the .json file to recover the system to that exact state.</p>
-                        <p><strong>Master Reset:</strong> "NUKE IT ALL" wipes data but keeps settings. Use only after exam season ends.</p>
-                    </div>
-                </section>
-
-            </div>
-            
-            <div class="bg-gray-50 p-6 text-center border-t border-gray-200">
-                <p class="text-xs text-gray-400">ExamFlow v11.9 • Developed by Exam Wing</p>
-            </div>
-        </div>
-    </div>
-    
 
 
     
