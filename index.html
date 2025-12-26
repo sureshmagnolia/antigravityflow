@@ -2096,7 +2096,6 @@
     
 
 
-
 <div id="view-help" class="container max-w-6xl mx-auto p-4 min-h-screen hidden">
     <div class="bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200">
         
@@ -2113,13 +2112,14 @@
             <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto">
                 <nav class="space-y-1 sticky top-0">
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">Workflow</p>
-                    <a href="#step1" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">1. Initial Setup</a>
-                    <a href="#step2" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">2. Loading Data</a>
+                    <a href="#step1" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">1. Initial Setup (Mandatory)</a>
+                    <a href="#step2" class="block px-3 py-2 text-sm font-bold text-red-600 bg-red-50 rounded-md border border-red-200 mb-2">2. Loading Data (Rules)</a>
                     <a href="#step3" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">3. Managing Students</a>
                     <a href="#step4" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">4. Room Allotment</a>
                     <a href="#step5" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">5. Scribes & QP Codes</a>
-                    <a href="#step6" class="block px-3 py-2 text-sm font-bold text-indigo-700 bg-indigo-50 rounded-md border border-indigo-200">6. Generating Reports</a>
-                    <a href="#step7" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">7. Remuneration</a>
+                    <a href="#step6" class="block px-3 py-2 text-sm font-bold text-indigo-700 bg-indigo-50 rounded-md border border-indigo-200">6. Detailed Reports Guide</a>
+                    <a href="#step7" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">7. Absentees & Bills</a>
+                    <a href="#step8" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">8. Backup & Restore</a>
                 </nav>
             </div>
 
@@ -2128,27 +2128,49 @@
                 <section id="step1" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">1</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Initial Setup (One-Time)</h2>
+                        <h2 class="text-2xl font-bold text-gray-800">Initial Setup (Mandatory)</h2>
                     </div>
                     
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg">
+                        <p class="text-red-800 font-bold">⚠️ CRITICAL: You must configure ALL 4 items below in the "Settings" tab BEFORE loading any student data.</p>
+                        <p class="text-red-700 text-sm mt-1">If these are missing, the "Data Loading" tab will not function.</p>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="border-l-4 border-indigo-500 bg-gray-50 p-4 rounded-r-lg">
-                            <h3 class="font-bold text-indigo-800 mb-2">A. College Name</h3>
-                            <p class="text-sm text-gray-600 mb-2"><strong>Purpose:</strong> Appears as the header on all printed reports.</p>
-                            <p class="text-sm text-gray-700"><strong>Action:</strong> Go to <em>Settings</em> tab > College Name section. Type the official name (e.g., "Govt Victoria College"). Click <strong>Save</strong>.</p>
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
+                            <h3 class="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                                <span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-xs">1</span> College Name
+                            </h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > College Name</em>. Enter the official name (e.g., "Govt Victoria College"). Click Save.</p>
+                            <p class="text-xs text-gray-400 mt-2">Required for: Report Headers.</p>
                         </div>
 
-                        <div class="border-l-4 border-indigo-500 bg-gray-50 p-4 rounded-r-lg">
-                            <h3 class="font-bold text-indigo-800 mb-2">B. Room Configuration</h3>
-                            <p class="text-sm text-gray-600 mb-2"><strong>Purpose:</strong> Defines the seating capacity and order of rooms.</p>
-                            <div class="text-sm text-gray-700 space-y-1">
-                                <p><strong>Action:</strong> Go to <em>Settings</em> > Room Capacity. Click <strong>+ Add New Room</strong>.</p>
-                                <ul class="list-disc list-inside text-xs text-indigo-900 mt-2 ml-1">
-                                    <li><strong>Name:</strong> Room Number (e.g., "101").</li>
-                                    <li><strong>Capacity:</strong> Max students (e.g., "30").</li>
-                                    <li><strong>Location:</strong> (Mandatory) E.g., "Main Block, Ground Floor". This is required for sorting rooms logically and printing correct stickers.</li>
-                                </ul>
-                            </div>
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
+                            <h3 class="font-bold text-purple-800 mb-2 flex items-center gap-2">
+                                <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs">2</span> Exam Streams
+                            </h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Exam Streams</em>. Add types like "Regular", "Supplementary", "EDE/Distance".</p>
+                            <p class="text-xs text-purple-600 mt-2 font-bold">Required for: Separating Regular & Distance students.</p>
+                        </div>
+
+                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
+                            <h3 class="font-bold text-pink-800 mb-2 flex items-center gap-2">
+                                <span class="bg-pink-100 text-pink-800 px-2 py-0.5 rounded text-xs">3</span> Exam Names (Master List)
+                            </h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings</em>. Find "Exam Names" section. Add tags like "B.Sc S5 Nov 2025" or "PG S2 2024".</p>
+                            <p class="text-xs text-pink-600 mt-2 font-bold">Required for: Tagging uploaded students to a semester.</p>
+                        </div>
+
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
+                            <h3 class="font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">4</span> Room Configuration
+                            </h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Room Capacity</em>. Add <strong>ALL</strong> rooms.</p>
+                            <ul class="list-disc list-inside text-xs text-gray-600 mt-2 ml-1">
+                                <li><strong>Name:</strong> E.g., "Room 101".</li>
+                                <li><strong>Capacity:</strong> Max seats (e.g., 30).</li>
+                                <li><strong>Location:</strong> <span class="text-red-600 font-bold">MANDATORY</span> (e.g., "Main Block"). Required for sorting & stickers.</li>
+                            </ul>
                         </div>
                     </div>
                 </section>
@@ -2160,7 +2182,18 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">2</span>
                         <h2 class="text-2xl font-bold text-gray-800">Loading Student Data</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">Go to the <strong>Data Loading</strong> tab. You must load data before doing anything else.</p>
+                    
+                    <div class="bg-red-50 border-l-4 border-red-500 p-5 mb-6 rounded-r-lg">
+                        <h4 class="text-red-800 font-bold mb-2">⛔ Golden Rules of Data Loading</h4>
+                        <p class="text-sm text-red-800 mb-2">To prevent data corruption, you must follow this logic explicitly:</p>
+                        <ul class="list-disc list-inside text-sm text-red-900 space-y-2 font-medium">
+                            <li><strong>Do NOT mix Streams:</strong> Load "Regular" files separately from "EDE/Distance" files. Select "Regular" in the dropdown, load the files. Then change dropdown to "EDE" and load those files.</li>
+                            <li><strong>Do NOT mix Exams:</strong> Never load "2nd Semester" and "3rd Semester" files at the same time. Load S2 files first. Then select S3 in the dropdown and load S3 files separately.</li>
+                            <li><strong>One Batch at a Time:</strong> The system tags every student in the current upload batch with the <em>selected</em> Stream and Exam Name. If you mix files, students will get the wrong tags.</li>
+                        </ul>
+                    </div>
+
+                    <p class="text-gray-600 mb-4">Go to the <strong>Data Loading</strong> tab. Select your Stream and Exam Name carefully before uploading.</p>
 
                     <div class="space-y-4">
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
@@ -2169,11 +2202,6 @@
                             <div class="bg-gray-100 p-2 rounded text-xs font-mono text-gray-700 border border-gray-300">
                                 <strong>Required Headers:</strong> Register Number, Name, Course, Date, Time
                             </div>
-                            <ul class="list-disc list-inside text-sm text-gray-700 mt-2 ml-2">
-                                <li>Select <strong>Stream</strong> (e.g., Regular).</li>
-                                <li>Select/Create <strong>Exam Name</strong> (e.g., "B.Sc S5 Nov 2025").</li>
-                                <li>Upload file and click <strong>Load Data</strong>.</li>
-                            </ul>
                         </div>
 
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
@@ -2296,7 +2324,7 @@
                 <section id="step6" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">6</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Generating Reports</h2>
+                        <h2 class="text-2xl font-bold text-gray-800">Detailed Report Guide</h2>
                     </div>
                     
                     <p class="text-gray-600 mb-6">Go to <strong>Reports Tab</strong> and select a Session. Each report has a specific audience and purpose.</p>
@@ -2456,7 +2484,7 @@
             <p class="text-xs text-gray-400">ExamFlow v12.8 • Developed by Exam Wing</p>
         </div>
     </div>
-</div>            
+</div>
 
 
 
