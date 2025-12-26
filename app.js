@@ -1452,8 +1452,7 @@ function updateLocalSlotsFromStudents() {
         downloadReportPDF();
     });
 
-// --- MASTER PDF DOWNLOAD DISPATCHER ---
-
+// --- MASTER PDF DOWNLOAD DISPATCHER (Updated for Invigilator Summary) ---
 window.downloadReportPDF = function() {
     const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
                      ? lastGeneratedReportType 
@@ -1461,54 +1460,24 @@ window.downloadReportPDF = function() {
 
     console.log("📄 Requesting PDF for:", reportType);
 
-    // 1. Room-wise
-    if (reportType === "Roomwise_Seating_Report") {
-        if(typeof generateRoomWisePDF === 'function') generateRoomWisePDF();
-        else alert("Room-wise PDF generator not found.");
-        return;
-    }
+    // Map Report Types to Generator Functions
+    const generators = {
+        "Roomwise_Seating_Report": generateRoomWisePDF,
+        "Daywise_Seating_Details": generateDayWisePDF,
+        "Question_Paper_Summary": generateQuestionPaperSummaryPDF,
+        "QP_Distribution_Report": generateQPDistributionPDF,
+        "qp-wise": generateQPDistributionPDF,
+        "Scribe_Proforma": generateScribeProformaPDF,
+        "Room_Stickers": generateRoomStickersPDF,
+        "Invigilator_Summary": generateInvigilatorSummaryPDF  // <--- The New Feature
+    };
 
-    // 2. Day-wise
-    if (reportType === "Daywise_Seating_Details") {
-        if(typeof generateDayWisePDF === 'function') generateDayWisePDF();
-        else alert("Day-wise PDF generator not found.");
-        return;
+    if (generators[reportType] && typeof generators[reportType] === 'function') {
+        generators[reportType]();
+    } else {
+        alert("PDF generation for '" + reportType + "' is not yet implemented.");
     }
-
-    // 3. QP Summary
-    if (reportType === "Question_Paper_Summary") {
-        if(typeof generateQuestionPaperSummaryPDF === 'function') generateQuestionPaperSummaryPDF();
-        else alert("QP Summary generator not found.");
-        return;
-    }
-
-    // 4. QP Distribution
-    if (reportType === "QP_Distribution_Report" || reportType === "qp-wise") {
-        if(typeof generateQPDistributionPDF === 'function') generateQPDistributionPDF();
-        else alert("QP Distribution generator not found.");
-        return;
-    }
-
-    // 5. Scribe Proforma
-    if (reportType === "Scribe_Proforma") {
-        if(typeof generateScribeProformaPDF === 'function') generateScribeProformaPDF();
-        else alert("Scribe Proforma generator not found.");
-        return;
-    }
-
-    // 6. Room Stickers (NEW)
-    if (reportType === "Room_Stickers") {
-        if(typeof generateRoomStickersPDF === 'function') {
-            generateRoomStickersPDF();
-        } else {
-            alert("Room Sticker generator not found.");
-        }
-        return;
-    }
-
-    alert("PDF generation for '" + reportType + "' is coming next!");
 };
-
     
 
 
@@ -15493,6 +15462,106 @@ function confirmDialSelection() {
 window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
+
+
+// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Nice & Tidy) ---
+function generateInvigilatorSummaryPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    
+    // Feedback Button State
+    const btn = document.getElementById('download-pdf-report-btn');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+
+    try {
+        // 1. Header Information
+        const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+        
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
+        
+        doc.setFontSize(11);
+        doc.text("Invigilator Requirement Summary", 105, 22, { align: "center" });
+        
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+
+        // Check for "Upcoming Only" Filter Badge (matches HTML visual)
+        const filterBadge = document.querySelector('.print-header-group span.bg-teal-100');
+        if (filterBadge) {
+            doc.setTextColor(13, 148, 136); // Teal Color to match HTML
+            doc.setFont("helvetica", "bold");
+            doc.text("Filtered: Upcoming Exams Only", 105, 34, { align: "center" });
+            doc.setTextColor(0, 0, 0); // Reset color
+        }
+
+        // 2. Generate Table from HTML
+        const tableEl = document.querySelector('#report-output-area table');
+        if (!tableEl) throw new Error("Table not found in report area.");
+
+        doc.autoTable({
+            html: tableEl,
+            startY: 40,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 9,
+                cellPadding: 3,
+                valign: 'middle',
+                lineColor: [200, 200, 200],
+                lineWidth: 0.1
+            },
+            headStyles: {
+                fillColor: [243, 244, 246], // Gray-100 background
+                textColor: 20,              // Dark Gray text
+                fontStyle: 'bold',
+                halign: 'left',
+                lineWidth: 0.1,
+                lineColor: [200, 200, 200]
+            },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 40 }, // Date | Time column
+                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] } // Total Column (Teal)
+            },
+            didParseCell: function(data) {
+                // Formatting Hacks: Clean up HTML content inside cells
+                if (data.section === 'body' && data.column.index === 1) {
+                    // Clean up the "Stream-wise" column text
+                    let text = data.cell.raw.innerText || "";
+                    // Replace double newlines with single to save vertical space
+                    data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
+                }
+                
+                // Style the Grand Total Row (Green Background)
+                if (data.row.raw.innerText.includes("GRAND TOTAL")) {
+                    data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
+                    data.cell.styles.textColor = [13, 148, 136];  // Teal Text
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            }
+        });
+
+        // 3. Footer Note
+        const finalY = doc.lastAutoTable.finalY || 40;
+        doc.setFontSize(8);
+        doc.setTextColor(100);
+        doc.text("Note: Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.", 14, finalY + 10);
+
+        // 4. Save File
+        doc.save(`Invigilator_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
+
+    } catch (e) {
+        console.error("PDF Gen Error:", e);
+        alert("Error generating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
+
+    
 //----------------Remunereation Bill PDF---------------------
 // --- REMUNERATION BILL PDF (Multi-Bill Support + Layout Fixes) ---
 function generateRemunerationBillPDF() {
