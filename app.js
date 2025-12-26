@@ -6918,6 +6918,10 @@ if (toggleButton && sidebar) {
     navReports.addEventListener('click', () => showView(viewReports, navReports));
     navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
     navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
+    // Add this line with your other navigation listeners
+    if (navHelp) {
+    navHelp.addEventListener('click', () => showView(viewHelp, navHelp));
+    }
 
     function showView(viewToShow, buttonToActivate) {
         // 1. Hide all views (Safety Check Added)
