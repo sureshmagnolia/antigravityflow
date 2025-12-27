@@ -15924,7 +15924,57 @@ function populateUploadExamDropdown() {
         });
     }
 }    
+// ==========================================
+// USER MANUAL FUNCTION (New Tab)
+// ==========================================
+function openManualNewTab() {
+    // 1. Get the template content from the HTML
+    const template = document.getElementById('manual-template');
+    
+    // Safety check: if template is missing, stop
+    if (!template) { 
+        console.error("Manual Template not found!"); 
+        alert("Error: Manual content is missing.");
+        return; 
+    }
+    
+    const content = template.innerHTML;
 
+    // 2. Open a new browser tab/window
+    const win = window.open('', '_blank');
+    
+    // 3. Write the HTML structure into the new tab
+    if (win) {
+        win.document.write(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>ExamFlow User Manual</title>
+                <script src="https://cdn.tailwindcss.com"><\/script>
+                <link href="https://fonts.googleapis.com/css2?family=Anek+Malayalam:wght@100..800&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Anek Malayalam', sans-serif; background-color: #f3f4f6; }
+                    .custom-scroll::-webkit-scrollbar { width: 8px; }
+                    .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+                    .custom-scroll::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 4px; }
+                </style>
+            </head>
+            <body>
+                ${content}
+            </body>
+            </html>
+        `);
+        win.document.close(); // Essential for the browser to stop loading and render
+    } else {
+        alert("Please allow pop-ups for this site to view the manual.");
+    }
+}
+
+// Helper to switch language inside the new tab
+// Note: This function string is already embedded in the template HTML, 
+// so you don't strictly need it here, but the openManualNewTab logic handles the rest.
     
 // ==========================================
     // ☁️ FORCE CLOUD SYNC (Header Button)
