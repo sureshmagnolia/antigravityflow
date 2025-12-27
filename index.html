@@ -2523,7 +2523,28 @@
     </div>
 </div>
 
-
+<script>
+    function toggleManualLanguage() {
+        const enDiv = document.getElementById('manual-en');
+        const mlDiv = document.getElementById('manual-ml');
+        const btnText = document.getElementById('lang-btn-text');
+        const titleText = document.getElementById('help-title-text');
+        
+        if (enDiv.classList.contains('hidden')) {
+            // Switch to English
+            enDiv.classList.remove('hidden');
+            mlDiv.classList.add('hidden');
+            btnText.innerText = 'മലയാളം';
+            titleText.innerText = 'ExamFlow User Manual';
+        } else {
+            // Switch to Malayalam
+            enDiv.classList.add('hidden');
+            mlDiv.classList.remove('hidden');
+            btnText.innerText = 'English';
+            titleText.innerText = 'യൂസർ മാനുവൽ (Malayalam)';
+        }
+    }
+</script>
 
             
             
