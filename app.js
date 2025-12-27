@@ -12246,15 +12246,16 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
 };
 
     
-
 // ==========================================
-// 🐍 PYTHON INTEGRATION (With Write-Saver Logic)
+// 🐍 PYTHON INTEGRATION (With Stream-Aware Merge)
 // ==========================================
 window.handlePythonExtraction = function (jsonString) {
     console.log("Received data from Python...");
-
+    
+    // 1. Get Configuration
     const examSelect = document.getElementById('upload-exam-select');
     const streamSelect = document.getElementById('global-stream-select');
+    
     const selectedExamName = examSelect ? examSelect.value : "";
     const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
@@ -12265,77 +12266,94 @@ window.handlePythonExtraction = function (jsonString) {
 
     try {
         let newJsonData = JSON.parse(jsonString);
+
         if (newJsonData.length === 0) {
             alert("No student data found in PDF.");
             return;
         }
 
-        // 1. Normalize & Tag Data
+        // 2. Normalize & Tag Data (Apply selected Stream/Exam to new data)
         newJsonData = newJsonData.map(item => ({
             ...item,
             "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
-            "Stream": selectedStream,
+            "Stream": selectedStream, // <--- TAGGING WITH STREAM
             "Exam Name": selectedExamName
         }));
 
-        // 2. Identify Affected Sessions (The "Write-Saver")
-        // We create a list of ONLY the sessions present in this new PDF.
+        // 3. Identify Affected Sessions & Scopes
         const affectedSessions = new Set();
         const scopesToUpdate = new Set();
 
         newJsonData.forEach(s => {
             if (s.Course && s.Date && s.Time) {
-                // Scope for Merge Logic (Course + Date)
-                scopesToUpdate.add(`${s.Course}|${s.Date}`);
+                // FIX: Scope now includes STREAM. 
+                // "English|Monday|Regular" is NOT the same as "English|Monday|EDE"
+                scopesToUpdate.add(`${s.Course}|${s.Date}|${s.Stream}`); 
                 
-                // Scope for Cloud Sync (Date + Time)
+                // For Cloud Sync, we still just need Date|Time
                 affectedSessions.add(`${s.Date} | ${s.Time}`);
             }
         });
 
-        // 3. Merge Logic (Interactive Diff)
-        const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
-        const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
-        const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
+        // 4. Merge Logic (Interactive Diff)
+        const currentDB = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+
+        // A. IGNORED DATA: Keep everything that doesn't match our specific Course+Date+Stream
+        // (This protects Regular students when uploading EDE, and vice versa)
+        const ignoredData = currentDB.filter(s => {
+            const sStream = s.Stream || "Regular";
+            return !scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
+        });
+
+        // B. RELEVANT DATA: Only data that matches the exact Course+Date+Stream we are uploading
+        const relevantOldData = currentDB.filter(s => {
+            const sStream = s.Stream || "Regular";
+            return scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
+        });
 
         const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
         const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
 
+        // C. Calculate Diff
         const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
         const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
         const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
 
         let finalBatch = [...commonStudents];
 
-        // Prompts
+        // 5. User Prompts
         if (potentialAdds.length > 0) {
-            if (confirm(`Found ${potentialAdds.length} new students. Add them?`)) {
+            // New students found for this specific stream
+            if (confirm(`Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
         }
+
         if (potentialDeletes.length > 0) {
-            if (confirm(`Found ${potentialDeletes.length} missing students (previously in database). Delete them from system?`)) {
-                // Do nothing, they are excluded from finalBatch. 
-                // If user clicks Cancel (false), we keep them:
+            // Missing students IN THIS STREAM only
+            if (confirm(`Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
+                // User said YES: They are removed (excluded from finalBatch)
             } else {
+                // User said NO: Keep them
                 finalBatch = finalBatch.concat(potentialDeletes);
             }
         }
 
-        // 4. Final Data Construction
+        // 6. Construct Final DB
+        // (Ignored Data + Updated Data for this Stream)
         const finalData = [...ignoredData, ...finalBatch];
 
-        // 5. Call Loader with Targeted Sync
-        // We pass 'affectedSessions' so the system knows to ONLY sync those specific dates/times.
+        // 7. Save & Sync
         window.loadStudentData(finalData, affectedSessions);
         
-        alert(`✅ PDF Processed!\n\n• Updated Database\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
+        alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
 
     } catch (e) {
         console.error("Bridge Error:", e);
         alert("Error processing data: " + e.message);
     }
 };
+
 
 
 
