@@ -2098,17 +2098,24 @@
 <div id="view-help" class="container max-w-6xl mx-auto p-2 md:p-4 min-h-screen hidden">
     <div class="bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200 flex flex-col h-[85vh] md:h-auto">
         
-        <div class="bg-indigo-800 p-4 md:p-8 text-white relative overflow-hidden shrink-0">
-            <div class="absolute top-1/2 right-4 transform -translate-y-1/2 opacity-10 pointer-events-none">
-                <svg class="w-24 h-24 md:w-64 md:h-64 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <div class="bg-indigo-800 p-4 md:p-6 text-white relative overflow-hidden shrink-0 flex justify-between items-center">
+            <div class="relative z-10 flex items-center gap-3">
+                <h1 class="text-xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2">
+                    <span>📘</span> <span id="help-title-text">ExamFlow User Manual</span>
+                </h1>
             </div>
-            <h1 class="text-xl md:text-4xl font-extrabold tracking-tight relative z-10 flex items-center gap-2">
-                <span>📘</span> ExamFlow User Manual
-            </h1>
+            
+            <button onclick="toggleManualLanguage()" class="relative z-20 bg-white/20 hover:bg-white/30 text-white border border-white/40 px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                <span id="lang-btn-text">മലയാളം</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" /></svg>
+            </button>
+
+            <div class="absolute top-1/2 right-12 transform -translate-y-1/2 opacity-10 pointer-events-none">
+                <svg class="w-32 h-32 md:w-64 md:h-64 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            </div>
         </div>
 
-        <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
-            
+        <div id="manual-en" class="flex flex-col md:flex-row flex-1 overflow-hidden transition-opacity duration-300">
             <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto custom-scroll">
                 <nav class="space-y-1 sticky top-0">
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">Workflow</p>
@@ -2126,54 +2133,32 @@
             </div>
 
             <div class="flex-1 p-4 md:p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto custom-scroll scroll-smooth bg-white">
-
+                
                 <section id="step1" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">1</span>
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Initial Setup (Mandatory)</h2>
                     </div>
-                    
                     <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg">
                         <p class="text-red-800 font-bold text-sm">⚠️ CRITICAL: You must configure ALL 4 items below in the "Settings" tab BEFORE loading any student data.</p>
-                        <p class="text-red-700 text-xs mt-1">If these are missing, the "Data Loading" tab will not function correctly.</p>
                     </div>
-
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                                <span class="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-xs">1</span> College Name
-                            </h3>
+                            <h3 class="font-bold text-gray-800 mb-2">1. College Name</h3>
                             <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > College Name</em>. Enter the official name. Click Save.</p>
                         </div>
-
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-purple-800 mb-2 flex items-center gap-2">
-                                <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded text-xs">2</span> Exam Streams
-                            </h3>
-                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Exam Streams</em>. Add exactly these two types:</p>
-                            <ul class="list-disc list-inside text-xs text-purple-700 mt-2 ml-1 font-bold">
-                                <li>Regular</li>
-                                <li>EDE (or Distance)</li>
-                            </ul>
+                            <h3 class="font-bold text-purple-800 mb-2">2. Exam Streams</h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Exam Streams</em>. Add exactly these types:</p>
+                            <ul class="list-disc list-inside text-xs text-purple-700 mt-1 font-bold"><li>Regular</li><li>EDE (or Distance)</li></ul>
                         </div>
-
                          <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-pink-800 mb-2 flex items-center gap-2">
-                                <span class="bg-pink-100 text-pink-800 px-2 py-0.5 rounded text-xs">3</span> Exam Names (Master List)
-                            </h3>
+                            <h3 class="font-bold text-pink-800 mb-2">3. Exam Names</h3>
                             <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Exam Names</em>. Add tags like "B.Sc S5 Nov 2025" or "PG S2 2024".</p>
                         </div>
-
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md transition">
-                            <h3 class="font-bold text-blue-800 mb-2 flex items-center gap-2">
-                                <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">4</span> Room Configuration
-                            </h3>
-                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Room Capacity</em>. Add <strong>ALL</strong> rooms.</p>
-                            <ul class="list-disc list-inside text-xs text-gray-600 mt-2 ml-1">
-                                <li><strong>Name:</strong> E.g., "Room 101".</li>
-                                <li><strong>Capacity:</strong> Max seats (e.g., 30).</li>
-                                <li><strong>Location:</strong> <span class="text-red-600 font-bold">MANDATORY</span>. E.g., "Main Block". Required for sorting & stickers.</li>
-                            </ul>
+                            <h3 class="font-bold text-blue-800 mb-2">4. Room Configuration</h3>
+                            <p class="text-sm text-gray-600"><strong>Action:</strong> Go to <em>Settings > Room Capacity</em>. Add <strong>ALL</strong> rooms. <strong>Location is MANDATORY.</strong></p>
                         </div>
                     </div>
                 </section>
@@ -2185,7 +2170,6 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">2</span>
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Loading Student Data</h2>
                     </div>
-                    
                     <div class="bg-red-50 border-l-4 border-red-500 p-5 mb-6 rounded-r-lg">
                         <h4 class="text-red-800 font-bold mb-2 text-sm">⛔ Golden Rules of Data Loading</h4>
                         <ul class="list-disc list-inside text-sm text-red-900 space-y-2 font-medium">
@@ -2194,7 +2178,6 @@
                             <li>The system tags every student in the upload with the <em>currently selected</em> Stream and Exam Name.</li>
                         </ul>
                     </div>
-
                     <p class="text-gray-600 mb-4 text-sm">Go to the <strong>Data Loading</strong> tab. Select your Stream and Exam Name carefully before uploading.</p>
                 </section>
 
@@ -2205,15 +2188,7 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">3</span>
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Managing Students</h2>
                     </div>
-                    <p class="text-gray-600 mb-4 text-sm">Go to the <strong>Data Editor</strong> tab to fix mistakes or reschedule exams.</p>
-                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                        <h4 class="font-bold text-yellow-800 mb-2 text-sm">⚡ Bulk Rescheduling (Yellow Box)</h4>
-                        <ol class="list-decimal list-inside text-sm text-yellow-800">
-                            <li>Select the specific <strong>Course</strong> from the dropdown.</li>
-                            <li>A yellow box appears. Enter the <strong>New Date/Time</strong>.</li>
-                            <li>Click <strong>Apply to All</strong> to update everyone instantly.</li>
-                        </ol>
-                    </div>
+                    <p class="text-gray-600 mb-4 text-sm">Go to the <strong>Data Editor</strong> tab to fix mistakes. Use the <strong>Pencil Icon</strong> for single edits. Use the <strong>Yellow Box</strong> for Bulk Rescheduling.</p>
                 </section>
 
                 <hr class="border-gray-200">
@@ -2224,12 +2199,10 @@
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Scribe Management</h2>
                     </div>
                     <div class="bg-white border border-gray-300 rounded-xl p-6 shadow-sm">
-                        <p class="text-sm text-gray-600 mb-3"><strong>Important:</strong> You must identify Scribe candidates <strong>BEFORE</strong> starting Room Allotment so the system can set them aside.</p>
+                        <p class="text-sm text-gray-600 mb-3"><strong>Important:</strong> Identify Scribe candidates <strong>BEFORE</strong> Room Allotment so they can be assigned separate rooms.</p>
                         <ol class="list-decimal list-inside text-sm text-gray-800 space-y-2">
                             <li>Go to <strong>Scribe Assistance</strong> tab.</li>
-                            <li>Search for the student by <strong>Register Number</strong>.</li>
-                            <li>Click <strong>Add to Scribe List</strong>.</li>
-                            <li>This marks them globally as a Scribe Candidate. They will be highlighted during allotment.</li>
+                            <li>Search student by Register Number > Click <strong>Add to Scribe List</strong>.</li>
                         </ol>
                     </div>
                 </section>
@@ -2239,41 +2212,14 @@
                 <section id="step5" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">5</span>
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Room Allotment (The Core Task)</h2>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Room Allotment</h2>
                     </div>
-                    
                     <div class="bg-white border border-gray-300 rounded-xl p-6 shadow-sm">
-                        <h3 class="font-bold text-gray-800 mb-4 underline decoration-indigo-300 decoration-4">Step-by-Step Workflow</h3>
-                        
-                        <div class="space-y-4">
-                            <div class="flex gap-3">
-                                <div class="bg-indigo-100 text-indigo-700 font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs shrink-0">1</div>
-                                <div>
-                                    <p class="text-sm font-bold text-gray-800">Select Session</p>
-                                    <p class="text-sm text-gray-600">Go to <strong>Room Allotment</strong> tab. Pick the exam date/time.</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-3">
-                                <div class="bg-indigo-100 text-indigo-700 font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs shrink-0">2</div>
-                                <div>
-                                    <p class="text-sm font-bold text-gray-800">Regular Allotment</p>
-                                    <p class="text-sm text-gray-600">Click <strong>+ Add Room</strong>. Select a room. The system fills it. Repeat until "Awaiting" is 0.</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-3">
-                                <div class="bg-yellow-100 text-yellow-700 font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs shrink-0">3</div>
-                                <div>
-                                    <p class="text-sm font-bold text-gray-800">Scribe Allotment (Direct)</p>
-                                    <p class="text-sm text-gray-600">Scroll down to the <strong>Scribe Allotment</strong> section. Use the separate <strong>Assign Room</strong> button here to put scribe candidates into smaller, specific rooms.</p>
-                                </div>
-                            </div>
-                            <div class="flex gap-3">
-                                <div class="bg-green-100 text-green-700 font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs shrink-0">4</div>
-                                <div>
-                                    <p class="text-sm font-bold text-gray-800">Save Allocation</p>
-                                    <p class="text-sm text-gray-600">Click the <strong>Green Save Button</strong>. Reports will NOT work if you don't click Save.</p>
-                                </div>
-                            </div>
+                        <div class="space-y-4 text-sm text-gray-700">
+                            <p><strong>1. Select Session:</strong> Go to Room Allotment tab.</p>
+                            <p><strong>2. Regular Allotment:</strong> Click <strong>+ Add Room</strong>. Repeat until "Awaiting" count is 0.</p>
+                            <p><strong>3. Scribe Allotment:</strong> Scroll down to the "Scribe Allotment" section. Use the separate <strong>Assign Room</strong> button here to put scribe candidates into smaller, specific rooms.</p>
+                            <p><strong>4. Save:</strong> Click the <strong class="text-green-600">Green Save Button</strong>.</p>
                         </div>
                     </div>
                 </section>
@@ -2283,17 +2229,9 @@
                 <section id="step6" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">6</span>
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">QP Code Entry</h2>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">QP Codes</h2>
                     </div>
-                    <div class="bg-purple-50 p-5 rounded-lg border border-purple-200">
-                        <p class="text-sm text-purple-800 mb-3"><strong>Purpose:</strong> Mandatory for Absentee Statements and Packing Labels.</p>
-                        <ul class="list-disc list-inside text-sm text-purple-800 space-y-1">
-                            <li>Go to <strong>QP Codes</strong> tab.</li>
-                            <li>Select a Session.</li>
-                            <li>Enter the University Code (e.g., "A01") for each subject.</li>
-                            <li>Click <strong>Save QP Codes</strong>.</li>
-                        </ul>
-                    </div>
+                    <p class="text-sm text-gray-600">Go to <strong>QP Codes</strong> tab. Enter the code (e.g., "A01") for each subject. Required for Packing Labels.</p>
                 </section>
 
                 <hr class="border-gray-200">
@@ -2303,23 +2241,7 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">7</span>
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Search Student Details</h2>
                     </div>
-                    <p class="text-gray-600 mb-4 text-sm">The <strong>Search</strong> tab is a powerful tool for exam days.</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
-                            <h3 class="font-bold text-teal-700 mb-2">When to use it?</h3>
-                            <ul class="list-disc list-inside text-sm text-gray-600">
-                                <li>A student forgets their room number.</li>
-                                <li>You need to check which Course/Exam a student belongs to.</li>
-                                <li>To find the exact Seat Number.</li>
-                            </ul>
-                        </div>
-                        <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
-                            <h3 class="font-bold text-teal-700 mb-2">How it works</h3>
-                            <p class="text-sm text-gray-600">Enter the <strong>Register Number</strong> or <strong>Name</strong>. The system scans all sessions and displays:</p>
-                            <code class="block mt-2 bg-gray-100 p-1 text-xs font-mono">Room No | Seat No | Course | Stream</code>
-                        </div>
-                    </div>
+                    <p class="text-sm text-gray-600">Use this to quickly find a student's <strong>Room, Seat Number, and Course</strong> if they forget it on exam day.</p>
                 </section>
 
                 <hr class="border-gray-200">
@@ -2329,111 +2251,157 @@
                         <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">8</span>
                         <h2 class="text-xl md:text-2xl font-bold text-gray-800">Detailed Report Guide</h2>
                     </div>
-                    <div class="space-y-6">
-                        <div class="border-l-4 border-blue-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">1. Room-wise Seating Report (Candidates List)</h3>
-                            <p class="text-xs font-bold text-blue-600 mb-2">For: Invigilators | Active After: Room Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> The Invigilator takes this to the room. It lists students in that room. Used to verify identity, get signatures, and <strong>mark absentees</strong>.</p>
-                        </div>
-                        <div class="border-l-4 border-green-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">2. Seating Details for Candidates</h3>
-                            <p class="text-xs font-bold text-green-600 mb-2">For: Students (Notice Board) | Active After: Room Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> Print and paste on the Notice Board. Students check this to find their Room and Seat Number.</p>
-                        </div>
-                        <div class="border-l-4 border-purple-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">3. Question Paper (QP) Report</h3>
-                            <p class="text-xs font-bold text-purple-600 mb-2">For: Chief Supt (CS) | Active After: Data Loading</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> Shows the Total Count of papers needed. Use this to open the correct number of packets from the bank locker.</p>
-                        </div>
-                        <div class="border-l-4 border-orange-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">4. QP Distribution by QP-Code</h3>
-                            <p class="text-xs font-bold text-orange-600 mb-2">For: Control Room | Active After: QP Codes Entry</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> A packing list. Tells you exactly how many copies of each QP Code go into each Room Cover.</p>
-                        </div>
-                        <div class="border-l-4 border-yellow-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">5. Scribe Proforma</h3>
-                            <p class="text-xs font-bold text-yellow-600 mb-2">For: Scribes | Active After: Scribe Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> A detailed form (One Page Per Scribe) to record scribe assistance details. Used for documentation.</p>
-                        </div>
-                        <div class="border-l-4 border-red-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">6. Invigilator Requirement Summary</h3>
-                            <p class="text-xs font-bold text-red-600 mb-2">For: Chief Supt (CS) | Active After: Room Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> Shows the exact number of Invigilators required for the session (Regular + Scribe rooms).</p>
-                        </div>
-                        <div class="border-l-4 border-teal-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">7. Room Stickers</h3>
-                            <p class="text-xs font-bold text-teal-600 mb-2">For: Room Doors | Active After: Room Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> Paste on the door. Displays Room No and Reg No range.</p>
-                        </div>
-                        <div class="border-l-4 border-indigo-500 bg-white shadow-sm p-4 rounded-r-lg">
-                            <h3 class="text-lg font-bold text-gray-800">8. Room Allotment Summary</h3>
-                            <p class="text-xs font-bold text-indigo-600 mb-2">For: Chief Supt (CS) | Active After: Room Allotment</p>
-                            <p class="text-sm text-gray-600"><strong>Usage:</strong> High-level summary of room statistics (Capacity used vs available).</p>
-                        </div>
+                    <div class="space-y-4">
+                        <div class="bg-blue-50 p-3 rounded border border-blue-100"><strong class="text-blue-800">1. Room-wise Report:</strong> For Invigilators (Attendance/Absentees). Active after Allotment.</div>
+                        <div class="bg-green-50 p-3 rounded border border-green-100"><strong class="text-green-800">2. Seating Details:</strong> For Students (Notice Board). Active after Allotment.</div>
+                        <div class="bg-purple-50 p-3 rounded border border-purple-100"><strong class="text-purple-800">3. QP Report:</strong> Total Question Paper count for Chief Supt. Active after Data Load.</div>
+                        <div class="bg-orange-50 p-3 rounded border border-orange-100"><strong class="text-orange-800">4. QP Distribution:</strong> Packing list for Room Covers. Active after QP Codes.</div>
+                        <div class="bg-yellow-50 p-3 rounded border border-yellow-100"><strong class="text-yellow-800">5. Scribe Proforma:</strong> Scribe details form. Active after Scribe Allotment.</div>
+                        <div class="bg-red-50 p-3 rounded border border-red-100"><strong class="text-red-800">6. Invigilator Summary:</strong> Staff Requirement count. Active after Allotment.</div>
                     </div>
                 </section>
 
                 <hr class="border-gray-200">
 
                 <section id="step9" class="scroll-mt-4">
-                    <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">9</span>
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Absentees & Bills</h2>
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">9. Absentees & Bills</h2>
+                    <p class="text-sm text-gray-600">Mark absentees 30 mins after exam start. Generate Bills at season end.</p>
+                </section>
+                
+                <section id="step10" class="scroll-mt-4 pt-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">10. Backup & Restore (Danger Zone)</h2>
+                    <div class="bg-gray-100 p-4 rounded text-sm text-gray-700 space-y-2">
+                        <p><strong>Full Backup (JSON):</strong> Downloads EVERYTHING. Do this daily.</p>
+                        <p><strong>Restore:</strong> Recover your work on a new computer.</p>
+                        <p class="text-red-600 font-bold"><strong>Master Reset:</strong> Wipes all data for a new semester.</p>
                     </div>
+                </section>
+            </div>
+        </div>
 
-                    <div class="space-y-6">
-                        <div class="bg-red-50 p-5 rounded-lg border border-red-200">
-                            <h3 class="font-bold text-red-900 mb-3">A. Marking Absentees</h3>
-                            <p class="text-sm text-red-700 mb-3">Perform this task 30 minutes after the exam starts.</p>
-                            <ol class="list-decimal list-inside text-sm text-red-800 space-y-1">
-                                <li>Go to <strong>Absentees</strong> tab.</li>
-                                <li>Select the Session.</li>
-                                <li>Search the student's Register Number.</li>
-                                <li>Click <strong>Add to Absentee List</strong>.</li>
-                                <li>Finally, click <strong>Generate Absentee Statement</strong> (University Format).</li>
-                            </ol>
+
+        <div id="manual-ml" class="flex flex-col md:flex-row flex-1 overflow-hidden transition-opacity duration-300 hidden">
+            <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto custom-scroll">
+                <nav class="space-y-1 sticky top-0">
+                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">പ്രവർത്തന ഘട്ടങ്ങൾ</p>
+                    <a href="#ml-step1" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">1. സജ്ജീകരണങ്ങൾ (Setup)</a>
+                    <a href="#ml-step2" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">2. ഡാറ്റ ലോഡിംഗ് (Loading)</a>
+                    <a href="#ml-step3" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">3. തിരുത്തലുകൾ (Editing)</a>
+                    <a href="#ml-step4" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">4. സ്ക്രൈബ് (Scribe)</a>
+                    <a href="#ml-step5" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">5. റൂം അലോട്ട്മെന്റ്</a>
+                    <a href="#ml-step6" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">6. QP കോഡുകൾ</a>
+                    <a href="#ml-step7" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">7. സെർച്ച് (Search)</a>
+                    <a href="#ml-step8" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">8. റിപ്പോർട്ടുകൾ (Reports)</a>
+                    <a href="#ml-step9" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">9. ആബ്സെന്റീസ് & ബില്ലുകൾ</a>
+                    <a href="#ml-step10" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">10. ബാക്കപ്പ് (Backup)</a>
+                </nav>
+            </div>
+
+            <div class="flex-1 p-4 md:p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto custom-scroll scroll-smooth bg-white">
+                
+                <section id="ml-step1" class="scroll-mt-4">
+                    <div class="flex items-center gap-3 mb-6">
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">1</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">പ്രാഥമിക സജ്ജീകരണങ്ങൾ (Initial Setup)</h2>
+                    </div>
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg">
+                        <p class="text-red-800 font-bold text-sm">⚠️ ശ്രദ്ധിക്കുക: ഡാറ്റ ലോഡ് ചെയ്യുന്നതിന് മുൻപ് താഴെ പറയുന്ന 4 കാര്യങ്ങൾ Settings-ൽ നിർബന്ധമായും ചെയ്തിരിക്കണം.</p>
+                    </div>
+                    <div class="space-y-4">
+                         <div class="bg-white border border-gray-200 p-4 rounded-lg">
+                            <h3 class="font-bold text-gray-800">1. കോളേജ് പേര് (College Name)</h3>
+                            <p class="text-sm text-gray-600">Settings ടാബിൽ കോളേജ് പേര് നൽകി Save ചെയ്യുക.</p>
                         </div>
-
-                        <div class="bg-green-50 p-5 rounded-lg border border-green-200">
-                            <h3 class="font-bold text-green-900 mb-3">B. Remuneration Bills</h3>
-                            <p class="text-sm text-green-700 mb-3">Perform this at the end of the exam season.</p>
-                            <ol class="list-decimal list-inside text-sm text-green-800 space-y-1">
-                                <li>Go to <strong>Remuneration</strong> tab.</li>
-                                <li>Configure <strong>Rate Card</strong> (Pay per session).</li>
-                                <li>Select <strong>Date Range</strong>.</li>
-                                <li>Click <strong>Generate Bill</strong> to get the invoice.</li>
-                            </ol>
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg">
+                            <h3 class="font-bold text-purple-800">2. എക്സാം സ്ട്രീമുകൾ (Exam Streams)</h3>
+                            <p class="text-sm text-gray-600">Settings > Exam Streams-ൽ പോയി <strong>"Regular"</strong> എന്നും <strong>"EDE"</strong> (അല്ലെങ്കിൽ Distance) എന്നും രണ്ട് സ്ട്രീമുകൾ കൃത്യമായി ആഡ് ചെയ്യുക.</p>
+                        </div>
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg">
+                            <h3 class="font-bold text-pink-800">3. പരീക്ഷയുടെ പേര് (Exam Names)</h3>
+                            <p class="text-sm text-gray-600">Settings > Exam Names-ൽ പോയി പരീക്ഷയുടെ പേര് (ഉദാ: "B.Sc S5 Nov 2025") നൽകുക.</p>
+                        </div>
+                        <div class="bg-white border border-gray-200 p-4 rounded-lg">
+                            <h3 class="font-bold text-blue-800">4. റൂമുകൾ (Room Configuration)</h3>
+                            <p class="text-sm text-gray-600">Settings > Room Capacity-ൽ പോയി എല്ലാ എക്സാം ഹാളുകളും ആഡ് ചെയ്യുക. <strong>Location (ഏത് ബ്ലോക്ക്/നില)</strong> എന്നത് നിർബന്ധമാണ്.</p>
                         </div>
                     </div>
                 </section>
 
                 <hr class="border-gray-200">
 
-                <section id="step10" class="scroll-mt-4">
+                <section id="ml-step2" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">10</span>
-                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Backup & Recovery (Danger Zone)</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">2</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">ഡാറ്റ ലോഡിംഗ് (Data Loading)</h2>
                     </div>
-                    
-                    <div class="bg-gray-100 p-6 rounded-xl border border-gray-300">
-                        <p class="text-sm text-gray-700 mb-4">Found in <strong>Settings</strong> tab at the bottom. Your data lives in the browser, so backups are vital.</p>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div class="bg-white p-4 rounded border border-gray-200">
-                                <h4 class="font-bold text-gray-800">Full Backup (JSON)</h4>
-                                <p class="text-xs text-gray-500 mt-1">Downloads a file with ALL your data (Students, Settings, Rooms). Do this daily.</p>
-                            </div>
-                            <div class="bg-white p-4 rounded border border-gray-200">
-                                <h4 class="font-bold text-gray-800">Restore</h4>
-                                <p class="text-xs text-gray-500 mt-1">Upload your JSON file to recover your work on a new computer or after clearing cache.</p>
-                            </div>
-                            <div class="bg-red-50 p-4 rounded border border-red-200">
-                                <h4 class="font-bold text-red-600">Master Reset</h4>
-                                <p class="text-xs text-red-500 mt-1">"Nuke It All". Wipes all student data. Use only when starting a fresh semester.</p>
-                            </div>
-                        </div>
+                     <div class="bg-red-50 border-l-4 border-red-500 p-5 mb-6 rounded-r-lg">
+                        <h4 class="text-red-800 font-bold mb-2 text-sm">⛔ ശ്രദ്ധിക്കേണ്ട കാര്യങ്ങൾ:</h4>
+                        <ul class="list-disc list-inside text-sm text-red-900 space-y-2">
+                            <li><strong>Regular, EDE ഫയലുകൾ കൂട്ടിക്കലർത്തരുത്:</strong> Regular ഫയലുകൾ അപ്‌ലോഡ് ചെയ്ത ശേഷം മാത്രം EDE സെലക്ട് ചെയ്ത് EDE ഫയലുകൾ അപ്‌ലോഡ് ചെയ്യുക.</li>
+                            <li><strong>സെമസ്റ്ററുകൾ കൂട്ടിക്കലർത്തരുത്:</strong> ഓരോ സെമസ്റ്റർ ഫയലുകളും (ഉദാ: S2, S3) അതാത് Exam Name സെലക്ട് ചെയ്ത ശേഷം മാത്രം അപ്‌ലോഡ് ചെയ്യുക.</li>
+                        </ul>
                     </div>
+                    <p class="text-sm text-gray-600"><strong>Data Loading</strong> ടാബിൽ പോവുക. CSV ഫയൽ ഉപയോഗിക്കുന്നതാണ് ഉചിതം (വേഗതയും കൃത്യതയും കൂടുതൽ).</p>
                 </section>
+
+                <hr class="border-gray-200">
+                <section id="ml-step3" class="scroll-mt-4">
+                     <h2 class="text-xl font-bold text-gray-800 mb-3">3. ഡാറ്റ തിരുത്തലുകൾ (Managing Students)</h2>
+                     <p class="text-sm text-gray-600"><strong>Data Editor</strong> ടാബിൽ വിദ്യാർത്ഥികളുടെ വിവരങ്ങൾ തിരുത്താം. ഒരു പരീക്ഷ മുഴുവനായി മാറ്റിവെക്കാൻ (Postpone), <strong>Course</strong> സെലക്ട് ചെയ്യുമ്പോൾ വരുന്ന മഞ്ഞ ബോക്സ് (Yellow Box) ഉപയോഗിക്കുക.</p>
+                </section>
+                <hr class="border-gray-200">
+                <section id="ml-step4" class="scroll-mt-4">
+                     <h2 class="text-xl font-bold text-gray-800 mb-3">4. സ്ക്രൈബ് മാനേജ്മെന്റ് (Scribe)</h2>
+                     <p class="text-sm text-gray-600 mb-2">റൂം അലോട്ട്മെന്റിന് <strong>മുൻപ്</strong> തന്നെ സ്ക്രൈബ് ആവശ്യമുള്ള കുട്ടികളെ കണ്ടെത്തണം.</p>
+                     <p class="text-sm text-gray-600"><strong>Scribe Assistance</strong> ടാബിൽ രജിസ്റ്റർ നമ്പർ സെർച്ച് ചെയ്ത് അവരെ ലിസ്റ്റിലേക്ക് ആഡ് ചെയ്യുക.</p>
+                </section>
+                <hr class="border-gray-200">
+                 <section id="ml-step5" class="scroll-mt-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-3">5. റൂം അലോട്ട്മെന്റ് (Room Allotment)</h2>
+                    <ul class="list-decimal list-inside text-sm text-gray-700 space-y-2">
+                        <li><strong>Room Allotment</strong> ടാബിൽ സെഷൻ (തിയ്യതി) സെലക്ട് ചെയ്യുക.</li>
+                        <li><strong>+ Add Room</strong> ക്ലിക്ക് ചെയ്ത് റൂമുകൾ ആഡ് ചെയ്യുക.</li>
+                        <li>ഓറഞ്ച് നിറത്തിലുള്ള "Awaiting" കൗണ്ട് 0 ആകുന്നത് വരെ റൂമുകൾ ആഡ് ചെയ്യുക.</li>
+                        <li><strong>Scribe Allotment:</strong> താഴെയുള്ള പ്രത്യേക സെക്ഷനിലേക്ക് സ്ക്രോൾ ചെയ്യുക. സ്ക്രൈബ് കുട്ടികൾക്കായി <strong>പ്രത്യേക ബട്ടൺ</strong> (Assign Room) ഉപയോഗിച്ച് ചെറിയ റൂമുകൾ നൽകുക.</li>
+                        <li>അവസാനം പച്ച നിറത്തിലുള്ള <strong>Save</strong> ബട്ടൺ ക്ലിക്ക് ചെയ്യുക.</li>
+                    </ul>
+               </section>
+               <hr class="border-gray-200">
+               <section id="ml-step6" class="scroll-mt-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">6. QP കോഡുകൾ</h2>
+                    <p class="text-sm text-gray-600"><strong>QP Codes</strong> ടാബിൽ ഓരോ വിഷയത്തിനും യൂണിവേഴ്സിറ്റി നൽകിയ QP Code (ഉദാ: A01) രേഖപ്പെടുത്തി Save ചെയ്യുക.</p>
+               </section>
+               <hr class="border-gray-200">
+               <section id="ml-step7" class="scroll-mt-4 pt-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">7. സേർച്ച് (Search Student)</h2>
+                    <p class="text-sm text-gray-600">പരീക്ഷാ ദിവസം കുട്ടികൾക്ക് റൂം നമ്പർ മറന്നുപോയാൽ ഈ ടാബ് ഉപയോഗിക്കാം. രജിസ്റ്റർ നമ്പർ അല്ലെങ്കിൽ പേര് നൽകിയാൽ അവരുടെ Room No, Seat No, Course എന്നിവ പെട്ടെന്ന് കാണാം.</p>
+               </section>
+               <hr class="border-gray-200">
+               <section id="ml-step8" class="scroll-mt-4">
+                    <h2 class="text-xl font-bold text-gray-800 mb-3">8. റിപ്പോർട്ടുകൾ (Reports Guide)</h2>
+                    <div class="space-y-2 text-sm text-gray-700">
+                        <p>🔵 <strong>1. Room-wise Seating Report:</strong> ഇൻവിജിലേറ്റർമാർക്ക് (ഹാളിൽ കൊണ്ടുപോകാൻ). ഇതിലാണ് ഒപ്പ് വാങ്ങേണ്ടതും ആബ്സെന്റീസ് മാർക്ക് ചെയ്യേണ്ടതും.</p>
+                        <p>🟢 <strong>2. Seating Details:</strong> നോട്ടീസ് ബോർഡിൽ ഒട്ടിക്കാൻ (കുട്ടികൾക്ക് നോക്കാൻ).</p>
+                        <p>🟣 <strong>3. QP Report:</strong> ചീഫ് സൂപ്രണ്ടിന്. ആകെ എത്ര ചോദ്യപേപ്പർ വേണമെന്ന് അറിയാൻ (ലോക്കറിൽ നിന്ന് പാക്കറ്റ് എടുക്കാൻ).</p>
+                        <p>🟠 <strong>4. QP Distribution:</strong> കൺട്രോൾ റൂമിന്. ഓരോ റൂം കവറിലും ഏതൊക്കെ ചോദ്യപേപ്പർ ഇടണം എന്നറിയാൻ.</p>
+                        <p>🟡 <strong>5. Scribe Proforma:</strong> സ്ക്രൈബ് വിവരങ്ങൾ രേഖപ്പെടുത്താനുള്ള ഫോം.</p>
+                        <p>🔴 <strong>6. Invigilator Requirement:</strong> എത്ര അധ്യാപകർ ഡ്യൂട്ടിക്ക് വേണമെന്ന് അറിയാൻ.</p>
+                        <p>🟤 <strong>7. Room Stickers:</strong> റൂമിന്റെ വാതിലിൽ ഒട്ടിക്കാൻ.</p>
+                    </div>
+               </section>
+               <hr class="border-gray-200">
+               <section id="ml-step9" class="scroll-mt-4">
+                <h2 class="text-xl font-bold text-gray-800 mb-2">9. ആബ്സെന്റീസ് & ബില്ലുകൾ</h2>
+                <p class="text-sm text-gray-600">പരീക്ഷ തുടങ്ങി 30 മിനിറ്റിനു ശേഷം <strong>Absentees</strong> ടാബിൽ ഹാജരാകാത്തവരെ മാർക്ക് ചെയ്ത് റിപ്പോർട്ട് എടുക്കുക. സീസൺ കഴിയുമ്പോൾ <strong>Remuneration</strong> ടാബിൽ ബില്ലുകൾ ജനറേറ്റ് ചെയ്യാം.</p>
+               </section>
+               <section id="ml-step10" class="scroll-mt-4 pt-4">
+                <h2 class="text-xl font-bold text-gray-800 mb-2">10. ബാക്കപ്പ് (Backup & Restore)</h2>
+                <div class="bg-gray-100 p-4 rounded text-sm text-gray-700 space-y-2">
+                    <p><strong>Full Backup (JSON):</strong> ദിവസവും വർക്ക് കഴിഞ്ഞ് ഇത് ഡൗൺലോഡ് ചെയ്ത് സൂക്ഷിക്കുക.</p>
+                    <p><strong>Restore:</strong> കമ്പ്യൂട്ടർ മാറ്റുകയോ ബ്രൗസർ ക്ലിയർ ആവുകയോ ചെയ്താൽ ഈ ഫയൽ വെച്ച് പഴയ പോലെ ആക്കാം.</p>
+                    <p class="text-red-600 font-bold"><strong>Master Reset:</strong> പുതിയ സെമസ്റ്റർ തുടങ്ങുമ്പോൾ മാത്രം ഉപയോഗിക്കുക. ഇത് എല്ലാ ഡാറ്റയും മായ്ച്ചു കളയും.</p>
+                </div>
+               </section>
 
             </div>
         </div>
@@ -2443,6 +2411,29 @@
         </div>
     </div>
 </div>
+
+<script>
+    function toggleManualLanguage() {
+        const enDiv = document.getElementById('manual-en');
+        const mlDiv = document.getElementById('manual-ml');
+        const btnText = document.getElementById('lang-btn-text');
+        const titleText = document.getElementById('help-title-text');
+        
+        if (enDiv.classList.contains('hidden')) {
+            // Switch to English
+            enDiv.classList.remove('hidden');
+            mlDiv.classList.add('hidden');
+            btnText.innerText = 'മലയാളം';
+            titleText.innerText = 'ExamFlow User Manual';
+        } else {
+            // Switch to Malayalam
+            enDiv.classList.add('hidden');
+            mlDiv.classList.remove('hidden');
+            btnText.innerText = 'English';
+            titleText.innerText = 'യൂസർ മാനുവൽ (Malayalam)';
+        }
+    }
+</script>
 
 
             
