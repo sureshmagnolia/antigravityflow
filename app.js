@@ -15927,7 +15927,7 @@ function populateUploadExamDropdown() {
 // ==========================================
 // USER MANUAL FUNCTION (New Tab)
 // ==========================================
-function openManualNewTab() {
+window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     // 1. Get the template content from the HTML
     const template = document.getElementById('manual-template');
     
