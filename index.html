@@ -2095,20 +2095,21 @@
 
     
 
-<div id="view-help" class="container max-w-6xl mx-auto p-4 min-h-screen hidden">
-    <div class="bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200">
+<div id="view-help" class="container max-w-6xl mx-auto p-2 md:p-4 min-h-screen hidden">
+    <div class="bg-white shadow-2xl rounded-2xl overflow-hidden border border-gray-200 flex flex-col h-[85vh] md:h-auto">
         
-        <div class="bg-indigo-800 p-8 text-white relative overflow-hidden">
-            <div class="absolute top-0 right-0 opacity-10">
-                <svg class="w-64 h-64 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <div class="bg-indigo-800 p-4 md:p-8 text-white relative overflow-hidden shrink-0">
+            <div class="absolute top-1/2 right-4 transform -translate-y-1/2 opacity-10 pointer-events-none">
+                <svg class="w-24 h-24 md:w-64 md:h-64 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
             </div>
-            <h1 class="text-4xl font-extrabold mb-2 tracking-tight relative z-10">📘 ExamFlow Master Manual</h1>
-            <p class="text-indigo-200 font-medium text-lg relative z-10">Operational Guide for Exam Cell Coordinators & Staff</p>
+            <h1 class="text-xl md:text-4xl font-extrabold tracking-tight relative z-10 flex items-center gap-2">
+                <span>📘</span> ExamFlow User Manual
+            </h1>
         </div>
 
-        <div class="flex flex-col md:flex-row h-[80vh]">
+        <div class="flex flex-col md:flex-row flex-1 overflow-hidden">
             
-            <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto">
+            <div class="md:w-72 bg-gray-50 border-r border-gray-200 p-4 hidden md:block overflow-y-auto custom-scroll">
                 <nav class="space-y-1 sticky top-0">
                     <p class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pl-2">Workflow</p>
                     <a href="#step1" class="block px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-white hover:shadow-sm">1. Initial Setup (Mandatory)</a>
@@ -2124,17 +2125,17 @@
                 </nav>
             </div>
 
-            <div class="flex-1 p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto custom-scroll scroll-smooth">
+            <div class="flex-1 p-4 md:p-8 space-y-12 text-gray-800 leading-relaxed overflow-y-auto custom-scroll scroll-smooth bg-white">
 
                 <section id="step1" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">1</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Initial Setup (Mandatory)</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">1</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Initial Setup (Mandatory)</h2>
                     </div>
                     
                     <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg">
-                        <p class="text-red-800 font-bold">⚠️ CRITICAL: You must configure ALL 4 items below in the "Settings" tab BEFORE loading any student data.</p>
-                        <p class="text-red-700 text-sm mt-1">If these are missing, the "Data Loading" tab will not function correctly.</p>
+                        <p class="text-red-800 font-bold text-sm">⚠️ CRITICAL: You must configure ALL 4 items below in the "Settings" tab BEFORE loading any student data.</p>
+                        <p class="text-red-700 text-xs mt-1">If these are missing, the "Data Loading" tab will not function correctly.</p>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2181,12 +2182,12 @@
 
                 <section id="step2" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">2</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Loading Student Data</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">2</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Loading Student Data</h2>
                     </div>
                     
                     <div class="bg-red-50 border-l-4 border-red-500 p-5 mb-6 rounded-r-lg">
-                        <h4 class="text-red-800 font-bold mb-2">⛔ Golden Rules of Data Loading</h4>
+                        <h4 class="text-red-800 font-bold mb-2 text-sm">⛔ Golden Rules of Data Loading</h4>
                         <ul class="list-disc list-inside text-sm text-red-900 space-y-2 font-medium">
                             <li><strong>Do NOT mix Streams:</strong> Load "Regular" files separately. Then select "EDE" and load "EDE" files separately.</li>
                             <li><strong>Do NOT mix Exams:</strong> Load "2nd Semester" files first. Then switch Exam Name to "3rd Semester" and load those files.</li>
@@ -2194,19 +2195,19 @@
                         </ul>
                     </div>
 
-                    <p class="text-gray-600 mb-4">Go to the <strong>Data Loading</strong> tab. Select your Stream and Exam Name carefully before uploading.</p>
+                    <p class="text-gray-600 mb-4 text-sm">Go to the <strong>Data Loading</strong> tab. Select your Stream and Exam Name carefully before uploading.</p>
                 </section>
 
                 <hr class="border-gray-200">
 
                 <section id="step3" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">3</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Managing Students</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">3</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Managing Students</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">Go to the <strong>Data Editor</strong> tab to fix mistakes or reschedule exams.</p>
+                    <p class="text-gray-600 mb-4 text-sm">Go to the <strong>Data Editor</strong> tab to fix mistakes or reschedule exams.</p>
                     <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                        <h4 class="font-bold text-yellow-800 mb-2">⚡ Bulk Rescheduling (Yellow Box)</h4>
+                        <h4 class="font-bold text-yellow-800 mb-2 text-sm">⚡ Bulk Rescheduling (Yellow Box)</h4>
                         <ol class="list-decimal list-inside text-sm text-yellow-800">
                             <li>Select the specific <strong>Course</strong> from the dropdown.</li>
                             <li>A yellow box appears. Enter the <strong>New Date/Time</strong>.</li>
@@ -2219,8 +2220,8 @@
 
                 <section id="step4" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">4</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Scribe Management</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">4</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Scribe Management</h2>
                     </div>
                     <div class="bg-white border border-gray-300 rounded-xl p-6 shadow-sm">
                         <p class="text-sm text-gray-600 mb-3"><strong>Important:</strong> You must identify Scribe candidates <strong>BEFORE</strong> starting Room Allotment so the system can set them aside.</p>
@@ -2237,8 +2238,8 @@
 
                 <section id="step5" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">5</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Room Allotment (The Core Task)</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">5</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Room Allotment (The Core Task)</h2>
                     </div>
                     
                     <div class="bg-white border border-gray-300 rounded-xl p-6 shadow-sm">
@@ -2249,7 +2250,7 @@
                                 <div class="bg-indigo-100 text-indigo-700 font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs shrink-0">1</div>
                                 <div>
                                     <p class="text-sm font-bold text-gray-800">Select Session</p>
-                                    <p class="text-sm text-gray-600">Go to <strong>Room Allotment</strong> tab. Pick the exam date/time (e.g., "15.10.2025 FN").</p>
+                                    <p class="text-sm text-gray-600">Go to <strong>Room Allotment</strong> tab. Pick the exam date/time.</p>
                                 </div>
                             </div>
                             <div class="flex gap-3">
@@ -2281,8 +2282,8 @@
 
                 <section id="step6" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">6</span>
-                        <h2 class="text-2xl font-bold text-gray-800">QP Code Entry</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">6</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">QP Code Entry</h2>
                     </div>
                     <div class="bg-purple-50 p-5 rounded-lg border border-purple-200">
                         <p class="text-sm text-purple-800 mb-3"><strong>Purpose:</strong> Mandatory for Absentee Statements and Packing Labels.</p>
@@ -2299,10 +2300,10 @@
 
                 <section id="step7" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">7</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Search Student Details</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">7</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Search Student Details</h2>
                     </div>
-                    <p class="text-gray-600 mb-4">The <strong>Search</strong> tab is a powerful tool for exam days.</p>
+                    <p class="text-gray-600 mb-4 text-sm">The <strong>Search</strong> tab is a powerful tool for exam days.</p>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-white border border-gray-200 p-4 rounded-lg shadow-sm">
@@ -2325,8 +2326,8 @@
 
                 <section id="step8" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">8</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Detailed Report Guide</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">8</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Detailed Report Guide</h2>
                     </div>
                     <div class="space-y-6">
                         <div class="border-l-4 border-blue-500 bg-white shadow-sm p-4 rounded-r-lg">
@@ -2376,8 +2377,8 @@
 
                 <section id="step9" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">9</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Absentees & Bills</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">9</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Absentees & Bills</h2>
                     </div>
 
                     <div class="space-y-6">
@@ -2410,8 +2411,8 @@
 
                 <section id="step10" class="scroll-mt-4">
                     <div class="flex items-center gap-3 mb-6">
-                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">10</span>
-                        <h2 class="text-2xl font-bold text-gray-800">Backup & Recovery (Danger Zone)</h2>
+                        <span class="bg-indigo-600 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">10</span>
+                        <h2 class="text-xl md:text-2xl font-bold text-gray-800">Backup & Recovery (Danger Zone)</h2>
                     </div>
                     
                     <div class="bg-gray-100 p-6 rounded-xl border border-gray-300">
@@ -2438,7 +2439,7 @@
         </div>
         
         <div class="bg-gray-50 p-6 text-center border-t border-gray-200">
-            <p class="text-xs text-gray-400">ExamFlow v12.8 • Developed by Exam Wing, GVC</p>
+            <p class="text-xs text-gray-400">ExamFlow v12.8 • Developed by Exam Wing</p>
         </div>
     </div>
 </div>
