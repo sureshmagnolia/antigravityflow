@@ -11452,11 +11452,14 @@ Are you sure you want to update these records?
         }, 250);
     });
 
-    // 3A. Show Single Session Details (Stream-Aware + Invigilator Info)
+// 3A. Show Single Session Details (Stream-Aware + Invigilator Info)
 function showStudentDetailsModal(regNo, sessionKey) {
     const singleView = document.getElementById('search-result-single-view');
     const globalView = document.getElementById('search-result-global-view');
-    const modal = document.getElementById('search-result-modal');
+    
+    // --- FIX: Use the correct ID from index.html ---
+    const modal = document.getElementById('student-search-result-modal'); 
+    // -----------------------------------------------
 
     if(singleView) singleView.classList.remove('hidden');
     if(globalView) globalView.classList.add('hidden');
@@ -11464,9 +11467,9 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const [date, time] = sessionKey.split(' | ');
     const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
 
-    if (!student) { 
-        alert("Student not found in this session."); 
-        return; 
+    if (!student) {
+        alert("Student not found in this session.");
+        return;
     }
 
     // 1. Calculate Allocation Logic
@@ -11475,7 +11478,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
 
     // 2. Scribe Info
-    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
     const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
     const scribeRoom = sessionScribeAllotment[regNo];
 
@@ -11487,7 +11490,6 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const qpCode = sessionQPCodes[courseKey] || "N/A";
 
     // 4. Update Basic UI
-    // Note: Assuming searchResultName/RegNo are global vars, strictly using getElementById is safer
     document.getElementById('search-result-name').textContent = student.Name;
     document.getElementById('search-result-regno').textContent = student['Register Number'];
     document.getElementById('search-result-stream').textContent = streamName;
@@ -11501,7 +11503,6 @@ function showStudentDetailsModal(regNo, sessionKey) {
     if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
         const roomName = allocatedStudent['Room No'];
         const roomInfo = currentRoomConfig[roomName] || {};
-        
         document.getElementById('search-result-room').textContent = roomName;
         document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
         document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
@@ -11524,7 +11525,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
         if(scribeBlock) scribeBlock.classList.remove('hidden');
         
         // OVERRIDE: If student has a scribe room, they are physically THERE, not in the regular hall.
-        targetRoom = scribeRoom;
+        targetRoom = scribeRoom; 
     } else {
         if(scribeBlock) scribeBlock.classList.add('hidden');
     }
@@ -11551,7 +11552,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
             // Lookup staff details for Department/Phone
             const staff = staffData.find(s => s.name === invigName || s.email === invigName);
             const dept = staff ? staff.dept : "Unknown Dept";
-            const phone = staff ? staff.phone : ""; // Optional: Show phone if available
+            const phone = staff ? staff.phone : ""; 
 
             invigContainer.innerHTML = `
                 <div class="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
