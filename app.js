@@ -8495,8 +8495,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 
-    // ==========================================
-    // 💍 MASTER CSV DOWNLOAD (ONE RING TO RULE THEM ALL)
+  // ==========================================
+    // 💍 MASTER CSV DOWNLOAD (Updated with Invigilator Info)
     // ==========================================
     const masterDownloadBtn = document.getElementById('master-download-csv-btn');
 
@@ -8520,6 +8520,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                 const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
                 const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
 
+                // --- NEW: Load Invigilator Data ---
+                const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+                const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+                // ----------------------------------
+
                 // Reload Configs to be safe
                 loadQPCodes(); // Refreshes qpCodeMap
                 currentExamNames = JSON.parse(localStorage.getItem(EXAM_NAMES_KEY) || '{}');
@@ -8540,7 +8545,6 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const [date, time] = sessionKey.split(' | ');
 
                     // Run allocation logic to get Seats & Rooms
-                    // (This ensures we get the exact Seat No even if it wasn't saved in basic data)
                     const allocatedStudents = performOriginalAllocation(students);
 
                     // Helper: Absentee Set for this session
@@ -8551,6 +8555,10 @@ window.real_populate_qp_code_session_dropdown = function () {
 
                     // Helper: QP Codes for this session
                     const sessionQPCodes = qpCodeMap[sessionKey] || {};
+
+                    // --- NEW: Get Invigilator Map for this Session ---
+                    const sessionInvigilators = allInvigMappings[sessionKey] || {};
+                    // -------------------------------------------------
 
                     for (const s of allocatedStudents) {
                         // A. Basic Info
@@ -8589,6 +8597,21 @@ window.real_populate_qp_code_session_dropdown = function () {
                             scribeLocation = sInfo.location || "";
                         }
 
+                        // --- NEW: Resolve Invigilator ---
+                        // Determine actual room (Scribe Room vs Regular Room)
+                        const actualRoom = (isScribe === "YES" && scribeRoom !== "Not Allotted") ? scribeRoom : roomNo;
+                        
+                        // Look up invigilator for that room in this session
+                        const invigName = sessionInvigilators[actualRoom] || "Not Assigned";
+                        let invigDept = "-";
+
+                        if (invigName !== "Not Assigned") {
+                            // Find staff details to get Department
+                            const staff = staffData.find(st => st.name === invigName || st.email === invigName);
+                            if (staff) invigDept = staff.dept || "Unknown";
+                        }
+                        // --------------------------------
+
                         masterRows.push({
                             "Exam Name": examName,
                             "Date": date,
@@ -8604,7 +8627,9 @@ window.real_populate_qp_code_session_dropdown = function () {
                             "Seat No": seatNo,
                             "Scribe Required": isScribe,
                             "Scribe Room": scribeRoom,
-                            "Scribe Location": scribeLocation
+                            "Scribe Location": scribeLocation,
+                            "Invigilator Name": invigName, // Added
+                            "Invigilator Dept": invigDept  // Added
                         });
                     }
                 }
@@ -8619,11 +8644,13 @@ window.real_populate_qp_code_session_dropdown = function () {
                 });
 
                 // 5. Generate CSV Content
+                // Added new headers
                 const headers = [
                     "Exam Name", "Date", "Time", "Stream", "Course", "QP Code",
                     "Register Number", "Name", "Status",
                     "Allotted Hall", "Hall Location", "Seat No",
-                    "Scribe Required", "Scribe Room", "Scribe Location"
+                    "Scribe Required", "Scribe Room", "Scribe Location",
+                    "Invigilator Name", "Invigilator Dept" 
                 ];
 
                 let csvContent = headers.join(",") + "\n";
@@ -11425,63 +11452,128 @@ Are you sure you want to update these records?
         }, 250);
     });
 
-    // 3A. Show Single Session Details (Stream-Aware)
-    function showStudentDetailsModal(regNo, sessionKey) {
-        document.getElementById('search-result-single-view').classList.remove('hidden');
-        document.getElementById('search-result-global-view').classList.add('hidden');
+    // 3A. Show Single Session Details (Stream-Aware + Invigilator Info)
+function showStudentDetailsModal(regNo, sessionKey) {
+    const singleView = document.getElementById('search-result-single-view');
+    const globalView = document.getElementById('search-result-global-view');
+    const modal = document.getElementById('search-result-modal');
 
-        const [date, time] = sessionKey.split(' | ');
-        const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
+    if(singleView) singleView.classList.remove('hidden');
+    if(globalView) globalView.classList.add('hidden');
 
-        if (!student) { alert("Student not found in this session."); return; }
+    const [date, time] = sessionKey.split(' | ');
+    const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
 
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const allocatedSessionData = performOriginalAllocation(sessionStudents);
-        const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
-
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
-        const scribeRoom = sessionScribeAllotment[regNo];
-
-        loadQPCodes();
-        const sessionQPCodes = qpCodeMap[sessionKey] || {};
-
-        // *** FIX: Use Stream-Aware Key ***
-        const streamName = student.Stream || "Regular";
-        const courseKey = getQpKey(student.Course, streamName);
-        const qpCode = sessionQPCodes[courseKey] || "N/A";
-        // *********************************
-
-        searchResultName.textContent = student.Name;
-        searchResultRegNo.textContent = student['Register Number'];
-        document.getElementById('search-result-stream').textContent = streamName;
-        document.getElementById('search-result-course').textContent = student.Course;
-        document.getElementById('search-result-qpcode').textContent = qpCode;
-
-        if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
-            const roomName = allocatedStudent['Room No'];
-            const roomInfo = currentRoomConfig[roomName] || {};
-            document.getElementById('search-result-room').textContent = roomName;
-            document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
-            document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
-            document.getElementById('search-result-room-location-block').classList.remove('hidden');
-        } else {
-            document.getElementById('search-result-room').textContent = "Not Allotted";
-            document.getElementById('search-result-seat').textContent = "-";
-            document.getElementById('search-result-room-location-block').classList.add('hidden');
-        }
-
-        if (scribeRoom) {
-            const scribeInfo = currentRoomConfig[scribeRoom] || {};
-            document.getElementById('search-result-scribe-room').textContent = scribeRoom;
-            document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
-            document.getElementById('search-result-scribe-block').classList.remove('hidden');
-        } else {
-            document.getElementById('search-result-scribe-block').classList.add('hidden');
-        }
-
-        searchResultModal.classList.remove('hidden');
+    if (!student) { 
+        alert("Student not found in this session."); 
+        return; 
     }
+
+    // 1. Calculate Allocation Logic
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const allocatedSessionData = performOriginalAllocation(sessionStudents);
+    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+
+    // 2. Scribe Info
+    const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+    const scribeRoom = sessionScribeAllotment[regNo];
+
+    // 3. QP Code Info
+    loadQPCodes();
+    const sessionQPCodes = qpCodeMap[sessionKey] || {};
+    const streamName = student.Stream || "Regular";
+    const courseKey = getQpKey(student.Course, streamName);
+    const qpCode = sessionQPCodes[courseKey] || "N/A";
+
+    // 4. Update Basic UI
+    // Note: Assuming searchResultName/RegNo are global vars, strictly using getElementById is safer
+    document.getElementById('search-result-name').textContent = student.Name;
+    document.getElementById('search-result-regno').textContent = student['Register Number'];
+    document.getElementById('search-result-stream').textContent = streamName;
+    document.getElementById('search-result-course').textContent = student.Course;
+    document.getElementById('search-result-qpcode').textContent = qpCode;
+
+    let targetRoom = null; // Track which room the student is physically in
+
+    // 5. Update Room UI
+    const roomLocBlock = document.getElementById('search-result-room-location-block');
+    if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
+        const roomName = allocatedStudent['Room No'];
+        const roomInfo = currentRoomConfig[roomName] || {};
+        
+        document.getElementById('search-result-room').textContent = roomName;
+        document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
+        document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
+        
+        if(roomLocBlock) roomLocBlock.classList.remove('hidden');
+        targetRoom = roomName; // Student is in this room
+    } else {
+        document.getElementById('search-result-room').textContent = "Not Allotted";
+        document.getElementById('search-result-seat').textContent = "-";
+        if(roomLocBlock) roomLocBlock.classList.add('hidden');
+    }
+
+    // 6. Update Scribe UI
+    const scribeBlock = document.getElementById('search-result-scribe-block');
+    if (scribeRoom) {
+        const scribeInfo = currentRoomConfig[scribeRoom] || {};
+        document.getElementById('search-result-scribe-room').textContent = scribeRoom;
+        document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
+        
+        if(scribeBlock) scribeBlock.classList.remove('hidden');
+        
+        // OVERRIDE: If student has a scribe room, they are physically THERE, not in the regular hall.
+        targetRoom = scribeRoom;
+    } else {
+        if(scribeBlock) scribeBlock.classList.add('hidden');
+    }
+
+    // ==========================================
+    // 👮 NEW: Invigilator Details Logic
+    // ==========================================
+    const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const sessionInvigs = allInvigMappings[sessionKey] || {};
+
+    // Get or Create Container for Invigilator Info in the Modal
+    let invigContainer = document.getElementById('search-result-invigilator-block');
+    if (!invigContainer && singleView) {
+        invigContainer = document.createElement('div');
+        invigContainer.id = 'search-result-invigilator-block';
+        invigContainer.className = "mt-4 pt-3 border-t border-gray-100 animate-fade-in";
+        singleView.appendChild(invigContainer);
+    }
+
+    if (invigContainer) {
+        if (targetRoom && sessionInvigs[targetRoom]) {
+            const invigName = sessionInvigs[targetRoom];
+            // Lookup staff details for Department/Phone
+            const staff = staffData.find(s => s.name === invigName || s.email === invigName);
+            const dept = staff ? staff.dept : "Unknown Dept";
+            const phone = staff ? staff.phone : ""; // Optional: Show phone if available
+
+            invigContainer.innerHTML = `
+                <div class="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                    <div class="bg-indigo-200 text-indigo-700 h-10 w-10 flex items-center justify-center rounded-full font-bold text-lg">
+                        👮
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Invigilator Assigned</p>
+                        <p class="font-bold text-gray-800 text-sm">${invigName}</p>
+                        <p class="text-xs text-gray-600 font-medium">${dept} ${phone ? '<span class="text-gray-400 mx-1">|</span> ' + phone : ''}</p>
+                    </div>
+                </div>
+            `;
+            invigContainer.classList.remove('hidden');
+        } else {
+            invigContainer.classList.add('hidden'); // Hide if no invigilator assigned
+        }
+    }
+    // ==========================================
+
+    if(modal) modal.classList.remove('hidden');
+}
 
     // 3B. Show Global Details (Updated with Location)
     function showGlobalStudentDetails(regNo) {
