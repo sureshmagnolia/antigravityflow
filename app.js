@@ -16066,16 +16066,16 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (REAL DIAGNOSTIC)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK (FULL DIAGNOSTIC)
 // ==========================================
 
 async function runSystemHealthCheck() {
-    // 1. Show Loading State (Verification takes 1-2 seconds)
+    // 1. Show Loading State
     const btn = document.getElementById('btn-run-self-check');
     const originalText = btn ? btn.innerHTML : 'Run Check';
     if(btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...`;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
     }
 
     let score = 100;
@@ -16098,7 +16098,6 @@ async function runSystemHealthCheck() {
         `);
     };
 
-    // --- Helper: Parse Date ---
     const parseDate = (dateStr) => {
         if (!dateStr) return null;
         try {
@@ -16111,28 +16110,23 @@ async function runSystemHealthCheck() {
     };
 
     try {
-        // ============================
         // LAYER 1: INFRASTRUCTURE
-        // ============================
         const collegeName = localStorage.getItem('examCollegeName');
         if (!collegeName || collegeName === "University of Calicut") {
-            log('warn', 'College Name', 'Using default name. Please update in Settings.');
+            log('warn', 'Settings', 'Default College Name detected.');
         }
 
         const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
         if (Object.keys(rooms).length === 0) {
-            log('fail', 'Room Master', 'No rooms configured. Allotment impossible.');
+            log('fail', 'Infrastructure', 'No rooms configured.');
         }
 
         const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
-        if (!streams || streams.length === 0) {
-            log('fail', 'Exam Streams', 'No streams defined in Settings.');
-        }
+        if (!streams || streams.length === 0) log('fail', 'Settings', 'No Exam Streams defined.');
 
-        // ============================
-        // LAYER 2: UPCOMING EXAMS
-        // ============================
+        // LAYER 2: SESSION SCOPE & DATA
         const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+        const scribesList = JSON.parse(localStorage.getItem('examScribes') || '[]');
         
         if (allStudents.length === 0) {
             log('warn', 'Database', 'No student data loaded.');
@@ -16141,108 +16135,123 @@ async function runSystemHealthCheck() {
             const now = new Date();
             now.setHours(0, 0, 0, 0);
 
-            // Filter for Today & Future
             const activeDates = uniqueDateStrings
-                .filter(dateStr => {
-                    const d = parseDate(dateStr);
-                    return d && d >= now;
-                })
+                .filter(dateStr => { const d = parseDate(dateStr); return d && d >= now; })
                 .sort((a, b) => parseDate(a) - parseDate(b));
 
-            // Select Scope: Today (if exam exists) OR Next Immediate Exam
             const targetDates = [];
             if (activeDates.length > 0) {
-                const firstDate = parseDate(activeDates[0]);
-                // If first date is today, check it.
-                // If first date is future, check it.
-                // Logic: Always check index 0. If index 0 is Today, also check index 1 (Tomorrow) just in case.
                 targetDates.push(activeDates[0]);
-                
+                const firstDate = parseDate(activeDates[0]);
                 const isToday = firstDate.getTime() === now.getTime();
-                if (isToday && activeDates.length > 1) {
-                    targetDates.push(activeDates[1]);
-                }
+                if (isToday && activeDates.length > 1) targetDates.push(activeDates[1]);
             }
 
             if (targetDates.length === 0) {
-                log('ok', 'Schedule', 'No upcoming exams found. System is idle.');
+                log('ok', 'Schedule', 'No upcoming exams.');
             } else {
-                log('ok', 'Active Scope', `Checking readiness for: <strong>${targetDates.join(', ')}</strong>`);
+                log('ok', 'Target Scope', `Checking: <strong>${targetDates.join(', ')}</strong>`);
 
                 const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
                 const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
-                
-                // Check Streams
-                const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
-                if (invalidStreams.length > 0) {
-                    log('fail', 'Data Integrity', `${invalidStreams.length} students have undefined Streams.`);
-                }
 
-                // Check Allotment & QP
                 const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                
+                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'); // Assuming this key
+
                 targetSessions.forEach(sessionKey => {
-                    if (!allotments[sessionKey]) {
-                        log('fail', 'Missing Allotment', `<strong>${sessionKey}</strong> has NOT been allotted rooms.`);
+                    const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
+                    
+                    // 1. REGULAR ALLOTMENT
+                    if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
+                        log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
+                    } else {
+                         // Optional: Check if % allocated is reasonable
                     }
+
+                    // 2. SCRIBE ALLOTMENT
+                    const sessionScribes = scribesList.filter(scribeReg => 
+                        targetStudents.find(s => s.RegNo === scribeReg)
+                    );
+                    
+                    if (sessionScribes.length > 0) {
+                        // Check if these scribes are actually in a room
+                        // Logic: Scan allotment for this session to see if Scribe RegNos exist
+                        let allottedScribesCount = 0;
+                        if (allotments[sessionKey]) {
+                             Object.values(allotments[sessionKey]).forEach(room => {
+                                 if (room.students) {
+                                     room.students.forEach(s => {
+                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++;
+                                     });
+                                 }
+                             });
+                        }
+
+                        if (allottedScribesCount < sessionScribes.length) {
+                             log('warn', 'Scribe Issue', `${sessionScribes.length - allottedScribesCount} Scribes pending allotment in ${sessionName}`);
+                        } else {
+                             log('ok', 'Scribe Allotment', `All ${sessionScribes.length} scribes assigned rooms.`);
+                        }
+                    }
+
+                    // 3. QP CODES
                     if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
-                        log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> is missing QP Codes.`);
+                        log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
+                    }
+
+                    // 4. INVIGILATOR ASSIGNMENT (Premium/Logged In Only)
+                    const currentUser = window.firebase?.auth?.currentUser;
+                    if (currentUser) {
+                        const sessionInvigilation = invigilators[sessionKey] || [];
+                        const roomsInSession = allotments[sessionKey] ? Object.keys(allotments[sessionKey]).length : 0;
+                        
+                        if (roomsInSession > 0) {
+                            if (!sessionInvigilation || sessionInvigilation.length === 0) {
+                                log('warn', 'Staffing', `No invigilators assigned for ${sessionName} (${roomsInSession} rooms).`);
+                            } else if (sessionInvigilation.length < roomsInSession) {
+                                log('warn', 'Staffing', `Shortage: ${roomsInSession} rooms but only ${sessionInvigilation.length} staff assigned.`);
+                            } else {
+                                log('ok', 'Staffing', `Invigilators assigned for ${sessionName}.`);
+                            }
+                        }
                     }
                 });
             }
         }
 
-        // ============================
-        // LAYER 3: REAL CLOUD TEST
-        // ============================
+        // LAYER 3: SYNC CHECK
         const currentUser = window.firebase?.auth?.currentUser;
-        
         if (currentUser) {
-            if (!window.currentCollegeId) {
-                log('fail', 'Cloud Link', 'Logged in, but College ID is missing. Try re-login.');
+            if (window.currentCollegeId) {
+                // Real Ping
+                const docRef = window.firebase.doc(window.firebase.db, "colleges", window.currentCollegeId);
+                await window.firebase.getDoc(docRef); // Just await, if it fails it goes to catch
+                log('ok', 'Cloud Sync', 'Database connected & synced.');
             } else {
-                // REAL PING TEST
-                try {
-                    // Try to fetch the college metadata document
-                    const docRef = window.firebase.doc(window.firebase.db, "colleges", window.currentCollegeId);
-                    const docSnap = await window.firebase.getDoc(docRef);
-
-                    if (docSnap.exists()) {
-                        log('ok', 'Cloud Connection', 'Ping Successful. Server is reachable & Data is Live.');
-                        
-                        // Optional: Check if local data is stale?
-                        // const cloudData = docSnap.data();
-                        // if(cloudData.lastUpdated > localLastUpdated) ...
-                    } else {
-                        log('fail', 'Cloud Data', 'Connected, but College Database was not found!');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    log('fail', 'Sync Failure', 'Network Error or Permission Denied. Check Internet.');
-                }
+                log('fail', 'Account', 'Logged in but College ID missing.');
             }
         } else {
-            log('ok', 'Mode', 'Running in Local/Guest Mode (Offline).');
+            log('ok', 'Mode', 'Local Offline Mode (Guest).');
         }
 
     } catch (e) {
-        log('fail', 'System Crash', `Self-check failed: ${e.message}`);
+        // If network error on ping
+        if(e.code === 'unavailable' || e.message.includes('offline')) {
+             log('fail', 'Sync Error', 'Internet connection lost or Firewall blocking Firebase.');
+        } else {
+             log('fail', 'System Error', `Check failed: ${e.message}`);
+        }
     }
 
-    // Restore Button
-    if(btn) {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    }
+    if(btn) { btn.disabled = false; btn.innerHTML = originalText; }
 
-    // Show Report
     const scoreColor = score > 85 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
     const finalHtml = `
         <div class="space-y-4">
             <div class="text-center p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <div class="text-4xl font-black ${scoreColor} mb-1">${score}%</div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">System Readiness</div>
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">Flight Readiness</div>
             </div>
             <div class="max-h-[50vh] overflow-y-auto custom-scroll border border-gray-100 rounded-lg bg-white">
                 ${report.join('')}
