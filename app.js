@@ -16066,15 +16066,22 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW SYSTEM SELF-CHECK (FIXED DATE & SYNC)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK (REAL DIAGNOSTIC)
 // ==========================================
 
-function runSystemHealthCheck() {
+async function runSystemHealthCheck() {
+    // 1. Show Loading State (Verification takes 1-2 seconds)
+    const btn = document.getElementById('btn-run-self-check');
+    const originalText = btn ? btn.innerHTML : 'Run Check';
+    if(btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...`;
+    }
+
     let score = 100;
     let report = [];
     let criticalErrors = 0;
 
-    // --- Helper to add log ---
     const log = (status, title, message) => {
         let icon = status === 'ok' ? '✅' : (status === 'warn' ? '⚠️' : '🛑');
         let color = status === 'ok' ? 'text-green-600' : (status === 'warn' ? 'text-orange-600' : 'text-red-600');
@@ -16091,133 +16098,151 @@ function runSystemHealthCheck() {
         `);
     };
 
-    // --- Helper: Parse DD.MM.YYYY or YYYY-MM-DD ---
+    // --- Helper: Parse Date ---
     const parseDate = (dateStr) => {
         if (!dateStr) return null;
         try {
-            // Handle "29.12.2025" -> "2025-12-29"
             if (dateStr.includes('.')) {
                 const [d, m, y] = dateStr.trim().split('.');
                 return new Date(`${y}-${m}-${d}T00:00:00`);
             }
-            // Handle "2025-12-29"
-            if (dateStr.includes('-')) {
-                return new Date(`${dateStr}T00:00:00`);
-            }
-            return new Date(dateStr);
-        } catch (e) {
-            return null;
-        }
+            return new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+        } catch (e) { return null; }
     };
 
-    // 1. INFRASTRUCTURE CHECKS
-    const collegeName = localStorage.getItem('examCollegeName');
-    if (!collegeName || collegeName === "University of Calicut") {
-        log('warn', 'College Name Default', 'Update College Name in Settings.');
-    }
+    try {
+        // ============================
+        // LAYER 1: INFRASTRUCTURE
+        // ============================
+        const collegeName = localStorage.getItem('examCollegeName');
+        if (!collegeName || collegeName === "University of Calicut") {
+            log('warn', 'College Name', 'Using default name. Please update in Settings.');
+        }
 
-    const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
-    if (Object.keys(rooms).length === 0) {
-        log('fail', 'No Rooms', 'Room Master is empty. Allotment impossible.');
-    }
+        const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+        if (Object.keys(rooms).length === 0) {
+            log('fail', 'Room Master', 'No rooms configured. Allotment impossible.');
+        }
 
-    const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
-    if (!streams || streams.length === 0) {
-        log('fail', 'No Streams', 'Exam Streams are missing.');
-    }
+        const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
+        if (!streams || streams.length === 0) {
+            log('fail', 'Exam Streams', 'No streams defined in Settings.');
+        }
 
-    // 2. INTELLIGENT DATE SCOPE
-    const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
-    
-    if (allStudents.length === 0) {
-        log('warn', 'Empty Database', 'No student data found to check.');
-    } else {
-        // A. Get unique dates
-        const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
+        // ============================
+        // LAYER 2: UPCOMING EXAMS
+        // ============================
+        const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
         
-        // B. Get "Today" (Midnight)
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
+        if (allStudents.length === 0) {
+            log('warn', 'Database', 'No student data loaded.');
+        } else {
+            const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
 
-        // C. Filter for FUTURE & TODAY using strict parsing
-        const activeDates = uniqueDateStrings
-            .filter(dateStr => {
-                const d = parseDate(dateStr);
-                return d && d >= now; 
-            })
-            .sort((a, b) => parseDate(a) - parseDate(b)); // Sort chronologically
+            // Filter for Today & Future
+            const activeDates = uniqueDateStrings
+                .filter(dateStr => {
+                    const d = parseDate(dateStr);
+                    return d && d >= now;
+                })
+                .sort((a, b) => parseDate(a) - parseDate(b));
 
-        // D. Define Scope: 
-        // 1. Today? 
-        // 2. Next Upcoming Date?
-        const targetDates = [];
-        
-        // Check if the very first date is today
-        if (activeDates.length > 0) {
-            const firstDate = parseDate(activeDates[0]);
-            const isToday = firstDate.getTime() === now.getTime();
-            
-            targetDates.push(activeDates[0]); // Always add the first available slot (Today or Future)
-            
-            // If the first one was Today, try to add the next one too (Tomorrow/Next Week)
-            if (isToday && activeDates.length > 1) {
-                targetDates.push(activeDates[1]);
+            // Select Scope: Today (if exam exists) OR Next Immediate Exam
+            const targetDates = [];
+            if (activeDates.length > 0) {
+                const firstDate = parseDate(activeDates[0]);
+                // If first date is today, check it.
+                // If first date is future, check it.
+                // Logic: Always check index 0. If index 0 is Today, also check index 1 (Tomorrow) just in case.
+                targetDates.push(activeDates[0]);
+                
+                const isToday = firstDate.getTime() === now.getTime();
+                if (isToday && activeDates.length > 1) {
+                    targetDates.push(activeDates[1]);
+                }
+            }
+
+            if (targetDates.length === 0) {
+                log('ok', 'Schedule', 'No upcoming exams found. System is idle.');
+            } else {
+                log('ok', 'Active Scope', `Checking readiness for: <strong>${targetDates.join(', ')}</strong>`);
+
+                const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
+                const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
+                
+                // Check Streams
+                const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
+                if (invalidStreams.length > 0) {
+                    log('fail', 'Data Integrity', `${invalidStreams.length} students have undefined Streams.`);
+                }
+
+                // Check Allotment & QP
+                const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+                
+                targetSessions.forEach(sessionKey => {
+                    if (!allotments[sessionKey]) {
+                        log('fail', 'Missing Allotment', `<strong>${sessionKey}</strong> has NOT been allotted rooms.`);
+                    }
+                    if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
+                        log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> is missing QP Codes.`);
+                    }
+                });
             }
         }
 
-        if (targetDates.length === 0) {
-            log('ok', 'No Exams Pending', 'No exams found for Today or the Future. Relax! ☕');
-        } else {
-            // 3. TARGETED CHECKS
-            log('ok', 'Scope: Active', `Checking readiness for: <strong>${targetDates.join(', ')}</strong>`);
+        // ============================
+        // LAYER 3: REAL CLOUD TEST
+        // ============================
+        const currentUser = window.firebase?.auth?.currentUser;
+        
+        if (currentUser) {
+            if (!window.currentCollegeId) {
+                log('fail', 'Cloud Link', 'Logged in, but College ID is missing. Try re-login.');
+            } else {
+                // REAL PING TEST
+                try {
+                    // Try to fetch the college metadata document
+                    const docRef = window.firebase.doc(window.firebase.db, "colleges", window.currentCollegeId);
+                    const docSnap = await window.firebase.getDoc(docRef);
 
-            const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
-            const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
-            
-            // Check A: Data Integrity
-            const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
-            if (invalidStreams.length > 0) {
-                log('fail', 'Stream Error', `${invalidStreams.length} students have undefined streams.`);
+                    if (docSnap.exists()) {
+                        log('ok', 'Cloud Connection', 'Ping Successful. Server is reachable & Data is Live.');
+                        
+                        // Optional: Check if local data is stale?
+                        // const cloudData = docSnap.data();
+                        // if(cloudData.lastUpdated > localLastUpdated) ...
+                    } else {
+                        log('fail', 'Cloud Data', 'Connected, but College Database was not found!');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    log('fail', 'Sync Failure', 'Network Error or Permission Denied. Check Internet.');
+                }
             }
-
-            // Check B: Allotment & QP
-            const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-            
-            targetSessions.forEach(sessionKey => {
-                if (!allotments[sessionKey]) {
-                    log('fail', 'Missing Allotment', `<strong>${sessionKey}</strong> has NO room allotment.`);
-                }
-                if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
-                    log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> is missing Question Paper codes.`);
-                }
-            });
-        }
-    }
-
-    // 4. SMART SYNC CHECK
-    const currentUser = window.firebase?.auth?.currentUser;
-    
-    if (currentUser) {
-        // If logged in, check if we are attached to a college DB
-        if (window.currentCollegeId) {
-            log('ok', 'Cloud Sync', `Online & Synced (ID: ...${window.currentCollegeId.slice(-4)})`);
         } else {
-            // If logged in but ID is missing, we might still be loading
-            log('warn', 'Cloud Connection', 'Logged in, but establishing database connection...');
+            log('ok', 'Mode', 'Running in Local/Guest Mode (Offline).');
         }
-    } else {
-        // Guest mode is Valid
-        log('ok', 'Local Mode', 'Running locally. Remember to backup manually.');
+
+    } catch (e) {
+        log('fail', 'System Crash', `Self-check failed: ${e.message}`);
     }
 
-    // --- DISPLAY RESULT ---
+    // Restore Button
+    if(btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+
+    // Show Report
     const scoreColor = score > 85 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
     const finalHtml = `
         <div class="space-y-4">
             <div class="text-center p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <div class="text-4xl font-black ${scoreColor} mb-1">${score}%</div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">Readiness Score</div>
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">System Readiness</div>
             </div>
             <div class="max-h-[50vh] overflow-y-auto custom-scroll border border-gray-100 rounded-lg bg-white">
                 ${report.join('')}
