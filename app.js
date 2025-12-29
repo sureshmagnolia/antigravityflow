@@ -16066,7 +16066,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (SELF-HEALING)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK (FINAL FIX)
 // ==========================================
 
 async function runSystemHealthCheck() {
@@ -16075,7 +16075,7 @@ async function runSystemHealthCheck() {
     const originalText = btn ? btn.innerHTML : 'Run Check';
     if(btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Diagnostic...`;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
     }
 
     let score = 100;
@@ -16098,13 +16098,21 @@ async function runSystemHealthCheck() {
         `);
     };
 
+    // --- Helper: Bulletproof Date Parser ---
     const parseDate = (dateStr) => {
         if (!dateStr) return null;
         try {
+            // Handle DD.MM.YYYY (29.12.2025)
             if (dateStr.includes('.')) {
                 const [d, m, y] = dateStr.trim().split('.');
                 return new Date(`${y}-${m}-${d}T00:00:00`);
             }
+            // Handle DD/MM/YYYY (29/12/2025)
+            if (dateStr.includes('/')) {
+                const [d, m, y] = dateStr.trim().split('/');
+                return new Date(`${y}-${m}-${d}T00:00:00`);
+            }
+            // Handle YYYY-MM-DD (2025-12-29)
             return new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
         } catch (e) { return null; }
     };
@@ -16132,23 +16140,34 @@ async function runSystemHealthCheck() {
             log('warn', 'Database', 'No student data loaded.');
         } else {
             const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
+            
+            // Get "Today" at Midnight (Local Time)
             const now = new Date();
             now.setHours(0, 0, 0, 0);
 
+            // Filter for Today & Future
             const activeDates = uniqueDateStrings
-                .filter(dateStr => { const d = parseDate(dateStr); return d && d >= now; })
+                .filter(dateStr => {
+                    const d = parseDate(dateStr);
+                    // Compare timestamps to be safe
+                    return d && d.getTime() >= now.getTime();
+                })
                 .sort((a, b) => parseDate(a) - parseDate(b));
 
             const targetDates = [];
             if (activeDates.length > 0) {
+                // Add the very first upcoming date (Could be Today or Future)
                 targetDates.push(activeDates[0]);
+                
+                // If the first date is Today, also grab the next one (Tomorrow/Next Exam)
                 const firstDate = parseDate(activeDates[0]);
-                const isToday = firstDate.getTime() === now.getTime();
-                if (isToday && activeDates.length > 1) targetDates.push(activeDates[1]);
+                if (firstDate.getTime() === now.getTime() && activeDates.length > 1) {
+                    targetDates.push(activeDates[1]);
+                }
             }
 
             if (targetDates.length === 0) {
-                log('ok', 'Schedule', 'No upcoming exams.');
+                log('ok', 'Schedule', 'No upcoming exams found.');
             } else {
                 log('ok', 'Target Scope', `Checking: <strong>${targetDates.join(', ')}</strong>`);
 
@@ -16162,17 +16181,24 @@ async function runSystemHealthCheck() {
                 targetSessions.forEach(sessionKey => {
                     const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
                     
+                    // CHECK 1: ALLOTMENT
                     if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
                         log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
                     }
 
-                    const sessionScribes = scribesList.filter(scribeReg => targetStudents.find(s => s.RegNo === scribeReg));
+                    // CHECK 2: SCRIBES
+                    const sessionScribes = scribesList.filter(scribeReg => 
+                        targetStudents.find(s => s.RegNo === scribeReg)
+                    );
+                    
                     if (sessionScribes.length > 0) {
                         let allottedScribesCount = 0;
                         if (allotments[sessionKey]) {
                              Object.values(allotments[sessionKey]).forEach(room => {
                                  if (room.students) {
-                                     room.students.forEach(s => { if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; });
+                                     room.students.forEach(s => { 
+                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; 
+                                     });
                                  }
                              });
                         }
@@ -16181,10 +16207,12 @@ async function runSystemHealthCheck() {
                         }
                     }
 
+                    // CHECK 3: QP CODES
                     if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
                         log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
                     }
 
+                    // CHECK 4: INVIGILATORS (Only if logged in)
                     const currentUser = window.firebase?.auth?.currentUser;
                     if (currentUser) {
                         const sessionInvigilation = invigilators[sessionKey] || [];
@@ -16198,38 +16226,31 @@ async function runSystemHealthCheck() {
             }
         }
 
-        // LAYER 3: SYNC CHECK (SELF-HEALING)
+        // LAYER 3: SYNC CHECK (ROBUST SCOPE)
         const currentUser = window.firebase?.auth?.currentUser;
         if (currentUser) {
-            // 1. Broad Search for ID
-            let activeId = window.currentCollegeId 
-                || localStorage.getItem('adminCollegeId') 
-                || localStorage.getItem('collegeId')
-                || localStorage.getItem('exam_college_id')
-                || sessionStorage.getItem('currentCollegeId');
+            // STRATEGY: Try finding the ID in variable scope OR storage
+            let activeId = null;
 
-            // 2. If missing, Fetch from User Profile (Self-Heal)
-            if (!activeId) {
-                try {
-                    const userDoc = await window.firebase.getDoc(window.firebase.doc(window.firebase.db, "users", currentUser.uid));
-                    if (userDoc.exists()) {
-                        activeId = userDoc.data().collegeId;
-                        // REPAIR GLOBAL STATE
-                        if (activeId) {
-                            window.currentCollegeId = activeId;
-                            localStorage.setItem('adminCollegeId', activeId);
-                        }
-                    }
-                } catch(e) { console.log("User doc fetch failed", e); }
-            }
+            // 1. Try Variable Scope (Handle ReferenceError if not defined)
+            try { if(typeof currentCollegeId !== 'undefined') activeId = currentCollegeId; } catch(e){}
+            
+            // 2. Try Window Scope
+            if(!activeId && window.currentCollegeId) activeId = window.currentCollegeId;
+
+            // 3. Try Storage (Backup)
+            if (!activeId) activeId = localStorage.getItem('adminCollegeId') || localStorage.getItem('collegeId');
 
             if (activeId) {
-                // 3. Real Ping with found ID
+                // AUTO-REPAIR: Save it to localStorage so we don't lose it next time
+                localStorage.setItem('adminCollegeId', activeId);
+                
+                // Real Ping
                 const docRef = window.firebase.doc(window.firebase.db, "colleges", activeId);
                 await window.firebase.getDoc(docRef); 
-                log('ok', 'Cloud Sync', `Database Connected.`);
+                log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeId.slice(-4)})`);
             } else {
-                log('fail', 'Account', 'Logged in, but College ID not found in profile.');
+                log('fail', 'Account', 'Logged in, but College ID missing. Reload Page.');
             }
         } else {
             log('ok', 'Mode', 'Local Offline Mode (Guest).');
@@ -16260,7 +16281,6 @@ async function runSystemHealthCheck() {
 
     UiModal.alert("Pre-Flight Check Report", finalHtml);
 }
-
 
 // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
 (function injectSelfCheckButton() {
