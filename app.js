@@ -16200,42 +16200,51 @@ function runSystemHealthCheck() {
 }
 
 
-// --- AUTO-INJECT BUTTON INTO SETTINGS ---
+// --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
 (function injectSelfCheckButton() {
     setTimeout(() => {
-        const settingsTab = document.getElementById('view-settings');
-        if (!settingsTab) return;
+        // 1. Target the Home/Dashboard View
+        const homeTab = document.getElementById('view-home');
+        if (!homeTab) return;
 
-        let checkContainer = document.getElementById('system-check-container');
-        if (!checkContainer) {
-            checkContainer = document.createElement('div');
-            checkContainer.id = 'system-check-container';
-            checkContainer.className = "mt-6 mb-6 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm";
+        // 2. Find the main white card container inside Home
+        const dashboardCard = homeTab.querySelector('.bg-white.shadow-xl');
+        
+        if (dashboardCard) {
+            let checkContainer = document.getElementById('system-check-container');
             
-            checkContainer.innerHTML = `
-                <div>
-                    <h3 class="font-bold text-indigo-900 text-lg">System Pre-Flight Check</h3>
-                    <p class="text-sm text-indigo-600 opacity-80">Scan Today & Upcoming exams for issues.</p>
-                </div>
-                <button id="btn-run-self-check" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    Run Check
-                </button>
-            `;
+            // Create if it doesn't exist
+            if (!checkContainer) {
+                checkContainer = document.createElement('div');
+                checkContainer.id = 'system-check-container';
+                // Added 'mt-8' for spacing from the calendar/other content
+                checkContainer.className = "mt-8 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center justify-between shadow-sm gap-4";
+                
+                checkContainer.innerHTML = `
+                    <div class="text-center sm:text-left">
+                        <h3 class="font-bold text-indigo-900 text-lg flex items-center justify-center sm:justify-start gap-2">
+                            <span>🚀</span> System Pre-Flight Check
+                        </h3>
+                        <p class="text-sm text-indigo-600 opacity-80 mt-1">Scan Today & Upcoming exams for missing rooms or data errors.</p>
+                    </div>
+                    <button id="btn-run-self-check" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Run Check
+                    </button>
+                `;
 
-            // Insert at the top of settings for visibility
-            const mainContainer = settingsTab.querySelector('.max-w-2xl') || settingsTab.querySelector('.w-full'); 
-            if(mainContainer) {
-                // Try to insert after the Title
-                const title = mainContainer.querySelector('h1');
-                if(title) title.insertAdjacentElement('afterend', checkContainer);
+                // 3. Append to the bottom of the dashboard card
+                dashboardCard.appendChild(checkContainer);
             }
+
+            // Re-attach event listener (safe to do multiple times)
+            const btn = document.getElementById('btn-run-self-check');
+            if(btn) btn.onclick = runSystemHealthCheck;
         }
 
-        const btn = document.getElementById('btn-run-self-check');
-        if(btn) btn.onclick = runSystemHealthCheck;
-
-    }, 2000); 
+    }, 1000); // 1s delay to ensure Dashboard HTML is ready
 })();
 
 
