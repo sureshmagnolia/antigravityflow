@@ -16064,7 +16064,158 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
         alert("Please allow pop-ups for this site to view the manual.");
     }
 }
+// ==========================================
+// 🩺 EXAMFLOW SYSTEM SELF-CHECK (PRE-FLIGHT)
+// ==========================================
 
+function runSystemHealthCheck() {
+    let score = 100;
+    let report = [];
+    let criticalErrors = 0;
+
+    // --- Helper to add log ---
+    const log = (status, title, message) => {
+        let icon = status === 'ok' ? '✅' : (status === 'warn' ? '⚠️' : '🛑');
+        let color = status === 'ok' ? 'text-green-600' : (status === 'warn' ? 'text-orange-600' : 'text-red-600');
+        if (status === 'warn') score -= 10;
+        if (status === 'fail') { score -= 25; criticalErrors++; }
+        report.push(`
+            <div class="flex items-start gap-3 p-3 border-b border-gray-100 last:border-0">
+                <span class="text-xl">${icon}</span>
+                <div>
+                    <h4 class="font-bold text-sm ${color}">${title}</h4>
+                    <p class="text-xs text-gray-600 mt-0.5">${message}</p>
+                </div>
+            </div>
+        `);
+    };
+
+    // 1. CONFIGURATION CHECKS (Infrastructure)
+    const collegeName = localStorage.getItem('examCollegeName');
+    if (!collegeName || collegeName === "University of Calicut") {
+        log('warn', 'College Name Default', 'You haven\'t set your specific College Name in Settings.');
+    } else {
+        log('ok', 'College Name Configured', `Set as: ${collegeName}`);
+    }
+
+    const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+    const roomCount = Object.keys(rooms).length;
+    if (roomCount === 0) {
+        log('fail', 'No Rooms Configured', 'You have 0 rooms in the Room Master. Allotment cannot proceed.');
+    } else {
+        log('ok', 'Room Infrastructure', `${roomCount} rooms defined.`);
+    }
+
+    const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
+    if (!streams || streams.length === 0) {
+        log('fail', 'No Exam Streams', 'Streams (Regular, Distance etc) are missing. System will fail.');
+    } else {
+        log('ok', 'Exam Streams', `${streams.length} streams active (${streams.join(', ')}).`);
+    }
+
+    // 2. DATA INTEGRITY (Students)
+    const students = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+    if (students.length === 0) {
+        log('warn', 'Empty Database', 'No student data loaded yet. Ready for upload.');
+    } else {
+        // Deep Data Scan
+        const invalidStreams = students.filter(s => !streams.includes(s.Stream || "Regular"));
+        if (invalidStreams.length > 0) {
+            log('fail', 'Stream Mismatch', `${invalidStreams.length} students have streams NOT defined in Settings. Add them to "Exam Streams" immediately.`);
+        } else {
+            log('ok', 'Data Consistency', `All ${students.length} students matched with valid streams.`);
+        }
+
+        // 3. OPERATIONAL READINESS (Allotment)
+        const sessions = new Set(students.map(s => `${s.Date} | ${s.Time}`));
+        const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+        
+        let pendingAllotment = 0;
+        let pendingQP = 0;
+
+        sessions.forEach(session => {
+            if (!allotments[session]) pendingAllotment++;
+            if (!qpCodes[session]) pendingQP++;
+        });
+
+        if (pendingAllotment > 0) {
+            log('warn', 'Pending Room Allotment', `${pendingAllotment} exam sessions have students but NO room allotment generated.`);
+        } else {
+            log('ok', 'Room Allotment', 'All active sessions have been allotted rooms.');
+        }
+
+        if (pendingQP > 0) {
+            log('warn', 'Missing QP Codes', `${pendingQP} sessions are missing Question Paper codes.`);
+        }
+    }
+
+    // 4. SYNC STATUS
+    if (window.currentCollegeId) {
+        log('ok', 'Cloud Sync', 'Connected to Cloud Database.');
+    } else {
+        log('warn', 'Offline Mode', 'Running in local mode. Data is NOT backed up to the cloud.');
+    }
+
+    // --- DISPLAY RESULT ---
+    const scoreColor = score > 80 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
+    const finalHtml = `
+        <div class="space-y-4">
+            <div class="text-center p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div class="text-3xl font-black ${scoreColor} mb-1">${score}%</div>
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">System Health Score</div>
+            </div>
+            <div class="max-h-[60vh] overflow-y-auto custom-scroll border border-gray-100 rounded-lg">
+                ${report.join('')}
+            </div>
+        </div>
+    `;
+
+    UiModal.alert("System Self-Check Report", finalHtml);
+}
+
+// --- AUTO-INJECT BUTTON INTO SETTINGS ---
+// This runs automatically when app.js loads to place the button
+(function injectSelfCheckButton() {
+    // Wait for DOM
+    setTimeout(() => {
+        const settingsTab = document.getElementById('view-settings');
+        if (!settingsTab) return;
+
+        // Create the button container if it doesn't exist
+        let checkContainer = document.getElementById('system-check-container');
+        if (!checkContainer) {
+            checkContainer = document.createElement('div');
+            checkContainer.id = 'system-check-container';
+            checkContainer.className = "mt-8 mb-8 p-6 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm";
+            
+            checkContainer.innerHTML = `
+                <div>
+                    <h3 class="font-bold text-indigo-900 text-lg">System Pre-Flight Check</h3>
+                    <p class="text-sm text-indigo-600 opacity-80">Run a full diagnostic scan for missing configurations or broken data links.</p>
+                </div>
+                <button id="btn-run-self-check" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Run Check
+                </button>
+            `;
+
+            // Insert it before the "Danger Zone"
+            const dangerZone = document.getElementById('danger-zone-modal')?.previousElementSibling; // Usually the Backup/Restore section or similar
+            if (dangerZone) {
+                // Try to find the Danger Zone button or section to place above
+                // For safety, let's append it to the main settings container
+                const mainContainer = settingsTab.querySelector('.max-w-4xl'); 
+                if(mainContainer) mainContainer.insertBefore(checkContainer, mainContainer.lastElementChild);
+            }
+        }
+
+        // Attach Event Listener
+        const btn = document.getElementById('btn-run-self-check');
+        if(btn) btn.onclick = runSystemHealthCheck;
+
+    }, 2000); // Wait 2s for other UI to settle
+})();
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
 // so you don't strictly need it here, but the openManualNewTab logic handles the rest.
