@@ -16066,7 +16066,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (FULL DIAGNOSTIC)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK (ROBUST SYNC)
 // ==========================================
 
 async function runSystemHealthCheck() {
@@ -16075,7 +16075,7 @@ async function runSystemHealthCheck() {
     const originalText = btn ? btn.innerHTML : 'Run Check';
     if(btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...`;
     }
 
     let score = 100;
@@ -16157,7 +16157,7 @@ async function runSystemHealthCheck() {
 
                 const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'); // Assuming this key
+                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'); 
 
                 targetSessions.forEach(sessionKey => {
                     const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
@@ -16165,8 +16165,6 @@ async function runSystemHealthCheck() {
                     // 1. REGULAR ALLOTMENT
                     if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
                         log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
-                    } else {
-                         // Optional: Check if % allocated is reasonable
                     }
 
                     // 2. SCRIBE ALLOTMENT
@@ -16175,8 +16173,6 @@ async function runSystemHealthCheck() {
                     );
                     
                     if (sessionScribes.length > 0) {
-                        // Check if these scribes are actually in a room
-                        // Logic: Scan allotment for this session to see if Scribe RegNos exist
                         let allottedScribesCount = 0;
                         if (allotments[sessionKey]) {
                              Object.values(allotments[sessionKey]).forEach(room => {
@@ -16200,7 +16196,7 @@ async function runSystemHealthCheck() {
                         log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
                     }
 
-                    // 4. INVIGILATOR ASSIGNMENT (Premium/Logged In Only)
+                    // 4. INVIGILATOR ASSIGNMENT
                     const currentUser = window.firebase?.auth?.currentUser;
                     if (currentUser) {
                         const sessionInvigilation = invigilators[sessionKey] || [];
@@ -16208,9 +16204,7 @@ async function runSystemHealthCheck() {
                         
                         if (roomsInSession > 0) {
                             if (!sessionInvigilation || sessionInvigilation.length === 0) {
-                                log('warn', 'Staffing', `No invigilators assigned for ${sessionName} (${roomsInSession} rooms).`);
-                            } else if (sessionInvigilation.length < roomsInSession) {
-                                log('warn', 'Staffing', `Shortage: ${roomsInSession} rooms but only ${sessionInvigilation.length} staff assigned.`);
+                                log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
                             } else {
                                 log('ok', 'Staffing', `Invigilators assigned for ${sessionName}.`);
                             }
@@ -16220,23 +16214,25 @@ async function runSystemHealthCheck() {
             }
         }
 
-        // LAYER 3: SYNC CHECK
+        // LAYER 3: SYNC CHECK (ROBUST)
         const currentUser = window.firebase?.auth?.currentUser;
         if (currentUser) {
-            if (window.currentCollegeId) {
+            // FIX: Check multiple storage locations for ID
+            const activeCollegeId = window.currentCollegeId || localStorage.getItem('adminCollegeId') || localStorage.getItem('college_id');
+            
+            if (activeCollegeId) {
                 // Real Ping
-                const docRef = window.firebase.doc(window.firebase.db, "colleges", window.currentCollegeId);
-                await window.firebase.getDoc(docRef); // Just await, if it fails it goes to catch
-                log('ok', 'Cloud Sync', 'Database connected & synced.');
+                const docRef = window.firebase.doc(window.firebase.db, "colleges", activeCollegeId);
+                await window.firebase.getDoc(docRef); 
+                log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeCollegeId.slice(-4)})`);
             } else {
-                log('fail', 'Account', 'Logged in but College ID missing.');
+                log('fail', 'Account', 'Logged in, but College ID missing. Try refreshing.');
             }
         } else {
             log('ok', 'Mode', 'Local Offline Mode (Guest).');
         }
 
     } catch (e) {
-        // If network error on ping
         if(e.code === 'unavailable' || e.message.includes('offline')) {
              log('fail', 'Sync Error', 'Internet connection lost or Firewall blocking Firebase.');
         } else {
