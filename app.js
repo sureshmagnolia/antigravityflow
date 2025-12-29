@@ -16064,8 +16064,10 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
         alert("Please allow pop-ups for this site to view the manual.");
     }
 }
+
+
 // ==========================================
-// 🩺 EXAMFLOW SYSTEM SELF-CHECK (PRE-FLIGHT)
+// 🩺 EXAMFLOW SYSTEM SELF-CHECK (SMART SCOPE)
 // ==========================================
 
 function runSystemHealthCheck() {
@@ -16081,141 +16083,155 @@ function runSystemHealthCheck() {
         if (status === 'fail') { score -= 25; criticalErrors++; }
         report.push(`
             <div class="flex items-start gap-3 p-3 border-b border-gray-100 last:border-0">
-                <span class="text-xl">${icon}</span>
+                <span class="text-xl shrink-0">${icon}</span>
                 <div>
                     <h4 class="font-bold text-sm ${color}">${title}</h4>
-                    <p class="text-xs text-gray-600 mt-0.5">${message}</p>
+                    <p class="text-xs text-gray-600 mt-0.5 leading-snug">${message}</p>
                 </div>
             </div>
         `);
     };
 
-    // 1. CONFIGURATION CHECKS (Infrastructure)
+    // 1. INFRASTRUCTURE CHECKS (Must always exist)
     const collegeName = localStorage.getItem('examCollegeName');
     if (!collegeName || collegeName === "University of Calicut") {
-        log('warn', 'College Name Default', 'You haven\'t set your specific College Name in Settings.');
-    } else {
-        log('ok', 'College Name Configured', `Set as: ${collegeName}`);
+        log('warn', 'College Name Default', 'College Name is generic. Update in Settings.');
     }
 
     const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
-    const roomCount = Object.keys(rooms).length;
-    if (roomCount === 0) {
-        log('fail', 'No Rooms Configured', 'You have 0 rooms in the Room Master. Allotment cannot proceed.');
-    } else {
-        log('ok', 'Room Infrastructure', `${roomCount} rooms defined.`);
+    if (Object.keys(rooms).length === 0) {
+        log('fail', 'No Rooms', 'Room Master is empty. Allotment impossible.');
     }
 
     const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
     if (!streams || streams.length === 0) {
-        log('fail', 'No Exam Streams', 'Streams (Regular, Distance etc) are missing. System will fail.');
-    } else {
-        log('ok', 'Exam Streams', `${streams.length} streams active (${streams.join(', ')}).`);
+        log('fail', 'No Streams', 'Exam Streams are missing.');
     }
 
-    // 2. DATA INTEGRITY (Students)
-    const students = JSON.parse(localStorage.getItem('examBaseData') || '[]');
-    if (students.length === 0) {
-        log('warn', 'Empty Database', 'No student data loaded yet. Ready for upload.');
+    // 2. SCOPE DEFINITION (Find Today & Next Exam)
+    const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+    
+    if (allStudents.length === 0) {
+        log('warn', 'Empty Database', 'No student data found.');
     } else {
-        // Deep Data Scan
-        const invalidStreams = students.filter(s => !streams.includes(s.Stream || "Regular"));
-        if (invalidStreams.length > 0) {
-            log('fail', 'Stream Mismatch', `${invalidStreams.length} students have streams NOT defined in Settings. Add them to "Exam Streams" immediately.`);
-        } else {
-            log('ok', 'Data Consistency', `All ${students.length} students matched with valid streams.`);
-        }
-
-        // 3. OPERATIONAL READINESS (Allotment)
-        const sessions = new Set(students.map(s => `${s.Date} | ${s.Time}`));
-        const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+        // Get all unique dates from data
+        const uniqueDates = [...new Set(allStudents.map(s => s.Date))].sort();
         
-        let pendingAllotment = 0;
-        let pendingQP = 0;
+        // Find Today (in YYYY-MM-DD format based on local time)
+        const todayObj = new Date();
+        const year = todayObj.getFullYear();
+        const month = String(todayObj.getMonth() + 1).padStart(2, '0');
+        const day = String(todayObj.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
 
-        sessions.forEach(session => {
-            if (!allotments[session]) pendingAllotment++;
-            if (!qpCodes[session]) pendingQP++;
-        });
+        // Determine Dates to Check
+        const targetDates = [];
+        if (uniqueDates.includes(todayStr)) targetDates.push(todayStr); // Add Today if exams exist
+        
+        // Find next immediate date
+        const nextDate = uniqueDates.find(d => d > todayStr);
+        if (nextDate) targetDates.push(nextDate);
 
-        if (pendingAllotment > 0) {
-            log('warn', 'Pending Room Allotment', `${pendingAllotment} exam sessions have students but NO room allotment generated.`);
+        if (targetDates.length === 0) {
+            log('ok', 'No Immediate Exams', 'No exams scheduled for Today or the near future.');
         } else {
-            log('ok', 'Room Allotment', 'All active sessions have been allotted rooms.');
-        }
+            // 3. TARGETED CHECKS (Only for target dates)
+            const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
+            const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
+            
+            log('ok', 'Scope: Active', `Checking data for: ${targetDates.join(', ')}`);
 
-        if (pendingQP > 0) {
-            log('warn', 'Missing QP Codes', `${pendingQP} sessions are missing Question Paper codes.`);
+            // Check A: Data Integrity
+            const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
+            if (invalidStreams.length > 0) {
+                log('fail', 'Stream Mismatch', `${invalidStreams.length} students in upcoming exams have undefined streams.`);
+            }
+
+            // Check B: Allotment & QP Codes
+            const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+            
+            targetSessions.forEach(sessionKey => {
+                // Allotment Check
+                if (!allotments[sessionKey]) {
+                    log('fail', 'Missing Allotment', `Session [${sessionKey}] has NO room allotment.`);
+                } else {
+                    // Check if *all* students in this session are allotted?
+                    // (Optional deep check: compare total students vs allotted count)
+                }
+
+                // QP Code Check
+                if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
+                    log('warn', 'Missing QP Codes', `Session [${sessionKey}] has no QP Codes defined.`);
+                }
+            });
         }
     }
 
     // 4. SYNC STATUS
     if (window.currentCollegeId) {
-        log('ok', 'Cloud Sync', 'Connected to Cloud Database.');
+        log('ok', 'Cloud Sync', 'Online & Synced.');
     } else {
-        log('warn', 'Offline Mode', 'Running in local mode. Data is NOT backed up to the cloud.');
+        log('warn', 'Offline Mode', 'Data is local only. Please Backup manually.');
     }
 
     // --- DISPLAY RESULT ---
-    const scoreColor = score > 80 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
+    const scoreColor = score > 85 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
     const finalHtml = `
         <div class="space-y-4">
             <div class="text-center p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <div class="text-3xl font-black ${scoreColor} mb-1">${score}%</div>
-                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">System Health Score</div>
+                <div class="text-4xl font-black ${scoreColor} mb-1">${score}%</div>
+                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest">Readiness Score</div>
             </div>
-            <div class="max-h-[60vh] overflow-y-auto custom-scroll border border-gray-100 rounded-lg">
+            <div class="max-h-[50vh] overflow-y-auto custom-scroll border border-gray-100 rounded-lg bg-white">
                 ${report.join('')}
             </div>
         </div>
     `;
 
-    UiModal.alert("System Self-Check Report", finalHtml);
+    UiModal.alert("Pre-Flight Check Report", finalHtml);
 }
 
 // --- AUTO-INJECT BUTTON INTO SETTINGS ---
-// This runs automatically when app.js loads to place the button
 (function injectSelfCheckButton() {
-    // Wait for DOM
     setTimeout(() => {
         const settingsTab = document.getElementById('view-settings');
         if (!settingsTab) return;
 
-        // Create the button container if it doesn't exist
         let checkContainer = document.getElementById('system-check-container');
         if (!checkContainer) {
             checkContainer = document.createElement('div');
             checkContainer.id = 'system-check-container';
-            checkContainer.className = "mt-8 mb-8 p-6 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm";
+            checkContainer.className = "mt-6 mb-6 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm";
             
             checkContainer.innerHTML = `
                 <div>
                     <h3 class="font-bold text-indigo-900 text-lg">System Pre-Flight Check</h3>
-                    <p class="text-sm text-indigo-600 opacity-80">Run a full diagnostic scan for missing configurations or broken data links.</p>
+                    <p class="text-sm text-indigo-600 opacity-80">Scan Today & Upcoming exams for issues.</p>
                 </div>
-                <button id="btn-run-self-check" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center gap-2">
+                <button id="btn-run-self-check" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     Run Check
                 </button>
             `;
 
-            // Insert it before the "Danger Zone"
-            const dangerZone = document.getElementById('danger-zone-modal')?.previousElementSibling; // Usually the Backup/Restore section or similar
-            if (dangerZone) {
-                // Try to find the Danger Zone button or section to place above
-                // For safety, let's append it to the main settings container
-                const mainContainer = settingsTab.querySelector('.max-w-4xl'); 
-                if(mainContainer) mainContainer.insertBefore(checkContainer, mainContainer.lastElementChild);
+            // Insert at the top of settings for visibility
+            const mainContainer = settingsTab.querySelector('.max-w-2xl') || settingsTab.querySelector('.w-full'); 
+            if(mainContainer) {
+                // Try to insert after the Title
+                const title = mainContainer.querySelector('h1');
+                if(title) title.insertAdjacentElement('afterend', checkContainer);
             }
         }
 
-        // Attach Event Listener
         const btn = document.getElementById('btn-run-self-check');
         if(btn) btn.onclick = runSystemHealthCheck;
 
-    }, 2000); // Wait 2s for other UI to settle
+    }, 2000); 
 })();
+
+
+    
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
 // so you don't strictly need it here, but the openManualNewTab logic handles the rest.
