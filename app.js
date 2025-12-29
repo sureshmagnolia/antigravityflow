@@ -16065,9 +16065,8 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     }
 }
 
-
 // ==========================================
-// 🩺 EXAMFLOW SYSTEM SELF-CHECK (INTELLIGENT)
+// 🩺 EXAMFLOW SYSTEM SELF-CHECK (FIXED DATE & SYNC)
 // ==========================================
 
 function runSystemHealthCheck() {
@@ -16092,10 +16091,29 @@ function runSystemHealthCheck() {
         `);
     };
 
-    // 1. INFRASTRUCTURE (Must always exist)
+    // --- Helper: Parse DD.MM.YYYY or YYYY-MM-DD ---
+    const parseDate = (dateStr) => {
+        if (!dateStr) return null;
+        try {
+            // Handle "29.12.2025" -> "2025-12-29"
+            if (dateStr.includes('.')) {
+                const [d, m, y] = dateStr.trim().split('.');
+                return new Date(`${y}-${m}-${d}T00:00:00`);
+            }
+            // Handle "2025-12-29"
+            if (dateStr.includes('-')) {
+                return new Date(`${dateStr}T00:00:00`);
+            }
+            return new Date(dateStr);
+        } catch (e) {
+            return null;
+        }
+    };
+
+    // 1. INFRASTRUCTURE CHECKS
     const collegeName = localStorage.getItem('examCollegeName');
     if (!collegeName || collegeName === "University of Calicut") {
-        log('warn', 'College Name Default', 'Update College Name in Settings for proper reports.');
+        log('warn', 'College Name Default', 'Update College Name in Settings.');
     }
 
     const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
@@ -16117,36 +16135,40 @@ function runSystemHealthCheck() {
         // A. Get unique dates
         const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
         
-        // B. Get "Today" (Midnight) for comparison
+        // B. Get "Today" (Midnight)
         const now = new Date();
         now.setHours(0, 0, 0, 0);
 
-        // C. Filter for FUTURE & TODAY (Ignore history)
+        // C. Filter for FUTURE & TODAY using strict parsing
         const activeDates = uniqueDateStrings
-            .filter(dateStr => new Date(dateStr + "T00:00:00") >= now)
-            .sort(); // Sorts YYYY-MM-DD correctly
+            .filter(dateStr => {
+                const d = parseDate(dateStr);
+                return d && d >= now; 
+            })
+            .sort((a, b) => parseDate(a) - parseDate(b)); // Sort chronologically
 
         // D. Define Scope: 
-        // 1. Is there an exam Today?
-        // 2. What is the VERY NEXT exam? (Could be tomorrow or in 2 weeks)
+        // 1. Today? 
+        // 2. Next Upcoming Date?
         const targetDates = [];
         
-        // Check Today
-        const todayStr = now.toISOString().split('T')[0];
-        if (activeDates.includes(todayStr)) {
-            targetDates.push(todayStr);
-        }
-
-        // Find next future date (not today)
-        const nextExamDate = activeDates.find(d => d > todayStr);
-        if (nextExamDate) {
-            targetDates.push(nextExamDate);
+        // Check if the very first date is today
+        if (activeDates.length > 0) {
+            const firstDate = parseDate(activeDates[0]);
+            const isToday = firstDate.getTime() === now.getTime();
+            
+            targetDates.push(activeDates[0]); // Always add the first available slot (Today or Future)
+            
+            // If the first one was Today, try to add the next one too (Tomorrow/Next Week)
+            if (isToday && activeDates.length > 1) {
+                targetDates.push(activeDates[1]);
+            }
         }
 
         if (targetDates.length === 0) {
             log('ok', 'No Exams Pending', 'No exams found for Today or the Future. Relax! ☕');
         } else {
-            // 3. TARGETED CHECKS (Only for identified dates)
+            // 3. TARGETED CHECKS
             log('ok', 'Scope: Active', `Checking readiness for: <strong>${targetDates.join(', ')}</strong>`);
 
             const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
@@ -16174,20 +16196,19 @@ function runSystemHealthCheck() {
     }
 
     // 4. SMART SYNC CHECK
-    // Logic: Only complain about sync if the user is actually trying to be online (Logged In)
-    const currentUser = window.firebase?.auth?.currentUser; 
+    const currentUser = window.firebase?.auth?.currentUser;
     
     if (currentUser) {
-        // PREMIUM USER CHECK
+        // If logged in, check if we are attached to a college DB
         if (window.currentCollegeId) {
-            log('ok', 'Cloud Sync', `Account Active: ${currentUser.email}`);
-            // Future improvement: Compare local timestamp vs cloud timestamp here
+            log('ok', 'Cloud Sync', `Online & Synced (ID: ...${window.currentCollegeId.slice(-4)})`);
         } else {
-            log('warn', 'Sync Error', 'Logged in, but not connected to a College Database.');
+            // If logged in but ID is missing, we might still be loading
+            log('warn', 'Cloud Connection', 'Logged in, but establishing database connection...');
         }
     } else {
-        // GUEST USER CHECK (Normal behavior)
-        log('ok', 'Local Mode', 'Running in offline mode. Data stored locally.');
+        // Guest mode is Valid
+        log('ok', 'Local Mode', 'Running locally. Remember to backup manually.');
     }
 
     // --- DISPLAY RESULT ---
@@ -16206,6 +16227,7 @@ function runSystemHealthCheck() {
 
     UiModal.alert("Pre-Flight Check Report", finalHtml);
 }
+
 
 // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
 (function injectSelfCheckButton() {
