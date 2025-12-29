@@ -16065,9 +16065,8 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     }
 }
 
-
 // ==========================================
-// 🩺 EXAMFLOW SYSTEM SELF-CHECK (SMART SCOPE)
+// 🩺 EXAMFLOW SYSTEM SELF-CHECK (STRICT FUTURE)
 // ==========================================
 
 function runSystemHealthCheck() {
@@ -16092,10 +16091,10 @@ function runSystemHealthCheck() {
         `);
     };
 
-    // 1. INFRASTRUCTURE CHECKS (Must always exist)
+    // 1. INFRASTRUCTURE CHECKS
     const collegeName = localStorage.getItem('examCollegeName');
     if (!collegeName || collegeName === "University of Calicut") {
-        log('warn', 'College Name Default', 'College Name is generic. Update in Settings.');
+        log('warn', 'College Name Default', 'Update College Name in Settings.');
     }
 
     const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
@@ -16108,43 +16107,45 @@ function runSystemHealthCheck() {
         log('fail', 'No Streams', 'Exam Streams are missing.');
     }
 
-    // 2. SCOPE DEFINITION (Find Today & Next Exam)
+    // 2. SMART DATE FILTERING (Fix for "Past Data" issue)
     const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
     
     if (allStudents.length === 0) {
         log('warn', 'Empty Database', 'No student data found.');
     } else {
-        // Get all unique dates from data
-        const uniqueDates = [...new Set(allStudents.map(s => s.Date))].sort();
+        // A. Get unique date strings (YYYY-MM-DD)
+        const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
         
-        // Find Today (in YYYY-MM-DD format based on local time)
-        const todayObj = new Date();
-        const year = todayObj.getFullYear();
-        const month = String(todayObj.getMonth() + 1).padStart(2, '0');
-        const day = String(todayObj.getDate()).padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
+        // B. Get "Today" at Midnight for strict comparison
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
 
-        // Determine Dates to Check
-        const targetDates = [];
-        if (uniqueDates.includes(todayStr)) targetDates.push(todayStr); // Add Today if exams exist
-        
-        // Find next immediate date
-        const nextDate = uniqueDates.find(d => d > todayStr);
-        if (nextDate) targetDates.push(nextDate);
+        // C. Filter & Sort
+        const upcomingDates = uniqueDateStrings
+            .filter(dateStr => {
+                const examDate = new Date(dateStr);
+                // Fix for timezone issues: simple string comparison works best if format is ISO (YYYY-MM-DD)
+                // But to be safe with Date objects:
+                return new Date(dateStr + "T00:00:00") >= now;
+            })
+            .sort(); // String sort works for YYYY-MM-DD
+
+        // D. Select Scope: Today + Next Immediate Day (Max 2 days)
+        const targetDates = upcomingDates.slice(0, 2);
 
         if (targetDates.length === 0) {
-            log('ok', 'No Immediate Exams', 'No exams scheduled for Today or the near future.');
+            log('ok', 'No Upcoming Exams', 'No exams found for Today or Future. Relax! ☕');
         } else {
-            // 3. TARGETED CHECKS (Only for target dates)
+            // 3. TARGETED CHECKS
+            log('ok', 'Scope: Active', `Scanning: <strong>${targetDates.join(', ')}</strong>`);
+
             const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
             const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
             
-            log('ok', 'Scope: Active', `Checking data for: ${targetDates.join(', ')}`);
-
-            // Check A: Data Integrity
+            // Check A: Stream Integrity
             const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
             if (invalidStreams.length > 0) {
-                log('fail', 'Stream Mismatch', `${invalidStreams.length} students in upcoming exams have undefined streams.`);
+                log('fail', 'Stream Error', `${invalidStreams.length} students in upcoming exams have undefined streams.`);
             }
 
             // Check B: Allotment & QP Codes
@@ -16154,15 +16155,21 @@ function runSystemHealthCheck() {
             targetSessions.forEach(sessionKey => {
                 // Allotment Check
                 if (!allotments[sessionKey]) {
-                    log('fail', 'Missing Allotment', `Session [${sessionKey}] has NO room allotment.`);
+                    log('fail', 'Missing Allotment', `<strong>${sessionKey}</strong> has NO room allotment.`);
                 } else {
-                    // Check if *all* students in this session are allotted?
-                    // (Optional deep check: compare total students vs allotted count)
+                    // Deep Check: Are all students actually inside?
+                    // Count allocated students vs total students for this session
+                    const totalInSession = allStudents.filter(s => `${s.Date} | ${s.Time}` === sessionKey).length;
+                    const allocatedData = allotments[sessionKey];
+                    // Simple check if object exists and has keys
+                    if(Object.keys(allocatedData).length === 0 && totalInSession > 0) {
+                         log('warn', 'Empty Allotment', `Session ${sessionKey} exists but room list is empty.`);
+                    }
                 }
 
                 // QP Code Check
                 if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
-                    log('warn', 'Missing QP Codes', `Session [${sessionKey}] has no QP Codes defined.`);
+                    log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> has no Question Paper codes.`);
                 }
             });
         }
@@ -16191,6 +16198,7 @@ function runSystemHealthCheck() {
 
     UiModal.alert("Pre-Flight Check Report", finalHtml);
 }
+
 
 // --- AUTO-INJECT BUTTON INTO SETTINGS ---
 (function injectSelfCheckButton() {
