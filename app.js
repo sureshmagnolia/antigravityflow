@@ -16066,7 +16066,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (ROBUST SYNC)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK (SELF-HEALING)
 // ==========================================
 
 async function runSystemHealthCheck() {
@@ -16075,7 +16075,7 @@ async function runSystemHealthCheck() {
     const originalText = btn ? btn.innerHTML : 'Run Check';
     if(btn) {
         btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...`;
+        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Diagnostic...`;
     }
 
     let score = 100;
@@ -16157,76 +16157,79 @@ async function runSystemHealthCheck() {
 
                 const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'); 
+                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
 
                 targetSessions.forEach(sessionKey => {
                     const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
                     
-                    // 1. REGULAR ALLOTMENT
                     if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
                         log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
                     }
 
-                    // 2. SCRIBE ALLOTMENT
-                    const sessionScribes = scribesList.filter(scribeReg => 
-                        targetStudents.find(s => s.RegNo === scribeReg)
-                    );
-                    
+                    const sessionScribes = scribesList.filter(scribeReg => targetStudents.find(s => s.RegNo === scribeReg));
                     if (sessionScribes.length > 0) {
                         let allottedScribesCount = 0;
                         if (allotments[sessionKey]) {
                              Object.values(allotments[sessionKey]).forEach(room => {
                                  if (room.students) {
-                                     room.students.forEach(s => {
-                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++;
-                                     });
+                                     room.students.forEach(s => { if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; });
                                  }
                              });
                         }
-
                         if (allottedScribesCount < sessionScribes.length) {
-                             log('warn', 'Scribe Issue', `${sessionScribes.length - allottedScribesCount} Scribes pending allotment in ${sessionName}`);
-                        } else {
-                             log('ok', 'Scribe Allotment', `All ${sessionScribes.length} scribes assigned rooms.`);
+                             log('warn', 'Scribe Issue', `Pending scribe allotment in ${sessionName}`);
                         }
                     }
 
-                    // 3. QP CODES
                     if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
                         log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
                     }
 
-                    // 4. INVIGILATOR ASSIGNMENT
                     const currentUser = window.firebase?.auth?.currentUser;
                     if (currentUser) {
                         const sessionInvigilation = invigilators[sessionKey] || [];
-                        const roomsInSession = allotments[sessionKey] ? Object.keys(allotments[sessionKey]).length : 0;
-                        
-                        if (roomsInSession > 0) {
-                            if (!sessionInvigilation || sessionInvigilation.length === 0) {
-                                log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
-                            } else {
-                                log('ok', 'Staffing', `Invigilators assigned for ${sessionName}.`);
-                            }
+                        if (sessionInvigilation.length === 0 && allotments[sessionKey]) {
+                            log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
+                        } else if (allotments[sessionKey]) {
+                            log('ok', 'Staffing', `Invigilators assigned.`);
                         }
                     }
                 });
             }
         }
 
-        // LAYER 3: SYNC CHECK (ROBUST)
+        // LAYER 3: SYNC CHECK (SELF-HEALING)
         const currentUser = window.firebase?.auth?.currentUser;
         if (currentUser) {
-            // FIX: Check multiple storage locations for ID
-            const activeCollegeId = window.currentCollegeId || localStorage.getItem('adminCollegeId') || localStorage.getItem('college_id');
-            
-            if (activeCollegeId) {
-                // Real Ping
-                const docRef = window.firebase.doc(window.firebase.db, "colleges", activeCollegeId);
+            // 1. Broad Search for ID
+            let activeId = window.currentCollegeId 
+                || localStorage.getItem('adminCollegeId') 
+                || localStorage.getItem('collegeId')
+                || localStorage.getItem('exam_college_id')
+                || sessionStorage.getItem('currentCollegeId');
+
+            // 2. If missing, Fetch from User Profile (Self-Heal)
+            if (!activeId) {
+                try {
+                    const userDoc = await window.firebase.getDoc(window.firebase.doc(window.firebase.db, "users", currentUser.uid));
+                    if (userDoc.exists()) {
+                        activeId = userDoc.data().collegeId;
+                        // REPAIR GLOBAL STATE
+                        if (activeId) {
+                            window.currentCollegeId = activeId;
+                            localStorage.setItem('adminCollegeId', activeId);
+                        }
+                    }
+                } catch(e) { console.log("User doc fetch failed", e); }
+            }
+
+            if (activeId) {
+                // 3. Real Ping with found ID
+                const docRef = window.firebase.doc(window.firebase.db, "colleges", activeId);
                 await window.firebase.getDoc(docRef); 
-                log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeCollegeId.slice(-4)})`);
+                log('ok', 'Cloud Sync', `Database Connected.`);
             } else {
-                log('fail', 'Account', 'Logged in, but College ID missing. Try refreshing.');
+                log('fail', 'Account', 'Logged in, but College ID not found in profile.');
             }
         } else {
             log('ok', 'Mode', 'Local Offline Mode (Guest).');
