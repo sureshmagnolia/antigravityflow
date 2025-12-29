@@ -16065,8 +16065,9 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     }
 }
 
+
 // ==========================================
-// 🩺 EXAMFLOW SYSTEM SELF-CHECK (STRICT FUTURE)
+// 🩺 EXAMFLOW SYSTEM SELF-CHECK (INTELLIGENT)
 // ==========================================
 
 function runSystemHealthCheck() {
@@ -16091,10 +16092,10 @@ function runSystemHealthCheck() {
         `);
     };
 
-    // 1. INFRASTRUCTURE CHECKS
+    // 1. INFRASTRUCTURE (Must always exist)
     const collegeName = localStorage.getItem('examCollegeName');
     if (!collegeName || collegeName === "University of Calicut") {
-        log('warn', 'College Name Default', 'Update College Name in Settings.');
+        log('warn', 'College Name Default', 'Update College Name in Settings for proper reports.');
     }
 
     const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
@@ -16107,79 +16108,86 @@ function runSystemHealthCheck() {
         log('fail', 'No Streams', 'Exam Streams are missing.');
     }
 
-    // 2. SMART DATE FILTERING (Fix for "Past Data" issue)
+    // 2. INTELLIGENT DATE SCOPE
     const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
     
     if (allStudents.length === 0) {
-        log('warn', 'Empty Database', 'No student data found.');
+        log('warn', 'Empty Database', 'No student data found to check.');
     } else {
-        // A. Get unique date strings (YYYY-MM-DD)
+        // A. Get unique dates
         const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
         
-        // B. Get "Today" at Midnight for strict comparison
+        // B. Get "Today" (Midnight) for comparison
         const now = new Date();
         now.setHours(0, 0, 0, 0);
 
-        // C. Filter & Sort
-        const upcomingDates = uniqueDateStrings
-            .filter(dateStr => {
-                const examDate = new Date(dateStr);
-                // Fix for timezone issues: simple string comparison works best if format is ISO (YYYY-MM-DD)
-                // But to be safe with Date objects:
-                return new Date(dateStr + "T00:00:00") >= now;
-            })
-            .sort(); // String sort works for YYYY-MM-DD
+        // C. Filter for FUTURE & TODAY (Ignore history)
+        const activeDates = uniqueDateStrings
+            .filter(dateStr => new Date(dateStr + "T00:00:00") >= now)
+            .sort(); // Sorts YYYY-MM-DD correctly
 
-        // D. Select Scope: Today + Next Immediate Day (Max 2 days)
-        const targetDates = upcomingDates.slice(0, 2);
+        // D. Define Scope: 
+        // 1. Is there an exam Today?
+        // 2. What is the VERY NEXT exam? (Could be tomorrow or in 2 weeks)
+        const targetDates = [];
+        
+        // Check Today
+        const todayStr = now.toISOString().split('T')[0];
+        if (activeDates.includes(todayStr)) {
+            targetDates.push(todayStr);
+        }
+
+        // Find next future date (not today)
+        const nextExamDate = activeDates.find(d => d > todayStr);
+        if (nextExamDate) {
+            targetDates.push(nextExamDate);
+        }
 
         if (targetDates.length === 0) {
-            log('ok', 'No Upcoming Exams', 'No exams found for Today or Future. Relax! ☕');
+            log('ok', 'No Exams Pending', 'No exams found for Today or the Future. Relax! ☕');
         } else {
-            // 3. TARGETED CHECKS
-            log('ok', 'Scope: Active', `Scanning: <strong>${targetDates.join(', ')}</strong>`);
+            // 3. TARGETED CHECKS (Only for identified dates)
+            log('ok', 'Scope: Active', `Checking readiness for: <strong>${targetDates.join(', ')}</strong>`);
 
             const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
             const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
             
-            // Check A: Stream Integrity
+            // Check A: Data Integrity
             const invalidStreams = targetStudents.filter(s => !streams.includes(s.Stream || "Regular"));
             if (invalidStreams.length > 0) {
-                log('fail', 'Stream Error', `${invalidStreams.length} students in upcoming exams have undefined streams.`);
+                log('fail', 'Stream Error', `${invalidStreams.length} students have undefined streams.`);
             }
 
-            // Check B: Allotment & QP Codes
+            // Check B: Allotment & QP
             const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
             
             targetSessions.forEach(sessionKey => {
-                // Allotment Check
                 if (!allotments[sessionKey]) {
                     log('fail', 'Missing Allotment', `<strong>${sessionKey}</strong> has NO room allotment.`);
-                } else {
-                    // Deep Check: Are all students actually inside?
-                    // Count allocated students vs total students for this session
-                    const totalInSession = allStudents.filter(s => `${s.Date} | ${s.Time}` === sessionKey).length;
-                    const allocatedData = allotments[sessionKey];
-                    // Simple check if object exists and has keys
-                    if(Object.keys(allocatedData).length === 0 && totalInSession > 0) {
-                         log('warn', 'Empty Allotment', `Session ${sessionKey} exists but room list is empty.`);
-                    }
                 }
-
-                // QP Code Check
                 if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
-                    log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> has no Question Paper codes.`);
+                    log('warn', 'Missing QP Codes', `<strong>${sessionKey}</strong> is missing Question Paper codes.`);
                 }
             });
         }
     }
 
-    // 4. SYNC STATUS
-    if (window.currentCollegeId) {
-        log('ok', 'Cloud Sync', 'Online & Synced.');
+    // 4. SMART SYNC CHECK
+    // Logic: Only complain about sync if the user is actually trying to be online (Logged In)
+    const currentUser = window.firebase?.auth?.currentUser; 
+    
+    if (currentUser) {
+        // PREMIUM USER CHECK
+        if (window.currentCollegeId) {
+            log('ok', 'Cloud Sync', `Account Active: ${currentUser.email}`);
+            // Future improvement: Compare local timestamp vs cloud timestamp here
+        } else {
+            log('warn', 'Sync Error', 'Logged in, but not connected to a College Database.');
+        }
     } else {
-        log('warn', 'Offline Mode', 'Data is local only. Please Backup manually.');
+        // GUEST USER CHECK (Normal behavior)
+        log('ok', 'Local Mode', 'Running in offline mode. Data stored locally.');
     }
 
     // --- DISPLAY RESULT ---
@@ -16198,7 +16206,6 @@ function runSystemHealthCheck() {
 
     UiModal.alert("Pre-Flight Check Report", finalHtml);
 }
-
 
 // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
 (function injectSelfCheckButton() {
