@@ -298,6 +298,7 @@ function setupLiveSync(collegeId, mode) {
             if (adminView && !adminView.classList.contains('hidden')) {
                 renderSlotsGridAdmin();
                 renderAdminTodayStats();
+                populateAttendanceSessions(); // 🟢 ADD THIS LINE HERE
             } else if (staffView && !staffView.classList.contains('hidden')) {
                 // If staff view is open, refresh calendar
                 let emailToRender = currentUser ? currentUser.email : null;
