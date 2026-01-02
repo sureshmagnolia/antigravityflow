@@ -16411,7 +16411,7 @@ window.toggleBulkLock = function() {
     }
 };
 
-// 2. Execute Delete Function
+// 2. Execute Delete Function (Updated to Preserve Invigilation Data)
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
@@ -16441,7 +16441,7 @@ window.executeBulkDelete = async function() {
     const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
     // Confirmation
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove ALL student data, allotments, and scribe settings for these dates.\n\nType 'DELETE' to confirm:`;
+    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\nNOTE: Invigilation Volunteers & Availability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
     const userInput = prompt(confirmMsg);
 
     if (userInput !== 'DELETE') {
@@ -16466,9 +16466,13 @@ window.executeBulkDelete = async function() {
         localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
 
         // 2. Remove Aux Data (Assignments, Rooms, etc.)
+        // 🟢 UPDATE: Removed 'examInvigilationSlots' and 'examInvigilatorMapping' from this list
+        // This ensures Volunteer/Availability data survives the delete.
         const auxKeys = [
-            'examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 
-            'examQPCodes', 'examInvigilatorMapping', 'examInvigilationSlots'
+            'examRoomAllotment', 
+            'examScribeAllotment', 
+            'examAbsenteeList', 
+            'examQPCodes' 
         ];
         
         auxKeys.forEach(key => {
@@ -16483,15 +16487,18 @@ window.executeBulkDelete = async function() {
             }
         });
 
-        // 3. Sync to Cloud (Settings/Ops/Staff/Slots)
+        // 3. Sync to Cloud
+        // We sync 'ops' and 'allocation' to reflect the deletions.
+        // We do NOT sync 'slots' here to avoid overwriting the preserved data with empty data if logic was different.
+        // Actually, since we didn't touch localStorage for slots, we don't strictly need to sync it, 
+        // but 'allocation' sync covers rooms/scribes.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
-            await syncDataToCloud('allocation');
-            await syncDataToCloud('staff');
-            await syncDataToCloud('slots');
+            await syncDataToCloud('allocation'); 
+            // await syncDataToCloud('slots'); // Optional: Leaving this out prevents accidental wiping if cloud has newer data
         }
         
-        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.`);
+        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         
         // Refresh App
         window.location.reload();
