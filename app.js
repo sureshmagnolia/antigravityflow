@@ -16511,11 +16511,14 @@ window.executeBulkDelete = async function() {
     }
 };
 
+
 // ==========================================
 // AUTOMATED HOUSEKEEPING (Runs on Load)
 // ==========================================
 
 async function autoCleanPastGhostData() {
+    console.log("🧹 [System] Starting Ghost Data Housekeeping check...");
+
     // 1. Get Today's Date (Midnight) for comparison
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -16536,6 +16539,7 @@ async function autoCleanPastGhostData() {
 
         // If date is in the past (Strictly less than Today)
         if (slotDate < today) {
+            console.log(`🗑️ Deleting expired slot data: ${slotId}`); // <--- LOG ADDED
             delete slots[slotId];
             deletedCount++;
             hasChanges = true;
@@ -16548,16 +16552,15 @@ async function autoCleanPastGhostData() {
         availDate.setHours(0, 0, 0, 0);
 
         if (availDate < today) {
+            console.log(`🗑️ Deleting expired availability data: ${dateStr}`); // <--- LOG ADDED
             delete availability[dateStr];
-            // We don't increment deletedCount here to avoid confusing the user with high numbers,
-            // but we do clean it up.
             hasChanges = true;
         }
     });
 
     // 5. Save & Notify if Cleanup happened
     if (hasChanges) {
-        console.log(`🧹 Auto-Cleanup: Removed ${deletedCount} past records.`);
+        console.log(`🧹 Auto-Cleanup Complete: Removed ${deletedCount} past records.`);
         
         // Save to LocalStorage
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
@@ -16570,18 +16573,20 @@ async function autoCleanPastGhostData() {
 
         // Intimate the User (Delayed slightly to allow UI to load)
         setTimeout(() => {
-            // Create a nice toast or standard alert
             alert(`🧹 System Maintenance\n\nAutomatically removed ${deletedCount} expired exam records (Ghost Data) from previous dates to keep the system fast.`);
         }, 2000);
+    } else {
+        console.log("✅ Housekeeping clean: No expired ghost data found."); // <--- LOG ADDED
     }
 }
 
 // EXECUTE ON LOAD
-// We verify firebase is ready or wait a moment
 document.addEventListener('DOMContentLoaded', () => {
-    // Run after a short delay to ensure localstorage is mounted and cloud sync logic is ready
+    // Run after a short delay to ensure localstorage is mounted
     setTimeout(autoCleanPastGhostData, 3000);
 });
+
+
     
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
