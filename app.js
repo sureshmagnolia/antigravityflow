@@ -16330,31 +16330,57 @@ async function runSystemHealthCheck() {
 })();
 
 // ==========================================
-// BULK DELETE IN DATA EDITOR (With Safety Lock)
+// BULK DELETE IN DATA EDITOR (Dropdown Version)
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
+    // DOM Elements
     const bulkDeleteBtn = document.getElementById('btn-edit-bulk-delete');
     const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
     const bulkControls = document.getElementById('bulk-delete-controls');
-    const startDateInput = document.getElementById('edit-bulk-start-date');
-    const endDateInput = document.getElementById('edit-bulk-end-date');
-    
+    const startSelect = document.getElementById('edit-bulk-start-session');
+    const endSelect = document.getElementById('edit-bulk-end-session');
+
+    // Helper: Populate Dropdowns with existing sessions
+    function populateBulkDropdowns() {
+        if (!window.exam_data) return;
+        
+        // Get all sessions and sort them chronologically
+        const sessions = Object.keys(window.exam_data).sort();
+        
+        startSelect.innerHTML = '<option value="">-- Select Start --</option>';
+        endSelect.innerHTML = '<option value="">-- Select End --</option>';
+
+        sessions.forEach(session => {
+            const opt1 = document.createElement('option');
+            opt1.value = session;
+            opt1.textContent = session; // e.g. "2025-10-26_FN"
+            startSelect.appendChild(opt1);
+
+            const opt2 = document.createElement('option');
+            opt2.value = session;
+            opt2.textContent = session;
+            endSelect.appendChild(opt2);
+        });
+    }
+
     // --- 1. LOCK TOGGLE LOGIC ---
     if (bulkLockBtn) {
-        bulkLockBtn.addEventListener('click', () => {
-            const isLocked = startDateInput.disabled; // Check current state
+        bulkLockBtn.onclick = function() { // Direct assignment to ensure event fires
+            const isLocked = startSelect.disabled;
             
             if (isLocked) {
                 // UNLOCK ACTION
-                startDateInput.disabled = false;
-                endDateInput.disabled = false;
+                populateBulkDropdowns(); // Load data immediately on unlock
+                
+                startSelect.disabled = false;
+                endSelect.disabled = false;
                 bulkDeleteBtn.disabled = false;
                 
                 // Visual updates
-                startDateInput.classList.remove('bg-gray-100');
-                startDateInput.classList.add('bg-white');
-                endDateInput.classList.remove('bg-gray-100');
-                endDateInput.classList.add('bg-white');
+                startSelect.classList.remove('bg-gray-100');
+                startSelect.classList.add('bg-white');
+                endSelect.classList.remove('bg-gray-100');
+                endSelect.classList.add('bg-white');
                 
                 bulkControls.classList.remove('opacity-50', 'pointer-events-none');
                 
@@ -16368,13 +16394,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
             } else {
                 // LOCK ACTION
-                startDateInput.disabled = true;
-                endDateInput.disabled = true;
+                startSelect.disabled = true;
+                endSelect.disabled = true;
                 bulkDeleteBtn.disabled = true;
                 
                 // Visual updates
-                startDateInput.classList.add('bg-gray-100');
-                endDateInput.classList.add('bg-gray-100');
+                startSelect.classList.add('bg-gray-100');
+                endSelect.classList.add('bg-gray-100');
                 
                 bulkControls.classList.add('opacity-50', 'pointer-events-none');
                 
@@ -16387,45 +16413,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
             }
-        });
+        };
     }
 
     // --- 2. DELETE EXECUTION LOGIC ---
     if (bulkDeleteBtn) {
-        bulkDeleteBtn.addEventListener('click', async function() {
-            const startDateVal = startDateInput.value;
-            const endDateVal = endDateInput.value;
+        bulkDeleteBtn.onclick = async function() {
+            const startSession = startSelect.value;
+            const endSession = endSelect.value;
 
             // Validation
-            if (!startDateVal || !endDateVal) {
-                alert("Please select both 'From' and 'To' dates.");
+            if (!startSession || !endSession) {
+                alert("Please select both Start and End sessions.");
                 return;
             }
 
-            if (startDateVal > endDateVal) {
-                alert("Start Date cannot be after End Date.");
+            if (startSession > endSession) {
+                alert("Start Session cannot be after End Session.");
                 return;
             }
 
-            // Identify Target Sessions
-            if (!window.exam_data) {
-                alert("No data loaded to delete.");
+            // Identify Range
+            const allSessions = Object.keys(window.exam_data).sort();
+            const startIndex = allSessions.indexOf(startSession);
+            const endIndex = allSessions.indexOf(endSession);
+
+            if (startIndex === -1 || endIndex === -1) {
+                alert("Selected sessions not found in database.");
                 return;
             }
 
-            const allSessions = Object.keys(window.exam_data);
-            const sessionsToDelete = allSessions.filter(sessionKey => {
-                const sessionDate = sessionKey.substring(0, 10); 
-                return sessionDate >= startDateVal && sessionDate <= endDateVal;
-            });
-
-            if (sessionsToDelete.length === 0) {
-                alert("No exam sessions found in this date range.");
-                return;
-            }
+            // Slice out the sessions to delete (inclusive)
+            const sessionsToDelete = allSessions.slice(startIndex, endIndex + 1);
 
             // Confirmation
-            const confirmMsg = `WARNING: You are about to delete ${sessionsToDelete.length} sessions from ${startDateVal} to ${endDateVal}.\n\nThis includes ALL student data for these dates.\n\nType 'DELETE' to confirm:`;
+            const confirmMsg = `WARNING: You are about to delete ${sessionsToDelete.length} sessions.\nFrom: ${startSession}\nTo: ${endSession}\n\nType 'DELETE' to confirm:`;
             const userInput = prompt(confirmMsg);
 
             if (userInput !== 'DELETE') {
@@ -16435,7 +16457,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Execution
             let deletedCount = 0;
-            
             try {
                 const originalText = bulkDeleteBtn.innerHTML;
                 bulkDeleteBtn.innerHTML = "Deleting...";
@@ -16453,13 +16474,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof initializeDashboard === 'function') initializeDashboard();
                 if (typeof populateEditSessionDropdown === 'function') populateEditSessionDropdown();
                 
-                // Re-Lock the Interface automatically after success
-                bulkLockBtn.click(); 
+                // Re-Lock
+                if (bulkLockBtn) bulkLockBtn.click(); 
                 
-                // Clear inputs
-                startDateInput.value = '';
-                endDateInput.value = '';
-
                 alert(`Successfully deleted ${deletedCount} sessions.`);
 
             } catch (error) {
@@ -16467,9 +16484,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("An error occurred. Check console.");
             } finally {
                 bulkDeleteBtn.innerHTML = "Delete Range";
-                // Note: We don't re-enable button here because we auto-locked it above
             }
-        });
+        };
     }
 });
     
