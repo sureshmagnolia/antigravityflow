@@ -16510,6 +16510,78 @@ window.executeBulkDelete = async function() {
         deleteBtn.innerHTML = "Delete Range";
     }
 };
+
+// ==========================================
+// AUTOMATED HOUSEKEEPING (Runs on Load)
+// ==========================================
+
+async function autoCleanPastGhostData() {
+    // 1. Get Today's Date (Midnight) for comparison
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 2. Fetch Invigilation Data from LocalStorage
+    let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
+    
+    let deletedCount = 0;
+    let hasChanges = false;
+
+    // 3. Scan Slots (Format: "YYYY-MM-DD_Session")
+    Object.keys(slots).forEach(slotId => {
+        // Extract Date String "2025-10-26"
+        const dateStr = slotId.split('_')[0];
+        const slotDate = new Date(dateStr);
+        slotDate.setHours(0, 0, 0, 0);
+
+        // If date is in the past (Strictly less than Today)
+        if (slotDate < today) {
+            delete slots[slotId];
+            deletedCount++;
+            hasChanges = true;
+        }
+    });
+
+    // 4. Scan Availability Marks (Format: "YYYY-MM-DD")
+    Object.keys(availability).forEach(dateStr => {
+        const availDate = new Date(dateStr);
+        availDate.setHours(0, 0, 0, 0);
+
+        if (availDate < today) {
+            delete availability[dateStr];
+            // We don't increment deletedCount here to avoid confusing the user with high numbers,
+            // but we do clean it up.
+            hasChanges = true;
+        }
+    });
+
+    // 5. Save & Notify if Cleanup happened
+    if (hasChanges) {
+        console.log(`🧹 Auto-Cleanup: Removed ${deletedCount} past records.`);
+        
+        // Save to LocalStorage
+        localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
+        localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
+
+        // Sync to Cloud (Crucial to update DB)
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('slots');
+        }
+
+        // Intimate the User (Delayed slightly to allow UI to load)
+        setTimeout(() => {
+            // Create a nice toast or standard alert
+            alert(`🧹 System Maintenance\n\nAutomatically removed ${deletedCount} expired exam records (Ghost Data) from previous dates to keep the system fast.`);
+        }, 2000);
+    }
+}
+
+// EXECUTE ON LOAD
+// We verify firebase is ready or wait a moment
+document.addEventListener('DOMContentLoaded', () => {
+    // Run after a short delay to ensure localstorage is mounted and cloud sync logic is ready
+    setTimeout(autoCleanPastGhostData, 3000);
+});
     
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
