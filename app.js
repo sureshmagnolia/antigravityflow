@@ -16330,164 +16330,179 @@ async function runSystemHealthCheck() {
 })();
 
 // ==========================================
-// BULK DELETE IN DATA EDITOR (Dropdown Version)
+// BULK DELETE FUNCTIONS (Global Scope & Corrected Data Source)
 // ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM Elements
-    const bulkDeleteBtn = document.getElementById('btn-edit-bulk-delete');
+
+// 1. Toggle Lock Function
+window.toggleBulkLock = function() {
     const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
-    const bulkControls = document.getElementById('bulk-delete-controls');
     const startSelect = document.getElementById('edit-bulk-start-session');
     const endSelect = document.getElementById('edit-bulk-end-session');
+    const deleteBtn = document.getElementById('btn-edit-bulk-delete');
+    const controlsDiv = document.getElementById('bulk-delete-controls');
 
-    // Helper: Populate Dropdowns with existing sessions
-    function populateBulkDropdowns() {
-        if (!window.exam_data) return;
+    // Check if currently locked (disabled)
+    const isLocked = startSelect.disabled;
+
+    if (isLocked) {
+        // --- UNLOCKING ---
         
-        // Get all sessions and sort them chronologically
-        const sessions = Object.keys(window.exam_data).sort();
-        
-        startSelect.innerHTML = '<option value="">-- Select Start --</option>';
-        endSelect.innerHTML = '<option value="">-- Select End --</option>';
+        // 1. Populate Dropdowns (Using CORRECT Global Variable)
+        // ensure sessions are loaded
+        if (typeof populate_session_dropdown === 'function') populate_session_dropdown(); 
 
-        sessions.forEach(session => {
-            const opt1 = document.createElement('option');
-            opt1.value = session;
-            opt1.textContent = session; // e.g. "2025-10-26_FN"
-            startSelect.appendChild(opt1);
-
-            const opt2 = document.createElement('option');
-            opt2.value = session;
-            opt2.textContent = session;
-            endSelect.appendChild(opt2);
-        });
-    }
-
-    // --- 1. LOCK TOGGLE LOGIC ---
-    if (bulkLockBtn) {
-        bulkLockBtn.onclick = function() { // Direct assignment to ensure event fires
-            const isLocked = startSelect.disabled;
+        if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
             
-            if (isLocked) {
-                // UNLOCK ACTION
-                populateBulkDropdowns(); // Load data immediately on unlock
+            // Clear and Add Default
+            startSelect.innerHTML = '<option value="">-- Select Start --</option>';
+            endSelect.innerHTML = '<option value="">-- Select End --</option>';
+
+            allStudentSessions.forEach(session => {
+                const opt1 = new Option(session, session);
+                startSelect.add(opt1);
                 
-                startSelect.disabled = false;
-                endSelect.disabled = false;
-                bulkDeleteBtn.disabled = false;
-                
-                // Visual updates
-                startSelect.classList.remove('bg-gray-100');
-                startSelect.classList.add('bg-white');
-                endSelect.classList.remove('bg-gray-100');
-                endSelect.classList.add('bg-white');
-                
-                bulkControls.classList.remove('opacity-50', 'pointer-events-none');
-                
-                // Update Button
-                bulkLockBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                    </svg>
-                    <span class="text-rose-600 font-bold">Unlocked</span>
-                `;
-                bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
-            } else {
-                // LOCK ACTION
-                startSelect.disabled = true;
-                endSelect.disabled = true;
-                bulkDeleteBtn.disabled = true;
-                
-                // Visual updates
-                startSelect.classList.add('bg-gray-100');
-                endSelect.classList.add('bg-gray-100');
-                
-                bulkControls.classList.add('opacity-50', 'pointer-events-none');
-                
-                // Update Button
-                bulkLockBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span>Locked</span>
-                `;
-                bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
-            }
-        };
+                const opt2 = new Option(session, session);
+                endSelect.add(opt2);
+            });
+        } else {
+            alert("No exam sessions found to delete! (List empty)");
+            return;
+        }
+
+        // 2. Enable Inputs
+        startSelect.disabled = false;
+        endSelect.disabled = false;
+        deleteBtn.disabled = false;
+
+        // 3. Visual Updates
+        startSelect.classList.remove('bg-gray-100');
+        startSelect.classList.add('bg-white');
+        endSelect.classList.remove('bg-gray-100');
+        endSelect.classList.add('bg-white');
+        controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
+
+        // 4. Update Button State
+        bulkLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+            <span class="text-rose-600 font-bold">Unlocked</span>
+        `;
+        bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
+
+    } else {
+        // --- LOCKING ---
+        startSelect.disabled = true;
+        endSelect.disabled = true;
+        deleteBtn.disabled = true;
+
+        startSelect.classList.add('bg-gray-100');
+        endSelect.classList.add('bg-gray-100');
+        controlsDiv.classList.add('opacity-50', 'pointer-events-none');
+
+        // Update Button State
+        bulkLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span>Locked</span>
+        `;
+        bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
+    }
+};
+
+// 2. Execute Delete Function
+window.executeBulkDelete = async function() {
+    const startSession = document.getElementById('edit-bulk-start-session').value;
+    const endSession = document.getElementById('edit-bulk-end-session').value;
+    const deleteBtn = document.getElementById('btn-edit-bulk-delete');
+
+    // Validation
+    if (!startSession || !endSession) {
+        alert("Please select both Start and End sessions.");
+        return;
     }
 
-    // --- 2. DELETE EXECUTION LOGIC ---
-    if (bulkDeleteBtn) {
-        bulkDeleteBtn.onclick = async function() {
-            const startSession = startSelect.value;
-            const endSession = endSelect.value;
+    // Sort order check (using existing array order)
+    const startIndex = allStudentSessions.indexOf(startSession);
+    const endIndex = allStudentSessions.indexOf(endSession);
 
-            // Validation
-            if (!startSession || !endSession) {
-                alert("Please select both Start and End sessions.");
-                return;
-            }
+    if (startIndex === -1 || endIndex === -1) {
+        alert("Selected sessions not found in database.");
+        return;
+    }
 
-            if (startSession > endSession) {
-                alert("Start Session cannot be after End Session.");
-                return;
-            }
+    if (startIndex > endIndex) {
+        alert("Start Session cannot be after End Session (chronologically).");
+        return;
+    }
 
-            // Identify Range
-            const allSessions = Object.keys(window.exam_data).sort();
-            const startIndex = allSessions.indexOf(startSession);
-            const endIndex = allSessions.indexOf(endSession);
+    // Identify Range
+    const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
-            if (startIndex === -1 || endIndex === -1) {
-                alert("Selected sessions not found in database.");
-                return;
-            }
+    // Confirmation
+    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove ALL student data, allotments, and scribe settings for these dates.\n\nType 'DELETE' to confirm:`;
+    const userInput = prompt(confirmMsg);
 
-            // Slice out the sessions to delete (inclusive)
-            const sessionsToDelete = allSessions.slice(startIndex, endIndex + 1);
+    if (userInput !== 'DELETE') {
+        return;
+    }
 
-            // Confirmation
-            const confirmMsg = `WARNING: You are about to delete ${sessionsToDelete.length} sessions.\nFrom: ${startSession}\nTo: ${endSession}\n\nType 'DELETE' to confirm:`;
-            const userInput = prompt(confirmMsg);
+    // Execution
+    let deletedCount = 0;
+    try {
+        deleteBtn.innerHTML = "Deleting...";
+        deleteBtn.disabled = true;
 
-            if (userInput !== 'DELETE') {
-                alert("Deletion cancelled.");
-                return;
-            }
+        const sessionSet = new Set(sessionsToDelete);
 
-            // Execution
-            let deletedCount = 0;
-            try {
-                const originalText = bulkDeleteBtn.innerHTML;
-                bulkDeleteBtn.innerHTML = "Deleting...";
-                bulkDeleteBtn.disabled = true;
+        // 1. Remove Students (Filter Global Array)
+        // Format in data is "DD.MM.YYYY" and "HH:MM AM"
+        // Session Key is "DD.MM.YYYY | HH:MM AM"
+        allStudentData = allStudentData.filter(s => {
+            const key = `${s.Date} | ${s.Time}`;
+            return !sessionSet.has(key);
+        });
+        localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
 
-                sessionsToDelete.forEach(key => {
-                    delete window.exam_data[key];
-                    deletedCount++;
+        // 2. Remove Aux Data (Assignments, Rooms, etc.)
+        const auxKeys = [
+            'examRoomAllotment', 'examScribeAllotment', 'examAbsenteeList', 
+            'examQPCodes', 'examInvigilatorMapping', 'examInvigilationSlots'
+        ];
+        
+        auxKeys.forEach(key => {
+            const raw = localStorage.getItem(key);
+            if(raw) {
+                const data = JSON.parse(raw);
+                let changed = false;
+                sessionsToDelete.forEach(s => {
+                    if(data[s]) { delete data[s]; changed = true; }
                 });
-
-                // Sync
-                if (typeof saveData === 'function') await saveData();
-                
-                // Refresh UI
-                if (typeof initializeDashboard === 'function') initializeDashboard();
-                if (typeof populateEditSessionDropdown === 'function') populateEditSessionDropdown();
-                
-                // Re-Lock
-                if (bulkLockBtn) bulkLockBtn.click(); 
-                
-                alert(`Successfully deleted ${deletedCount} sessions.`);
-
-            } catch (error) {
-                console.error("Bulk Delete Error:", error);
-                alert("An error occurred. Check console.");
-            } finally {
-                bulkDeleteBtn.innerHTML = "Delete Range";
+                if(changed) localStorage.setItem(key, JSON.stringify(data));
             }
-        };
+        });
+
+        // 3. Sync to Cloud (Settings/Ops/Staff/Slots)
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('ops');
+            await syncDataToCloud('allocation');
+            await syncDataToCloud('staff');
+            await syncDataToCloud('slots');
+        }
+        
+        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.`);
+        
+        // Refresh App
+        window.location.reload();
+
+    } catch (error) {
+        console.error("Delete Error:", error);
+        alert("An error occurred: " + error.message);
+    } finally {
+        deleteBtn.innerHTML = "Delete Range";
     }
-});
+};
     
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
