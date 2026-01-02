@@ -16512,98 +16512,97 @@ window.executeBulkDelete = async function() {
 };
 
 
+
 // ==========================================
-// AUTOMATED HOUSEKEEPING (Runs on Load)
+// AUTOMATED HOUSEKEEPING (Diagnostic Version)
 // ==========================================
 
 async function autoCleanPastGhostData() {
-    console.log("🧹 [System] Starting Ghost Data Housekeeping check...");
+    console.log("🚀 [System] STARTING Ghost Data Cleanup..."); // Force log
 
-    // 1. Get Today's Date (Midnight) for comparison
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 2. Fetch Invigilation Data from LocalStorage
+    // Fetch Data
     let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
     
     let deletedCount = 0;
     let hasChanges = false;
 
-    // 3. Scan Slots (Format: "YYYY-MM-DD_Session")
+    // Scan Slots
     Object.keys(slots).forEach(slotId => {
-        // Extract Date String "2025-10-26"
         const dateStr = slotId.split('_')[0];
         const slotDate = new Date(dateStr);
         slotDate.setHours(0, 0, 0, 0);
 
-        // If date is in the past (Strictly less than Today)
         if (slotDate < today) {
-            console.log(`🗑️ Deleting expired slot data: ${slotId}`); // <--- LOG ADDED
+            console.log(`🗑️ Deleting expired slot data: ${slotId}`);
             delete slots[slotId];
             deletedCount++;
             hasChanges = true;
         }
     });
 
-    // 4. Scan Availability Marks (Format: "YYYY-MM-DD")
+    // Scan Availability
     Object.keys(availability).forEach(dateStr => {
         const availDate = new Date(dateStr);
         availDate.setHours(0, 0, 0, 0);
 
         if (availDate < today) {
-            console.log(`🗑️ Deleting expired availability data: ${dateStr}`); // <--- LOG ADDED
+            console.log(`🗑️ Deleting expired availability data: ${dateStr}`);
             delete availability[dateStr];
             hasChanges = true;
         }
     });
 
-    // 5. Save & Notify if Cleanup happened
+    // Save & Notify
     if (hasChanges) {
-        console.log(`🧹 Auto-Cleanup Complete: Removed ${deletedCount} past records.`);
-        
-        // Save to LocalStorage
+        console.log(`🧹 Cleanup Complete: Removed ${deletedCount} records.`);
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
 
-        // Sync to Cloud (Crucial to update DB)
+        // Sync if possible
         if (typeof syncDataToCloud === 'function') {
+            console.log("☁️ Syncing cleanup to cloud...");
             await syncDataToCloud('slots');
+        } else {
+            console.warn("⚠️ syncDataToCloud function not found! Local clean only.");
         }
 
-        // Intimate the User (Delayed slightly to allow UI to load)
         setTimeout(() => {
-            alert(`🧹 System Maintenance\n\nAutomatically removed ${deletedCount} expired exam records (Ghost Data) from previous dates to keep the system fast.`);
-        }, 2000);
+            alert(`🧹 System Maintenance\n\nAutomatically removed ${deletedCount} expired exam records.`);
+        }, 1000);
     } else {
-        console.log("✅ Housekeeping clean: No expired ghost data found."); // <--- LOG ADDED
+        console.log("✅ Housekeeping clean: No expired data found.");
     }
 }
 
-// ==========================================
-// SMART EXECUTION (Waits for Dependencies)
-// ==========================================
+// 2. The Diagnostic Trigger
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("⏳ [System] Waiting for app logic to load...");
     
-    const checkDependencies = setInterval(() => {
-        // Check 1: Is the Sync function loaded?
-        // Check 2: Is Firebase/App initialized? (You likely have a global flag, if not, checking the function is usually enough)
-        if (typeof syncDataToCloud === 'function') {
-            
-            clearInterval(checkDependencies); // Stop checking
-            
-            // Use requestIdleCallback if available (Runs when browser is "taking a breath")
-            // Otherwise fallback to a tiny immediate delay
-            if ('requestIdleCallback' in window) {
-                requestIdleCallback(autoCleanPastGhostData);
-            } else {
-                setTimeout(autoCleanPastGhostData, 500); 
-            }
-            
+    let attempts = 0;
+    const checkAppReady = setInterval(() => {
+        attempts++;
+        
+        // Debug Log every 1 second (10 attempts)
+        if (attempts % 10 === 0) {
+            console.log(`🔍 [System] Searching for 'syncDataToCloud'... Attempt ${attempts}`);
         }
-    }, 100); // Check every 100 milliseconds
-});
 
+        // Try to find the function
+        if (typeof syncDataToCloud === 'function') {
+            clearInterval(checkAppReady); 
+            console.log("✅ [System] Function found! Running cleanup now.");
+            autoCleanPastGhostData();     
+        } else if (attempts >= 50) { // Timeout after 5 seconds
+            clearInterval(checkAppReady);
+            console.error("❌ [System] TIMEOUT: Could not find 'syncDataToCloud'. Running cleanup locally only.");
+            autoCleanPastGhostData(); // Run anyway (Local cleanup is better than nothing)
+        }
+    }, 100);
+});
 
     
 
