@@ -779,20 +779,24 @@
     </div>
     
     <div id="bulk-delete-controls" class="flex flex-col sm:flex-row gap-3 items-end opacity-50 pointer-events-none transition-all">
-        <div>
-            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">From Date</label>
-            <input type="date" id="edit-bulk-start-date" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-rose-500 focus:ring-rose-500 bg-gray-100" disabled>
+        <div class="flex-1 w-full">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">From Session</label>
+            <select id="edit-bulk-start-session" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-rose-500 focus:ring-rose-500 bg-gray-100" disabled>
+                <option value="">-- Locked --</option>
+            </select>
         </div>
-        <div>
-            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">To Date</label>
-            <input type="date" id="edit-bulk-end-date" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-rose-500 focus:ring-rose-500 bg-gray-100" disabled>
+        <div class="flex-1 w-full">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">To Session</label>
+            <select id="edit-bulk-end-session" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-rose-500 focus:ring-rose-500 bg-gray-100" disabled>
+                <option value="">-- Locked --</option>
+            </select>
         </div>
         <button id="btn-edit-bulk-delete" class="w-full sm:w-auto bg-white border border-rose-300 text-rose-600 hover:bg-rose-600 hover:text-white px-4 py-2 rounded text-sm font-bold shadow-sm transition flex items-center justify-center gap-2" disabled>
             Delete Range
         </button>
     </div>
     <p class="text-[10px] text-rose-600 mt-2 font-medium">
-        ⚠️ Warning: This will permanently delete ALL sessions and student data between these dates.
+        ⚠️ Warning: This will permanently delete ALL data for the selected sessions range.
     </p>
 </div>
 
