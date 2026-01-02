@@ -16329,7 +16329,149 @@ async function runSystemHealthCheck() {
     }, 1000); // 1s delay to ensure Dashboard HTML is ready
 })();
 
+// ==========================================
+// BULK DELETE IN DATA EDITOR (With Safety Lock)
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const bulkDeleteBtn = document.getElementById('btn-edit-bulk-delete');
+    const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
+    const bulkControls = document.getElementById('bulk-delete-controls');
+    const startDateInput = document.getElementById('edit-bulk-start-date');
+    const endDateInput = document.getElementById('edit-bulk-end-date');
+    
+    // --- 1. LOCK TOGGLE LOGIC ---
+    if (bulkLockBtn) {
+        bulkLockBtn.addEventListener('click', () => {
+            const isLocked = startDateInput.disabled; // Check current state
+            
+            if (isLocked) {
+                // UNLOCK ACTION
+                startDateInput.disabled = false;
+                endDateInput.disabled = false;
+                bulkDeleteBtn.disabled = false;
+                
+                // Visual updates
+                startDateInput.classList.remove('bg-gray-100');
+                startDateInput.classList.add('bg-white');
+                endDateInput.classList.remove('bg-gray-100');
+                endDateInput.classList.add('bg-white');
+                
+                bulkControls.classList.remove('opacity-50', 'pointer-events-none');
+                
+                // Update Button
+                bulkLockBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                    </svg>
+                    <span class="text-rose-600 font-bold">Unlocked</span>
+                `;
+                bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
+            } else {
+                // LOCK ACTION
+                startDateInput.disabled = true;
+                endDateInput.disabled = true;
+                bulkDeleteBtn.disabled = true;
+                
+                // Visual updates
+                startDateInput.classList.add('bg-gray-100');
+                endDateInput.classList.add('bg-gray-100');
+                
+                bulkControls.classList.add('opacity-50', 'pointer-events-none');
+                
+                // Update Button
+                bulkLockBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Locked</span>
+                `;
+                bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
+            }
+        });
+    }
 
+    // --- 2. DELETE EXECUTION LOGIC ---
+    if (bulkDeleteBtn) {
+        bulkDeleteBtn.addEventListener('click', async function() {
+            const startDateVal = startDateInput.value;
+            const endDateVal = endDateInput.value;
+
+            // Validation
+            if (!startDateVal || !endDateVal) {
+                alert("Please select both 'From' and 'To' dates.");
+                return;
+            }
+
+            if (startDateVal > endDateVal) {
+                alert("Start Date cannot be after End Date.");
+                return;
+            }
+
+            // Identify Target Sessions
+            if (!window.exam_data) {
+                alert("No data loaded to delete.");
+                return;
+            }
+
+            const allSessions = Object.keys(window.exam_data);
+            const sessionsToDelete = allSessions.filter(sessionKey => {
+                const sessionDate = sessionKey.substring(0, 10); 
+                return sessionDate >= startDateVal && sessionDate <= endDateVal;
+            });
+
+            if (sessionsToDelete.length === 0) {
+                alert("No exam sessions found in this date range.");
+                return;
+            }
+
+            // Confirmation
+            const confirmMsg = `WARNING: You are about to delete ${sessionsToDelete.length} sessions from ${startDateVal} to ${endDateVal}.\n\nThis includes ALL student data for these dates.\n\nType 'DELETE' to confirm:`;
+            const userInput = prompt(confirmMsg);
+
+            if (userInput !== 'DELETE') {
+                alert("Deletion cancelled.");
+                return;
+            }
+
+            // Execution
+            let deletedCount = 0;
+            
+            try {
+                const originalText = bulkDeleteBtn.innerHTML;
+                bulkDeleteBtn.innerHTML = "Deleting...";
+                bulkDeleteBtn.disabled = true;
+
+                sessionsToDelete.forEach(key => {
+                    delete window.exam_data[key];
+                    deletedCount++;
+                });
+
+                // Sync
+                if (typeof saveData === 'function') await saveData();
+                
+                // Refresh UI
+                if (typeof initializeDashboard === 'function') initializeDashboard();
+                if (typeof populateEditSessionDropdown === 'function') populateEditSessionDropdown();
+                
+                // Re-Lock the Interface automatically after success
+                bulkLockBtn.click(); 
+                
+                // Clear inputs
+                startDateInput.value = '';
+                endDateInput.value = '';
+
+                alert(`Successfully deleted ${deletedCount} sessions.`);
+
+            } catch (error) {
+                console.error("Bulk Delete Error:", error);
+                alert("An error occurred. Check console.");
+            } finally {
+                bulkDeleteBtn.innerHTML = "Delete Range";
+                // Note: We don't re-enable button here because we auto-locked it above
+            }
+        });
+    }
+});
     
 // Helper to switch language inside the new tab
 // Note: This function string is already embedded in the template HTML, 
