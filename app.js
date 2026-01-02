@@ -16580,10 +16580,28 @@ async function autoCleanPastGhostData() {
     }
 }
 
-// EXECUTE ON LOAD
+// ==========================================
+// SMART EXECUTION (Waits for Dependencies)
+// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Run after a short delay to ensure localstorage is mounted
-    setTimeout(autoCleanPastGhostData, 3000);
+    
+    const checkDependencies = setInterval(() => {
+        // Check 1: Is the Sync function loaded?
+        // Check 2: Is Firebase/App initialized? (You likely have a global flag, if not, checking the function is usually enough)
+        if (typeof syncDataToCloud === 'function') {
+            
+            clearInterval(checkDependencies); // Stop checking
+            
+            // Use requestIdleCallback if available (Runs when browser is "taking a breath")
+            // Otherwise fallback to a tiny immediate delay
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(autoCleanPastGhostData);
+            } else {
+                setTimeout(autoCleanPastGhostData, 500); 
+            }
+            
+        }
+    }, 100); // Check every 100 milliseconds
 });
 
 
