@@ -157,6 +157,85 @@ function disable_edit_data_tab(disabled) {
 window.disable_edit_data_tab = disable_edit_data_tab;
 
 // --- END FUNCTIONS FOR PYTHON BRIDGE ---
+
+
+
+// ==========================================
+// 🧹 AUTOMATED GHOST DATA CLEANUP (Place at TOP of app.js)
+// ==========================================
+async function autoCleanPastGhostData() {
+    console.log("🚀 [System] Checking for expired exam data...");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
+    let deletedCount = 0;
+    let hasChanges = false;
+
+    // Scan Slots
+    Object.keys(slots).forEach(slotId => {
+        const dateStr = slotId.split('_')[0]; // Extract "2025-10-26"
+        const slotDate = new Date(dateStr);
+        slotDate.setHours(0, 0, 0, 0);
+
+        // Delete if date is strictly in the past
+        if (slotDate < today) {
+            delete slots[slotId];
+            deletedCount++;
+            hasChanges = true;
+        }
+    });
+
+    // Scan Availability
+    Object.keys(availability).forEach(dateStr => {
+        const availDate = new Date(dateStr);
+        availDate.setHours(0, 0, 0, 0);
+
+        if (availDate < today) {
+            delete availability[dateStr];
+            hasChanges = true;
+        }
+    });
+
+    if (hasChanges) {
+        localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
+        localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
+        
+        // Sync to cloud if available
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('slots');
+        }
+        
+        // Notify
+        setTimeout(() => {
+            alert(`🧹 System Maintenance\n\nRemoved ${deletedCount} expired records from previous dates.`);
+        }, 2000);
+    } else {
+        console.log("✅ [System] No expired data found.");
+    }
+}
+
+// Smart Trigger (Safe to be at the top)
+document.addEventListener('DOMContentLoaded', () => {
+    // Check every 500ms for app readiness
+    const initCheck = setInterval(() => {
+        // We wait for a signal that the app is ready (e.g., syncDataToCloud exists)
+        if (typeof syncDataToCloud === 'function' && window.firebase) {
+            clearInterval(initCheck);
+            autoCleanPastGhostData();
+        }
+    }, 500);
+});
+// ==========================================
+
+
+
+
+
+
+
+
 function dismissLoader() {
     const loader = document.getElementById('initial-app-loader');
     const msgInterval = window.loaderMessageInterval; // Get the interval ID if defined
@@ -16513,96 +16592,6 @@ window.executeBulkDelete = async function() {
 
 
 
-// ==========================================
-// AUTOMATED HOUSEKEEPING (Diagnostic Version)
-// ==========================================
-
-async function autoCleanPastGhostData() {
-    console.log("🚀 [System] STARTING Ghost Data Cleanup..."); // Force log
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Fetch Data
-    let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-    let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
-    
-    let deletedCount = 0;
-    let hasChanges = false;
-
-    // Scan Slots
-    Object.keys(slots).forEach(slotId => {
-        const dateStr = slotId.split('_')[0];
-        const slotDate = new Date(dateStr);
-        slotDate.setHours(0, 0, 0, 0);
-
-        if (slotDate < today) {
-            console.log(`🗑️ Deleting expired slot data: ${slotId}`);
-            delete slots[slotId];
-            deletedCount++;
-            hasChanges = true;
-        }
-    });
-
-    // Scan Availability
-    Object.keys(availability).forEach(dateStr => {
-        const availDate = new Date(dateStr);
-        availDate.setHours(0, 0, 0, 0);
-
-        if (availDate < today) {
-            console.log(`🗑️ Deleting expired availability data: ${dateStr}`);
-            delete availability[dateStr];
-            hasChanges = true;
-        }
-    });
-
-    // Save & Notify
-    if (hasChanges) {
-        console.log(`🧹 Cleanup Complete: Removed ${deletedCount} records.`);
-        localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
-        localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
-
-        // Sync if possible
-        if (typeof syncDataToCloud === 'function') {
-            console.log("☁️ Syncing cleanup to cloud...");
-            await syncDataToCloud('slots');
-        } else {
-            console.warn("⚠️ syncDataToCloud function not found! Local clean only.");
-        }
-
-        setTimeout(() => {
-            alert(`🧹 System Maintenance\n\nAutomatically removed ${deletedCount} expired exam records.`);
-        }, 1000);
-    } else {
-        console.log("✅ Housekeeping clean: No expired data found.");
-    }
-}
-
-// 2. The Diagnostic Trigger
-document.addEventListener('DOMContentLoaded', () => {
-    console.log("⏳ [System] Waiting for app logic to load...");
-    
-    let attempts = 0;
-    const checkAppReady = setInterval(() => {
-        attempts++;
-        
-        // Debug Log every 1 second (10 attempts)
-        if (attempts % 10 === 0) {
-            console.log(`🔍 [System] Searching for 'syncDataToCloud'... Attempt ${attempts}`);
-        }
-
-        // Try to find the function
-        if (typeof syncDataToCloud === 'function') {
-            clearInterval(checkAppReady); 
-            console.log("✅ [System] Function found! Running cleanup now.");
-            autoCleanPastGhostData();     
-        } else if (attempts >= 50) { // Timeout after 5 seconds
-            clearInterval(checkAppReady);
-            console.error("❌ [System] TIMEOUT: Could not find 'syncDataToCloud'. Running cleanup locally only.");
-            autoCleanPastGhostData(); // Run anyway (Local cleanup is better than nothing)
-        }
-    }, 100);
-});
 
     
 
