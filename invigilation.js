@@ -8755,6 +8755,56 @@ window.cancelBulkSending = function() {
     document.getElementById('bulk-status-text').textContent = "Stopping...";
 };
 
+// ==========================================
+// 📧 EMAIL HTML GENERATORS
+// ==========================================
+
+// 1. Generate HTML for Staff Email (Individual)
+window.generateHtmlEmailBody = function(name, duties) {
+    const college = localStorage.getItem('examCollegeName') || "EXAMINATION CELL";
+    
+    let rows = duties.map(d => 
+        `<tr>
+            <td style="padding:8px;border:1px solid #ddd;font-size:14px;">${d.date}<br><span style="font-size:11px;color:#666;">${d.day}</span></td>
+            <td style="padding:8px;border:1px solid #ddd;font-size:14px;"><b>${d.session}</b><br><span style="font-size:11px;color:#666;">${d.time}</span></td>
+        </tr>`
+    ).join('');
+
+    return `
+    <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
+        <div style="background:#4f46e5;color:white;padding:20px;text-align:center;">
+            <h2 style="margin:0;font-size:18px;text-transform:uppercase;">${college}</h2>
+            <p style="margin:5px 0 0;font-size:13px;opacity:0.9;">Invigilation Duty Intimation</p>
+        </div>
+        <div style="padding:20px;">
+            <p style="font-size:15px;">Dear <b>${name}</b>,</p>
+            <p style="line-height:1.5;">You have been assigned the following exam invigilation duties for this week:</p>
+            
+            <table style="width:100%;border-collapse:collapse;margin:15px 0;background:#f9fafb;">
+                <thead>
+                    <tr style="background:#eef2ff;text-align:left;">
+                        <th style="padding:10px;border:1px solid #ddd;font-size:12px;color:#4f46e5;">DATE</th>
+                        <th style="padding:10px;border:1px solid #ddd;font-size:12px;color:#4f46e5;">SESSION</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+
+            <div style="background:#fff1f2;border-left:4px solid #f43f5e;padding:15px;margin-top:20px;font-size:13px;color:#881337;">
+                <strong>⚠️ Important Instructions:</strong>
+                <ul style="margin:5px 0 0 20px;padding:0;">
+                    <li>Please report to the Exam Cell <strong>30 minutes</strong> before the start time.</li>
+                    <li>Mobile phones are strictly prohibited inside the exam hall.</li>
+                </ul>
+            </div>
+            
+            <p style="font-size:13px;color:#666;margin-top:20px;border-top:1px solid #eee;padding-top:10px;">
+                <em>This is an automated system alert. Please do not reply directly to this email.</em>
+            </p>
+        </div>
+    </div>`;
+};
+
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
