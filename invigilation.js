@@ -8193,16 +8193,21 @@ window.closeModal = function(id) {
 // 📧 BULK EMAIL LOGIC HANDLERS
 // ==========================================
 
-// --- INVIGILATOR LIST LOGIC ---
+// Global Queue for Bulk Actions
+window.currentEmailQueue = [];
+
+// --- 1. STAFF BULK MESSAGING UI (With Bulk Send & Confirmation) ---
 window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
     
-    subtitle.textContent = "Click 'WhatsApp' or 'Email' to send individual alerts.";
+    subtitle.textContent = "Review drafts. Use 'Send All' or send individually.";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
-    // 1. Gather Data
+    // 1. Gather & Group Data
     const dutiesByEmail = {};
+    window.currentEmailQueue = []; // Reset Queue
+
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
@@ -8222,16 +8227,12 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         }
     });
 
-    // 2. Render List
-    let html = `
-    <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100">
-        <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
-        </button>
-        <span class="text-xs font-bold bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">${Object.keys(dutiesByEmail).length} Staff</span>
-    </div>
-    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1 custom-scroll">`;
+    if (Object.keys(dutiesByEmail).length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-500 py-8">No invigilation duties found for this week.</div>`;
+        return;
+    }
 
+    // 2. Prepare Data & Queue
     const sortedEmails = Object.keys(dutiesByEmail).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
     sortedEmails.forEach(email => {
@@ -8243,25 +8244,8 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 
         const staff = staffData.find(s => s.email === email);
         const name = staff ? staff.name : getNameFromEmail(email);
-        
-        // --- WHATSAPP LOGIC ---
-        let phone = staff ? (staff.phone || "") : "";
-        let waLink = "#";
-        let waClass = "opacity-50 cursor-not-allowed grayscale bg-gray-100 text-gray-400"; // Disabled style
-        
-        if (phone) {
-            let cleanNum = phone.replace(/\D/g, '');
-            if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
-            if (cleanNum.length >= 10) {
-                // Generate the BEAUTIFUL message here
-                const waMsg = generateWeeklyWhatsApp(name, duties);
-                waLink = `https://wa.me/${cleanNum}?text=${encodeURIComponent(waMsg)}`;
-                waClass = "bg-[#25D366] hover:bg-[#128C7E] text-white border-transparent"; // Brand Color
-            }
-        }
 
-        // --- EMAIL LOGIC ---
-        // (Keep the email looking good too)
+        // Generate Beautiful Email Body
         const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('%0D%0A');
         const subject = encodeURIComponent(`Exam Duty Assignment - Week ${weekNum}`);
         const body = encodeURIComponent(
@@ -8275,20 +8259,63 @@ Please report to the Exam Cell at least 20 minutes prior to the commencement of 
 
 Thank you,
 Chief Superintendent
+${currentCollegeName || "University of Calicut"}
 `);
-        const emailLink = `mailto:${email}?subject=${subject}&body=${body}`;
+        
+        // Add to Queue
+        window.currentEmailQueue.push({
+            email: email,
+            name: name,
+            subject: subject,
+            body: body,
+            duties: duties // For WA generation
+        });
+    });
 
-        // Render Card
+    // 3. Render List with Bulk Button
+    let html = `
+    <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4">
+        <div class="flex items-center justify-between">
+            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
+            </button>
+            <span class="text-xs font-bold text-gray-500">${window.currentEmailQueue.length} Staff Members</span>
+        </div>
+        
+        <button onclick="confirmBulkSend()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Send Emails to All (${window.currentEmailQueue.length})
+        </button>
+        <p class="text-[10px] text-center text-gray-400">This will open your default email client for each staff member.</p>
+    </div>
+
+    <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1 custom-scroll">`;
+
+    // 4. Render Individual Items
+    window.currentEmailQueue.forEach((item, index) => {
+        const staff = staffData.find(s => s.email === item.email);
+        const phone = staff ? (staff.phone || "") : "";
+        
+        // WA Logic
+        let waLink = "#";
+        let waClass = "opacity-30 cursor-not-allowed grayscale bg-gray-100 text-gray-400";
+        if (phone) {
+            let cleanNum = phone.replace(/\D/g, '');
+            if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
+            if (cleanNum.length >= 10) {
+                const waMsg = generateWeeklyWhatsApp(item.name, item.duties);
+                waLink = `https://wa.me/${cleanNum}?text=${encodeURIComponent(waMsg)}`;
+                waClass = "bg-[#25D366] hover:bg-[#128C7E] text-white border-transparent";
+            }
+        }
+
         html += `
         <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 group">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 text-sm truncate">${name}</div>
-                    ${!phone ? '<span class="text-[9px] text-red-500 bg-red-50 px-1 rounded border border-red-100">No Phone</span>' : ''}
+                    <div class="font-bold text-gray-800 text-sm truncate">${item.name}</div>
                 </div>
-                <div class="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-1">
-                    ${duties.map(d => `<span class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] border border-gray-200">${d.day} ${d.session}</span>`).join('')}
-                </div>
+                <div class="text-xs text-gray-500 mt-0.5">${item.duties.length} Session(s)</div>
             </div>
             
             <div class="flex gap-2 w-full sm:w-auto">
@@ -8297,10 +8324,10 @@ Chief Superintendent
                     WhatsApp
                 </a>
 
-                <a href="${emailLink}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
+                <button onclick="confirmSingleEmail(${index})" class="bg-white hover:bg-gray-50 text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     Email
-                </a>
+                </button>
             </div>
         </div>`;
     });
@@ -8439,6 +8466,57 @@ window.generateWeeklyWhatsApp = function(name, duties) {
 
     return msg;
 };
+
+
+// --- CONFIRMATION HANDLERS ---
+
+// 1. Single Email Confirmation
+window.confirmSingleEmail = function(index) {
+    const item = window.currentEmailQueue[index];
+    if (!item) return;
+
+    if (confirm(`Send exam duty email to ${item.name}?`)) {
+        window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_self');
+    }
+};
+
+// 2. Bulk Email Confirmation & Execution
+window.confirmBulkSend = function() {
+    const count = window.currentEmailQueue.length;
+    if (count === 0) return alert("No emails to send.");
+
+    const msg = `⚠️ BULK SEND CONFIRMATION ⚠️\n\n` +
+                `You are about to initiate sending ${count} emails.\n\n` +
+                `• This will attempt to open ${count} email compose windows.\n` +
+                `• Please ensure your default email client (e.g. Outlook, Mail) is open.\n` +
+                `• Some browsers may block multiple popups.\n\n` +
+                `Do you want to proceed?`;
+
+    if (confirm(msg)) {
+        processEmailQueue();
+    }
+};
+
+// 3. Queue Processor (Recursive with Delay to prevent blocking)
+window.processEmailQueue = function(index = 0) {
+    if (index >= window.currentEmailQueue.length) {
+        alert("✅ All email commands sent to client.");
+        return;
+    }
+
+    const item = window.currentEmailQueue[index];
+    
+    // Open Mail Client
+    window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_blank'); // _blank helps prevent overriding curr tab
+
+    // Process next one after a short delay
+    setTimeout(() => {
+        processEmailQueue(index + 1);
+    }, 800); // 800ms delay between opens
+};
+
+
+
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
