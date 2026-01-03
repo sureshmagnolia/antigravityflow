@@ -5420,24 +5420,10 @@ window.downloadMasterBackup = function () {
     link.click();
     document.body.removeChild(link);
 }
+
 window.handleMasterRestore = function (input) {
     const file = input.files[0];
     if (!file) return;
-
-    // 1. First Warning (Click OK)
-    if (!confirm("⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE all current system data including:\n- Staff List\n- Duty Assignments\n- Settings & Roles\n- Unavailability Records\n\nThis action cannot be undone. Do you want to proceed?")) {
-        input.value = "";
-        return;
-    }
-
-    // 2. Second Warning (Type CONFIRM)
-    const check = prompt("🔴 FINAL SAFETY CHECK\n\nTo overwrite the database, please type 'CONFIRM' in the box below:");
-
-    if (check !== "CONFIRM") {
-        alert("❌ Restore Aborted.\nThe confirmation code was incorrect.");
-        input.value = "";
-        return;
-    }
 
     const reader = new FileReader();
     reader.onload = async function (e) {
@@ -5449,44 +5435,112 @@ window.handleMasterRestore = function (input) {
                 throw new Error("Invalid backup file: Missing core data.");
             }
 
-            // 1. Update Local State
+            // 1. Ask User for Mode
+            const mode = prompt(
+                "♻️ RESTORE OPTIONS\n\n" +
+                "Type '1' for FULL RESTORE (Overwrites everything)\n" +
+                "Type '2' for VOLUNTEERS & INCONVENIENCE ONLY (Merges into current slots)\n\n" +
+                "Enter choice (1 or 2):"
+            );
+
+            if (mode !== '1' && mode !== '2') {
+                input.value = "";
+                return; // Cancelled silently or invalid
+            }
+
+            // 2. Safety Check
+            const confirmMsg = (mode === '1') 
+                ? "⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE ALL system data (Staff, Settings, Duties).\nThis cannot be undone.\n\nType 'CONFIRM' to proceed:"
+                : "⚠️ PARTIAL RESTORE ⚠️\n\nThis will OVERWRITE duty assignments and unavailability in the current schedule using data from the backup.\n\nType 'CONFIRM' to proceed:";
+
+            if (prompt(confirmMsg) !== "CONFIRM") {
+                input.value = "";
+                return alert("Restore Cancelled. Incorrect code.");
+            }
+
+            updateSyncStatus("Restoring...", "neutral");
             const d = backup.data;
-            staffData = d.staffData || [];
-            invigilationSlots = d.invigilationSlots || {};
-            advanceUnavailability = d.advanceUnavailability || {};
-            rolesConfig = d.rolesConfig || {};
-            designationsConfig = d.designationsConfig || {};
-            departmentsConfig = d.departmentsConfig || [];
-            globalDutyTarget = d.globalDutyTarget || 2;
-            googleScriptUrl = d.googleScriptUrl || "";
-
-            // 2. Save to Cloud (Atomic Update)
             const ref = doc(db, "colleges", currentCollegeId);
-            await updateDoc(ref, {
-                examStaffData: JSON.stringify(staffData),
-                examInvigilationSlots: JSON.stringify(invigilationSlots),
-                invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
-                invigRoles: JSON.stringify(rolesConfig),
-                invigDesignations: JSON.stringify(designationsConfig),
-                invigDepartments: JSON.stringify(departmentsConfig),
-                invigGlobalTarget: globalDutyTarget,
-                invigGoogleScriptUrl: googleScriptUrl
-            });
+            let updatePayload = {};
 
-            // 3. Refresh UI
+            if (mode === '1') {
+                // --- FULL RESTORE ---
+                staffData = d.staffData || [];
+                invigilationSlots = d.invigilationSlots || {};
+                advanceUnavailability = d.advanceUnavailability || {};
+                rolesConfig = d.rolesConfig || {};
+                designationsConfig = d.designationsConfig || {};
+                departmentsConfig = d.departmentsConfig || [];
+                globalDutyTarget = d.globalDutyTarget || 2;
+                googleScriptUrl = d.googleScriptUrl || "";
+
+                // Prepare Full Payload
+                updatePayload = {
+                    examStaffData: JSON.stringify(staffData),
+                    examInvigilationSlots: JSON.stringify(invigilationSlots),
+                    invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
+                    invigRoles: JSON.stringify(rolesConfig),
+                    invigDesignations: JSON.stringify(designationsConfig),
+                    invigDepartments: JSON.stringify(departmentsConfig),
+                    invigGlobalTarget: globalDutyTarget,
+                    invigGoogleScriptUrl: googleScriptUrl
+                };
+            } 
+            else {
+                // --- PARTIAL RESTORE (Volunteers & Inconvenience) ---
+                
+                // 1. Restore Advance Unavailability (General Leave)
+                if (d.advanceUnavailability) {
+                    advanceUnavailability = d.advanceUnavailability;
+                }
+
+                // 2. Restore Slot Specific Data (Merge into existing)
+                const backupSlots = d.invigilationSlots || {};
+                let restoreCount = 0;
+
+                Object.keys(backupSlots).forEach(key => {
+                    const bSlot = backupSlots[key];
+                    
+                    // Only restore if the slot exists in the current system (e.g. correct date/time matches)
+                    if (invigilationSlots[key]) {
+                        invigilationSlots[key].assigned = bSlot.assigned || [];
+                        invigilationSlots[key].unavailable = bSlot.unavailable || [];
+                        invigilationSlots[key].exchangeRequests = bSlot.exchangeRequests || [];
+                        
+                        // Optional: Restore attendance if needed, otherwise skip
+                        // invigilationSlots[key].attendance = bSlot.attendance || [];
+                        
+                        restoreCount++;
+                    }
+                });
+
+                console.log(`Partial Restore: Updated duty data for ${restoreCount} slots.`);
+
+                // Prepare Partial Payload
+                updatePayload = {
+                    examInvigilationSlots: JSON.stringify(invigilationSlots),
+                    invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
+                };
+            }
+
+            // 3. Save to Cloud
+            await updateDoc(ref, updatePayload);
+
+            // 4. Refresh UI
             updateAdminUI();
             renderSlotsGridAdmin();
-            alert("✅ System successfully restored from backup.");
+            updateSyncStatus("Restored", "success");
+            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).`);
 
         } catch (err) {
             console.error("Restore Error:", err);
             alert("Restore Failed: " + err.message);
+            updateSyncStatus("Error", "error");
         }
         input.value = ""; // Reset input
     };
     reader.readAsText(file);
 }
-
 
 // ==========================================
 // 📥 BULK ATTENDANCE UPLOAD LOGIC
