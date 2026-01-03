@@ -161,60 +161,69 @@ window.disable_edit_data_tab = disable_edit_data_tab;
 
 
 // ==========================================
-// 🧹 AUTOMATED GHOST DATA CLEANUP (Place at TOP of app.js)
+// 🧹 AUTOMATED GHOST DATA CLEANUP (Safe Version)
 // ==========================================
 async function autoCleanPastGhostData() {
     console.log("🚀 [System] Checking for expired exam data...");
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // 🛡️ SAFETY BUFFER: Keep data for 30 days after the exam date
+    // This prevents accidental deletion if you are working on recent past exams.
+    const cutoffDate = new Date(today);
+    cutoffDate.setDate(today.getDate() - 30); 
 
     let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
     let deletedCount = 0;
     let hasChanges = false;
 
-    // Scan Slots
+    // 1. Scan Slots
     Object.keys(slots).forEach(slotId => {
-        const dateStr = slotId.split('_')[0]; // Extract "2025-10-26"
+        const dateStr = slotId.split('_')[0]; // "2025-10-26"
         const slotDate = new Date(dateStr);
         slotDate.setHours(0, 0, 0, 0);
 
-        // Delete if date is strictly in the past
-        if (slotDate < today) {
+        // ONLY delete if the exam is older than 30 days
+        if (slotDate < cutoffDate) {
+            console.log(`🗑️ Auto-Deleting Old Record: ${slotId}`);
             delete slots[slotId];
             deletedCount++;
             hasChanges = true;
         }
     });
 
-    // Scan Availability
+    // 2. Scan Availability (General Dates)
     Object.keys(availability).forEach(dateStr => {
         const availDate = new Date(dateStr);
         availDate.setHours(0, 0, 0, 0);
 
-        if (availDate < today) {
+        // ONLY delete if the date is older than 30 days
+        if (availDate < cutoffDate) {
             delete availability[dateStr];
             hasChanges = true;
         }
     });
 
+    // 3. Save & Sync
     if (hasChanges) {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
-        // Sync to cloud if available
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('slots');
         }
         
-        // Notify
-        setTimeout(() => {
-            alert(`🧹 System Maintenance\n\nRemoved ${deletedCount} expired records from previous dates.`);
-        }, 2000);
+        // Notify user via console to avoid popup spam
+        console.log(`🧹 Maintenance: Cleaned up ${deletedCount} records older than 30 days.`);
     } else {
-        console.log("✅ [System] No expired data found.");
+        console.log("✅ [System] Data is clean. No old records found.");
     }
 }
+
+
+
 
 // Smart Trigger (Safe to be at the top)
 document.addEventListener('DOMContentLoaded', () => {
