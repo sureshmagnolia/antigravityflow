@@ -761,6 +761,8 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 }
 
 
+
+
 function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -784,23 +786,81 @@ function renderSlotsGridAdmin() {
         </div>`;
     ui.adminSlotsGrid.innerHTML = navHtml;
 
-    // 2. Filter & Group Data
     const slotItems = [];
+
+    // 2A. COLLECT REAL SLOTS
     Object.keys(invigilationSlots).forEach(key => {
-        // 🟢 HIDE SOFT-DELETED SLOTS
-        if (invigilationSlots[key].isHidden) return; 
+        if (invigilationSlots[key].isHidden) return; // Skip deleted
 
         const date = parseDate(key);
         if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
-            slotItems.push({ key, date: date, slot: invigilationSlots[key] });
+            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });
         }
     });
 
+    // 2B. COLLECT GHOST SLOTS (Unavailability without Exam)
+    // We check advanceUnavailability for dates in this month
+    if (typeof advanceUnavailability !== 'undefined') {
+        Object.keys(advanceUnavailability).forEach(dateStr => {
+            const [d, m, y] = dateStr.split('.').map(Number);
+            // Check Month Match (Note: JS Month is 0-11, stored date usually 1-12)
+            if (m - 1 !== currentAdminDate.getMonth() || y !== currentAdminDate.getFullYear()) return;
+
+            const dateObj = new Date(y, m - 1, d);
+            const leaves = advanceUnavailability[dateStr];
+
+            // Helper to check if a REAL slot already exists for this session
+            const hasRealSlot = (sessionType) => {
+                return slotItems.some(item => {
+                    if (item.type !== 'REAL') return false;
+                    const [kDate, kTime] = item.key.split(' | ');
+                    if (kDate !== dateStr) return false;
+                    
+                    // Determine Period of real slot
+                    let t = kTime.trim().toUpperCase();
+                    let isAN = (t.includes("PM") && !t.startsWith("12")) || t.startsWith("12") || t.startsWith("01") || t.startsWith("02") || t.startsWith("03"); // Rough heuristic
+                    // Better Heuristic:
+                    let [h] = t.split(':').map(Number);
+                    if (t.includes('PM') && h !== 12) h += 12;
+                    if (t.includes('AM') && h === 12) h = 0;
+                    
+                    const slotPeriod = h < 13 ? 'FN' : 'AN';
+                    return slotPeriod === sessionType;
+                });
+            };
+
+            // Check FN
+            if (leaves.FN && leaves.FN.length > 0 && !hasRealSlot('FN')) {
+                slotItems.push({
+                    key: `${dateStr} | FN`,
+                    date: dateObj,
+                    type: 'GHOST',
+                    session: 'FN',
+                    count: leaves.FN.length,
+                    list: leaves.FN
+                });
+            }
+
+            // Check AN
+            if (leaves.AN && leaves.AN.length > 0 && !hasRealSlot('AN')) {
+                slotItems.push({
+                    key: `${dateStr} | AN`,
+                    date: dateObj,
+                    type: 'GHOST',
+                    session: 'AN',
+                    count: leaves.AN.length,
+                    list: leaves.AN
+                });
+            }
+        });
+    }
+
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions or leaves found this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
         return;
     }
 
+    // 3. Group by Week
     const groupedSlots = {};
     slotItems.forEach(item => {
         const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
@@ -812,7 +872,7 @@ function renderSlotsGridAdmin() {
 
     const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => groupedSlots[a].items[0].date - groupedSlots[b].items[0].date);
 
-    // 3. Render Groups
+    // 4. Render Grid
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
@@ -823,32 +883,55 @@ function renderSlotsGridAdmin() {
                     Week ${group.week}
                 </span>
                 <div class="flex gap-2">
-                    <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-l hover:bg-gray-50 font-bold border-r-0" title="Lock Standard Booking">🔒 Std</button>
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
-                    </div>
-                    <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
-                    </div>
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
                 </div>
             </div>`;
 
-        group.items.sort((a, b) => a.date - b.date);
+        group.items.sort((a, b) => {
+            if (a.date - b.date !== 0) return a.date - b.date;
+            // Sort FN before AN
+            const aS = a.key.includes('FN') || (a.key.includes('AM') && !a.key.includes('12:')) ? 0 : 1;
+            const bS = b.key.includes('FN') || (b.key.includes('AM') && !b.key.includes('12:')) ? 0 : 1;
+            return aS - bS;
+        });
 
-        group.items.forEach(({ key, slot }) => {
+        group.items.forEach((item) => {
+            
+            // --- RENDER GHOST CARD (No Exam, Only Leaves) ---
+            if (item.type === 'GHOST') {
+                const encodedList = encodeURIComponent(JSON.stringify(item.list));
+                ui.adminSlotsGrid.innerHTML += `
+                    <div class="relative border-l-[6px] border-gray-300 bg-gray-50 p-3 rounded-xl shadow-sm hover:shadow-md transition w-full mb-3 opacity-90 border border-gray-200 border-l-gray-400">
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-bold text-gray-500 text-xs flex items-center gap-1">
+                                <span class="text-sm">🗓️</span> 
+                                <span>${item.key}</span>
+                            </h4>
+                            <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">No Exam</span>
+                        </div>
+                        
+                        <div class="text-[10px] text-gray-500 mb-3 italic">
+                            No exam scheduled, but staff have reported unavailability.
+                        </div>
+
+                        <button onclick="openGhostUnavailabilityModal('${item.key}', '${encodedList}')" class="w-full bg-white text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 flex items-center justify-center gap-1 shadow-sm">
+                            ⛔ View ${item.count} Unavailability
+                        </button>
+                    </div>`;
+                return;
+            }
+
+            // --- RENDER REAL SLOT (Existing Logic) ---
+            const { key, slot } = item;
             const filled = slot.assigned.length;
             const isAdminLocked = slot.isAdminLocked || false;
 
-            // --- THEME & ICON LOGIC ---
             let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
             let statusIcon = "🔓";
             
-            // Priority: Admin Lock > Standard Lock > Full > Open
             if (isAdminLocked) {
                 themeClasses = "border-amber-500 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100";
-                statusIcon = "🛡️"; // Admin Shield
+                statusIcon = "🛡️";
             } else if (slot.isLocked) {
                 themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
                 statusIcon = "🔒";
@@ -861,12 +944,11 @@ function renderSlotsGridAdmin() {
                 ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
                 : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
 
-            // Render Card
             ui.adminSlotsGrid.innerHTML += `
                 <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
-                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50" title="${isAdminLocked ? 'Admin Posting Locked' : 'Status'}">${statusIcon}</span> 
+                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
                             <span>${key}</span>
                         </h4>
                         <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
@@ -876,7 +958,7 @@ function renderSlotsGridAdmin() {
                         </div>
                     </div>
                     
-                    <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm">
+                    <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm min-h-[1.5rem]">
                         <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
                     
@@ -902,9 +984,15 @@ function renderSlotsGridAdmin() {
                 </div>`;
         });
     });
-
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
+
+
+
+
+
+
+
 
 // REPLACE your existing renderStaffTable function with this SAFE version
 function renderStaffTable() {
@@ -8090,6 +8178,59 @@ window.downloadVacationPDF = function() {
     doc.save(`Vacation_Report_${startStr}_${endStr}.pdf`);
     window.closeModal('vacation-report-modal');
 };
+
+//handles the "View List" click from the ghost card.
+
+window.openGhostUnavailabilityModal = function(title, encodedList) {
+    try {
+        const list = JSON.parse(decodeURIComponent(encodedList));
+        
+        let htmlContent = `<div class="p-4"><h3 class="font-bold text-lg mb-3 border-b pb-2">⛔ Unavailability: ${title}</h3>`;
+        
+        if (list.length === 0) {
+            htmlContent += `<p class="text-gray-500">No records found.</p>`;
+        } else {
+            htmlContent += `<div class="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">`;
+            list.forEach(u => {
+                const email = (typeof u === 'string') ? u : u.email;
+                const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
+                const name = getNameFromEmail(email) || email;
+                
+                htmlContent += `
+                    <div class="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100">
+                        <span class="font-bold text-red-900 text-sm">${name}</span>
+                        <span class="text-xs text-red-600 bg-white px-2 py-1 rounded border border-red-100 shadow-sm">${reason}</span>
+                    </div>`;
+            });
+            htmlContent += `</div>`;
+        }
+        
+        htmlContent += `<div class="mt-4 text-right"><button onclick="closeModal('custom-ghost-modal')" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700">Close</button></div></div>`;
+
+        // Use a generic modal container if available, or create one dynamically
+        let modal = document.getElementById('custom-ghost-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'custom-ghost-modal';
+            modal.className = "fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden backdrop-blur-sm";
+            modal.innerHTML = `<div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden transform transition-all" id="custom-ghost-content"></div>`;
+            document.body.appendChild(modal);
+        }
+        
+        document.getElementById('custom-ghost-content').innerHTML = htmlContent;
+        modal.classList.remove('hidden');
+
+    } catch (e) {
+        alert("Error opening list: " + e.message);
+    }
+};
+
+// Helper to close the specific ghost modal
+window.closeModal = function(id) {
+    const m = document.getElementById(id);
+    if(m) m.classList.add('hidden');
+};
+
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
