@@ -16429,8 +16429,12 @@ window.toggleBulkLock = function() {
 
     if (isLocked) {
         // --- UNLOCKING ---
-        // 1. Populate Dropdowns (Using CORRECT Global Variable)
-        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+        // 1. Populate Dropdowns (Check Global vs Scope)
+        if (typeof populate_session_dropdown === 'function') {
+            populate_session_dropdown();
+        } else if (typeof window.populate_session_dropdown === 'function') {
+            window.populate_session_dropdown();
+        }
         
         if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
             // Clear and Add Default
@@ -16623,13 +16627,16 @@ window.executeBulkDelete = async function() {
         });
     }
 
-}); // <--- CRITICAL: This closes the main DOMContentLoaded event
-
-
-            
+    // ==========================================
+    // 🔄 RESTORE UI STATE & LINKS
+    // ==========================================
+    
     // Initial Call (in case we start on settings page or refresh)
-    updateStudentPortalLink();
-    // --- NEW: Restore Last Active Tab ---
+    if (typeof updateStudentPortalLink === 'function') {
+        updateStudentPortalLink();
+    }
+
+    // --- Restore Last Active Tab ---
     function restoreActiveTab() {
         const savedViewId = localStorage.getItem('lastActiveViewId');
         const savedNavId = localStorage.getItem('lastActiveNavId');
@@ -16639,11 +16646,15 @@ window.executeBulkDelete = async function() {
             const nav = document.getElementById(savedNavId);
             if (view && nav) {
                 // Programmatically switch to the saved tab
-                showView(view, nav);
+                // We assume showView is defined in the parent scope
+                if (typeof showView === 'function') {
+                    showView(view, nav);
+                }
             }
         }
     }
 
     // Call it after data is loaded
     restoreActiveTab();
-});
+
+}); // <--- FINAL CLOSING BRACKET (Closes DOMContentLoaded)
