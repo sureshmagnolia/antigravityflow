@@ -612,7 +612,6 @@ function populateAllExamDropdowns() {
 
 
 
-
 // --- HELPER: Calculate Slot Requirements from Student Data ---
 function updateLocalSlotsFromStudents() {
     const localBaseData = localStorage.getItem('examBaseData');
@@ -678,39 +677,51 @@ function updateLocalSlotsFromStudents() {
             let targetKey = generatedKey;
             
             if (!existingSlots[generatedKey]) {
-                // No exact match? Look for a "Virtual" or "Hidden" slot on same Date & Period
-                const fuzzyMatchKey = Object.keys(existingSlots).find(k => {
+                // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
+                const virtualMatchKey = Object.keys(existingSlots).find(k => {
                     if (!k.includes('|')) return false;
                     const [exDate, exTime] = k.split('|').map(s => s.trim());
                     
+                    // Must be same Date
                     if (exDate !== stats.dateStr) return false;
+                    
+                    // Must be same Period (FN or AN)
                     if (getPeriod(exTime) !== genPeriod) return false;
 
+                    // Must be "Virtual" (Created by attendance, so 0 students or undefined)
                     const slot = existingSlots[k];
-                    // Match if it's "Virtual" (0 students) OR if it is "Hidden" (Soft Deleted)
-                    return (!slot.studentCount || slot.studentCount === 0 || slot.isHidden);
+                    return (!slot.studentCount || slot.studentCount === 0);
                 });
 
-                if (fuzzyMatchKey) {
-                    // FOUND IT! Migrate/Restore this slot
-                    targetKey = generatedKey; // Use the new correct time
-                    existingSlots[targetKey] = { ...existingSlots[fuzzyMatchKey] }; 
-                    if(targetKey !== fuzzyMatchKey) delete existingSlots[fuzzyMatchKey]; // Cleanup old key if different
+                if (virtualMatchKey) {
+                    // FOUND IT! We will Migrate this virtual slot to the real time key
+                    targetKey = generatedKey; // We use the new (Correct) time
+                    existingSlots[targetKey] = { ...existingSlots[virtualMatchKey] }; // Copy staff data
+                    delete existingSlots[virtualMatchKey]; // Remove the old 9:30 slot
                     hasChanges = true; 
                 }
             }
 
-            // --- DATE CHECK ---
+            // --- DATE CHECK (Robust Parsing) ---
             let isPastSession = false;
             try {
+                // Handle DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY
                 const parts = stats.dateStr.split(/[\.\-\/]/); 
                 let day, month, year;
-                if (parts[0].length === 4) { year = parts[0]; month = parts[1]; day = parts[2]; } 
-                else { day = parts[0]; month = parts[1]; year = parts[2]; }
+                
+                if (parts[0].length === 4) { // YYYY-MM-DD
+                    year = parts[0]; month = parts[1]; day = parts[2];
+                } else { // DD.MM.YYYY
+                    day = parts[0]; month = parts[1]; year = parts[2];
+                }
+                
                 const sessionDate = new Date(year, month - 1, day);
-                sessionDate.setHours(0,0,0,0);
+                sessionDate.setHours(0,0,0,0); // Compare dates only
                 isPastSession = sessionDate < today;
-            } catch(e) { isPastSession = false; }
+            } catch(e) {
+                console.warn("Date parse error, assuming Future:", stats.dateStr);
+                isPastSession = false; // Default to Future (Locked) if date is weird
+            }
 
             // Calculate Required Invigilators
             let baseRequirement = 0;
@@ -726,7 +737,7 @@ function updateLocalSlotsFromStudents() {
                     reserveCount: reserve,
                     assigned: [],
                     unavailable: [],
-                    isLocked: !isPastSession,
+                    isLocked: !isPastSession, // 🔒 Lock Future, Unlock Past
                     scribeCount: stats.totalScribes,
                     studentCount: stats.totalStudents
                 };
@@ -735,19 +746,19 @@ function updateLocalSlotsFromStudents() {
                 // CASE B: Update Existing Slot
                 const slot = existingSlots[targetKey];
                 
-                // 🟢 RESTORE HIDDEN SLOT (The Fix)
-                if (slot.isHidden) {
-                    delete slot.isHidden; // Unhide it
-                    hasChanges = true;
-                }
-
+                // 🟢 RE-LOCKING LOGIC:
+                // If the slot WAS empty (Virtual) and is NOW getting students (Real Data),
+                // we treat it as a "New Upload" and FORCE LOCK if it is in the future.
                 const isNewDataUpload = (!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0;
                 
                 if (isNewDataUpload) {
-                     if (!isPastSession) slot.isLocked = true;
+                     if (!isPastSession) {
+                         slot.isLocked = true; // Force Lock
+                     }
                      hasChanges = true;
                 }
 
+                // Update Counts
                 if (slot.required !== totalRequired || slot.studentCount !== stats.totalStudents) {
                     slot.required = totalRequired;
                     slot.reserveCount = reserve;
@@ -767,8 +778,6 @@ function updateLocalSlotsFromStudents() {
     }
     return false;
 }
-
-    
 
     
 
@@ -14070,58 +14079,45 @@ if (btnSessionReschedule) {
             if (!confirm(msg)) return;
 
             const check = prompt("Type 'DELETE' to confirm permanent deletion:");
-    if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
+            if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
 
-    try {
-        // 1. Delete Students (Hard Delete)
-        allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
-        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+            try {
+                // 1. Delete Students
+                allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
+                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-        // 2. Helper to Hard Delete other data
-        const deleteKeyInStorage = (storageKey) => {
-            const raw = localStorage.getItem(storageKey);
-            if (!raw) return;
-            const data = JSON.parse(raw);
-            if (data[currentSession]) {
-                delete data[currentSession];
-                localStorage.setItem(storageKey, JSON.stringify(data));
+                // 2. Helper to Delete Key
+                const deleteKeyInStorage = (storageKey) => {
+                    const raw = localStorage.getItem(storageKey);
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    if (data[currentSession]) {
+                        delete data[currentSession];
+                        localStorage.setItem(storageKey, JSON.stringify(data));
+                    }
+                };
+
+                // 3. Delete Associated Data
+                deleteKeyInStorage('examRoomAllotment');
+                deleteKeyInStorage('examScribeAllotment');
+                deleteKeyInStorage('examAbsenteeList');
+                deleteKeyInStorage('examInvigilatorMapping');
+                deleteKeyInStorage('examInvigilationSlots');
+                deleteKeyInStorage('examQPCodes');
+
+                alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
+
+                // MODULAR SYNC (V2)
+                // This pushes an empty update to the old ID, effectively clearing it in the cloud
+                await syncSessionToCloud(currentSession);
+                
+                window.location.reload();
+
+            } catch (e) {
+                console.error(e);
+                alert("Error during deletion: " + e.message);
             }
-        };
-
-        // 3. Delete Associated Data
-        deleteKeyInStorage('examRoomAllotment');
-        deleteKeyInStorage('examScribeAllotment');
-        deleteKeyInStorage('examAbsenteeList');
-        deleteKeyInStorage('examInvigilatorMapping');
-        deleteKeyInStorage('examQPCodes');
-
-        // 4. 🟢 SOFT DELETE Invigilation Slots (Preserve Staff Data)
-        const slotRaw = localStorage.getItem('examInvigilationSlots');
-        if (slotRaw) {
-            const slots = JSON.parse(slotRaw);
-            if (slots[currentSession]) {
-                slots[currentSession].isHidden = true;      // Mark hidden
-                slots[currentSession].studentCount = 0;     // Reset counts
-                // We KEEP 'assigned', 'unavailable', etc.
-                localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
-            }
-        }
-
-        alert(`✅ Deleted ${targets.length} records. Invigilation data is archived (hidden).`);
-
-        // MODULAR SYNC (V2)
-        await syncSessionToCloud(currentSession);
-        
-        // Sync Slots Explicitly to save the 'isHidden' flag
-        if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('slots'); 
-        }
-
-        window.location.reload();
-
-    } catch (e) {
-        console.error(e);
-        alert("Error during deletion: " + e.message);
+        });
     }
 
      
@@ -16494,48 +16490,71 @@ window.toggleBulkLock = function() {
     }
 };
 
-
-
+// 2. Execute Delete Function (Updated to Preserve Invigilation Data)
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
 
-    if (!startSession || !endSession) return alert("Please select both Start and End sessions.");
+    // Validation
+    if (!startSession || !endSession) {
+        alert("Please select both Start and End sessions.");
+        return;
+    }
 
+    // Sort order check (using existing array order)
     const startIndex = allStudentSessions.indexOf(startSession);
     const endIndex = allStudentSessions.indexOf(endSession);
 
-    if (startIndex === -1 || endIndex === -1) return alert("Sessions not found.");
-    if (startIndex > endIndex) return alert("Start Session cannot be after End Session.");
+    if (startIndex === -1 || endIndex === -1) {
+        alert("Selected sessions not found in database.");
+        return;
+    }
 
+    if (startIndex > endIndex) {
+        alert("Start Session cannot be after End Session (chronologically).");
+        return;
+    }
+
+    // Identify Range
     const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\nNOTE: Invigilation Volunteers & Availability will be PRESERVED (Hidden).\n\nType 'DELETE' to confirm:`;
-    if (prompt(confirmMsg) !== 'DELETE') return;
+    // Confirmation
+    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\nNOTE: Invigilation Volunteers & Availability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
+    const userInput = prompt(confirmMsg);
 
+    if (userInput !== 'DELETE') {
+        return;
+    }
+
+    // Execution
+    let deletedCount = 0;
     try {
         deleteBtn.innerHTML = "Deleting...";
         deleteBtn.disabled = true;
+
         const sessionSet = new Set(sessionsToDelete);
 
-        // 1. Remove Students (Hard Delete)
+        // 1. Remove Students (Filter Global Array)
+        // Format in data is "DD.MM.YYYY" and "HH:MM AM"
+        // Session Key is "DD.MM.YYYY | HH:MM AM"
         allStudentData = allStudentData.filter(s => {
             const key = `${s.Date} | ${s.Time}`;
             return !sessionSet.has(key);
         });
         localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
 
-        // 2. Remove Aux Data (Hard Delete)
-        const hardDeleteKeys = [
+        // 2. Remove Aux Data (Assignments, Rooms, etc.)
+        // 🟢 UPDATE: Removed 'examInvigilationSlots' and 'examInvigilatorMapping' from this list
+        // This ensures Volunteer/Availability data survives the delete.
+        const auxKeys = [
             'examRoomAllotment', 
             'examScribeAllotment', 
             'examAbsenteeList', 
-            'examQPCodes',
-            'examInvigilatorMapping' // Delete mapping, keep volunteers in slots
+            'examQPCodes' 
         ];
-
-        hardDeleteKeys.forEach(key => {
+        
+        auxKeys.forEach(key => {
             const raw = localStorage.getItem(key);
             if(raw) {
                 const data = JSON.parse(raw);
@@ -16547,29 +16566,20 @@ window.executeBulkDelete = async function() {
             }
         });
 
-        // 3. 🟢 SOFT DELETE Invigilation Slots
-        const slotsRaw = localStorage.getItem('examInvigilationSlots');
-        if(slotsRaw) {
-            const slots = JSON.parse(slotsRaw);
-            let slotsChanged = false;
-            sessionsToDelete.forEach(s => {
-                if(slots[s]) {
-                    slots[s].isHidden = true;      // Mark hidden
-                    slots[s].studentCount = 0;     // Reset count
-                    slotsChanged = true;
-                }
-            });
-            if(slotsChanged) localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
-        }
-
-        // 4. Sync to Cloud
+        // 3. Sync to Cloud
+        // We sync 'ops' and 'allocation' to reflect the deletions.
+        // We do NOT sync 'slots' here to avoid overwriting the preserved data with empty data if logic was different.
+        // Actually, since we didn't touch localStorage for slots, we don't strictly need to sync it, 
+        // but 'allocation' sync covers rooms/scribes.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
-            await syncDataToCloud('allocation');
-            await syncDataToCloud('slots'); // Important: Sync the hidden flags
+            await syncDataToCloud('allocation'); 
+            // await syncDataToCloud('slots'); // Optional: Leaving this out prevents accidental wiping if cloud has newer data
         }
-
-        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved (hidden).`);
+        
+        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
+        
+        // Refresh App
         window.location.reload();
 
     } catch (error) {
@@ -16579,6 +16589,7 @@ window.executeBulkDelete = async function() {
         deleteBtn.innerHTML = "Delete Range";
     }
 };
+
 
 
 
