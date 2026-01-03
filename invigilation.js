@@ -8495,53 +8495,6 @@ window.generateWeeklyWhatsApp = function(name, duties) {
 };
 
 
-// --- CONFIRMATION HANDLERS ---
-
-// 1. Single Email Confirmation
-window.confirmSingleEmail = function(index) {
-    const item = window.currentEmailQueue[index];
-    if (!item) return;
-
-    if (confirm(`Send exam duty email to ${item.name}?`)) {
-        window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_self');
-    }
-};
-
-// 2. Bulk Email Confirmation & Execution
-window.confirmBulkSend = function() {
-    const count = window.currentEmailQueue.length;
-    if (count === 0) return alert("No emails to send.");
-
-    const msg = `⚠️ BULK SEND CONFIRMATION ⚠️\n\n` +
-                `You are about to initiate sending ${count} emails.\n\n` +
-                `• This will attempt to open ${count} email compose windows.\n` +
-                `• Please ensure your default email client (e.g. Outlook, Mail) is open.\n` +
-                `• Some browsers may block multiple popups.\n\n` +
-                `Do you want to proceed?`;
-
-    if (confirm(msg)) {
-        processEmailQueue();
-    }
-};
-
-// 3. Queue Processor (Recursive with Delay to prevent blocking)
-window.processEmailQueue = function(index = 0) {
-    if (index >= window.currentEmailQueue.length) {
-        alert("✅ All email commands sent to client.");
-        return;
-    }
-
-    const item = window.currentEmailQueue[index];
-    
-    // Open Mail Client
-    window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_blank'); // _blank helps prevent overriding curr tab
-
-    // Process next one after a short delay
-    setTimeout(() => {
-        processEmailQueue(index + 1);
-    }, 800); // 800ms delay between opens
-};
-
 
 
 // --- DEPARTMENT SENDING LOGIC (API) ---
@@ -8671,23 +8624,6 @@ window.sendBulkDeptEmails = async function() {
 };
 
 
-// 3. Dept Queue Processor
-window.processDeptEmailQueue = function(index = 0) {
-    if (index >= window.currentDeptEmailQueue.length) {
-        alert("✅ All department emails triggered.");
-        return;
-    }
-
-    const item = window.currentDeptEmailQueue[index];
-    
-    // Open Mail Client
-    window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_blank');
-
-    // Process next one after a short delay
-    setTimeout(() => {
-        processDeptEmailQueue(index + 1);
-    }, 800); 
-};
 
 window.sendSingleEmailFromQueue = function(index) {
     const item = window.currentEmailQueue[index];
