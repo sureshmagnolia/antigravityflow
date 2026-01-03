@@ -161,7 +161,7 @@ window.disable_edit_data_tab = disable_edit_data_tab;
 
 
 // ==========================================
-// 🧹 AUTOMATED GHOST DATA CLEANUP (Safe Version)
+// 🧹 AUTOMATED GHOST DATA CLEANUP (Safe 30-Day Buffer)
 // ==========================================
 async function autoCleanPastGhostData() {
     console.log("🚀 [System] Checking for expired exam data...");
@@ -170,7 +170,7 @@ async function autoCleanPastGhostData() {
     today.setHours(0, 0, 0, 0);
 
     // 🛡️ SAFETY BUFFER: Keep data for 30 days after the exam date
-    // This prevents accidental deletion if you are working on recent past exams.
+    // This allows you to delete and re-upload past exams without losing volunteers.
     const cutoffDate = new Date(today);
     cutoffDate.setDate(today.getDate() - 30); 
 
@@ -181,11 +181,18 @@ async function autoCleanPastGhostData() {
 
     // 1. Scan Slots
     Object.keys(slots).forEach(slotId => {
-        const dateStr = slotId.split('_')[0]; // "2025-10-26"
-        const slotDate = new Date(dateStr);
+        const dateStr = slotId.split('_')[0]; 
+        // Handle "DD.MM.YYYY" or "YYYY-MM-DD"
+        let slotDate;
+        if (dateStr.includes('.')) {
+            const [d, m, y] = dateStr.split('.');
+            slotDate = new Date(`${y}-${m}-${d}`);
+        } else {
+            slotDate = new Date(dateStr);
+        }
         slotDate.setHours(0, 0, 0, 0);
 
-        // ONLY delete if the exam is older than 30 days
+        // ONLY delete if the exam is strictly older than 30 days
         if (slotDate < cutoffDate) {
             console.log(`🗑️ Auto-Deleting Old Record: ${slotId}`);
             delete slots[slotId];
@@ -194,12 +201,17 @@ async function autoCleanPastGhostData() {
         }
     });
 
-    // 2. Scan Availability (General Dates)
+    // 2. Scan Availability
     Object.keys(availability).forEach(dateStr => {
-        const availDate = new Date(dateStr);
+        let availDate;
+        if (dateStr.includes('.')) {
+            const [d, m, y] = dateStr.split('.');
+            availDate = new Date(`${y}-${m}-${d}`);
+        } else {
+            availDate = new Date(dateStr);
+        }
         availDate.setHours(0, 0, 0, 0);
 
-        // ONLY delete if the date is older than 30 days
         if (availDate < cutoffDate) {
             delete availability[dateStr];
             hasChanges = true;
@@ -214,8 +226,6 @@ async function autoCleanPastGhostData() {
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('slots');
         }
-        
-        // Notify user via console to avoid popup spam
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} records older than 30 days.`);
     } else {
         console.log("✅ [System] Data is clean. No old records found.");
@@ -16499,7 +16509,9 @@ window.toggleBulkLock = function() {
     }
 };
 
-// 2. Execute Delete Function (Updated to Preserve Invigilation Data)
+
+
+// 2. Execute Delete Function (Preserves Invigilation Data)
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
@@ -16511,7 +16523,6 @@ window.executeBulkDelete = async function() {
         return;
     }
 
-    // Sort order check (using existing array order)
     const startIndex = allStudentSessions.indexOf(startSession);
     const endIndex = allStudentSessions.indexOf(endSession);
 
@@ -16521,7 +16532,7 @@ window.executeBulkDelete = async function() {
     }
 
     if (startIndex > endIndex) {
-        alert("Start Session cannot be after End Session (chronologically).");
+        alert("Start Session cannot be after End Session.");
         return;
     }
 
@@ -16529,15 +16540,12 @@ window.executeBulkDelete = async function() {
     const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
     // Confirmation
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\nNOTE: Invigilation Volunteers & Availability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
+    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\n✅ NOTE: Invigilation Volunteers & Unavailability will be SAVED/PRESERVED.\n\nType 'DELETE' to confirm:`;
     const userInput = prompt(confirmMsg);
 
-    if (userInput !== 'DELETE') {
-        return;
-    }
+    if (userInput !== 'DELETE') return;
 
     // Execution
-    let deletedCount = 0;
     try {
         deleteBtn.innerHTML = "Deleting...";
         deleteBtn.disabled = true;
@@ -16545,8 +16553,6 @@ window.executeBulkDelete = async function() {
         const sessionSet = new Set(sessionsToDelete);
 
         // 1. Remove Students (Filter Global Array)
-        // Format in data is "DD.MM.YYYY" and "HH:MM AM"
-        // Session Key is "DD.MM.YYYY | HH:MM AM"
         allStudentData = allStudentData.filter(s => {
             const key = `${s.Date} | ${s.Time}`;
             return !sessionSet.has(key);
@@ -16554,8 +16560,7 @@ window.executeBulkDelete = async function() {
         localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
 
         // 2. Remove Aux Data (Assignments, Rooms, etc.)
-        // 🟢 UPDATE: Removed 'examInvigilationSlots' and 'examInvigilatorMapping' from this list
-        // This ensures Volunteer/Availability data survives the delete.
+        // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
         const auxKeys = [
             'examRoomAllotment', 
             'examScribeAllotment', 
@@ -16576,19 +16581,13 @@ window.executeBulkDelete = async function() {
         });
 
         // 3. Sync to Cloud
-        // We sync 'ops' and 'allocation' to reflect the deletions.
-        // We do NOT sync 'slots' here to avoid overwriting the preserved data with empty data if logic was different.
-        // Actually, since we didn't touch localStorage for slots, we don't strictly need to sync it, 
-        // but 'allocation' sync covers rooms/scribes.
+        // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
             await syncDataToCloud('allocation'); 
-            // await syncDataToCloud('slots'); // Optional: Leaving this out prevents accidental wiping if cloud has newer data
         }
         
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
-        
-        // Refresh App
         window.location.reload();
 
     } catch (error) {
@@ -16598,6 +16597,7 @@ window.executeBulkDelete = async function() {
         deleteBtn.innerHTML = "Delete Range";
     }
 };
+
 
 
 
