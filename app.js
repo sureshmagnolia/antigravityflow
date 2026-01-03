@@ -10088,185 +10088,163 @@ function renderScribeAllotmentList(sessionKey) {
         });
     }
 
-    // --- NEW: STUDENT DATA EDIT FUNCTIONALITY (MODAL VERSION) ---
+
+
+// --- NEW: STUDENT DATA EDIT FUNCTIONALITY (MODAL VERSION) ---
 
     let editCurrentPage = 1;
     const STUDENTS_PER_EDIT_PAGE = 10;
     let currentEditSession = '';
     let currentEditCourse = '';
-    let currentEditStream = ''; // <--- ADD THIS NEW VARIABLE
-    let currentCourseStudents = []; // This will hold the "working copy" of students
+    let currentEditStream = ''; 
+    let currentCourseStudents = []; // Working copy
     let hasUnsavedEdits = false;
-    let currentlyEditingIndex = null; // Store the index of the student being edited
+    let currentlyEditingIndex = null; 
 
-    // Get the "Add Student" button from the HTML
+    // Elements
     const addNewStudentBtn = document.getElementById('add-new-student-btn');
-
-    // Get references to the new modal elements
     const studentEditModal = document.getElementById('student-edit-modal');
     const modalTitle = document.getElementById('student-edit-modal-title');
     const modalDate = document.getElementById('modal-edit-date');
     const modalTime = document.getElementById('modal-edit-time');
     const modalCourse = document.getElementById('modal-edit-course');
-    const modalExamName = document.getElementById('modal-edit-exam-name'); // <--- ADD THIS
+    const modalExamName = document.getElementById('modal-edit-exam-name');
     const modalRegNo = document.getElementById('modal-edit-regno');
     const modalName = document.getElementById('modal-edit-name');
     const modalSaveBtn = document.getElementById('modal-save-student');
     const modalCancelBtn = document.getElementById('modal-cancel-student');
 
-    // 1. Session selection (Updated: Splits Course by Stream)
-    editSessionSelect.addEventListener('change', () => {
-        currentEditSession = editSessionSelect.value;
-        const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
+    // 1. Session Selection
+    if (editSessionSelect) {
+        editSessionSelect.addEventListener('change', () => {
+            currentEditSession = editSessionSelect.value;
+            const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
+            const opsCountBadge = document.getElementById('session-ops-count-badge');
 
-        // --- NEW: Select the badge element ---
-        const opsCountBadge = document.getElementById('session-ops-count-badge');
-
-        if (sessionOpsContainer) {
-            if (currentEditSession) {
-                sessionOpsContainer.classList.remove('hidden');
-                isSessionOpsLocked = true;
-                updateSessionOpsLockUI();
-            } else {
-                sessionOpsContainer.classList.add('hidden');
-                // --- NEW: Hide badge if no session selected ---
-                if (opsCountBadge) opsCountBadge.classList.add('hidden');
-            }
-        }
-
-        editDataContainer.innerHTML = '';
-        editPaginationControls.classList.add('hidden');
-        editSaveSection.classList.add('hidden');
-        addNewStudentBtn.classList.add('hidden');
-
-        const bulkContainer = document.getElementById('bulk-course-update-container');
-        if (bulkContainer) bulkContainer.classList.add('hidden');
-
-        if (currentEditSession) {
-            const [date, time] = currentEditSession.split(' | ');
-            const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-
-            // --- NEW: Update and Show Badge Count ---
-            if (opsCountBadge) {
-                opsCountBadge.textContent = `${sessionStudents.length} Students`;
-                opsCountBadge.classList.remove('hidden');
-            }
-            // ----------------------------------------
-
-            const uniquePairs = [];
-            const seen = new Set();
-            // ... (rest of the existing logic continues unchanged) ...
-
-            sessionStudents.forEach(s => {
-                const strm = s.Stream || "Regular";
-                const pairKey = `${s.Course}|${strm}`; // Composite Key
-
-                if (!seen.has(pairKey)) {
-                    seen.add(pairKey);
-                    uniquePairs.push({
-                        course: s.Course,
-                        stream: strm,
-                        value: pairKey
-                    });
+            if (sessionOpsContainer) {
+                if (currentEditSession) {
+                    sessionOpsContainer.classList.remove('hidden');
+                    isSessionOpsLocked = true;
+                    if(typeof updateSessionOpsLockUI === 'function') updateSessionOpsLockUI();
+                } else {
+                    sessionOpsContainer.classList.add('hidden');
+                    if (opsCountBadge) opsCountBadge.classList.add('hidden');
                 }
-            });
-
-            // Sort: Regular first, then Alphabetical
-            uniquePairs.sort((a, b) => {
-                if (a.stream === "Regular" && b.stream !== "Regular") return -1;
-                if (a.stream !== "Regular" && b.stream === "Regular") return 1;
-                if (a.course !== b.course) return a.course.localeCompare(b.course);
-                return a.stream.localeCompare(b.stream);
-            });
-
-            editCourseSelect.innerHTML = '';
-            editCourseSelect.appendChild(new Option('-- Select a Course --', ''));
-
-            uniquePairs.forEach(item => {
-                // Display Format: "Course Name (Stream)"
-                const label = `${item.course} (${item.stream})`;
-                editCourseSelect.appendChild(new Option(label, item.value));
-            });
-
-            editCourseSelectContainer.classList.remove('hidden');
-        } else {
-            editCourseSelectContainer.classList.add('hidden');
-            if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
-        }
-    });
-
-    // 2. Course selection (Updated: Parses Composite Key)
-    editCourseSelect.addEventListener('change', () => {
-        const selectedValue = editCourseSelect.value; // "CourseName|StreamName"
-        editCurrentPage = 1;
-        if (typeof setUnsavedChanges === 'function') {
-            setUnsavedChanges(false);
-        } else {
-            hasUnsavedEdits = false;
-        }
-
-        let countDisplay = document.getElementById('edit-student-count');
-        if (!countDisplay && addNewStudentBtn) {
-            countDisplay = document.createElement('div');
-            countDisplay.id = 'edit-student-count';
-            countDisplay.className = 'mb-2 font-bold text-blue-700 text-sm';
-            addNewStudentBtn.parentNode.insertBefore(countDisplay, addNewStudentBtn);
-        }
-
-        if (selectedValue) {
-            if (toggleEditDataLockBtn) {
-                toggleEditDataLockBtn.classList.remove('hidden');
-                updateEditLockUI(); // Ensure it reflects the current state (Locked/Unlocked)
-            }
-            const [date, time] = currentEditSession.split(' | ');
-
-            // Split the key back to Course and Stream
-            const parts = selectedValue.split('|');
-            const selectedStream = parts.pop(); // Last part is Stream
-            const selectedCourse = parts.join('|'); // Rest is Course
-
-            // Update Globals
-            currentEditCourse = selectedCourse;
-            currentEditStream = selectedStream;
-
-            // Strict Filter
-            currentCourseStudents = allStudentData
-                .filter(s => {
-                    const sStream = s.Stream || "Regular";
-                    return s.Date === date &&
-                        s.Time === time &&
-                        s.Course === selectedCourse &&
-                        sStream === selectedStream;
-                })
-                .map(s => ({ ...s }));
-
-            if (countDisplay) {
-                countDisplay.textContent = `Students: ${currentCourseStudents.length} | Stream: ${selectedStream}`;
-                countDisplay.classList.remove('hidden');
             }
 
-            renderStudentEditTable();
-            editSaveSection.classList.remove('hidden');
-            addNewStudentBtn.classList.remove('hidden');
-        } else {
-            // Reset
-            currentEditCourse = '';
-            currentEditStream = '';
             editDataContainer.innerHTML = '';
             editPaginationControls.classList.add('hidden');
             editSaveSection.classList.add('hidden');
-            addNewStudentBtn.classList.add('hidden');
-            if (countDisplay) countDisplay.classList.add('hidden');
-            if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
-            // Hide Bulk if open
-            const bulk = document.getElementById('bulk-course-update-container');
-            if (bulk) bulk.classList.add('hidden');
-        }
-    });
+            if (addNewStudentBtn) addNewStudentBtn.classList.add('hidden');
 
-    // Find the renderStudentEditTable function (around line 1330) and replace it with this:
+            const bulkContainer = document.getElementById('bulk-course-update-container');
+            if (bulkContainer) bulkContainer.classList.add('hidden');
 
-// 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
+            if (currentEditSession) {
+                const [date, time] = currentEditSession.split(' | ');
+                const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+
+                if (opsCountBadge) {
+                    opsCountBadge.textContent = `${sessionStudents.length} Students`;
+                    opsCountBadge.classList.remove('hidden');
+                }
+
+                const uniquePairs = [];
+                const seen = new Set();
+
+                sessionStudents.forEach(s => {
+                    const strm = s.Stream || "Regular";
+                    const pairKey = `${s.Course}|${strm}`;
+                    if (!seen.has(pairKey)) {
+                        seen.add(pairKey);
+                        uniquePairs.push({ course: s.Course, stream: strm, value: pairKey });
+                    }
+                });
+
+                // Sort: Regular first, then Alphabetical
+                uniquePairs.sort((a, b) => {
+                    if (a.stream === "Regular" && b.stream !== "Regular") return -1;
+                    if (a.stream !== "Regular" && b.stream === "Regular") return 1;
+                    if (a.course !== b.course) return a.course.localeCompare(b.course);
+                    return a.stream.localeCompare(b.stream);
+                });
+
+                editCourseSelect.innerHTML = '';
+                editCourseSelect.appendChild(new Option('-- Select a Course --', ''));
+                uniquePairs.forEach(item => {
+                    editCourseSelect.appendChild(new Option(`${item.course} (${item.stream})`, item.value));
+                });
+                editCourseSelectContainer.classList.remove('hidden');
+            } else {
+                editCourseSelectContainer.classList.add('hidden');
+                if (typeof toggleEditDataLockBtn !== 'undefined' && toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
+            }
+        });
+    }
+
+    // 2. Course Selection
+    if (editCourseSelect) {
+        editCourseSelect.addEventListener('change', () => {
+            const selectedValue = editCourseSelect.value; 
+            editCurrentPage = 1;
+            
+            if (typeof setUnsavedChanges === 'function') setUnsavedChanges(false);
+            else hasUnsavedEdits = false;
+
+            let countDisplay = document.getElementById('edit-student-count');
+            if (!countDisplay && addNewStudentBtn) {
+                countDisplay = document.createElement('div');
+                countDisplay.id = 'edit-student-count';
+                countDisplay.className = 'mb-2 font-bold text-blue-700 text-sm';
+                addNewStudentBtn.parentNode.insertBefore(countDisplay, addNewStudentBtn);
+            }
+
+            if (selectedValue) {
+                if (typeof toggleEditDataLockBtn !== 'undefined' && toggleEditDataLockBtn) {
+                    toggleEditDataLockBtn.classList.remove('hidden');
+                    if(typeof updateEditLockUI === 'function') updateEditLockUI();
+                }
+
+                const [date, time] = currentEditSession.split(' | ');
+                const parts = selectedValue.split('|');
+                const selectedStream = parts.pop();
+                const selectedCourse = parts.join('|');
+
+                currentEditCourse = selectedCourse;
+                currentEditStream = selectedStream;
+
+                currentCourseStudents = allStudentData
+                    .filter(s => {
+                        const sStream = s.Stream || "Regular";
+                        return s.Date === date && s.Time === time && s.Course === selectedCourse && sStream === selectedStream;
+                    })
+                    .map(s => ({ ...s }));
+
+                if (countDisplay) {
+                    countDisplay.textContent = `Students: ${currentCourseStudents.length} | Stream: ${selectedStream}`;
+                    countDisplay.classList.remove('hidden');
+                }
+
+                renderStudentEditTable();
+                editSaveSection.classList.remove('hidden');
+                if (addNewStudentBtn) addNewStudentBtn.classList.remove('hidden');
+            } else {
+                currentEditCourse = '';
+                currentEditStream = '';
+                editDataContainer.innerHTML = '';
+                editPaginationControls.classList.add('hidden');
+                editSaveSection.classList.add('hidden');
+                if (addNewStudentBtn) addNewStudentBtn.classList.add('hidden');
+                if (countDisplay) countDisplay.classList.add('hidden');
+                if (typeof toggleEditDataLockBtn !== 'undefined' && toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
+                
+                const bulk = document.getElementById('bulk-course-update-container');
+                if (bulk) bulk.classList.add('hidden');
+            }
+        });
+    }
+
+    // 3. Render Table
     function renderStudentEditTable() {
         editDataContainer.innerHTML = '';
 
@@ -10280,7 +10258,6 @@ function renderScribeAllotmentList(sessionKey) {
         const end = start + STUDENTS_PER_EDIT_PAGE;
         const pageStudents = currentCourseStudents.slice(start, end);
 
-        // --- LOCK CHECK ---
         const isLocked = (typeof isEditDataLocked !== 'undefined') ? isEditDataLocked : false;
         const btnState = isLocked ? 'disabled' : '';
         const btnOpacity = isLocked ? 'opacity-50 cursor-not-allowed' : '';
@@ -10294,48 +10271,37 @@ function renderScribeAllotmentList(sessionKey) {
                         <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
                         <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th> <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
                         <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
-    `;
+        `;
 
         pageStudents.forEach((student, index) => {
             const uniqueRowIndex = start + index;
             const serialNo = uniqueRowIndex + 1;
             const streamDisplay = student.Stream || "Regular";
-            const examDisplay = student['Exam Name'] || '-'; // ADDED
+            const examDisplay = student['Exam Name'] || '-';
 
-            // --- Desktop Row HTML ---
             const desktopRow = `
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                ${serialNo}
-            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">${serialNo}</td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <div class="font-bold">${student.Date}</div>
                 <div class="text-xs text-gray-500">${student.Time}</div>
             </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
-                ${student['Register Number']}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${student.Name}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold"> ${examDisplay}
-            </td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">${student['Register Number']}</td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">${student.Name}</td>
+            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold">${examDisplay}</td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                ${streamDisplay}
-                </span>
+                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">${streamDisplay}</span>
             </td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 transition ${btnOpacity}" ${btnState}>Edit</button>
                 <button class="delete-row-btn text-red-600 hover:text-red-900 transition ${btnOpacity}" ${btnState}>Delete</button>
-            </td>
-        `;
+            </td>`;
 
-            // --- Mobile Card HTML ---
             const mobileCard = `
             <td class="md:hidden block p-3 w-full border-b border-gray-100 last:border-0 bg-white">
                 <div class="flex items-start gap-3 mb-3 w-full">
@@ -10344,65 +10310,31 @@ function renderScribeAllotmentList(sessionKey) {
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap justify-between items-start gap-1">
-                            <div class="text-sm font-bold text-gray-900 leading-tight break-words pr-1 max-w-full">
-                                ${student.Name}
-                            </div>
-                            <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">
-                                ${streamDisplay}
-                            </span>
+                            <div class="text-sm font-bold text-gray-900 leading-tight break-words pr-1 max-w-full">${student.Name}</div>
+                            <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">${streamDisplay}</span>
                         </div>
-                        <div class="text-xs text-gray-500 font-mono mt-1 font-semibold tracking-wide break-all">
-                            ${student['Register Number']}
-                        </div>
+                        <div class="text-xs text-gray-500 font-mono mt-1 font-semibold tracking-wide break-all">${student['Register Number']}</div>
                     </div>
                 </div>
-                
                 <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs bg-gray-50 p-2.5 rounded-lg border border-gray-100 mb-3">
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Exam Name</span>
-                        <span class="font-bold text-indigo-700 whitespace-nowrap">${examDisplay}</span> </div>
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
-                        <span class="font-medium text-gray-700 whitespace-nowrap">${student.Date}</span>
-                    </div>
-                    <div class="col-span-2 border-t border-gray-200 pt-1 mt-1">
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Course</span>
-                        <span class="font-medium text-gray-700 block break-words whitespace-normal leading-snug" title="${student.Course}">
-                            ${student.Course}
-                        </span>
-                    </div>
+                    <div><span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Exam</span><span class="font-bold text-indigo-700 whitespace-nowrap">${examDisplay}</span></div>
+                    <div><span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Date</span><span class="font-medium text-gray-700 whitespace-nowrap">${student.Date}</span></div>
                 </div>
-
                 <div class="flex gap-2">
-                    <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        Edit
-                    </button>
-                    <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        Delete
-                    </button>
+                    <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>Edit</button>
+                    <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>Delete</button>
                 </div>
-            </td>
-            `;
+            </td>`;
 
-            tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row bg-white md:border-b border-gray-200 last:border-0">
-                ${desktopRow}
-                ${mobileCard}
-            </tr>
-            `;
+            tableHtml += `<tr data-row-index="${uniqueRowIndex}" class="block md:table-row bg-white md:border-b border-gray-200 last:border-0">${desktopRow}${mobileCard}</tr>`;
         });
 
         tableHtml += `</tbody></table></div>`;
         editDataContainer.innerHTML = tableHtml;
         renderEditPagination(currentCourseStudents.length);
     }
-    
 
-
-
-    // 4. Render Pagination (Same as before)
+    // 4. Pagination
     function renderEditPagination(totalStudents) {
         if (totalStudents <= STUDENTS_PER_EDIT_PAGE) {
             editPaginationControls.classList.add('hidden');
@@ -10414,287 +10346,192 @@ function renderScribeAllotmentList(sessionKey) {
         editPrevPage.disabled = (editCurrentPage === 1);
         editNextPage.disabled = (editCurrentPage === totalPages);
     }
-    editPrevPage.addEventListener('click', () => {
-        if (editCurrentPage > 1) {
-            editCurrentPage--;
-            renderStudentEditTable();
-        }
+    
+    if (editPrevPage) editPrevPage.addEventListener('click', () => {
+        if (editCurrentPage > 1) { editCurrentPage--; renderStudentEditTable(); }
     });
-    editNextPage.addEventListener('click', () => {
+    if (editNextPage) editNextPage.addEventListener('click', () => {
         const totalPages = Math.ceil(currentCourseStudents.length / STUDENTS_PER_EDIT_PAGE);
-        if (editCurrentPage < totalPages) {
-            editCurrentPage++;
-            renderStudentEditTable();
-        }
+        if (editCurrentPage < totalPages) { editCurrentPage++; renderStudentEditTable(); }
     });
 
-    // 5. "Add New Student" button listener (NEW: Opens modal)
-    addNewStudentBtn.addEventListener('click', () => {
-        openStudentEditModal(null); // Pass null to indicate a new student
-    });
-
-    // 6. Handle Edit/Delete Clicks (NEW: Opens modal)
-    editDataContainer.addEventListener('click', (e) => {
-        const target = e.target;
-        if (!target.closest('tr')) return; // Guard clause if click is not on a row
-        const rowIndex = target.closest('tr').dataset.rowIndex;
-        if (rowIndex === undefined) return; // Guard clause
-
-        if (target.classList.contains('edit-row-btn')) {
-            // --- Open Edit Modal ---
-            openStudentEditModal(rowIndex);
-
-        } else if (target.classList.contains('delete-row-btn')) {
-            // --- Delete Row ---
-            if (confirm('Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
-                currentCourseStudents.splice(rowIndex, 1); // Remove from the array
-                renderStudentEditTable(); // Re-render the table
-                setUnsavedChanges(true);
-            }
-        }
-    });
-
-    // 7. NEW Function: Open the Edit/Add Modal
+    // 5. Open Modal
     function openStudentEditModal(rowIndex) {
-        // Populate Stream Dropdown
         const streamSelect = document.getElementById('modal-edit-stream');
-        streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        if (streamSelect && typeof currentStreamConfig !== 'undefined') {
+            streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
 
-        // Helper to convert DD.MM.YYYY -> YYYY-MM-DD
-        const toInputDate = (dateStr) => {
-            if (!dateStr) return "";
-            const [d, m, y] = dateStr.split('.');
-            return `${y}-${m}-${d}`;
-        };
-
-        // Helper to convert HH:MM AM/PM -> HH:MM (24h)
-        const toInputTime = (timeStr) => {
-            if (!timeStr) return "";
-            const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-            if (!match) return "";
-            let [_, h, m, p] = match;
+        const toInputDate = (d) => { if (!d) return ""; const [da, mo, ye] = d.split('.'); return `${ye}-${mo}-${da}`; };
+        const toInputTime = (t) => {
+            if (!t) return "";
+            const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+            if (!m) return "";
+            let [_, h, min, p] = m;
             h = parseInt(h);
             if (p.toUpperCase() === 'PM' && h < 12) h += 12;
             if (p.toUpperCase() === 'AM' && h === 12) h = 0;
-            return `${String(h).padStart(2, '0')}:${m}`;
+            return `${String(h).padStart(2, '0')}:${min}`;
         };
 
         if (rowIndex === null) {
-            // --- ADDING A NEW STUDENT ---
+            // ADD NEW
             modalTitle.textContent = "Add New Student";
             currentlyEditingIndex = null;
-
             const [date, time] = currentEditSession.split(' | ');
             modalDate.value = toInputDate(date);
             modalTime.value = toInputTime(time);
             modalCourse.value = currentEditCourse;
-            modalExamName.value = ""; // NEW: Clear Exam Name
+            if(modalExamName) modalExamName.value = ""; 
             modalRegNo.value = "ENTER_REG_NO";
             modalName.value = "New Student";
-            streamSelect.value = currentStreamConfig[0];
+            if(streamSelect) streamSelect.value = (typeof currentStreamConfig !== 'undefined' ? currentStreamConfig[0] : "Regular");
         } else {
-            // --- EDITING AN EXISTING STUDENT ---
+            // EDIT EXISTING
             modalTitle.textContent = "Edit Student Details";
             currentlyEditingIndex = rowIndex;
             const student = currentCourseStudents[rowIndex];
-
             modalDate.value = toInputDate(student.Date);
             modalTime.value = toInputTime(student.Time);
             modalCourse.value = student.Course;
-            // Inside openStudentEditModal...
-    
+            
             const existingExam = student['Exam Name'] || '';
-    
-    // Check if the student's exam exists in our dropdown
-            const examOptionExists = [...modalExamName.options].some(o => o.value === existingExam);
-    
-            if (existingExam && !examOptionExists) {
-        // If the student has a weird/old exam name not in the list, add it temporarily so we don't lose it
-            const tempOpt = document.createElement('option');
-            tempOpt.value = existingExam;
-            tempOpt.textContent = `${existingExam} (Not in Master List)`;
-            modalExamName.appendChild(tempOpt);
+            if (modalExamName) {
+                const exists = [...modalExamName.options].some(o => o.value === existingExam);
+                if (existingExam && !exists) {
+                    const opt = document.createElement('option');
+                    opt.value = existingExam;
+                    opt.textContent = `${existingExam} (Not in list)`;
+                    modalExamName.appendChild(opt);
+                }
+                modalExamName.value = existingExam;
             }
-    
-            modalExamName.value = existingExam;
             modalRegNo.value = student['Register Number'];
             modalName.value = student.Name;
-            streamSelect.value = student.Stream || currentStreamConfig[0];
-            }
+            if(streamSelect) streamSelect.value = student.Stream || "Regular";
+        }
+        studentEditModal.classList.remove('hidden');
+    }
 
-            studentEditModal.classList.remove('hidden');
-            }
-
-    // 8. NEW Function: Close the modal
     function closeStudentEditModal() {
         studentEditModal.classList.add('hidden');
         currentlyEditingIndex = null;
     }
 
-    // 9. NEW Event Listeners for Modal Buttons
-    modalCancelBtn.addEventListener('click', closeStudentEditModal);
+    if (addNewStudentBtn) addNewStudentBtn.addEventListener('click', () => openStudentEditModal(null));
+    if (modalCancelBtn) modalCancelBtn.addEventListener('click', closeStudentEditModal);
 
-    // [In app.js]
+    // 6. Handle Clicks
+    if (editDataContainer) {
+        editDataContainer.addEventListener('click', (e) => {
+            const target = e.target;
+            const row = target.closest('tr');
+            if (!row) return;
+            const rowIndex = row.dataset.rowIndex;
+            if (rowIndex === undefined) return;
 
-    // [In app.js]
-    modalSaveBtn.addEventListener('click', () => {
-        // 1. Capture Inputs
-        const rawDate = modalDate.value;
-        const rawTime = modalTime.value;
-        const newCourse = modalCourse.value.trim();
-        const newRegNo = modalRegNo.value.trim();
-        const newName = modalName.value.trim();
-        const newExamName = modalExamName.value.trim(); // NEW
-        const newStream = document.getElementById('modal-edit-stream').value;
-
-        let finalDate = "";
-        let finalTime = "";
-
-        // 2. Helper: Date/Time Converters
-        const processDate = (dStr) => {
-            if (!dStr) return "";
-            const [y, m, d] = dStr.split('-');
-            return `${d}.${m}.${y}`;
-        };
-
-        const processTime = (tStr) => {
-            if (typeof normalizeTime === 'function') return normalizeTime(tStr);
-            return tStr;
-        };
-
-        // 3. MERGE LOGIC
-        let studentObj = {};
-
-        if (currentlyEditingIndex !== null) {
-            // --- EDIT MODE ---
-            const original = currentCourseStudents[currentlyEditingIndex];
-            finalDate = rawDate ? processDate(rawDate) : original.Date;
-            const timeToProcess = rawTime ? rawTime : original.Time;
-            finalTime = processTime(timeToProcess);
-
-            studentObj = {
-                Date: finalDate,
-                Time: finalTime,
-                Course: newCourse || original.Course,
-                'Register Number': newRegNo || original['Register Number'],
-                Name: newName || original.Name,
-                Stream: newStream || original.Stream || "Regular",
-                'Exam Name': newExamName || original['Exam Name'] // NEW
-            };
-        } else {
-            // --- ADD MODE ---
-            if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
-                alert('For a new student, all fields are required.');
-                return;
+            if (target.classList.contains('edit-row-btn')) {
+                openStudentEditModal(rowIndex);
+            } else if (target.classList.contains('delete-row-btn')) {
+                if (confirm('Delete this record?')) {
+                    currentCourseStudents.splice(rowIndex, 1);
+                    renderStudentEditTable();
+                    if(typeof setUnsavedChanges === 'function') setUnsavedChanges(true);
+                }
             }
-            studentObj = {
-                Date: processDate(rawDate),
-                Time: processTime(rawTime),
-                Course: newCourse,
-                'Register Number': newRegNo,
-                Name: newName,
-                Stream: newStream,
-                'Exam Name': newExamName // NEW
+        });
+    }
+
+    // 7. Save Student
+    if (modalSaveBtn) {
+        modalSaveBtn.addEventListener('click', () => {
+            const processDate = (dStr) => { if (!dStr) return ""; const [y, m, d] = dStr.split('-'); return `${d}.${m}.${y}`; };
+            const processTime = (tStr) => { 
+                if(typeof normalizeTime === 'function') return normalizeTime(tStr); 
+                return tStr; 
             };
-        }
 
-        // 4. Save & Close
-        if (confirm("Save changes?")) {
-            if (currentlyEditingIndex !== null) {
-                currentCourseStudents[currentlyEditingIndex] = studentObj;
-            } else {
-                currentCourseStudents.push(studentObj);
+            const studentObj = {
+                Date: processDate(modalDate.value),
+                Time: processTime(modalTime.value),
+                Course: modalCourse.value.trim(),
+                'Register Number': modalRegNo.value.trim(),
+                Name: modalName.value.trim(),
+                Stream: document.getElementById('modal-edit-stream').value,
+                'Exam Name': modalExamName ? modalExamName.value.trim() : ''
+            };
+
+            if (!studentObj['Register Number'] || !studentObj.Name) return alert("Fields required.");
+
+            if (confirm("Save changes?")) {
+                if (currentlyEditingIndex !== null) {
+                    currentCourseStudents[currentlyEditingIndex] = studentObj;
+                } else {
+                    currentCourseStudents.push(studentObj);
+                }
+                if(typeof setUnsavedChanges === 'function') setUnsavedChanges(true);
+                closeStudentEditModal();
+                renderStudentEditTable();
             }
-            setUnsavedChanges(true);
-            closeStudentEditModal();
-            renderStudentEditTable();
-        }
-    });
+        });
+    }
 
-    // 10. Save All Changes to LocalStorage
-    saveEditDataButton.addEventListener('click', () => {
-        if (!hasUnsavedEdits) {
-            editDataStatus.textContent = 'No changes to save.';
-            setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
-            return;
-        }
-
-        if (confirm('This will permanently save all edits, additions, and deletions for this course/session to the main data source. Continue?')) {
-
-            const [date, time] = currentEditSession.split(' | ');
-            const course = currentEditCourse;
-            const stream = currentEditStream; // <--- Use Global Stream
-
-            // 1. Filter out matching records (STRICT STREAM CHECK)
-            // We keep everything that DOES NOT match our current view
-            const otherStudents = allStudentData.filter(s => {
-                const sStream = s.Stream || "Regular";
-                return !(s.Date === date &&
-                    s.Time === time &&
-                    s.Course === course &&
-                    sStream === stream);
-            });
-
-            // 2. Create the new master list
-            const updatedAllStudentData = [...otherStudents, ...currentCourseStudents];
-
-            // 3. Update the global variable and localStorage
-            allStudentData = updatedAllStudentData;
-            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-
-            editDataStatus.textContent = 'All changes saved successfully!';
-            setUnsavedChanges(false);
-            setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
-            if (typeof syncDataToCloud === 'function') syncSessionToCloud(currentEditSession);
-
-            // 4. Reload other parts of the app
-            jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-            updateUniqueStudentList();
-            populate_session_dropdown();
-            populate_qp_code_session_dropdown();
-            populate_room_allotment_session_dropdown();
-
-            // 5. Reload the current view
-            currentCourseStudents = allStudentData
-                .filter(s => {
+    // 8. Save All Changes
+    if (saveEditDataButton) {
+        saveEditDataButton.addEventListener('click', () => {
+            if (!hasUnsavedEdits) return;
+            if (confirm('Permanently save all changes to main database?')) {
+                const [date, time] = currentEditSession.split(' | ');
+                
+                const otherStudents = allStudentData.filter(s => {
                     const sStream = s.Stream || "Regular";
-                    return s.Date === date &&
-                        s.Time === time &&
-                        s.Course === course &&
-                        sStream === stream;
-                })
-                .map(s => ({ ...s }));
+                    return !(s.Date === date && s.Time === time && s.Course === currentEditCourse && sStream === currentEditStream);
+                });
 
-            renderStudentEditTable();
-        }
-    });
+                allStudentData = [...otherStudents, ...currentCourseStudents];
+                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
 
-    // 11. Helper function to manage "unsaved" status (Auto-Disable Button)
+                if(typeof setUnsavedChanges === 'function') setUnsavedChanges(false);
+                if (editDataStatus) {
+                    editDataStatus.textContent = 'Saved!';
+                    setTimeout(() => editDataStatus.textContent = '', 2000);
+                }
+                if (typeof syncDataToCloud === 'function') syncSessionToCloud(currentEditSession);
+                
+                // Refresh App State
+                if (typeof jsonDataStore !== 'undefined') jsonDataStore.innerHTML = JSON.stringify(allStudentData);
+                if (typeof updateUniqueStudentList === 'function') updateUniqueStudentList();
+                if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+                
+                renderStudentEditTable();
+            }
+        });
+    }
+
     function setUnsavedChanges(status) {
         hasUnsavedEdits = status;
         const btn = document.getElementById('save-edit-data-button');
-        const statusText = document.getElementById('edit-data-status');
-
+        const txt = document.getElementById('edit-data-status');
         if (status) {
-            // STATE: CHANGES DETECTED -> ENABLE BUTTON
-            if (statusText) statusText.textContent = 'You have unsaved changes.';
-            if (btn) {
+            if(txt) txt.textContent = 'Unsaved changes.';
+            if(btn) {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
                 btn.classList.add('bg-green-600', 'hover:bg-green-700');
-                btn.textContent = "Save All Changes to Local Storage";
+                btn.textContent = "Save Changes";
             }
         } else {
-            // STATE: NO CHANGES -> DISABLE BUTTON
-            if (statusText) statusText.textContent = 'No unsaved changes.';
-            if (btn) {
+            if(txt) txt.textContent = '';
+            if(btn) {
                 btn.disabled = true;
                 btn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
                 btn.classList.remove('bg-green-600', 'hover:bg-green-700');
-                btn.textContent = "No Changes to Save";
+                btn.textContent = "No Changes";
             }
         }
     }
+
+    
     // ==========================================
     // ⚡ BULK COURSE UPDATE LOGIC (V3: Course Edit Added)
     // ==========================================
