@@ -813,9 +813,12 @@ function renderSlotsGridAdmin() {
                     if (item.type !== 'REAL') return false;
                     const [kDate, kTime] = item.key.split(' | ');
                     if (kDate !== dateStr) return false;
-                    let [h] = kTime.trim().split(':')[0].split(' '); // Rough parse
-                    if (kTime.includes('PM') && parseInt(h) !== 12) h = parseInt(h) + 12;
-                    if (kTime.includes('AM') && parseInt(h) === 12) h = 0;
+                    
+                    let [h] = kTime.trim().split(':')[0].split(' '); 
+                    let t = kTime.trim().toUpperCase();
+                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;
+                    if (t.includes('AM') && parseInt(h) === 12) h = 0;
+                    
                     const slotPeriod = h < 13 ? 'FN' : 'AN';
                     return slotPeriod === sessionType;
                 });
@@ -851,7 +854,6 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        // 🟢 RESTORED: Week Header with Notify Button
         ui.adminSlotsGrid.innerHTML += `
             <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
@@ -901,6 +903,27 @@ function renderSlotsGridAdmin() {
             const filled = slot.assigned.length;
             const isAdminLocked = slot.isAdminLocked || false;
 
+            // --- 🟢 NEW: Calculate TOTAL Issues (Session + Advance) ---
+            const [dateStr, timeStr] = key.split(' | ');
+            let session = "FN";
+            const t = timeStr ? timeStr.toUpperCase() : "";
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+
+            const uniqueIssues = new Set();
+            
+            // 1. Add Session Specific
+            if (slot.unavailable) {
+                slot.unavailable.forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+            }
+            
+            // 2. Add Advance Leave
+            if (typeof advanceUnavailability !== 'undefined' && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+                advanceUnavailability[dateStr][session].forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+            }
+            
+            const totalIssues = uniqueIssues.size;
+            // -----------------------------------------------------------
+
             let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
             let statusIcon = "🔓";
             
@@ -939,7 +962,7 @@ function renderSlotsGridAdmin() {
                     
                     ${isAdminLocked ? '<div class="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-200 mb-2 text-center">🛡️ Posting Restricted (Admin)</div>' : ''}
                     
-                    ${slot.unavailable && slot.unavailable.length > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2">⛔ ${slot.unavailable.length} Issue(s)</button>` : ''}
+                    ${totalIssues > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2 shadow-sm transition">⛔ ${totalIssues} Issue(s) Reported</button>` : ''}
                     
                     <div class="flex gap-1.5 mt-2">
                         <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
@@ -2778,30 +2801,76 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
     renderStaffTable();
 }
 
-
+// [In invigilation.js]
 
 window.openInconvenienceModal = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || !slot.unavailable) return;
+    if (!slot) return;
+
+    // 1. Gather Slot Specific Unavailability
+    const allUnavailable = [];
+    if (slot.unavailable) {
+        slot.unavailable.forEach(u => {
+            const entry = (typeof u === 'string') ? { email: u, reason: "Unspecified" } : u;
+            allUnavailable.push({ ...entry, type: 'Session' });
+        });
+    }
+
+    // 2. Gather Advance Unavailability (OD/DL/Leave)
+    const [dateStr, timeStr] = key.split(' | ');
+    let session = "FN";
+    const t = timeStr ? timeStr.toUpperCase() : "";
+    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+
+    if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+        advanceUnavailability[dateStr][session].forEach(u => {
+            const email = (typeof u === 'string') ? u : u.email;
+            // Prevent duplicates if user is in both lists
+            if (!allUnavailable.some(existing => existing.email === email)) {
+                const entry = (typeof u === 'string') ? { email: u, reason: "Leave/OD", details: "Advance Leave" } : u;
+                allUnavailable.push({ ...entry, type: 'Advance' }); // Mark source
+            }
+        });
+    }
+
+    if (allUnavailable.length === 0) return alert("No unavailability issues found.");
+
     document.getElementById('inconvenience-modal-subtitle').textContent = key;
     const list = document.getElementById('inconvenience-list');
     list.innerHTML = '';
 
-    slot.unavailable.forEach(u => {
-        const email = (typeof u === 'string') ? u : u.email;
-        const reason = (typeof u === 'object' && u.reason) ? u.reason : "N/A";
-        const details = (typeof u === 'object' && u.details) ? u.details : "No details.";
-        const s = staffData.find(st => st.email === email) || { name: email, phone: "", dept: "Unknown" };
-
-        // Fix Phone Format
+    allUnavailable.forEach(u => {
+        const s = staffData.find(st => st.email === u.email) || { name: u.email, phone: "", dept: "Unknown" };
         let phone = s.phone ? s.phone.replace(/\D/g, '') : "";
         if (phone.length === 10) phone = "91" + phone;
         const hasPhone = phone.length >= 10;
 
-        list.innerHTML += `<div class="bg-red-50 border border-red-100 p-3 rounded-lg"><div class="flex justify-between items-start mb-1"><div><div class="font-bold text-gray-800 text-sm">${s.name}</div><div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept}</div></div><span class="bg-white text-red-600 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 shadow-sm">${reason}</span></div><div class="text-xs text-gray-700 bg-white p-2 rounded border border-gray-100 italic mb-2">"${details}"</div><div class="text-right">${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}</div></div>`;
+        const reason = u.reason || "N/A";
+        const details = u.details || "No details provided.";
+        
+        // Visual distinction for Advance Leave
+        const badgeColor = u.type === 'Advance' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-red-50 text-red-600 border-red-200';
+        const sourceType = u.type === 'Advance' ? '(General Leave)' : '(Session Specific)';
+
+        list.innerHTML += `
+            <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm mb-2">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <div class="font-bold text-gray-800 text-sm">${s.name}</div>
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept} <span class="text-gray-400 font-normal">${sourceType}</span></div>
+                    </div>
+                    <span class="${badgeColor} text-[10px] font-bold px-2 py-0.5 rounded border shadow-sm">${reason}</span>
+                </div>
+                <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 italic mb-2">"${details}"</div>
+                <div class="text-right">
+                    ${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}
+                </div>
+            </div>`;
     });
     window.openModal('inconvenience-modal');
 }
+
+
 
 // --- MISSING HELPER FUNCTIONS ---
 
