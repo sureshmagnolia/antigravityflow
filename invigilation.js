@@ -5788,13 +5788,17 @@ window.filterManualStaff = function () {
         else noResults.classList.remove('hidden');
     }
 }
-// --- MANUAL ALLOCATION (Auto-Select Top N Candidates) ---
+
+
+
+// [In invigilation.js]
+// Replace the existing openManualAllocationModal function with this:
+
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
-    const requiredCount = parseInt(slot.required) || 0; // Capture required count early
+    const requiredCount = parseInt(slot.required) || 0; 
 
     // 1. Admin Lock Check
-    // Manual allocation requires the ADMIN POSTING LOCK.
     if (!slot.isAdminLocked) {
         alert("⚠️ Action Denied.\n\nManual allocation requires the ADMIN POSTING LOCK.\nPlease click the '🛡️ Admin' lock button for this slot first.");
         return;
@@ -5824,6 +5828,7 @@ window.openManualAllocationModal = function (key) {
     const staffContext = {};
     staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
 
+    // Build Context (Check conflicts with other slots)
     Object.keys(invigilationSlots).forEach(k => {
         if (k === key) return;
         const sSlot = invigilationSlots[k];
@@ -5859,12 +5864,12 @@ window.openManualAllocationModal = function (key) {
             let score = pending * 100;
             let badges = [];
 
-            // Penalties (Push to bottom)
+            // Penalties
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
 
-            // --- DEPT SATURATION CHECK ---
+            // Dept Saturation Check
             const assignedList = slot.assigned || [];
             const totalAssigned = assignedList.length;
             const myDeptCount = assignedList.filter(email => {
@@ -5882,7 +5887,6 @@ window.openManualAllocationModal = function (key) {
                     badges.push("Dept Saturation");
                 }
             }
-            // -----------------------------
 
             return { ...s, pending, score, badges };
         })
@@ -5890,25 +5894,40 @@ window.openManualAllocationModal = function (key) {
 
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
-    // --- 5. RENDER & AUTO-SELECT ---
+    // --- 5. RENDER & SELECTION LOGIC ---
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
 
-    // AUTO-SELECTION LOGIC: Always tick the top 'requiredCount' available staff,
-    // following the rank order (top to bottom).
-    let slotsToTick = requiredCount; 
+    // 🟢 FIX: Prioritize Volunteers (Existing Assignments)
+    const assignedSet = new Set(slot.assigned || []);
     let currentSelectionCount = 0;
+    
+    // Count how many assigned people are actually valid/ranked
+    let preFilledCount = 0;
+    rankedStaff.forEach(s => {
+         if(assignedSet.has(s.email)) preFilledCount++;
+    });
+
+    // Determine how many *more* slots we need to auto-fill
+    let slotsToAutoFill = Math.max(0, requiredCount - preFilledCount);
 
     rankedStaff.forEach(s => {
-        // 1. Check Availability (If unavailable, skip and never select)
-        if (isUserUnavailable(slot, s.email, key)) return;
+        const isUnavailable = isUserUnavailable(slot, s.email, key);
+        const isAssigned = assignedSet.has(s.email);
+
+        // Filter: Hide unavailable staff, UNLESS they are already assigned (keep them visible/checked)
+        if (isUnavailable && !isAssigned) return;
 
         let isChecked = false;
 
-        // Tick the top available staff until requiredCount is met.
-        if (slotsToTick > 0) {
+        // SELECTION RULE 1: If they volunteered/are assigned, ALWAYS check them.
+        if (isAssigned) {
             isChecked = true;
-            slotsToTick--;
+        } 
+        // SELECTION RULE 2: If we still have space, auto-check the top ranked staff.
+        else if (slotsToAutoFill > 0) {
+            isChecked = true;
+            slotsToAutoFill--;
         }
 
         if (isChecked) currentSelectionCount++;
@@ -5921,7 +5940,6 @@ window.openManualAllocationModal = function (key) {
             `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
         ).join('');
 
-        // COMPACT ROW DESIGN
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition text-xs">
                 <td class="px-1 py-2 md:px-3 text-center w-8 md:w-10">
@@ -5948,7 +5966,7 @@ window.openManualAllocationModal = function (key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 6. Render Unavailable List (No change)
+    // 6. Render Unavailable List (Unchanged)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
 
@@ -5990,6 +6008,7 @@ window.openManualAllocationModal = function (key) {
     if (reqCountEl) reqCountEl.textContent = requiredCount;
     window.openModal('manual-allocation-modal');
 }
+
 
 
 window.updateManualCounts = function () {
