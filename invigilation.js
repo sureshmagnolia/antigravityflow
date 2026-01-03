@@ -763,6 +763,7 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 
 
 
+
 function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
@@ -799,64 +800,38 @@ function renderSlotsGridAdmin() {
     });
 
     // 2B. COLLECT GHOST SLOTS (Unavailability without Exam)
-    // We check advanceUnavailability for dates in this month
     if (typeof advanceUnavailability !== 'undefined') {
         Object.keys(advanceUnavailability).forEach(dateStr => {
             const [d, m, y] = dateStr.split('.').map(Number);
-            // Check Month Match (Note: JS Month is 0-11, stored date usually 1-12)
             if (m - 1 !== currentAdminDate.getMonth() || y !== currentAdminDate.getFullYear()) return;
 
             const dateObj = new Date(y, m - 1, d);
             const leaves = advanceUnavailability[dateStr];
 
-            // Helper to check if a REAL slot already exists for this session
             const hasRealSlot = (sessionType) => {
                 return slotItems.some(item => {
                     if (item.type !== 'REAL') return false;
                     const [kDate, kTime] = item.key.split(' | ');
                     if (kDate !== dateStr) return false;
-                    
-                    // Determine Period of real slot
-                    let t = kTime.trim().toUpperCase();
-                    let isAN = (t.includes("PM") && !t.startsWith("12")) || t.startsWith("12") || t.startsWith("01") || t.startsWith("02") || t.startsWith("03"); // Rough heuristic
-                    // Better Heuristic:
-                    let [h] = t.split(':').map(Number);
-                    if (t.includes('PM') && h !== 12) h += 12;
-                    if (t.includes('AM') && h === 12) h = 0;
-                    
+                    let [h] = kTime.trim().split(':')[0].split(' '); // Rough parse
+                    if (kTime.includes('PM') && parseInt(h) !== 12) h = parseInt(h) + 12;
+                    if (kTime.includes('AM') && parseInt(h) === 12) h = 0;
                     const slotPeriod = h < 13 ? 'FN' : 'AN';
                     return slotPeriod === sessionType;
                 });
             };
 
-            // Check FN
             if (leaves.FN && leaves.FN.length > 0 && !hasRealSlot('FN')) {
-                slotItems.push({
-                    key: `${dateStr} | FN`,
-                    date: dateObj,
-                    type: 'GHOST',
-                    session: 'FN',
-                    count: leaves.FN.length,
-                    list: leaves.FN
-                });
+                slotItems.push({ key: `${dateStr} | FN`, date: dateObj, type: 'GHOST', session: 'FN', count: leaves.FN.length, list: leaves.FN });
             }
-
-            // Check AN
             if (leaves.AN && leaves.AN.length > 0 && !hasRealSlot('AN')) {
-                slotItems.push({
-                    key: `${dateStr} | AN`,
-                    date: dateObj,
-                    type: 'GHOST',
-                    session: 'AN',
-                    count: leaves.AN.length,
-                    list: leaves.AN
-                });
+                slotItems.push({ key: `${dateStr} | AN`, date: dateObj, type: 'GHOST', session: 'AN', count: leaves.AN.length, list: leaves.AN });
             }
         });
     }
 
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions or leaves found this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
         return;
     }
 
@@ -872,32 +847,39 @@ function renderSlotsGridAdmin() {
 
     const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => groupedSlots[a].items[0].date - groupedSlots[b].items[0].date);
 
-    // 4. Render Grid
+    // 4. Render Groups
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        // Week Header
+        // 🟢 RESTORED: Week Header with Notify Button
         ui.adminSlotsGrid.innerHTML += `
             <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
                     Week ${group.week}
                 </span>
                 <div class="flex gap-2">
+                    <div class="flex rounded shadow-sm">
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-l hover:bg-gray-50 font-bold border-r-0" title="Lock Standard Booking">🔒 Std</button>
+                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
+                    </div>
+                    <div class="flex rounded shadow-sm">
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
+                    </div>
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
+                    
+                    <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" class="text-[10px] bg-green-600 text-white border border-green-700 px-2 py-1 rounded hover:bg-green-700 font-bold shadow-sm flex items-center gap-1">📢 Notify</button>
                 </div>
             </div>`;
 
         group.items.sort((a, b) => {
             if (a.date - b.date !== 0) return a.date - b.date;
-            // Sort FN before AN
             const aS = a.key.includes('FN') || (a.key.includes('AM') && !a.key.includes('12:')) ? 0 : 1;
             const bS = b.key.includes('FN') || (b.key.includes('AM') && !b.key.includes('12:')) ? 0 : 1;
             return aS - bS;
         });
 
         group.items.forEach((item) => {
-            
-            // --- RENDER GHOST CARD (No Exam, Only Leaves) ---
             if (item.type === 'GHOST') {
                 const encodedList = encodeURIComponent(JSON.stringify(item.list));
                 ui.adminSlotsGrid.innerHTML += `
@@ -909,19 +891,12 @@ function renderSlotsGridAdmin() {
                             </h4>
                             <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">No Exam</span>
                         </div>
-                        
-                        <div class="text-[10px] text-gray-500 mb-3 italic">
-                            No exam scheduled, but staff have reported unavailability.
-                        </div>
-
-                        <button onclick="openGhostUnavailabilityModal('${item.key}', '${encodedList}')" class="w-full bg-white text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 flex items-center justify-center gap-1 shadow-sm">
-                            ⛔ View ${item.count} Unavailability
-                        </button>
+                        <div class="text-[10px] text-gray-500 mb-3 italic">No exam scheduled, but staff have reported unavailability.</div>
+                        <button onclick="openGhostUnavailabilityModal('${item.key}', '${encodedList}')" class="w-full bg-white text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 flex items-center justify-center gap-1 shadow-sm">⛔ View ${item.count} Unavailability</button>
                     </div>`;
                 return;
             }
 
-            // --- RENDER REAL SLOT (Existing Logic) ---
             const { key, slot } = item;
             const filled = slot.assigned.length;
             const isAdminLocked = slot.isAdminLocked || false;
@@ -986,6 +961,7 @@ function renderSlotsGridAdmin() {
     });
     ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
 }
+
 
 
 
