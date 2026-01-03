@@ -8208,6 +8208,15 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     const dutiesByEmail = {};
     window.currentEmailQueue = []; // Reset Queue
 
+    // --- FIX: Safe College Name Retrieval ---
+    let safeCollegeName = "University of Calicut"; // Default
+    if (typeof currentCollegeName !== 'undefined') {
+        safeCollegeName = currentCollegeName;
+    } else if (localStorage.getItem('examCollegeName')) {
+        safeCollegeName = localStorage.getItem('examCollegeName');
+    }
+    // ----------------------------------------
+
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
@@ -8248,6 +8257,8 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         // Generate Beautiful Email Body
         const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('%0D%0A');
         const subject = encodeURIComponent(`Exam Duty Assignment - Week ${weekNum}`);
+        
+        // --- FIX: Used safeCollegeName here ---
         const body = encodeURIComponent(
 `Dear ${name},
 
@@ -8259,7 +8270,7 @@ Please report to the Exam Cell at least 20 minutes prior to the commencement of 
 
 Thank you,
 Chief Superintendent
-${currentCollegeName || "University of Calicut"}
+${safeCollegeName}
 `);
         
         // Add to Queue
@@ -8303,6 +8314,8 @@ ${currentCollegeName || "University of Calicut"}
             let cleanNum = phone.replace(/\D/g, '');
             if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
             if (cleanNum.length >= 10) {
+                // Assuming generateWeeklyWhatsApp is available globally or needs similar fix?
+                // It usually handles currentCollegeName internally with a typeof check, so it's safe.
                 const waMsg = generateWeeklyWhatsApp(item.name, item.duties);
                 waLink = `https://wa.me/${cleanNum}?text=${encodeURIComponent(waMsg)}`;
                 waClass = "bg-[#25D366] hover:bg-[#128C7E] text-white border-transparent";
