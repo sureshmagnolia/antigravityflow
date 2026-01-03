@@ -16592,17 +16592,16 @@ window.executeBulkDelete = async function() {
 // so you don't strictly need it here, but the openManualNewTab logic handles the rest.
     
 // ==========================================
-    // ☁️ FORCE CLOUD SYNC (Header Button)
-    // ==========================================
+// ☁️ FORCE CLOUD SYNC (Header Button)
+// ==========================================
     const headerSyncStatus = document.getElementById('sync-status');
-    
     if (headerSyncStatus) {
         // 1. Visual Cues
         headerSyncStatus.style.cursor = "pointer";
         headerSyncStatus.title = "Click to Force Save to Cloud";
-        headerSyncStatus.classList.add("hover:underline"); // Add underline on hover
+        headerSyncStatus.classList.add("hover:underline");
 
-       // 2. Click Handler
+        // 2. Click Handler
         headerSyncStatus.addEventListener('click', async () => {
             const currentText = headerSyncStatus.textContent;
             if (currentText === "Saving..." || currentText === "Connecting...") return;
@@ -16610,7 +16609,7 @@ window.executeBulkDelete = async function() {
             if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
                     updateSyncStatus("Saving...", "neutral");
-        
+
                     // MODULAR FORCE SYNC (V2)
                     updateSyncStatus("Syncing Global Config...", "neutral");
                     await syncDataToCloud('settings');
@@ -16618,7 +16617,6 @@ window.executeBulkDelete = async function() {
                     await syncDataToCloud('allocation');
                     await syncDataToCloud('staff');
                     await syncDataToCloud('slots');
-                    // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
                     // Iteratively sync all sessions (Ensures V2 documents are fresh)
                     const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
@@ -16628,14 +16626,17 @@ window.executeBulkDelete = async function() {
                         updateSyncStatus(`Syncing Session ${count}/${allSessions.size}...`, "neutral");
                         await syncSessionToCloud(sessionKey);
                     }
-                    
+
                     updateSyncStatus("All Synced!", "success");
                 } else {
-                    alert("Sync function is not ready yet.");
+                    alert("Sync function not ready. Please wait a moment.");
                 }
             }
         });
     }
+
+}); // <--- CRITICAL: This closes the main DOMContentLoaded event
+            
     // Initial Call (in case we start on settings page or refresh)
     updateStudentPortalLink();
     // --- NEW: Restore Last Active Tab ---
