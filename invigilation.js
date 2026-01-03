@@ -8330,6 +8330,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 // Global Queue for Departments
 window.currentDeptEmailQueue = [];
 
+
 // --- 2. DEPARTMENT BULK MESSAGING UI (APPS SCRIPT) ---
 window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
@@ -8338,8 +8339,8 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     subtitle.textContent = "Send consolidated summaries via System (AppScript).";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
-    // 1. Gather Data by Dept
-    const deptData = {};
+    // 1. Gather Raw Duty Data by Dept
+    const rawDeptDuties = {}; 
     window.currentDeptEmailQueue = []; // Reset Queue
     
     Object.keys(invigilationSlots).forEach(key => {
@@ -8358,23 +8359,35 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
                 const dept = staff ? (staff.dept || "Unassigned") : "Unassigned";
                 const name = staff ? staff.name : getNameFromEmail(email);
 
-                if (!deptData[dept]) deptData[dept] = [];
-                deptData[dept].push({ name, date: dStr, session, time: tStr });
+                if (!rawDeptDuties[dept]) rawDeptDuties[dept] = [];
+                // Store raw duty info
+                rawDeptDuties[dept].push({ name, date: dStr, session, time: tStr });
             });
         }
     });
 
-    if (Object.keys(deptData).length === 0) {
+    if (Object.keys(rawDeptDuties).length === 0) {
         list.innerHTML = `<div class="text-center text-gray-500 py-8">No department data found.</div>`;
         return;
     }
 
-    // 2. Prepare Queue
-    const sortedDepts = Object.keys(deptData).sort();
+    // 2. Process Departments
+    const sortedDepts = Object.keys(rawDeptDuties).sort();
     
     sortedDepts.forEach((dept, index) => {
-        const entries = deptData[dept];
+        const entries = rawDeptDuties[dept];
         
+        // 2.1 GROUP BY FACULTY NAME (Crucial Step for Generator)
+        // Transform [ {name:'A',...}, {name:'A',...} ]  -->  [ {name:'A', duties:[...]} ]
+        const facultyMap = {};
+        entries.forEach(e => {
+            if (!facultyMap[e.name]) {
+                facultyMap[e.name] = { name: e.name, duties: [] };
+            }
+            facultyMap[e.name].duties.push({ date: e.date, session: e.session, time: e.time });
+        });
+        const groupedFacultyList = Object.values(facultyMap); // This is what the generator expects
+
         // Find HOD Email
         let hodEmail = "";
         if (typeof departmentsConfig !== 'undefined') {
@@ -8382,9 +8395,8 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             if (deptCfg && deptCfg.email) hodEmail = deptCfg.email;
         }
 
-        // Format HTML Body (Using the existing generator)
-        const facultyList = deptData[dept];
-        const htmlBody = generateDepartmentConsolidatedEmail(dept, facultyList, weekNum, monthStr);
+        // Generate HTML Body
+        const htmlBody = generateDepartmentConsolidatedEmail(dept, groupedFacultyList, weekNum, monthStr);
         const subject = `Consolidated Duty List: ${dept} - Week ${weekNum}`;
 
         // Add to Queue
@@ -8393,8 +8405,8 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             dept: dept,
             email: hodEmail,
             subject: subject,
-            body: htmlBody, // Pre-generated HTML
-            count: facultyList.length,
+            body: htmlBody,
+            count: groupedFacultyList.length, // Count of distinct faculty
             status: 'pending',
             btnId: `btn-dept-${index}`,
             statusId: `status-dept-${index}`
@@ -8450,7 +8462,6 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     html += `</div>`;
     list.innerHTML = html;
 };
-
 
 
 // --- HELPER: Generate Beautiful WhatsApp Message ---
