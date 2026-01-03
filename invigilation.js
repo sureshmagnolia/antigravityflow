@@ -787,6 +787,9 @@ function renderSlotsGridAdmin() {
     // 2. Filter & Group Data
     const slotItems = [];
     Object.keys(invigilationSlots).forEach(key => {
+        // 🟢 HIDE SOFT-DELETED SLOTS
+        if (invigilationSlots[key].isHidden) return; 
+
         const date = parseDate(key);
         if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
             slotItems.push({ key, date: date, slot: invigilationSlots[key] });
@@ -1219,6 +1222,9 @@ function renderStaffCalendar(myEmail) {
     // Group Slots
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
+        // 🟢 HIDE SOFT-DELETED SLOTS
+        if (invigilationSlots[key].isHidden) return;
+
         const [dStr, tStr] = key.split(' | ');
         const [dd, mm, yyyy] = dStr.split('.');
         if (parseInt(mm) === month + 1 && parseInt(yyyy) === year) {
