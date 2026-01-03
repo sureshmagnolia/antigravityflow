@@ -16149,7 +16149,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
 }
 
 // ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (FINAL FIX)
+// 🩺 EXAMFLOW PRE-FLIGHT CHECK
 // ==========================================
 
 async function runSystemHealthCheck() {
@@ -16185,17 +16185,14 @@ async function runSystemHealthCheck() {
     const parseDate = (dateStr) => {
         if (!dateStr) return null;
         try {
-            // Handle DD.MM.YYYY (29.12.2025)
             if (dateStr.includes('.')) {
                 const [d, m, y] = dateStr.trim().split('.');
                 return new Date(`${y}-${m}-${d}T00:00:00`);
             }
-            // Handle DD/MM/YYYY (29/12/2025)
             if (dateStr.includes('/')) {
                 const [d, m, y] = dateStr.trim().split('/');
                 return new Date(`${y}-${m}-${d}T00:00:00`);
             }
-            // Handle YYYY-MM-DD (2025-12-29)
             return new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
         } catch (e) { return null; }
     };
@@ -16217,14 +16214,11 @@ async function runSystemHealthCheck() {
 
         // LAYER 2: SESSION SCOPE & DATA
         const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
-        const scribesList = JSON.parse(localStorage.getItem('examScribes') || '[]');
         
         if (allStudents.length === 0) {
             log('warn', 'Database', 'No student data loaded.');
         } else {
             const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
-            
-            // Get "Today" at Midnight (Local Time)
             const now = new Date();
             now.setHours(0, 0, 0, 0);
 
@@ -16232,17 +16226,13 @@ async function runSystemHealthCheck() {
             const activeDates = uniqueDateStrings
                 .filter(dateStr => {
                     const d = parseDate(dateStr);
-                    // Compare timestamps to be safe
                     return d && d.getTime() >= now.getTime();
                 })
                 .sort((a, b) => parseDate(a) - parseDate(b));
 
             const targetDates = [];
             if (activeDates.length > 0) {
-                // Add the very first upcoming date (Could be Today or Future)
                 targetDates.push(activeDates[0]);
-                
-                // If the first date is Today, also grab the next one (Tomorrow/Next Exam)
                 const firstDate = parseDate(activeDates[0]);
                 if (firstDate.getTime() === now.getTime() && activeDates.length > 1) {
                     targetDates.push(activeDates[1]);
@@ -16254,81 +16244,33 @@ async function runSystemHealthCheck() {
             } else {
                 log('ok', 'Target Scope', `Checking: <strong>${targetDates.join(', ')}</strong>`);
 
-                const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
-                const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
-
+                const targetSessions = new Set(allStudents.filter(s => targetDates.includes(s.Date)).map(s => `${s.Date} | ${s.Time}`));
                 const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
 
                 targetSessions.forEach(sessionKey => {
                     const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
                     
-                    // CHECK 1: ALLOTMENT
                     if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
                         log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
                     }
-
-                    // CHECK 2: SCRIBES
-                    const sessionScribes = scribesList.filter(scribeReg => 
-                        targetStudents.find(s => s.RegNo === scribeReg)
-                    );
-                    
-                    if (sessionScribes.length > 0) {
-                        let allottedScribesCount = 0;
-                        if (allotments[sessionKey]) {
-                             Object.values(allotments[sessionKey]).forEach(room => {
-                                 if (room.students) {
-                                     room.students.forEach(s => { 
-                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; 
-                                     });
-                                 }
-                             });
-                        }
-                        if (allottedScribesCount < sessionScribes.length) {
-                             log('warn', 'Scribe Issue', `Pending scribe allotment in ${sessionName}`);
-                        }
-                    }
-
-                    // CHECK 3: QP CODES
                     if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
                         log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
-                    }
-
-                    // CHECK 4: INVIGILATORS (Only if logged in)
-                    const currentUser = window.firebase?.auth?.currentUser;
-                    if (currentUser) {
-                        const sessionInvigilation = invigilators[sessionKey] || [];
-                        if (sessionInvigilation.length === 0 && allotments[sessionKey]) {
-                            log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
-                        } else if (allotments[sessionKey]) {
-                            log('ok', 'Staffing', `Invigilators assigned.`);
-                        }
                     }
                 });
             }
         }
 
-        // LAYER 3: SYNC CHECK (ROBUST SCOPE)
+        // LAYER 3: SYNC CHECK
         const currentUser = window.firebase?.auth?.currentUser;
         if (currentUser) {
-            // STRATEGY: Try finding the ID in variable scope OR storage
             let activeId = null;
-
-            // 1. Try Variable Scope (Handle ReferenceError if not defined)
             try { if(typeof currentCollegeId !== 'undefined') activeId = currentCollegeId; } catch(e){}
-            
-            // 2. Try Window Scope
             if(!activeId && window.currentCollegeId) activeId = window.currentCollegeId;
-
-            // 3. Try Storage (Backup)
             if (!activeId) activeId = localStorage.getItem('adminCollegeId') || localStorage.getItem('collegeId');
 
             if (activeId) {
-                // AUTO-REPAIR: Save it to localStorage so we don't lose it next time
                 localStorage.setItem('adminCollegeId', activeId);
-                
-                // Real Ping
                 const docRef = window.firebase.doc(window.firebase.db, "colleges", activeId);
                 await window.firebase.getDoc(docRef); 
                 log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeId.slice(-4)})`);
@@ -16368,21 +16310,15 @@ async function runSystemHealthCheck() {
 // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
 function injectSelfCheckButton() {
     setTimeout(() => {
-        // 1. Target the Home/Dashboard View
         const homeTab = document.getElementById('view-home');
         if (!homeTab) return;
-
-        // 2. Find the main white card container inside Home
         const dashboardCard = homeTab.querySelector('.bg-white.shadow-xl');
         
         if (dashboardCard) {
             let checkContainer = document.getElementById('system-check-container');
-            
-            // Create if it doesn't exist
             if (!checkContainer) {
                 checkContainer = document.createElement('div');
                 checkContainer.id = 'system-check-container';
-                // Added 'mt-8' for spacing from the calendar/other content
                 checkContainer.className = "mt-8 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center justify-between shadow-sm gap-4";
                 
                 checkContainer.innerHTML = `
@@ -16390,27 +16326,23 @@ function injectSelfCheckButton() {
                         <h3 class="font-bold text-indigo-900 text-lg flex items-center justify-center sm:justify-start gap-2">
                             <span>🚀</span> System Pre-Flight Check
                         </h3>
-                        <p class="text-sm text-indigo-600 opacity-80 mt-1">Scan Today & Upcoming exams for missing rooms or data errors.</p>
+                        <p class="text-sm text-indigo-600 opacity-80 mt-1">Scan data for errors.</p>
                     </div>
                     <button id="btn-run-self-check" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition transform hover:scale-105 flex items-center justify-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                         </svg>
                         Run Check
                     </button>
                 `;
-
-                // 3. Append to the bottom of the dashboard card
                 dashboardCard.appendChild(checkContainer);
             }
-
-            // Re-attach event listener (safe to do multiple times)
             const btn = document.getElementById('btn-run-self-check');
             if(btn) btn.onclick = runSystemHealthCheck;
         }
-
-    }, 1000); // 1s delay to ensure Dashboard HTML is ready
-})();
+    }, 1000);
+}
+injectSelfCheckButton();
 
 // ==========================================
 // BULK DELETE FUNCTIONS (Global Scope & Corrected Data Source)
@@ -16424,12 +16356,10 @@ window.toggleBulkLock = function() {
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
     const controlsDiv = document.getElementById('bulk-delete-controls');
 
-    // Check if currently locked (disabled)
     const isLocked = startSelect.disabled;
 
     if (isLocked) {
         // --- UNLOCKING ---
-        // 1. Populate Dropdowns (Check Global vs Scope)
         if (typeof populate_session_dropdown === 'function') {
             populate_session_dropdown();
         } else if (typeof window.populate_session_dropdown === 'function') {
@@ -16437,7 +16367,6 @@ window.toggleBulkLock = function() {
         }
         
         if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
-            // Clear and Add Default
             startSelect.innerHTML = '<option value="">-- Select Start --</option>';
             endSelect.innerHTML = '<option value="">-- Select End --</option>';
             
@@ -16452,49 +16381,33 @@ window.toggleBulkLock = function() {
             return;
         }
 
-        // 2. Enable Inputs
         startSelect.disabled = false;
         endSelect.disabled = false;
         deleteBtn.disabled = false;
 
-        // 3. Visual Updates
         startSelect.classList.remove('bg-gray-100');
         startSelect.classList.add('bg-white');
         endSelect.classList.remove('bg-gray-100');
         endSelect.classList.add('bg-white');
         controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
 
-        // 4. Update Button State
-        bulkLockBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-            </svg>
-            <span class="text-rose-600 font-bold text-xs uppercase tracking-wide">Lock Controls</span>
-        `;
-        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 transition active:scale-95";
+        bulkLockBtn.innerHTML = `<span>🔓 Lock Controls</span>`;
+        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 transition active:scale-95 text-rose-600 font-bold";
 
     } else {
         // --- LOCKING ---
-        // 1. Disable Inputs
         startSelect.disabled = true;
         endSelect.disabled = true;
         deleteBtn.disabled = true;
 
-        // 2. Visual Updates
         startSelect.classList.add('bg-gray-100');
         startSelect.classList.remove('bg-white');
         endSelect.classList.add('bg-gray-100');
         endSelect.classList.remove('bg-white');
         controlsDiv.classList.add('opacity-50', 'pointer-events-none');
 
-        // 3. Update Button State
-        bulkLockBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span class="text-gray-600 font-bold text-xs uppercase tracking-wide">Unlock</span>
-        `;
-        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition active:scale-95";
+        bulkLockBtn.innerHTML = `<span>🔒 Unlock</span>`;
+        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition active:scale-95 text-gray-600 font-bold";
     }
 };
 
@@ -16535,7 +16448,7 @@ window.executeBulkDelete = async function() {
             'examScribeAllotment', 
             'examAbsenteeList', 
             'examQPCodes',
-            'examInvigilatorMapping' // Delete mapping, keep volunteers in slots
+            'examInvigilatorMapping'
         ];
 
         hardDeleteKeys.forEach(key => {
@@ -16645,8 +16558,6 @@ window.executeBulkDelete = async function() {
             const view = document.getElementById(savedViewId);
             const nav = document.getElementById(savedNavId);
             if (view && nav) {
-                // Programmatically switch to the saved tab
-                // We assume showView is defined in the parent scope
                 if (typeof showView === 'function') {
                     showView(view, nav);
                 }
@@ -16657,4 +16568,4 @@ window.executeBulkDelete = async function() {
     // Call it after data is loaded
     restoreActiveTab();
 
-}); // <--- FINAL CLOSING BRACKET (Closes DOMContentLoaded)
+}); // <--- FINAL CLOSING BRACKET FOR DOMContentLoaded
