@@ -4433,159 +4433,100 @@ if (exchangeSearch) {
 }
 
 // ==========================================
-// 📢 MESSAGING & ALERTS SYSTEM
+// 📢 MESSAGING & ALERTS SYSTEM (UPDATED UI)
 // ==========================================
 window.openWeeklyNotificationModal = function (monthStr, weekNum) {
-    const list = document.getElementById('notif-list-container');
-    const title = document.getElementById('notif-modal-title');
-    const subtitle = document.getElementById('notif-modal-subtitle');
-
-    title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
-    list.innerHTML = '';
-
-    currentEmailQueue = [];
-
-    // ... (Keep existing duty gathering logic) ...
-    // 1. Gather Duties
-    const facultyDuties = {};
+    // 1. Calculate Date Range for the Week
+    // (Using helper if available, otherwise filtering manually below)
+    
+    // 2. Filter Slots for this Week
+    const relevantSlots = [];
     Object.keys(invigilationSlots).forEach(key => {
+        if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
+        
         if (mStr === monthStr && wNum === weekNum) {
-            const slot = invigilationSlots[key];
-            const [dStr, tStr] = key.split(' | ');
-            const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
-            const sessionCode = isAN ? "AN" : "FN";
-            const dayName = date.toLocaleString('en-us', { weekday: 'short' });
-            slot.assigned.forEach(email => {
-                if (!facultyDuties[email]) facultyDuties[email] = [];
-                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
-            });
+            relevantSlots.push({ key, ...invigilationSlots[key] });
         }
     });
 
-    if (Object.keys(facultyDuties).length === 0) {
-        list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
-        window.openModal('notification-modal');
-        return;
-    }
-    // ... (End gathering logic) ...
+    if (relevantSlots.length === 0) return alert("No duties found for this week.");
 
-    // 2. Add Bulk Buttons (WITH CANCEL BUTTON)
-    list.innerHTML = `
-        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">
-                Queue: <b>${Object.keys(facultyDuties).length}</b> Faculty + Dept Copies.
+    // 3. Build HTML using the specific ID for the container content
+    const container = document.getElementById('weekly-notification-content');
+    
+    // Safety check if the modal structure is not yet injected
+    if (!container) {
+        // Create modal if missing (Generic handler)
+        let modal = document.getElementById('weekly-notification-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'weekly-notification-modal';
+            modal.className = "fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden backdrop-blur-sm";
+            modal.innerHTML = `<div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" id="weekly-notification-content"></div>`;
+            document.body.appendChild(modal);
+        }
+    }
+
+    const modalContent = `
+        <div class="p-6">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">📢 Weekly Notifications</h2>
+                    <p class="text-sm text-gray-500">${monthStr} - Week ${weekNum}</p>
+                </div>
+                <button onclick="closeModal('weekly-notification-modal')" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
-            <div class="flex gap-2">
-                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    Stop / Cancel
-                </button>
-                
-                <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" 
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    Send Bulk Emails
-                </button>
+
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            Found <strong>${relevantSlots.length} sessions</strong> with duties assigned in this week.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="border rounded-xl p-4 hover:shadow-md transition bg-white group cursor-pointer" onclick="triggerBulkStaffEmail('${monthStr}', ${weekNum})">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="p-3 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                        </div>
+                        <h3 class="font-bold text-gray-800">Email Invigilators</h3>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">Send individual duty reminders to each staff member.</p>
+                    <span class="text-xs font-bold text-indigo-600 group-hover:underline">Generate Links &rarr;</span>
+                </div>
+
+                <div class="border rounded-xl p-4 hover:shadow-md transition bg-white group cursor-pointer" onclick="triggerBulkDeptEmail('${monthStr}', ${weekNum})">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="p-3 bg-teal-100 text-teal-600 rounded-lg group-hover:bg-teal-600 group-hover:text-white transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                        </div>
+                        <h3 class="font-bold text-gray-800">Email Departments</h3>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">Send consolidated duty lists to HODs.</p>
+                    <span class="text-xs font-bold text-teal-600 group-hover:underline">Generate Links &rarr;</span>
+                </div>
+            </div>
+
+             <div class="mt-6 text-center">
+                <button onclick="closeModal('weekly-notification-modal')" class="text-sm text-gray-500 hover:text-gray-800 underline">Close</button>
             </div>
         </div>
     `;
 
-    // ... (Rest of the function: Sorting, Aggregating Depts, Rendering List) ...
-    // (Copy the rest of the logic from previous turn or your file here)
-
-    // --- SHORTCUT FOR COPYING ---
-    // Just use the loop logic from the previous `openWeeklyNotificationModal`
-    // The only change was the `list.innerHTML = ...` block above.
-
-    const deptAggregator = {};
-    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
-
-    sortedEmails.forEach((email, index) => {
-        const duties = facultyDuties[email];
-        duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
-        const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
-        const staff = staffData.find(s => s.email === email);
-        const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName);
-        const staffEmail = staff ? staff.email : "";
-
-        let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, '');
-        if (phone.length === 10) phone = "91" + phone;
-
-        // Emails
-        const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
-        const btnId = `email-btn-${index}`;
-
-        if (staffEmail) {
-            currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
-        }
-
-        // Dept Aggregation
-        if (staff && staff.dept) {
-            if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
-            deptAggregator[staff.dept].push({ name: fullName, duties: duties });
-        }
-
-        // WhatsApp (Elaborate & Detailed)
-        const waMsg = generateWeeklyWhatsApp(fullName, duties);
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
-        // SMS (Shortest Possible)
-        const smsMsg = generateWeeklySMS(firstName, duties);
-        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-        // *** NEW: Update Preview Box (Show 1st person's message) ***
-        if (index === 0) {
-            const previewEl = document.getElementById('notif-message-preview');
-            if (previewEl) {
-                previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
-            }
-        }
-
-        const shortDutyStr = dutyString.length > 100 ? dutyString.substring(0, 97) + "..." : dutyString;
-
-
-        const phoneDisabled = phone ? "" : "disabled";
-        const emailDisabled = staffEmail ? "" : "disabled";
-        const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
-
-        list.innerHTML += `
-            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
-                <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-mono truncate">${dutyString}</div>
-                    ${staff && staff.dept ? `<div class="text-[9px] text-gray-400">${staff.dept}</div>` : ''}
-                </div>
-                <div class="flex gap-2 shrink-0">
-                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA</a>
-                </div>
-            </div>
-        `;
-    });
-
-    // Dept Emails
-    const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-    Object.keys(deptAggregator).forEach(deptName => {
-        const deptObj = cleanDepts.find(d => d.name === deptName);
-        if (deptObj && deptObj.email) {
-            const facultyList = deptAggregator[deptName];
-            const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
-            const deptBody = generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr);
-            currentEmailQueue.push({ email: deptObj.email, name: `HOD ${deptName}`, subject: deptSubject, body: deptBody, btnId: null });
-            list.insertAdjacentHTML('beforeend', `<div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1"><span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})</div>`);
-        }
-    });
-
-    window.openModal('notification-modal');
+    document.getElementById('weekly-notification-content').innerHTML = modalContent;
+    window.openModal('weekly-notification-modal');
 }
 
 window.openSlotReminderModal = function (key) {
@@ -8275,6 +8216,128 @@ window.closeModal = function(id) {
     const m = document.getElementById(id);
     if(m) m.classList.add('hidden');
 };
+
+
+
+// --- 1. STAFF BULK EMAIL LOGIC ---
+window.triggerBulkStaffEmail = function(monthStr, weekNum) {
+    const dutiesByEmail = {};
+
+    // Gather Data
+    Object.keys(invigilationSlots).forEach(key => {
+        if (invigilationSlots[key].isHidden) return;
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+
+        if (mStr === monthStr && wNum === weekNum) {
+            invigilationSlots[key].assigned.forEach(email => {
+                if (!dutiesByEmail[email]) dutiesByEmail[email] = [];
+                dutiesByEmail[email].push(key);
+            });
+        }
+    });
+
+    if (Object.keys(dutiesByEmail).length === 0) return alert("No staff duties found.");
+
+    // Generate Links/Content
+    let outputHtml = `<div class="p-6 h-[80vh] flex flex-col">
+        <h3 class="font-bold mb-4 border-b pb-2 text-lg">📧 Invigilator Email Drafts</h3>
+        <div class="flex-1 overflow-y-auto pr-2 custom-scroll">`;
+
+    Object.keys(dutiesByEmail).forEach(email => {
+        const staff = staffData.find(s => s.email === email) || { name: "Staff", email: email };
+        const duties = dutiesByEmail[email].sort().join('\n• ');
+        
+        const subject = encodeURIComponent(`Exam Duty Assignment - Week ${weekNum}`);
+        const body = encodeURIComponent(`Dear ${staff.name},\n\nYou have been assigned the following exam duties:\n\n• ${duties}\n\nPlease report to the exam cell 30 mins prior.\n\nRegards,\nChief Superintendent`);
+        
+        outputHtml += `
+            <div class="flex justify-between items-center mb-3 p-3 bg-gray-50 rounded border border-gray-100 hover:shadow-sm transition">
+                <div>
+                    <div class="font-bold text-gray-800 text-sm">${staff.name}</div>
+                    <div class="text-xs text-gray-500 font-mono">${dutiesByEmail[email].length} Duties</div>
+                </div>
+                <a href="mailto:${email}?subject=${subject}&body=${body}" target="_blank" class="bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-1">
+                   <span>✉️ Open Mail</span>
+                </a>
+            </div>`;
+    });
+    outputHtml += `</div>
+        <div class="pt-4 mt-2 border-t text-right">
+            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-gray-500 text-sm hover:underline mr-4">Back</button>
+            <button onclick="closeModal('weekly-notification-modal')" class="bg-gray-800 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700">Done</button>
+        </div>
+    </div>`;
+
+    document.getElementById('weekly-notification-content').innerHTML = outputHtml;
+};
+
+
+// --- 2. DEPARTMENT BULK EMAIL LOGIC ---
+window.triggerBulkDeptEmail = function(monthStr, weekNum) {
+    const dutiesByDept = {};
+
+    // Gather Data
+    Object.keys(invigilationSlots).forEach(key => {
+        if (invigilationSlots[key].isHidden) return;
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+
+        if (mStr === monthStr && wNum === weekNum) {
+            invigilationSlots[key].assigned.forEach(email => {
+                const staff = staffData.find(s => s.email === email);
+                const dept = staff ? (staff.dept || "Unassigned") : "Unassigned";
+                
+                if (!dutiesByDept[dept]) dutiesByDept[dept] = [];
+                // Add duty text
+                dutiesByDept[dept].push(`${staff ? staff.name : email} : ${key}`);
+            });
+        }
+    });
+
+    if (Object.keys(dutiesByDept).length === 0) return alert("No department data found.");
+
+    // Generate Links/Content
+    let outputHtml = `<div class="p-6 h-[80vh] flex flex-col">
+        <h3 class="font-bold mb-4 border-b pb-2 text-lg">🏢 Department Summaries</h3>
+        <div class="flex-1 overflow-y-auto pr-2 custom-scroll">`;
+
+    Object.keys(dutiesByDept).sort().forEach(dept => {
+        const lines = dutiesByDept[dept].sort().join('\n• ');
+        
+        // Try to find a HOD email if you have one stored, otherwise leave blank
+        const cleanDepts = (typeof departmentsConfig !== 'undefined') ? departmentsConfig : [];
+        const deptObj = cleanDepts.find(d => (typeof d === 'object' ? d.name : d) === dept);
+        const hodEmail = (deptObj && deptObj.email) ? deptObj.email : "";
+
+        const subject = encodeURIComponent(`Invigilation Duty List - ${dept} - Week ${weekNum}`);
+        const body = encodeURIComponent(`Dear HoD ${dept},\n\nThe following faculty members are assigned exam duties this week:\n\n• ${lines}\n\nPlease inform them accordingly.\n\nRegards,\nChief Superintendent`);
+
+        outputHtml += `
+            <div class="flex justify-between items-center mb-3 p-3 bg-gray-50 rounded border border-gray-100 hover:shadow-sm transition">
+                <div>
+                    <div class="font-bold text-gray-800 text-sm">${dept}</div>
+                    <div class="text-xs text-gray-500 font-mono">${dutiesByDept[dept].length} Assignments</div>
+                    ${hodEmail ? `<div class="text-[10px] text-indigo-500 mt-0.5">${hodEmail}</div>` : ''}
+                </div>
+                <a href="mailto:${hodEmail}?subject=${subject}&body=${body}" target="_blank" class="bg-teal-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-teal-700 shadow-sm flex items-center gap-1">
+                   <span>📧 Draft Mail</span>
+                </a>
+            </div>`;
+    });
+    outputHtml += `</div>
+        <div class="pt-4 mt-2 border-t text-right">
+            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-gray-500 text-sm hover:underline mr-4">Back</button>
+            <button onclick="closeModal('weekly-notification-modal')" class="bg-gray-800 text-white px-4 py-2 rounded text-sm font-bold hover:bg-gray-700">Done</button>
+        </div>
+    </div>`;
+
+    document.getElementById('weekly-notification-content').innerHTML = outputHtml;
+};
+
+
 
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
