@@ -16366,7 +16366,7 @@ async function runSystemHealthCheck() {
 }
 
 // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
-(function injectSelfCheckButton() {
+function injectSelfCheckButton() {
     setTimeout(() => {
         // 1. Target the Home/Dashboard View
         const homeTab = document.getElementById('view-home');
