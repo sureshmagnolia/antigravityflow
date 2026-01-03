@@ -8464,7 +8464,7 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 };
 
 
-// --- HELPER: Generate Beautiful WhatsApp Message ---
+// --- HELPER: Generate Weekly WhatsApp (With Reporting Time) ---
 window.generateWeeklyWhatsApp = function(name, duties) {
     const now = new Date();
     const hours = now.getHours();
@@ -8476,7 +8476,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     else greeting = "Good Evening";
 
     // 2. Get College Name Safely
-    const college = localStorage.getItem('examCollegeName') || "EXAMINATION CELL";
+    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "EXAMINATION CELL";
     
     // 3. Build Message
     let msg = `🏛️ *${college.toUpperCase()}*\n`;
@@ -8484,21 +8484,21 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `─────────────────────\n\n`;
     
     msg += `${greeting} *${name}*,\n\n`;
-    msg += `You have been assigned the following exam duties for this week. Kindly note the details below:\n\n`;
+    msg += `Kindly note your invigilation duty schedule for this week:\n\n`;
 
+    // 4. Loop through duties
     duties.forEach(d => {
-        // d contains: { date, day, session, time }
+        // Calculate 30 mins prior
+        const rTime = calculateReportTime(d.time);
+
         msg += `🗓 *${d.date}* (${d.day})\n`;
         msg += `⏰ ${d.session} Session  |  ${d.time}\n`;
+        msg += `↪️ Report by: *${rTime}*\n`;
         msg += `─────────────────────\n`;
     });
 
-    msg += `\n🛑 *INSTRUCTIONS:*\n`;
-    msg += `🔹 Reporting Time: *30 Minutes* before exam start.\n`;
-    msg += `🔹 Control Room: Exam Cell\n`;
-    msg += `🔹 Please ensure mobile phones are in silent mode inside the hall.\n\n`;
-    
-    msg += `Thank you for your support.\n\n`;
+    // 5. Footer
+    msg += `\nThank you for your support.\n\n`;
     msg += `Regards,\n`;
     msg += `*Chief Superintendent*`;
 
