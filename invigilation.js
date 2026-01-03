@@ -8327,16 +8327,15 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 };
 
 
-
 // Global Queue for Departments
 window.currentDeptEmailQueue = [];
 
-// --- 2. DEPARTMENT BULK MESSAGING UI (With Confirmation & Bulk Send) ---
+// --- 2. DEPARTMENT BULK MESSAGING UI (APPS SCRIPT) ---
 window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
 
-    subtitle.textContent = "Review summaries. Use 'Send All' or send individually.";
+    subtitle.textContent = "Send consolidated summaries via System (AppScript).";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     // 1. Gather Data by Dept
@@ -8353,7 +8352,6 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             const [dStr, tStr] = key.split(' | ');
             const isAN = (tStr.includes("PM") || tStr.startsWith("12:"));
             const session = isAN ? "AN" : "FN";
-            const day = date.toLocaleString('en-us', { weekday: 'short' });
 
             invigilationSlots[key].assigned.forEach(email => {
                 const staff = staffData.find(s => s.email === email);
@@ -8361,7 +8359,7 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
                 const name = staff ? staff.name : getNameFromEmail(email);
 
                 if (!deptData[dept]) deptData[dept] = [];
-                deptData[dept].push({ name, date: dStr, day, session, time: tStr });
+                deptData[dept].push({ name, date: dStr, session, time: tStr });
             });
         }
     });
@@ -8374,7 +8372,7 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     // 2. Prepare Queue
     const sortedDepts = Object.keys(deptData).sort();
     
-    sortedDepts.forEach(dept => {
+    sortedDepts.forEach((dept, index) => {
         const entries = deptData[dept];
         
         // Find HOD Email
@@ -8384,37 +8382,28 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             if (deptCfg && deptCfg.email) hodEmail = deptCfg.email;
         }
 
-        // Format Body
-        const personMap = {};
-        entries.forEach(e => {
-            if (!personMap[e.name]) personMap[e.name] = [];
-            personMap[e.name].push(`${e.date} (${e.session})`);
-        });
-
-        let bodyText = `Dear HoD (${dept}),%0D%0A%0D%0AThe following faculty members from your department are assigned exam duties for Week ${weekNum}:%0D%0A%0D%0A`;
-        
-        Object.keys(personMap).sort().forEach(name => {
-            const duties = personMap[name].sort().join(', ');
-            bodyText += `👤 ${name}:%0D%0A   ${duties}%0D%0A%0D%0A`;
-        });
-
-        bodyText += `Please inform the concerned faculty members accordingly.%0D%0A%0D%0AThank you,%0D%0AChief Superintendent`;
-
-        const subject = encodeURIComponent(`Invigilation Duty List - ${dept} - Week ${weekNum}`);
+        // Format HTML Body (Using the existing generator)
+        const facultyList = deptData[dept];
+        const htmlBody = generateDepartmentConsolidatedEmail(dept, facultyList, weekNum, monthStr);
+        const subject = `Consolidated Duty List: ${dept} - Week ${weekNum}`;
 
         // Add to Queue
         window.currentDeptEmailQueue.push({
+            id: index,
             dept: dept,
-            email: hodEmail, // Can be empty, mail client will open with blank "To"
+            email: hodEmail,
             subject: subject,
-            body: bodyText,
-            count: Object.keys(personMap).length
+            body: htmlBody, // Pre-generated HTML
+            count: facultyList.length,
+            status: 'pending',
+            btnId: `btn-dept-${index}`,
+            statusId: `status-dept-${index}`
         });
     });
 
     // 3. Render List with Bulk Button
     let html = `
-    <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4">
+    <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4 sticky top-0 bg-white z-10 pt-2">
         <div class="flex items-center justify-between">
             <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
@@ -8422,32 +8411,36 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             <span class="text-xs font-bold text-gray-500">${window.currentDeptEmailQueue.length} Departments</span>
         </div>
         
-        <button onclick="confirmBulkDeptSend()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+        <button id="btn-bulk-dept-send" onclick="sendBulkDeptEmails()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            Send Emails to All Departments (${window.currentDeptEmailQueue.length})
+            Send All to Departments
         </button>
-        <p class="text-[10px] text-center text-gray-400">Opens default email client for each Head of Department.</p>
+        <div id="dept-progress-bar" class="hidden mt-3 w-full bg-gray-200 rounded-full h-2.5">
+            <div id="dept-progress-fill" class="bg-teal-600 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
+        <p id="dept-status-text" class="text-xs text-center text-gray-500 mt-2 hidden">Initializing...</p>
     </div>
 
     <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1 custom-scroll">`;
 
     // 4. Render Individual Cards
-    window.currentDeptEmailQueue.forEach((item, index) => {
+    window.currentDeptEmailQueue.forEach((item) => {
         const noEmail = !item.email;
-        const btnState = noEmail ? "bg-gray-100 text-gray-500 border-gray-300" : "bg-teal-600 hover:bg-teal-700 text-white";
-        const emailLabel = noEmail ? "No HoD Email" : "Email HoD";
+        const btnState = noEmail ? "disabled opacity-50 bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-600 hover:text-white";
+        const emailLabel = noEmail ? "No Email" : "Send Mail";
 
         html += `
         <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex justify-between items-center group">
             <div class="min-w-0 pr-2">
                 <div class="font-bold text-gray-800 text-sm truncate">${item.dept}</div>
-                <div class="text-xs text-gray-500 mt-0.5 truncate">${item.count} Faculty Members involved</div>
+                <div class="text-xs text-gray-500 mt-0.5 truncate">${item.count} Faculty Involved</div>
                 <div class="text-[10px] ${noEmail ? 'text-red-500 italic' : 'text-teal-600'} mt-1">
                     ${noEmail ? 'Email address not found' : item.email}
                 </div>
+                <div id="${item.statusId}" class="text-[10px] text-gray-400 mt-1 font-mono hidden"></div>
             </div>
             
-            <button onclick="confirmSingleDeptEmail(${index})" class="${btnState} px-4 py-2 rounded text-xs font-bold shadow-sm flex items-center gap-1 transition shrink-0">
+            <button id="${item.btnId}" onclick="sendSingleDeptEmail(${item.id})" class="${btnState} px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-1 transition shrink-0 border">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 <span>${emailLabel}</span> 
             </button>
@@ -8457,6 +8450,7 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     html += `</div>`;
     list.innerHTML = html;
 };
+
 
 
 // --- HELPER: Generate Beautiful WhatsApp Message ---
