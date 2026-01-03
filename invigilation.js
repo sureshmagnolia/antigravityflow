@@ -8224,16 +8224,16 @@ window.closeModal = function(id) {
 // 📧 BULK EMAIL LOGIC HANDLERS
 // ==========================================
 
-// 1. INVIGILATOR INDIVIDUAL EMAILS
+// --- 1. STAFF BULK MESSAGING LOGIC (Email + WhatsApp) ---
 window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
     
-    subtitle.textContent = "Review individual drafts. Click 'Open Mail' to send.";
+    subtitle.textContent = "Review drafts. Click 'WhatsApp' or 'Email' to send.";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     // 1. Gather & Group Data
-    const facultyDuties = {};
+    const dutiesByEmail = {};
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
@@ -8242,16 +8242,29 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 
         if (mStr === monthStr && wNum === weekNum) {
             const [dStr, tStr] = key.split(' | ');
-            const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("13:") || tStr.startsWith("14:"));
-            const sessionCode = isAN ? "AN" : "FN";
+            // Determine Session Code
+            let sessionCode = "FN";
+            const t = tStr.toUpperCase();
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("13:") || t.startsWith("14:")) sessionCode = "AN";
+            
             const dayName = date.toLocaleString('en-us', { weekday: 'short' });
             
             invigilationSlots[key].assigned.forEach(email => {
-                if (!facultyDuties[email]) facultyDuties[email] = [];
-                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
+                if (!dutiesByEmail[email]) dutiesByEmail[email] = [];
+                dutiesByEmail[email].push({ 
+                    date: dStr, 
+                    day: dayName, 
+                    session: sessionCode, 
+                    time: tStr 
+                });
             });
         }
     });
+
+    if (Object.keys(dutiesByEmail).length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-500 py-8">No invigilation duties found for this week.</div>`;
+        return;
+    }
 
     // 2. Render List
     let html = `
@@ -8259,14 +8272,15 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
         </button>
-        <span class="text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full">${Object.keys(facultyDuties).length} Staff Members</span>
+        <span class="text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full">${Object.keys(dutiesByEmail).length} Faculty Members</span>
     </div>
     <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1 custom-scroll">`;
 
-    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+    const sortedEmails = Object.keys(dutiesByEmail).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
     sortedEmails.forEach(email => {
-        const duties = facultyDuties[email].sort((a, b) => {
+        const duties = dutiesByEmail[email].sort((a, b) => {
+            // Sort by date
             const d1 = a.date.split('.').reverse().join('');
             const d2 = b.date.split('.').reverse().join('');
             return d1.localeCompare(d2) || a.session.localeCompare(b.session);
@@ -8274,10 +8288,24 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 
         const staff = staffData.find(s => s.email === email);
         const name = staff ? staff.name : getNameFromEmail(email);
-
-        // --- BEAUTIFUL EMAIL FORMATTING ---
-        const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('%0D%0A');
         
+        // Prepare Phone for WhatsApp
+        let phone = staff ? (staff.phone || "") : "";
+        let waLink = "#";
+        let waClass = "opacity-50 cursor-not-allowed grayscale";
+        
+        if (phone) {
+            let cleanNum = phone.replace(/\D/g, '');
+            if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
+            if (cleanNum.length >= 10) {
+                const waMsg = generateWeeklyWhatsApp(name, duties);
+                waLink = `https://wa.me/${cleanNum}?text=${encodeURIComponent(waMsg)}`;
+                waClass = "bg-[#25D366] hover:bg-[#128C7E] text-white";
+            }
+        }
+
+        // Email
+        const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('%0D%0A');
         const subject = encodeURIComponent(`Exam Duty Assignment - Week ${weekNum}`);
         const body = encodeURIComponent(
 `Dear ${name},
@@ -8292,17 +8320,27 @@ Thank you,
 Chief Superintendent
 ${currentCollegeName || "University of Calicut"}
 `);
+        const emailLink = `mailto:${email}?subject=${subject}&body=${body}`;
 
         html += `
-        <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex justify-between items-center group">
-            <div>
-                <div class="font-bold text-gray-800 text-sm">${name}</div>
+        <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 text-sm truncate">${name}</div>
                 <div class="text-xs text-gray-500 mt-0.5">${duties.length} Session(s)</div>
+                ${!phone ? '<div class="text-[9px] text-red-400">No Phone Number</div>' : ''}
             </div>
-            <a href="mailto:${email}?subject=${subject}&body=${body}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1">
-                <span>Open Mail</span> 
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            </a>
+            
+            <div class="flex gap-2 w-full sm:w-auto">
+                <a href="${waLink}" target="_blank" class="${waClass} px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></path></svg>
+                    WhatsApp
+                </a>
+
+                <a href="${emailLink}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    Email
+                </a>
+            </div>
         </div>`;
     });
 
@@ -8401,7 +8439,45 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 };
 
 
+// --- HELPER: Generate Professional WhatsApp Message ---
+window.generateWeeklyWhatsApp = function(name, duties) {
+    const now = new Date();
+    const hours = now.getHours();
+    
+    // Time-sensitive Greeting
+    let greeting = "Greetings";
+    if (hours < 12) greeting = "Good Morning";
+    else if (hours < 16) greeting = "Good Afternoon";
+    else greeting = "Good Evening";
 
+    // College Name
+    const college = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "Examination Cell";
+
+    let msg = `*🏛️ ${college.toUpperCase()}*\n`;
+    msg += `*OFFICIAL DUTY INTIMATION*\n`;
+    msg += `─────────────────────\n\n`;
+    
+    msg += `${greeting} *${name}*,\n\n`;
+    msg += `This is to inform you of your invigilation duties scheduled for this week. Please find the details below:\n\n`;
+
+    duties.forEach(d => {
+        // d: { date, day, session, time }
+        msg += `🗓 *${d.date}* (${d.day})\n`;
+        msg += `⏰ ${d.session} Session [${d.time}]\n`;
+        msg += `─────────────────────\n`;
+    });
+
+    msg += `\n🛑 *IMPORTANT INSTRUCTIONS:*\n`;
+    msg += `• Reporting Time: *30 Minutes* prior to exam start.\n`;
+    msg += `• Control Room: Exam Cell\n`;
+    msg += `• Mobile phones are strictly prohibited inside the hall.\n\n`;
+    
+    msg += `Thank you for your cooperation.\n\n`;
+    msg += `Regards,\n`;
+    msg += `*Chief Superintendent*`;
+
+    return msg;
+};
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
