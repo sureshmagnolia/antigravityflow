@@ -8491,7 +8491,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `\n🛑 *INSTRUCTIONS:*\n`;
     msg += `🔹 Reporting Time: *30 Minutes* before exam start.\n`;
     msg += `🔹 Control Room: Exam Cell\n`;
-    msg += `🔹 Please ensure mobile phones are switched off inside the hall.\n\n`;
+    msg += `🔹 Please ensure mobile phones are in silent mode inside the hall.\n\n`;
     
     msg += `Thank you for your support.\n\n`;
     msg += `Regards,\n`;
