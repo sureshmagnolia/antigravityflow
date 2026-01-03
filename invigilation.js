@@ -8350,16 +8350,20 @@ ${safeCollegeName}
 };
 
 
-// 2. DEPARTMENT CONSOLIDATED EMAILS
+// Global Queue for Departments
+window.currentDeptEmailQueue = [];
+
+// --- 2. DEPARTMENT BULK MESSAGING UI (With Confirmation & Bulk Send) ---
 window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
 
-    subtitle.textContent = "Send summary lists to HODs.";
+    subtitle.textContent = "Review summaries. Use 'Send All' or send individually.";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     // 1. Gather Data by Dept
     const deptData = {};
+    window.currentDeptEmailQueue = []; // Reset Queue
     
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
@@ -8384,27 +8388,25 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
         }
     });
 
-    // 2. Render List
-    let html = `
-    <div class="flex items-center justify-between mb-4">
-        <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
-        </button>
-        <span class="text-xs font-bold bg-teal-50 text-teal-700 px-2 py-1 rounded-full">${Object.keys(deptData).length} Departments</span>
-    </div>
-    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1 custom-scroll">`;
+    if (Object.keys(deptData).length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-500 py-8">No department data found.</div>`;
+        return;
+    }
 
-    Object.keys(deptData).sort().forEach(dept => {
+    // 2. Prepare Queue
+    const sortedDepts = Object.keys(deptData).sort();
+    
+    sortedDepts.forEach(dept => {
         const entries = deptData[dept];
         
-        // Find HOD Email if configured (from 'departmentsConfig' if you have it, else blank)
+        // Find HOD Email
         let hodEmail = "";
         if (typeof departmentsConfig !== 'undefined') {
             const deptCfg = departmentsConfig.find(d => (typeof d === 'object' ? d.name : d) === dept);
             if (deptCfg && deptCfg.email) hodEmail = deptCfg.email;
         }
 
-        // Format Body: Group by Person
+        // Format Body
         const personMap = {};
         entries.forEach(e => {
             if (!personMap[e.name]) personMap[e.name] = [];
@@ -8418,20 +8420,59 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
             bodyText += `👤 ${name}:%0D%0A   ${duties}%0D%0A%0D%0A`;
         });
 
-        bodyText += `Please inform the concerned faculty members.%0D%0A%0D%0AThank you,%0D%0AChief Superintendent`;
+        bodyText += `Please inform the concerned faculty members accordingly.%0D%0A%0D%0AThank you,%0D%0AChief Superintendent`;
 
         const subject = encodeURIComponent(`Invigilation Duty List - ${dept} - Week ${weekNum}`);
+
+        // Add to Queue
+        window.currentDeptEmailQueue.push({
+            dept: dept,
+            email: hodEmail, // Can be empty, mail client will open with blank "To"
+            subject: subject,
+            body: bodyText,
+            count: Object.keys(personMap).length
+        });
+    });
+
+    // 3. Render List with Bulk Button
+    let html = `
+    <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4">
+        <div class="flex items-center justify-between">
+            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
+            </button>
+            <span class="text-xs font-bold text-gray-500">${window.currentDeptEmailQueue.length} Departments</span>
+        </div>
+        
+        <button onclick="confirmBulkDeptSend()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Send Emails to All Departments (${window.currentDeptEmailQueue.length})
+        </button>
+        <p class="text-[10px] text-center text-gray-400">Opens default email client for each Head of Department.</p>
+    </div>
+
+    <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1 custom-scroll">`;
+
+    // 4. Render Individual Cards
+    window.currentDeptEmailQueue.forEach((item, index) => {
+        const noEmail = !item.email;
+        const btnState = noEmail ? "bg-gray-100 text-gray-500 border-gray-300" : "bg-teal-600 hover:bg-teal-700 text-white";
+        const emailLabel = noEmail ? "No HoD Email" : "Email HoD";
 
         html += `
         <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex justify-between items-center group">
             <div class="min-w-0 pr-2">
-                <div class="font-bold text-gray-800 text-sm truncate">${dept}</div>
-                <div class="text-xs text-gray-500 mt-0.5 truncate">${Object.keys(personMap).length} Faculty Members involved</div>
-                ${hodEmail ? `<div class="text-[10px] text-teal-600 mt-1">${hodEmail}</div>` : ''}
+                <div class="font-bold text-gray-800 text-sm truncate">${item.dept}</div>
+                <div class="text-xs text-gray-500 mt-0.5 truncate">${item.count} Faculty Members involved</div>
+                <div class="text-[10px] ${noEmail ? 'text-red-500 italic' : 'text-teal-600'} mt-1">
+                    ${noEmail ? 'Email address not found' : item.email}
+                </div>
             </div>
-            <a href="mailto:${hodEmail}?subject=${subject}&body=${bodyText}" target="_blank" class="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1 shrink-0">
-                <span>📧 Draft</span> 
-            </a>
+            
+            <button onclick="confirmSingleDeptEmail(${index})" class="${btnState} px-4 py-2 rounded text-xs font-bold shadow-sm flex items-center gap-1 transition shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span>${emailLabel}</span> 
+            </button>
         </div>`;
     });
 
@@ -8529,7 +8570,55 @@ window.processEmailQueue = function(index = 0) {
 };
 
 
+// --- DEPARTMENT CONFIRMATION HANDLERS ---
 
+// 1. Single Dept Email Confirmation
+window.confirmSingleDeptEmail = function(index) {
+    const item = window.currentDeptEmailQueue[index];
+    if (!item) return;
+
+    // Warning if email is missing
+    let warning = "";
+    if (!item.email) warning = "\n⚠️ NOTE: No email address defined for this department. You will need to enter it manually.";
+
+    if (confirm(`Send consolidated duty list to ${item.dept}?${warning}`)) {
+        window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_self');
+    }
+};
+
+// 2. Bulk Dept Confirmation
+window.confirmBulkDeptSend = function() {
+    const count = window.currentDeptEmailQueue.length;
+    if (count === 0) return alert("No emails to send.");
+
+    const msg = `⚠️ BULK SEND CONFIRMATION ⚠️\n\n` +
+                `You are about to initiate sending ${count} Department Summary emails.\n\n` +
+                `• This will attempt to open ${count} email compose windows.\n` +
+                `• Please ensure your email client is ready.\n\n` +
+                `Do you want to proceed?`;
+
+    if (confirm(msg)) {
+        processDeptEmailQueue();
+    }
+};
+
+// 3. Dept Queue Processor
+window.processDeptEmailQueue = function(index = 0) {
+    if (index >= window.currentDeptEmailQueue.length) {
+        alert("✅ All department emails triggered.");
+        return;
+    }
+
+    const item = window.currentDeptEmailQueue[index];
+    
+    // Open Mail Client
+    window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_blank');
+
+    // Process next one after a short delay
+    setTimeout(() => {
+        processDeptEmailQueue(index + 1);
+    }, 800); 
+};
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
