@@ -8543,37 +8543,133 @@ window.processEmailQueue = function(index = 0) {
 };
 
 
-// --- DEPARTMENT CONFIRMATION HANDLERS ---
 
-// 1. Single Dept Email Confirmation
-window.confirmSingleDeptEmail = function(index) {
+// --- DEPARTMENT SENDING LOGIC (API) ---
+
+// 1. Single Send
+window.sendSingleDeptEmail = async function(index) {
     const item = window.currentDeptEmailQueue[index];
-    if (!item) return;
+    if (!item || !item.email) return;
 
-    // Warning if email is missing
-    let warning = "";
-    if (!item.email) warning = "\n⚠️ NOTE: No email address defined for this department. You will need to enter it manually.";
+    if (!googleScriptUrl) return alert("⚠️ Google Apps Script URL not found in settings.");
 
-    if (confirm(`Send consolidated duty list to ${item.dept}?${warning}`)) {
-        window.open(`mailto:${item.email}?subject=${item.subject}&body=${item.body}`, '_self');
+    if (!confirm(`Send consolidated duty list to ${item.dept} (${item.email})?`)) return;
+
+    const btn = document.getElementById(item.btnId);
+    const status = document.getElementById(item.statusId);
+
+    if (btn) { btn.disabled = true; btn.textContent = "..."; }
+    if (status) { status.classList.remove('hidden'); status.textContent = "Sending..."; }
+
+    try {
+        await fetch(googleScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                to: item.email,
+                subject: item.subject,
+                body: item.body // HTML Body
+            })
+        });
+
+        // Success Update
+        item.status = 'sent';
+        if (btn) { 
+            btn.innerHTML = "✅ Sent"; 
+            btn.classList.remove('bg-teal-50', 'text-teal-700', 'hover:bg-teal-600', 'hover:text-white');
+            btn.classList.add('bg-green-100', 'text-green-800', 'border-green-200');
+        }
+        if (status) { status.textContent = "Sent via System"; status.classList.add('text-green-600'); }
+        
+        // Log it
+        if (typeof logActivity === 'function') logActivity("Dept Email Sent", `Sent consolidated list to ${item.dept}`);
+
+    } catch (e) {
+        console.error(e);
+        if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
+        if (status) { status.textContent = "Failed"; status.classList.add('text-red-500'); }
+        alert("Failed to send email. Check internet or API URL.");
     }
 };
 
-// 2. Bulk Dept Confirmation
-window.confirmBulkDeptSend = function() {
-    const count = window.currentDeptEmailQueue.length;
-    if (count === 0) return alert("No emails to send.");
+// 2. Bulk Send
+window.sendBulkDeptEmails = async function() {
+    const pendingItems = window.currentDeptEmailQueue.filter(i => i.status === 'pending' && i.email);
 
-    const msg = `⚠️ BULK SEND CONFIRMATION ⚠️\n\n` +
-                `You are about to initiate sending ${count} Department Summary emails.\n\n` +
-                `• This will attempt to open ${count} email compose windows.\n` +
-                `• Please ensure your email client is ready.\n\n` +
-                `Do you want to proceed?`;
+    if (pendingItems.length === 0) return alert("No valid pending emails to send.");
+    if (!confirm(`Start bulk sending to ${pendingItems.length} Departments?`)) return;
 
-    if (confirm(msg)) {
-        processDeptEmailQueue();
+    // UI Setup
+    const mainBtn = document.getElementById('btn-bulk-dept-send');
+    const progressBar = document.getElementById('dept-progress-bar');
+    const progressFill = document.getElementById('dept-progress-fill');
+    const statusText = document.getElementById('dept-status-text');
+    
+    // Allow cancellation
+    const isCancelled = { value: false }; 
+    // You can add a cancel button UI here if desired, similar to staff bulk
+
+    if(mainBtn) mainBtn.classList.add('hidden');
+    if(progressBar) progressBar.classList.remove('hidden');
+    if(statusText) { statusText.classList.remove('hidden'); statusText.textContent = "Initializing..."; }
+
+    let successCount = 0;
+
+    for (let i = 0; i < pendingItems.length; i++) {
+        const item = pendingItems[i];
+        
+        // Update Status
+        if(statusText) statusText.textContent = `Sending to ${item.dept} (${i+1}/${pendingItems.length})...`;
+        if(progressFill) progressFill.style.width = `${Math.round(((i+1)/pendingItems.length)*100)}%`;
+
+        // Update Row UI
+        const rowBtn = document.getElementById(item.btnId);
+        const rowStatus = document.getElementById(item.statusId);
+        
+        if(rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
+        if(rowStatus) { rowStatus.classList.remove('hidden'); rowStatus.textContent = "Sending..."; }
+
+        try {
+            await fetch(googleScriptUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    to: item.email,
+                    subject: item.subject,
+                    body: item.body
+                })
+            });
+
+            successCount++;
+            item.status = 'sent';
+            
+            if(rowBtn) { 
+                rowBtn.innerHTML = "✅"; 
+                rowBtn.className = "bg-green-100 text-green-800 border-green-200 px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-1 transition shrink-0 border cursor-default";
+            }
+            if(rowStatus) { rowStatus.textContent = "Sent"; rowStatus.className = "text-[10px] text-green-600 mt-1 font-mono font-bold"; }
+
+        } catch (e) {
+            console.error(e);
+            if(rowBtn) { rowBtn.textContent = "Failed"; rowBtn.disabled = false; }
+            if(rowStatus) { rowStatus.textContent = "Error"; rowStatus.className = "text-[10px] text-red-500 mt-1 font-mono"; }
+        }
+
+        // Delay to handle rate limits
+        await new Promise(r => setTimeout(r, 1000));
     }
+
+    if(statusText) statusText.textContent = "Completed.";
+    alert(`Batch Complete.\nSent to ${successCount} departments.`);
+    
+    // Log Bulk Action
+    if (typeof logActivity === 'function') logActivity("Bulk Dept Email", `Sent consolidated lists to ${successCount} departments.`);
+    
+    // Reset UI (Optional, keeping progress bar visible shows completion)
 };
+
 
 // 3. Dept Queue Processor
 window.processDeptEmailQueue = function(index = 0) {
