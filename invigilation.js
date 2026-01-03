@@ -8176,22 +8176,21 @@ window.closeModal = function(id) {
 // Global Queue
 window.currentEmailQueue = [];
 
-// --- 1. STAFF BULK MESSAGING UI (With Bulk Send & Confirmation) ---
+
+// --- 1. STAFF BULK MESSAGING UI (Fixed) ---
 window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
     
-    subtitle.textContent = "Review drafts. Use 'Send All' or send individually.";
+    subtitle.textContent = "Review drafts. Use 'Send All' to auto-email via System.";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     // 1. Gather & Group Data
     const dutiesByEmail = {};
     window.currentEmailQueue = []; // Reset Queue
 
-    // Safe College Name
-    let safeCollegeName = "University of Calicut";
-    if (typeof currentCollegeName !== 'undefined') safeCollegeName = currentCollegeName;
-    else if (collegeData && collegeData.examCollegeName) safeCollegeName = collegeData.examCollegeName;
+    // --- FIX: Safe College Name Retrieval ---
+    const collegeName = localStorage.getItem('examCollegeName') || "University of Calicut";
 
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
@@ -8230,22 +8229,25 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         const staff = staffData.find(s => s.email === email);
         const name = staff ? staff.name : getNameFromEmail(email);
 
-        // Generate Email Body (HTML for Apps Script)
-        // Note: The generateProfessionalEmail function returns HTML string
-        const emailBody = generateProfessionalEmail(name, duties, "Invigilation Duty");
+        // Generate Beautiful Email Body (HTML)
+        const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('<br>'); // Use <br> for HTML email
         const subject = `Exam Duty Assignment - Week ${weekNum}`;
         const btnId = `email-btn-${index}`;
         
+        // Use the HTML Email Generator Helper (Defined below)
+        const bodyHTML = window.generateHtmlEmailBody(name, duties);
+
         // Add to Queue
-        if (email) {
-            window.currentEmailQueue.push({
-                email: email,
-                name: name,
-                subject: subject,
-                body: emailBody, // HTML Body
-                btnId: btnId
-            });
-        }
+        window.currentEmailQueue.push({
+            id: index,
+            email: email,
+            name: name,
+            subject: subject,
+            body: bodyHTML, // Send HTML to Apps Script
+            duties: duties,  // Keep raw data for WhatsApp generation
+            btnId: btnId,
+            status: 'pending'
+        });
     });
 
     // 3. Render List with Bulk Button
@@ -8258,65 +8260,61 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
             <span class="text-xs font-bold text-gray-500">${window.currentEmailQueue.length} Staff Members</span>
         </div>
         
-        <button id="btn-bulk-send-all" onclick="sendBulkEmails('btn-bulk-send-all')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+        <button onclick="confirmBulkSend()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             Send Emails to All (${window.currentEmailQueue.length})
         </button>
-        <div id="bulk-progress-bar" class="hidden w-full bg-gray-200 rounded-full h-2.5 mt-2">
-            <div id="bulk-progress-fill" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+        
+        <div id="bulk-progress-container" class="hidden mt-2">
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="bulk-progress-fill" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <p id="bulk-status-text" class="text-xs text-center text-gray-500 mt-1">Ready</p>
         </div>
-        <p id="bulk-status-text" class="text-xs text-center text-gray-500 mt-1 hidden">Sending...</p>
     </div>
 
     <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1 custom-scroll">`;
 
     // 4. Render Individual Items
-    // We re-iterate sortedEmails to match the visual order with the queue
-    sortedEmails.forEach((email, index) => {
-        const staff = staffData.find(s => s.email === email);
-        const name = staff ? staff.name : getNameFromEmail(email);
-        const duties = dutiesByEmail[email];
-        
+    window.currentEmailQueue.forEach((item, index) => {
+        const staff = staffData.find(s => s.email === item.email);
         const phone = staff ? (staff.phone || "") : "";
+        
+        // WA Logic
         let waLink = "#";
         let waClass = "opacity-30 cursor-not-allowed grayscale bg-gray-100 text-gray-400";
+        
         if (phone) {
             let cleanNum = phone.replace(/\D/g, '');
             if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
             if (cleanNum.length >= 10) {
-                const waMsg = generateWeeklyWhatsApp(name, duties);
+                // Use the NEW generator for the link
+                const waMsg = generateWeeklyWhatsApp(item.name, item.duties);
                 waLink = `https://wa.me/${cleanNum}?text=${encodeURIComponent(waMsg)}`;
                 waClass = "bg-[#25D366] hover:bg-[#128C7E] text-white border-transparent";
             }
         }
 
-        // Escape for onclick
-        // For the single email button, we pass arguments to sendSingleEmail
-        // We need to fetch the specific queue item to pass correct data or use index
-        const queueItem = window.currentEmailQueue.find(i => i.email === email);
-        const btnId = queueItem ? queueItem.btnId : `btn-disabled-${index}`;
-        const emailDisabled = queueItem ? "" : "disabled";
-        
-        // We need to escape the HTML body string for the onclick handler, which is messy.
-        // Better to pass the INDEX to sendSingleEmailFromQueue(index)
-        const queueIndex = window.currentEmailQueue.findIndex(i => i.email === email);
+        const emailBtnState = item.email ? "bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50" : "bg-gray-100 text-gray-400 cursor-not-allowed";
 
         html += `
         <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 group">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 text-sm truncate">${name}</div>
+                    <div class="font-bold text-gray-800 text-sm truncate">${item.name}</div>
+                    ${!phone ? '<span class="text-[9px] text-red-400 bg-red-50 px-1 rounded">No Phone</span>' : ''}
                 </div>
-                <div class="text-xs text-gray-500 mt-0.5">${duties.length} Session(s)</div>
+                <div class="text-xs text-gray-500 mt-0.5">${item.duties.length} Session(s)</div>
+                <div id="status-msg-${item.id}" class="text-[9px] text-gray-400 mt-1">Pending</div>
             </div>
             
             <div class="flex gap-2 w-full sm:w-auto">
                 <a href="${waLink}" target="_blank" class="${waClass} px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition border">
-                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></path></svg>
                     WhatsApp
                 </a>
 
-                <button id="${btnId}" onclick="sendSingleEmailFromQueue(${queueIndex})" ${emailDisabled} class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
+                <button id="${item.btnId}" onclick="sendIndividualEmail(${index})" ${item.email ? '' : 'disabled'} class="${emailBtnState} px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center justify-center gap-1 flex-1 sm:flex-none transition">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     Email
                 </button>
@@ -8327,6 +8325,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     html += `</div>`;
     list.innerHTML = html;
 };
+
 
 
 // Global Queue for Departments
@@ -8460,40 +8459,41 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 };
 
 
-// --- HELPER: Generate Professional WhatsApp Message ---
+// --- HELPER: Generate Beautiful WhatsApp Message ---
 window.generateWeeklyWhatsApp = function(name, duties) {
     const now = new Date();
     const hours = now.getHours();
     
-    // Time-sensitive Greeting
+    // 1. Polite Time-Based Greeting
     let greeting = "Greetings";
     if (hours < 12) greeting = "Good Morning";
     else if (hours < 16) greeting = "Good Afternoon";
     else greeting = "Good Evening";
 
-    // College Name
-    const college = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "Examination Cell";
-
-    let msg = `*🏛️ ${college.toUpperCase()}*\n`;
-    msg += `*OFFICIAL DUTY INTIMATION*\n`;
+    // 2. Get College Name Safely
+    const college = localStorage.getItem('examCollegeName') || "EXAMINATION CELL";
+    
+    // 3. Build Message
+    let msg = `🏛️ *${college.toUpperCase()}*\n`;
+    msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
     msg += `─────────────────────\n\n`;
     
     msg += `${greeting} *${name}*,\n\n`;
-    msg += `This is to inform you of your invigilation duties scheduled for this week. Please find the details below:\n\n`;
+    msg += `You have been assigned the following exam duties for this week. Kindly note the details below:\n\n`;
 
     duties.forEach(d => {
-        // d: { date, day, session, time }
+        // d contains: { date, day, session, time }
         msg += `🗓 *${d.date}* (${d.day})\n`;
-        msg += `⏰ ${d.session} Session [${d.time}]\n`;
+        msg += `⏰ ${d.session} Session  |  ${d.time}\n`;
         msg += `─────────────────────\n`;
     });
 
-    msg += `\n🛑 *IMPORTANT INSTRUCTIONS:*\n`;
-    msg += `• Reporting Time: *30 Minutes* prior to exam start.\n`;
-    msg += `• Control Room: Exam Cell\n`;
-    msg += `• Mobile phones are strictly prohibited inside the hall.\n\n`;
+    msg += `\n🛑 *INSTRUCTIONS:*\n`;
+    msg += `🔹 Reporting Time: *30 Minutes* before exam start.\n`;
+    msg += `🔹 Control Room: Exam Cell\n`;
+    msg += `🔹 Please ensure mobile phones are switched off inside the hall.\n\n`;
     
-    msg += `Thank you for your cooperation.\n\n`;
+    msg += `Thank you for your support.\n\n`;
     msg += `Regards,\n`;
     msg += `*Chief Superintendent*`;
 
@@ -8621,7 +8621,102 @@ window.sendSingleEmailFromQueue = function(index) {
 
 
 
+// --- HELPER: Send Email via Apps Script ---
+async function sendEmailViaAppsScript(to, subject, body) {
+    if (!googleScriptUrl) return false;
+    try {
+        await fetch(googleScriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to, subject, body })
+        });
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
+}
 
+// --- LOGIC: Send Individual Item ---
+window.sendIndividualEmail = async function(index) {
+    const item = window.currentEmailQueue[index];
+    if (!item) return;
+
+    if (!confirm(`Send official email to ${item.name}?`)) return;
+
+    const btn = document.getElementById(item.btnId);
+    const statusMsg = document.getElementById(`status-msg-${item.id}`);
+
+    if (btn) { btn.disabled = true; btn.textContent = "..."; }
+    if (statusMsg) statusMsg.textContent = "Sending...";
+
+    const success = await sendEmailViaAppsScript(item.email, item.subject, item.body);
+
+    // With no-cors we assume success if no network error thrown
+    item.status = 'sent';
+    if (statusMsg) { statusMsg.textContent = "✅ Sent"; statusMsg.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
+    if (btn) { btn.innerHTML = "Done"; btn.classList.add('opacity-50'); }
+};
+
+// --- LOGIC: Bulk Queue Processor ---
+window.processBulkQueue = async function() {
+    const pendingItems = window.currentEmailQueue.filter(i => i.status === 'pending' && i.email);
+    
+    if (pendingItems.length === 0) return alert("No pending emails to send.");
+    if (!confirm(`Start bulk sending to ${pendingItems.length} recipients?\n\nKeep this window open until finished.`)) return;
+
+    // UI Setup
+    document.getElementById('btn-bulk-send').classList.add('hidden');
+    document.getElementById('bulk-progress-container').classList.remove('hidden');
+    
+    window.isBulkSendingCancelled = false;
+    let sentCount = 0;
+
+    for (let i = 0; i < pendingItems.length; i++) {
+        if (window.isBulkSendingCancelled) {
+            alert(`Process Stopped.\nSent: ${sentCount}`);
+            break;
+        }
+
+        const item = pendingItems[i];
+        
+        // Update Status UI
+        document.getElementById('bulk-status-text').textContent = `Sending ${i+1}/${pendingItems.length}: ${item.name}`;
+        document.getElementById('bulk-progress-fill').style.width = `${((i+1) / pendingItems.length) * 100}%`;
+
+        // Update Row UI
+        const rowStatus = document.getElementById(`status-msg-${item.id}`);
+        const rowBtn = document.getElementById(item.btnId);
+        if(rowStatus) rowStatus.textContent = "Sending...";
+        if(rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
+
+        await sendEmailViaAppsScript(item.email, item.subject, item.body);
+
+        // Update Row Success
+        item.status = 'sent';
+        sentCount++;
+        if(rowStatus) { rowStatus.textContent = "✅ Sent"; rowStatus.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
+        if(rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }
+
+        // Delay 1.2s
+        await new Promise(r => setTimeout(r, 1200)); 
+    }
+
+    document.getElementById('bulk-status-text').textContent = "Process Finished.";
+    if (!window.isBulkSendingCancelled) {
+        alert(`✅ Bulk Email Complete.\nSuccessfully sent: ${sentCount} emails.`);
+    }
+    
+    // Reset UI
+    document.getElementById('btn-bulk-send').classList.remove('hidden');
+    document.getElementById('bulk-progress-container').classList.add('hidden');
+};
+
+window.cancelBulkSending = function() {
+    window.isBulkSendingCancelled = true;
+    document.getElementById('bulk-status-text').textContent = "Stopping...";
+};
 
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
