@@ -16429,21 +16429,17 @@ window.toggleBulkLock = function() {
 
     if (isLocked) {
         // --- UNLOCKING ---
-        
         // 1. Populate Dropdowns (Using CORRECT Global Variable)
-        // ensure sessions are loaded
-        if (typeof populate_session_dropdown === 'function') populate_session_dropdown(); 
-
+        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+        
         if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
-            
             // Clear and Add Default
             startSelect.innerHTML = '<option value="">-- Select Start --</option>';
             endSelect.innerHTML = '<option value="">-- Select End --</option>';
-
+            
             allStudentSessions.forEach(session => {
                 const opt1 = new Option(session, session);
                 startSelect.add(opt1);
-                
                 const opt2 = new Option(session, session);
                 endSelect.add(opt2);
             });
@@ -16467,35 +16463,38 @@ window.toggleBulkLock = function() {
         // 4. Update Button State
         bulkLockBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             </svg>
-            <span class="text-rose-600 font-bold">Unlocked</span>
+            <span class="text-rose-600 font-bold text-xs uppercase tracking-wide">Lock Controls</span>
         `;
-        bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
+        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 rounded-lg shadow-sm hover:bg-rose-100 transition active:scale-95";
 
     } else {
         // --- LOCKING ---
+        // 1. Disable Inputs
         startSelect.disabled = true;
         endSelect.disabled = true;
         deleteBtn.disabled = true;
 
+        // 2. Visual Updates
         startSelect.classList.add('bg-gray-100');
+        startSelect.classList.remove('bg-white');
         endSelect.classList.add('bg-gray-100');
+        endSelect.classList.remove('bg-white');
         controlsDiv.classList.add('opacity-50', 'pointer-events-none');
 
-        // Update Button State
+        // 3. Update Button State
         bulkLockBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            <span>Locked</span>
+            <span class="text-gray-600 font-bold text-xs uppercase tracking-wide">Unlock</span>
         `;
-        bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
+        bulkLockBtn.className = "flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition active:scale-95";
     }
 };
 
-
-
+// 2. Execute Bulk Delete (With Soft Slot Delete)
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
@@ -16580,17 +16579,6 @@ window.executeBulkDelete = async function() {
     }
 };
 
-
-
-    
-
-    
-
-    
-// Helper to switch language inside the new tab
-// Note: This function string is already embedded in the template HTML, 
-// so you don't strictly need it here, but the openManualNewTab logic handles the rest.
-    
 // ==========================================
 // ☁️ FORCE CLOUD SYNC (Header Button)
 // ==========================================
@@ -16636,6 +16624,8 @@ window.executeBulkDelete = async function() {
     }
 
 }); // <--- CRITICAL: This closes the main DOMContentLoaded event
+
+
             
     // Initial Call (in case we start on settings page or refresh)
     updateStudentPortalLink();
