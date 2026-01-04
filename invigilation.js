@@ -2056,6 +2056,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
         // ADD (Open Modal for Reason)
         document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`; 
         document.getElementById('unav-email').value = email;
+        document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
         
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
@@ -2131,7 +2132,7 @@ window.toggleWholeDay = async function(dateStr, email) {
         // MARK BOTH
         document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`; 
         document.getElementById('unav-email').value = email;
-        
+        document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
         const detailsContainer = document.getElementById('unav-details-container');
@@ -2249,6 +2250,7 @@ window.setAvailability = async function (key, email, isAvailable) {
     } else {
         document.getElementById('unav-key').value = key;
         document.getElementById('unav-email').value = email;
+        document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
         document.getElementById('unav-details-container').classList.add('hidden');
@@ -2262,17 +2264,25 @@ window.confirmUnavailable = async function () {
     const email = document.getElementById('unav-email').value;
     const reason = document.getElementById('unav-reason').value;
     const details = document.getElementById('unav-details').value.trim();
+    // NEW: Capture Source
+    const markedBy = document.getElementById('unav-marked-by').value || 'Self'; 
 
     // 1. Validation
-    // Check Admin Lock
-    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked) {
+    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked && markedBy !== 'Admin') {
         return alert("🚫 Posting Locked! Admin has locked this slot.");
     }
     
     if (!reason) return alert("Select a reason.");
-    if (['OD', 'DL', 'Medical'].includes(reason) && !details) return alert("Details required.");
+    if (['OD', 'DL', 'Medical', 'Other'].includes(reason) && !details) return alert("Details required.");
 
-    const entry = { email, reason, details: details || "" };
+    // NEW: Create Entry Object with Metadata
+    const entry = { 
+        email: email, 
+        reason: reason, 
+        details: details || "",
+        markedBy: markedBy,
+        timestamp: new Date().toISOString()
+    };
 
     if (key.startsWith('ADVANCE|')) {
         // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
@@ -2283,62 +2293,51 @@ window.confirmUnavailable = async function () {
         if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
 
         if (session === 'WHOLE') {
-            // Clear both sessions first
-            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => u.email !== email);
-            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => u.email !== email);
+            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
+            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
             
             advanceUnavailability[dateStr].FN.push(entry);
             advanceUnavailability[dateStr].AN.push(entry);
             
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);
+            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);
         } else {
-            // Single Session
             if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
             
-            // Safety: Remove existing before pushing
-            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => u.email !== email);
+            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => (typeof u === 'string' ? u : u.email) !== email);
             advanceUnavailability[dateStr][session].push(entry);
 
-            logActivity("Advance Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);
+            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);
         }
 
         await saveAdvanceUnavailability();
         
-        window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); 
-        renderStaffCalendar(email);
-        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
     } else {
-        // --- CASE B: SLOT SPECIFIC (The Bug was Here) ---
+        // --- CASE B: SLOT SPECIFIC ---
         if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
         
-        // *** FIX: Remove existing entry for this email before adding ***
         invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => 
             (typeof u === 'string' ? u !== email : u.email !== email)
         );
 
-        // Now push the new entry (Guaranteed unique)
         invigilationSlots[key].unavailable.push(entry);
-
-        logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
+        logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
 
         await syncSlotsToCloud();
-    
-        window.closeModal('unavailable-modal');
-        window.closeModal('day-detail-modal'); 
+    }
 
-    // --- NEW: If Admin was in Manual Mode, re-open it ---
-    const manualModal = document.getElementById('manual-allocation-modal');
-    // Check if we were editing this specific key
-    if (document.getElementById('manual-session-key').value === key) {
+    // Cleanup & Refresh
+    window.closeModal('unavailable-modal');
+    window.closeModal('day-detail-modal'); 
+
+    // Refresh Manual Modal if open
+    const manualKey = document.getElementById('manual-session-key').value;
+    if (document.getElementById('manual-allocation-modal').classList.contains('hidden') === false && manualKey === key) {
         window.openManualAllocationModal(key);
     } else {
-        // Standard Refresh
         renderStaffCalendar(email);
         if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
     }
-}
+};
 
 window.waNotify = function (key) {
     const slot = invigilationSlots[key];
@@ -2810,11 +2809,15 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
 
 // [In invigilation.js]
 
+
 window.openInconvenienceModal = function (key) {
     const slot = invigilationSlots[key];
     if (!slot) return;
 
-    // 1. Gather Slot Specific Unavailability
+    // ... (Gathering logic same as before) ...
+    // Note: Ensure your gathering logic copies the whole object 'u', not just email/reason
+
+    // 1. Gather Slot Specific
     const allUnavailable = [];
     if (slot.unavailable) {
         slot.unavailable.forEach(u => {
@@ -2823,7 +2826,7 @@ window.openInconvenienceModal = function (key) {
         });
     }
 
-    // 2. Gather Advance Unavailability (OD/DL/Leave)
+    // 2. Gather Advance
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -2831,52 +2834,51 @@ window.openInconvenienceModal = function (key) {
 
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-            const email = (typeof u === 'string') ? u : u.email;
-            // Prevent duplicates if user is in both lists
-            if (!allUnavailable.some(existing => existing.email === email)) {
-                const entry = (typeof u === 'string') ? { email: u, reason: "Leave/OD", details: "Advance Leave" } : u;
-                allUnavailable.push({ ...entry, type: 'Advance' }); // Mark source
-            }
+             const email = (typeof u === 'string') ? u : u.email;
+             // Prevent duplicates
+             if (!allUnavailable.some(existing => existing.email === email)) {
+                 const entry = (typeof u === 'string') ? { email: u, reason: "Leave/OD" } : u;
+                 allUnavailable.push({ ...entry, type: 'Advance' });
+             }
         });
     }
+    
+    // ... (Empty check) ...
 
-    if (allUnavailable.length === 0) return alert("No unavailability issues found.");
-
-    document.getElementById('inconvenience-modal-subtitle').textContent = key;
     const list = document.getElementById('inconvenience-list');
     list.innerHTML = '';
 
     allUnavailable.forEach(u => {
-        const s = staffData.find(st => st.email === u.email) || { name: u.email, phone: "", dept: "Unknown" };
-        let phone = s.phone ? s.phone.replace(/\D/g, '') : "";
-        if (phone.length === 10) phone = "91" + phone;
-        const hasPhone = phone.length >= 10;
+        const s = staffData.find(st => st.email === u.email) || { name: u.email };
+        
+        // --- GOD MODE TAGS ---
+        let sourceTag = "";
+        if (u.markedBy === 'Admin') {
+            sourceTag = `<span class="bg-amber-100 text-amber-700 text-[9px] px-2 py-0.5 rounded border border-amber-200 font-bold ml-2">🛡️ Marked by Admin</span>`;
+        } else if (u.markedBy === 'Self') {
+             sourceTag = `<span class="bg-blue-50 text-blue-600 text-[9px] px-2 py-0.5 rounded border border-blue-100 ml-2">👤 Self Reported</span>`;
+        }
 
         const reason = u.reason || "N/A";
         const details = u.details || "No details provided.";
-        
-        // Visual distinction for Advance Leave
-        const badgeColor = u.type === 'Advance' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-red-50 text-red-600 border-red-200';
-        const sourceType = u.type === 'Advance' ? '(General Leave)' : '(Session Specific)';
+        const badgeColor = u.type === 'Advance' ? 'bg-orange-100 text-orange-700' : 'bg-red-50 text-red-600';
 
         list.innerHTML += `
             <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm mb-2">
                 <div class="flex justify-between items-start mb-1">
                     <div>
-                        <div class="font-bold text-gray-800 text-sm">${s.name}</div>
-                        <div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept} <span class="text-gray-400 font-normal">${sourceType}</span></div>
+                        <div class="font-bold text-gray-800 text-sm flex items-center">
+                            ${s.name} ${sourceTag}
+                        </div>
+                        <div class="text-[10px] text-gray-500 uppercase font-bold">${s.dept || ""}</div>
                     </div>
                     <span class="${badgeColor} text-[10px] font-bold px-2 py-0.5 rounded border shadow-sm">${reason}</span>
                 </div>
                 <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 italic mb-2">"${details}"</div>
-                <div class="text-right">
-                    ${hasPhone ? `<a href="https://wa.me/${phone}" target="_blank" class="text-green-600 hover:text-green-800 text-xs font-bold flex items-center justify-end gap-1">WhatsApp</a>` : ''}
-                </div>
             </div>`;
     });
     window.openModal('inconvenience-modal');
-}
-
+};
 
 
 // --- MISSING HELPER FUNCTIONS ---
@@ -6910,12 +6912,21 @@ function renderStaffUpcomingSummary(email) {
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         const date = parseDate(key);
-        const isUnav = slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email));
+        
+        // Find the specific entry object for this user
+        const unavEntry = slot.unavailable 
+            ? slot.unavailable.find(u => (typeof u === 'string' ? u === email : u.email === email)) 
+            : null;
 
-        if (date >= today && isUnav) {
+        if (date >= today && unavEntry) {
             const [dStr, tStr] = key.split(' | ');
             const sess = tStr.includes("PM") || tStr.startsWith("12") ? "AN" : "FN";
-            unavailableDates.push(`${dStr} (${sess})`);
+            
+            // Check for Admin Tag
+            const markedByAdmin = (typeof unavEntry === 'object' && unavEntry.markedBy === 'Admin');
+            const tag = markedByAdmin ? " (🛡️ By Admin)" : "";
+
+            unavailableDates.push(`${dStr} (${sess})${tag}`);
         }
     });
 
@@ -6924,14 +6935,24 @@ function renderStaffUpcomingSummary(email) {
         const d = parseDate(dateStr + " | 00:00 AM");
         if (d >= today) {
             const entry = advanceUnavailability[dateStr];
-            const sessions = [];
-            if (entry.FN && entry.FN.some(u => u.email === email)) sessions.push("FN");
-            if (entry.AN && entry.AN.some(u => u.email === email)) sessions.push("AN");
+            
+            // Helpers to find specific entry objects
+            const findEntry = (list) => list ? list.find(u => (typeof u === 'string' ? u === email : u.email === email)) : null;
+            
+            const fnEntry = findEntry(entry.FN);
+            const anEntry = findEntry(entry.AN);
 
-            if (sessions.length === 2) {
-                unavailableDates.push(`${dateStr} (Whole Day)`);
-            } else if (sessions.length > 0) {
-                unavailableDates.push(`${dateStr} (${sessions.join(',')})`);
+            // Determine Tags
+            const fnTag = (fnEntry && typeof fnEntry === 'object' && fnEntry.markedBy === 'Admin') ? " (🛡️ By Admin)" : "";
+            const anTag = (anEntry && typeof anEntry === 'object' && anEntry.markedBy === 'Admin') ? " (🛡️ By Admin)" : "";
+
+            if (fnEntry && anEntry) {
+                // If both exist, check if at least one is Admin for the tag (or specific logic)
+                const combinedTag = (fnTag || anTag) ? " (🛡️ By Admin)" : "";
+                unavailableDates.push(`${dateStr} (Whole Day)${combinedTag}`);
+            } else {
+                if (fnEntry) unavailableDates.push(`${dateStr} (FN)${fnTag}`);
+                if (anEntry) unavailableDates.push(`${dateStr} (AN)${anTag}`);
             }
         }
     });
@@ -8983,27 +9004,20 @@ function getSourceBadge(source) {
     }
 }
 
-
 // --- ADMIN: Mark Someone Unavailable (From Manual Modal) ---
 window.adminMarkUnavailable = function(key, email) {
-    // 1. Populate the Unavailability Modal hidden fields
     document.getElementById('unav-key').value = key;
     document.getElementById('unav-email').value = email;
-    
-    // 2. Clear previous inputs
+    document.getElementById('unav-marked-by').value = 'Admin'; // <--- KEY CHANGE
+
     document.getElementById('unav-reason').value = "";
     document.getElementById('unav-details').value = "";
     document.getElementById('unav-details-container').classList.add('hidden');
     
-    // 3. Switch Modals
-    // We keep manual modal open in background? No, standard is to focus on one.
-    // We will close manual, handle auth, then user must re-open manual to see changes.
     window.closeModal('manual-allocation-modal');
     window.openModal('unavailable-modal');
-    
-    // 4. Update the "Save" button in unavailable modal to know it came from Admin
-    // (The standard confirmUnavailable function will handle the saving and sync)
 };
+
 
 // --- ADMIN: Remove Unavailability (From Manual Modal) ---
 window.adminRemoveUnavailable = async function(key, email, isAdvance) {
