@@ -973,6 +973,7 @@ function renderSlotsGridAdmin() {
                     </div>
 
                     <div class="grid grid-cols-4 gap-1.5 mt-2">
+                        <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
                          <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
                          <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
                          <button onclick="openManualAllocationModal('${key}')" class="bg-white text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-50 text-[10px]">Edit</button>
