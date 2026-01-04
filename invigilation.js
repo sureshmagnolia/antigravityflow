@@ -4613,72 +4613,11 @@ window.openSlotReminderModal = function (key) {
     window.openModal('notification-modal');
 }
 
+// ==========================================
+// 💬 UNIFIED MESSAGE GENERATORS (WhatsApp, SMS, Email)
+// ==========================================
 
-// --- MESSAGE GENERATORS ---
-
-// --- MESSAGE GENERATORS (Split for SMS & WhatsApp) ---
-
-// 1. Weekly WhatsApp (Safe Emojis)
-function generateWeeklyWhatsApp(name, duties) {
-    const now = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
-
-    let dutyList = "";
-    duties.forEach(d => {
-        const rTime = calculateReportTime(d.time);
-        // Using 🗓️ (Calendar) and ➡️ (Arrow)
-        dutyList += `\n🗓️ *${d.date}* (${d.day}) | ${d.session}\n   ➡️ Report by: *${rTime}*\n`;
-    });
-
-    return `⚠️ *${name}*: Invigilation Duty Update (${now})\n${dutyList}\n✅ *Instructions:* https://bit.ly/gvc-exam\n\n_Adjustments:_ http://www.gvc.ac.in/exam\n-Chief Supt.`;
-}
-
-// 2. Weekly SMS (Shortest)
-function generateWeeklySMS(firstName, duties) {
-    // Format: "John: Duties: 01.12(FN), 03.12(AN). Portal: gvc.ac.in/exam -CS"
-   const shortList = duties.map(d => {
-        const [dd, mm, yyyy] = d.date.split('.');
-        const shortDate = `${dd}.${mm}.${yyyy.slice(-2)}`;
-        return `${shortDate}(${d.session})`;
-    }).join(', ');
-
-    return `${firstName}: Duties: ${shortList}. Portal: gvc.ac.in/exam -CS`;
-}
-
-// --- HELPER: Generate Daily WhatsApp (Reminder) ---
-window.generateDailyWhatsApp = function(name, dateStr, duties) {
-    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Exam Cell";
-
-    let dutyList = "";
-    duties.forEach(d => {
-        const rTime = calculateReportTime(d.time);
-        dutyList += `\n▪️ *Session:* ${d.session} (${d.time})\n   🕒 *Report by:* ${rTime}\n`;
-    });
-
-    return `🔔 *DUTY REMINDER FOR TOMORROW* 🔔\n\n` +
-           `Dear *${name}*,\n\n` +
-           `This is a reminder regarding your invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n` +
-           `*Duty Details:*${dutyList}\n` +
-           `🛑 *INSTRUCTIONS:*\n` +
-           `1. Report to Chief Supdt office *30 mins before* exam.\n` +
-           `2. Keep mobile phones in *silent mode*.\n\n` +
-           `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
-           `Thank you,\n` +
-           `*Chief Superintendent*\n${college}\n` + 
-           `_Automated Alert_`;
-};
-
-// 4. Daily SMS (Shortest)
-function generateDailySMS(firstName, dateStr, duties) {
-    // Format: "John: Duty Tmrw 01.12 (FN). Report 9:00 AM. -CS"
-    const [dd, mm, yyyy] = dateStr.split('.');
-    const shortDate = `${dd}.${mm}.${yyyy.slice(-2)}`;
-    const sessions = duties.map(d => d.session).join('&');
-    const firstTime = calculateReportTime(duties[0].time);
-
-    return `${firstName}: Duty Tmrw ${shortDate} (${sessions}). Report ${firstTime}. -CS`;
-}
-
-// --- HELPER: Time Calculation (Global) ---
+// --- 1. TIME HELPER (Global) ---
 window.calculateReportTime = function(timeStr) {
     try {
         let [time, mod] = timeStr.split(' ');
@@ -4707,7 +4646,173 @@ window.calculateReportTime = function(timeStr) {
         return timeStr; // Fallback if parsing fails
     }
 };
-// --- UI Helper: Mark button as sent ---
+
+// --- 2. WEEKLY WHATSAPP (Professional & Official) ---
+window.generateWeeklyWhatsApp = function(name, duties) {
+    const now = new Date();
+    const hours = now.getHours();
+    
+    let greeting = "Greetings";
+    if (hours < 12) greeting = "Good Morning";
+    else if (hours < 16) greeting = "Good Afternoon";
+    else greeting = "Good Evening";
+
+    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVERNMENT VICTORIA COLLEGE";
+    
+    let msg = `🏛️ *${college.toUpperCase()}*\n`;
+    msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
+    msg += `─────────────────────\n\n`;
+    
+    msg += `${greeting} *${name}*,\n\n`;
+    msg += `This is an official intimation regarding your invigilation duties for the upcoming week. Please find the schedule below:\n\n`;
+
+    duties.forEach(d => {
+        const rTime = window.calculateReportTime(d.time);
+        msg += `🗓 *${d.date}* (${d.day})\n`;
+        msg += `⏰ ${d.session} Session  |  ${d.time}\n`;
+        msg += `↪️ Report by: *${rTime}*\n`;
+        msg += `─────────────────────\n`;
+    });
+
+    msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
+    msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
+    msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
+    msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
+    
+    msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
+    msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
+    msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
+    msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
+    
+    msg += `Thank you for your cooperation.\n\n`;
+    msg += `Regards,\n`;
+    msg += `*Chief Superintendent*\n`;
+    msg += `Exam Cell, ${college}`;
+
+    return msg;
+};
+
+// --- 3. WEEKLY SMS (Concise) ---
+window.generateWeeklySMS = function(firstName, duties) {
+   const shortList = duties.map(d => {
+        const [dd, mm, yyyy] = d.date.split('.');
+        const shortDate = `${dd}.${mm}`;
+        return `${shortDate}(${d.session})`;
+    }).join(', ');
+
+    return `${firstName}: Exam Duties: ${shortList}. Portal: https://examflow-de08f.web.app/invigilation.html -CS`;
+};
+
+// --- 4. DAILY WHATSAPP (Reminder) ---
+window.generateDailyWhatsApp = function(name, dateStr, duties) {
+    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Exam Cell";
+
+    let dutyList = "";
+    duties.forEach(d => {
+        const rTime = window.calculateReportTime(d.time);
+        dutyList += `\n▪️ *Session:* ${d.session} (${d.time})\n   🕒 *Report by:* ${rTime}\n`;
+    });
+
+    return `🔔 *DUTY REMINDER FOR TOMORROW* 🔔\n\n` +
+           `Dear *${name}*,\n\n` +
+           `This is a reminder regarding your invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n` +
+           `*Duty Details:*${dutyList}\n` +
+           `🛑 *INSTRUCTIONS:*\n` +
+           `1. Report to Chief Supdt office *30 mins before* exam.\n` +
+           `2. Keep mobile phones in *silent mode*.\n\n` +
+           `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
+           `Thank you,\n` +
+           `*Chief Superintendent*\n${college}\n` + 
+           `_Automated Alert_`;
+};
+
+// --- 5. DAILY SMS (Concise) ---
+window.generateDailySMS = function(firstName, dateStr, duties) {
+    const sessions = duties.map(d => d.session).join('&');
+    const firstTime = window.calculateReportTime(duties[0].time);
+    return `${firstName}: Duty Tmrw ${dateStr} (${sessions}). Report ${firstTime}. Link: https://examflow-de08f.web.app/invigilation.html -CS`;
+};
+
+// --- 6. PROFESSIONAL EMAIL GENERATOR (Unified) ---
+window.generateProfessionalEmail = function(name, dutiesArray, title) {
+    const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
+
+    let rows = dutiesArray.map(d => {
+        const reportTime = window.calculateReportTime(d.time);
+        return `
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
+                <strong>${d.date}</strong> <br> 
+                <span style="font-size: 11px; color: #6b7280; text-transform: uppercase;">${d.day}</span>
+            </td>
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
+                <span style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">${d.session}</span> 
+                ${d.time}
+            </td>
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #c0392b; font-weight: bold;">
+                ${reportTime}
+            </td>
+        </tr>`;
+    }).join('');
+
+    return `
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
+            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
+        </div>
+
+        <div style="padding: 25px;">
+            <p style="font-size: 15px; color: #111827; margin-top: 0;">Dear <b>${name}</b>,</p>
+            <p style="color: #4b5563; line-height: 1.6; font-size: 14px;">
+                This is an official intimation regarding your invigilation duties. Please find your schedule below:
+            </p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #f9fafb; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Date</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Session</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Reporting Time</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+
+            <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                <strong style="color: #92400e; font-size: 13px;">🛑 Instructions:</strong>
+                <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
+                    <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
+                    <li>Mobile phones must be kept in <strong>silent mode</strong> inside the hall.</li>
+                    <li><a href="https://bit.ly/gvc-exam" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px; padding: 10px; background-color: #f3f4f6; border-radius: 4px; font-size: 13px; color: #374151;">
+                <p style="margin: 0 0 8px 0;">
+                    ♻️ For adjustments, please post in the <a href="https://examflow-de08f.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
+                </p>
+                <p style="margin: 0; color: #dc2626; font-weight: bold;">
+                    Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
+                </p>
+            </div>
+        </div>
+
+        <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.4;">
+                <strong>Exam Cell, ${collegeName}, Palakkad</strong><br>
+                This is an automated system alert. Please do not reply directly to this email.
+            </p>
+        </div>
+    </div>
+    `;
+};
+
+// --- 7. ALIAS FOR BACKWARD COMPATIBILITY ---
+// This ensures that any code calling 'generateHtmlEmailBody' still works but uses the new beautiful template.
+window.generateHtmlEmailBody = window.generateProfessionalEmail;
+
+// --- 8. UI HELPER: Mark Sent ---
 window.markAsSent = function (btn) {
     btn.classList.remove('bg-blue-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-orange-700');
     btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
@@ -4715,41 +4820,37 @@ window.markAsSent = function (btn) {
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
         Sent
     `;
-    // Optional: Disable click after sending to prevent double-send? 
-    // User might want to re-send if it failed, so we keep it clickable but green.
-}
+};
+
+// --- 9. SEND SESSION SMS (Native App) ---
 window.sendSessionSMS = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
+    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
 
     // 1. Get Data
     const [dateStr, timeStr] = key.split(' | ');
-    const reportTime = calculateReportTime(timeStr);
+    const reportTime = window.calculateReportTime(timeStr);
 
-    // 2. Gather Phones (With Country Code)
+    // 2. Gather Phones
     const phones = [];
     slot.assigned.forEach(email => {
         const s = staffData.find(st => st.email === email);
         if (s && s.phone) {
             let p = s.phone.replace(/\D/g, '');
-            // Ensure 10 digit numbers get 91 prepended
             if (p.length === 10) p = `91${p}`;
             phones.push(p);
         }
     });
 
-    if (phones.length === 0) return alert("No valid phone numbers found for assigned staff.");
+    if (phones.length === 0) return alert("No valid phone numbers found.");
 
-    // 3. Create Short Message (Optimized for 1 SMS segment if possible)
-    // Format: "Duty: DD.MM.YY HH:MM. Report: HH:MM. -CS GVC"
-    const shortDate = dateStr.slice(0, 5); // DD.MM
-    const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. -CS GVC`;
+    // 3. Create Message
+    const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. Link: https://examflow-de08f.web.app/invigilation.html -CS GVC`;
 
     // 4. Launch Native SMS App
-    // Note: Most phones allow selecting SIM card when the app opens.
-    // Android standard: comma separated numbers
     window.location.href = `sms:${phones.join(',')}?body=${encodeURIComponent(msg)}`;
-}
+};
+
 
 // --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
 window.downloadAttendanceCSV = function () {
