@@ -5970,12 +5970,10 @@ window.filterManualStaff = function () {
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
     const requiredCount = parseInt(slot.required) || 0; 
-
-    // 1. Admin Lock Check
-    if (!slot.isAdminLocked) {
-        alert("⚠️ Action Denied.\n\nManual allocation requires the ADMIN POSTING LOCK.\nPlease click the '🛡️ Admin' lock button for this slot first.");
-        return;
-    }
+    
+    // --- 1. DETERMINE MODE ---
+    // We allow opening even if NOT locked, but restrict actions
+    const isFullEditMode = slot.isAdminLocked;
 
     // 2. Reset Search
     const searchInput = document.getElementById('manual-staff-search');
@@ -5988,7 +5986,37 @@ window.openManualAllocationModal = function (key) {
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = requiredCount;
 
-    // --- 4. SMART SORTING (Same as before) ---
+    // --- 4. HANDLE BUTTON STATE (LOCK LOGIC) ---
+    const saveBtn = document.querySelector('#manual-allocation-modal button[onclick="saveManualAllocation()"]');
+    const headerDiv = document.getElementById('manual-modal-title').parentNode;
+    const existingMsg = document.getElementById('manual-lock-msg');
+    if (existingMsg) existingMsg.remove();
+
+    if (!isFullEditMode) {
+        // RESTRICTED MODE
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            saveBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            saveBtn.innerHTML = "🔒 Lock Slot to Edit Assignments";
+        }
+        // Add Warning Banner
+        const msg = document.createElement('div');
+        msg.id = 'manual-lock-msg';
+        msg.className = "mt-2 bg-blue-50 border border-blue-200 text-blue-800 text-[10px] p-2 rounded flex items-center gap-2";
+        msg.innerHTML = "<span>ℹ️</span> <b>Read-Only Mode:</b> You can mark Unavailability (⛔), but must <b>Admin Lock (🛡️)</b> this slot to change assignments.";
+        headerDiv.appendChild(msg);
+    } else {
+        // FULL EDIT MODE
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
+            saveBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            saveBtn.innerHTML = "Save Assignment Changes";
+        }
+    }
+
+    // --- 5. SMART SORTING & CONTEXT (Standard Logic) ---
     const targetDate = parseDate(key);
     const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     const weekNum = getWeekOfMonth(targetDate);
@@ -6001,7 +6029,6 @@ window.openManualAllocationModal = function (key) {
     const staffContext = {};
     staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
 
-    // Build Context
     Object.keys(invigilationSlots).forEach(k => {
         if (k === key) return;
         const sSlot = invigilationSlots[k];
@@ -6009,20 +6036,16 @@ window.openManualAllocationModal = function (key) {
         const sDateString = sDate.toDateString();
         const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
         const sWeek = getWeekOfMonth(sDate);
-        const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
-        const isSameDay = (sDateString === targetDateString);
-        const isAdjacent = (sDateString === prevDateStr || sDateString === nextDateStr);
-
+        
         (sSlot.assigned || []).forEach(email => {
             if (staffContext[email]) {
-                if (isSameWeek) staffContext[email].weekCount++;
-                if (isSameDay) staffContext[email].hasSameDay = true;
-                if (isAdjacent) staffContext[email].hasAdjacent = true;
+                if (sMonth === monthStr && sWeek === weekNum) staffContext[email].weekCount++;
+                if (sDateString === targetDateString) staffContext[email].hasSameDay = true;
+                if (sDateString === prevDateStr || sDateString === nextDateStr) staffContext[email].hasAdjacent = true;
             }
         });
     });
 
-    // Score Staff
     const rankedStaff = staffData
         .filter(s => s.status !== 'archived')
         .map(s => {
@@ -6036,22 +6059,18 @@ window.openManualAllocationModal = function (key) {
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
-
+            
             // Dept Saturation
             const assignedList = slot.assigned || [];
-            const totalAssigned = assignedList.length;
-            const myDeptCount = assignedList.filter(email => {
-                const member = staffData.find(st => st.email === email);
-                return member && member.dept === s.dept;
+            const myDeptCount = assignedList.filter(e => {
+                const m = staffData.find(st => st.email === e);
+                return m && m.dept === s.dept;
             }).length;
             const totalInDept = staffData.filter(st => st.dept === s.dept).length;
             
-            if (totalInDept > 1) {
-                const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
-                if (potentialRatio > 0.5) {
-                    score -= 500;
-                    badges.push("Dept Saturation");
-                }
+            if (totalInDept > 1 && ((myDeptCount + 1) / (assignedList.length + 1) > 0.5)) {
+                score -= 500;
+                badges.push("Dept Saturation");
             }
 
             return { ...s, pending, score, badges };
@@ -6060,7 +6079,7 @@ window.openManualAllocationModal = function (key) {
 
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
-    // --- 5. RENDER & SELECTION LOGIC ---
+    // --- 6. RENDER LIST ---
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
 
@@ -6075,37 +6094,33 @@ window.openManualAllocationModal = function (key) {
         const isUnavailable = isUserUnavailable(slot, s.email, key);
         const isAssigned = assignedSet.has(s.email);
 
-        // Filter: Hide unavailable staff, UNLESS they are already assigned
         if (isUnavailable && !isAssigned) return;
 
         let isChecked = false;
-        if (isAssigned) {
-            isChecked = true;
-        } else if (slotsToAutoFill > 0) {
-            isChecked = true;
-            slotsToAutoFill--;
-        }
+        if (isAssigned) isChecked = true;
+        else if (slotsToAutoFill > 0) { isChecked = true; slotsToAutoFill--; }
 
         if (isChecked) currentSelectionCount++;
 
         const checkState = isChecked ? 'checked' : '';
+        // DISABLE CHECKBOXES IF NOT ADMIN LOCKED
+        const disabledState = !isFullEditMode ? 'disabled' : '';
         const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
         const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
         const warningHtml = s.badges.map(b => `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`).join('');
 
-        // --- NEW: Add "Mark Unavailable" Button ---
-        // We pass the key and the email to a new helper function
+        // ⛔ Button is ALWAYS enabled (even if not locked)
         const unavailBtn = `
             <button onclick="adminMarkUnavailable('${key}', '${s.email}')" 
                     class="ml-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition" 
-                    title="Mark Unavailable / Sick">
+                    title="Mark Unavailable">
                 ⛔
             </button>`;
 
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition text-xs">
                 <td class="px-1 py-2 md:px-3 text-center w-8 md:w-10">
-                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600 rounded" value="${s.email}" ${checkState} onchange="window.updateManualCounts()">
+                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600 rounded disabled:opacity-50" value="${s.email}" ${checkState} ${disabledState} onchange="window.updateManualCounts()">
                 </td>
                 <td class="px-2 py-2 md:px-3">
                     <div class="flex flex-col md:flex-row md:items-center">
@@ -6131,14 +6146,13 @@ window.openManualAllocationModal = function (key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 6. Render Unavailable List (Now with Delete Button)
+    // 7. Render Unavailable List
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
-
     const allUnavailable = [];
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
 
-    // Merge Advance Unavailability
+    // Merge Advance
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -6160,9 +6174,6 @@ window.openManualAllocationModal = function (key) {
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
             const s = staffData.find(st => st.email === email) || { name: email };
             const isAdvance = u.type === 'Advance';
-
-            // --- NEW: Remove Button Logic ---
-            // If it's advance leave, we warn them. If session, we just delete.
             const removeAction = `adminRemoveUnavailable('${key}', '${email}', ${isAdvance})`;
 
             unavList.innerHTML += `
@@ -6181,10 +6192,7 @@ window.openManualAllocationModal = function (key) {
         unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
     }
 
-    // 7. Update Counters & Open
     document.getElementById('manual-sel-count').textContent = currentSelectionCount;
-    const reqCountEl = document.getElementById('manual-req-count');
-    if (reqCountEl) reqCountEl.textContent = requiredCount;
     window.openModal('manual-allocation-modal');
 }
 
@@ -6197,36 +6205,64 @@ window.updateManualCounts = function () {
 
 window.saveManualAllocation = async function () {
     const key = document.getElementById('manual-session-key').value;
+    
+    // --- SECURITY CHECK ---
+    if (!invigilationSlots[key].isAdminLocked) {
+        return alert("⚠️ Security Alert\n\nThis slot is currently OPEN. You must 'Lock (🛡️)' it before you can manually edit staff assignments.");
+    }
+
     const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
 
     if (invigilationSlots[key]) {
-        // ... (Log generation code) ...
+        // ... (Existing Logic for Log Generation and Metadata) ...
+        const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
+        const adminName = currentUser ? currentUser.email : "Admin";
+
+        let logHtml = "";
+        if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
+             // ... (Keep your existing log generation logic here) ...
+             // Re-paste the logic from previous turn if needed, or just wrap this check around existing function body
+             logHtml = `
+                <div class="mb-3 pb-2 border-b border-gray-200">
+                    <div class="font-bold text-gray-800">Assignment Logic Report</div>
+                    <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
+                </div>
+                <div class="mb-3">
+                    <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>`;
+             
+             selectedEmails.forEach((email, i) => {
+                const rankData = lastManualRanking.find(s => s.email === email);
+                if (rankData) {
+                    const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
+                    logHtml += `<div class="text-xs mb-1">${i + 1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
+                } else {
+                    logHtml += `<div class="text-xs mb-1">${i + 1}. ${getNameFromEmail(email)} (Manually Added)</div>`;
+                }
+            });
+            logHtml += `</div>`;
+        } else {
+            logHtml = `<div class="text-gray-500 italic">Log not available (Session reloaded).</div>`;
+        }
 
         const slot = invigilationSlots[key];
         const oldAssigned = new Set(slot.assigned || []);
 
-        // Save to Slot
         slot.allocationLog = logHtml;
         slot.assigned = selectedEmails;
 
-        // --- GOD MODE: UPDATE SOURCES ---
+        // GOD MODE UPDATE
         selectedEmails.forEach(email => {
-            // If this person was NOT in the list before, they are definitely added by ADMIN now.
-            // If they WERE in the list, but have no meta, mark as ADMIN (legacy fix).
-            // If they have meta (e.g. VOLUNTEER), leave it alone.
             if (!oldAssigned.has(email) || !slot.assignmentMeta?.[email]) {
                 updateAssignmentMeta(slot, email, 'ADMIN');
             }
         });
         
-        // Cleanup meta for removed staff
         if (slot.assignmentMeta) {
             Object.keys(slot.assignmentMeta).forEach(e => {
                 if (!selectedEmails.includes(e)) delete slot.assignmentMeta[e];
             });
         }
 
-        // --- 2. STANDARD LOGGING & SAVE ---
         if (typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${selectedEmails.length} staff to session ${key}`);
 
         await syncSlotsToCloud();
