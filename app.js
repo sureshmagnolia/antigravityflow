@@ -14905,6 +14905,53 @@ if (btnSessionReschedule) {
             }
         });
 
+
+
+// --- 6. Append Reserve List (New Logic) ---
+    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const slot = invigSlots[sessionKey];
+    
+    if (slot && slot.assigned && slot.assigned.length > 0) {
+        // Get all assigned names for this session
+        const assignedNames = new Set(Object.values(currentSessionInvigs));
+        
+        // Find staff who are in the slot ("available") but NOT in the assigned list
+        const reserves = [];
+        slot.assigned.forEach(email => {
+            const staff = staffData.find(s => s.email === email);
+            // We match by NAME because that's what we store in the mapping
+            if (staff && !assignedNames.has(staff.name)) {
+                reserves.push(staff);
+            }
+        });
+        
+        if (reserves.length > 0) {
+            // Header for Reserves
+             rowsHtml += `
+                <tr style="background-color:#fff7ed;">
+                    <td colspan="9" style="border:1px solid #d97706; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt; color:#9a3412; text-align:center;">
+                        RESERVES / RELIEVERS
+                    </td>
+                </tr>
+            `;
+            
+            // List each reserve invigilator
+            reserves.forEach((staff, idx) => {
+                 rowsHtml += `
+                 <tr>
+                    <td style="border:1px solid #000; padding:4px; text-align:center;">${idx + 1}</td>
+                    <td colspan="3" style="border:1px solid #000; padding:4px; font-weight:bold;">${staff.name}</td>
+                    <td colspan="3" style="border:1px solid #000; padding:4px;">${staff.dept || ""}</td>
+                    <td colspan="2" style="border:1px solid #000; padding:4px;">${staff.phone || ""}</td>
+                 </tr>
+                 `;
+            });
+        }
+    }
+
+
+        
+        
         // 6. Generate Print Window
         const w = window.open('', '_blank');
         w.document.write(`
