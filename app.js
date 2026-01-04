@@ -14451,9 +14451,11 @@ if (btnSessionReschedule) {
                     actionHtml = `
                     <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
                         ${getNameHtml(assignedName)}
-                        <div class="flex gap-1 w-full sm:w-auto">
-                            <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Change</button>
-                            <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>
+
+                       <div class="flex gap-1 w-full sm:w-auto">     
+                       <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Change</button>
+                            ${allRooms.length > 1 ? `
+                        <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>` : ''}
                         </div>
                     </div>
                 `;
