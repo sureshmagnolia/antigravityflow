@@ -8507,49 +8507,59 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 
 
 
-// --- HELPER: Generate Weekly WhatsApp ---
+// --- HELPER: Generate Weekly WhatsApp (Professional + Exchange Link) ---
 window.generateWeeklyWhatsApp = function(name, duties) {
     const now = new Date();
     const hours = now.getHours();
     
+    // 1. Polite Time-Based Greeting
     let greeting = "Greetings";
     if (hours < 12) greeting = "Good Morning";
     else if (hours < 16) greeting = "Good Afternoon";
     else greeting = "Good Evening";
 
+    // 2. Get College Name
     const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVERNMENT VICTORIA COLLEGE";
     
+    // 3. Build Message
     let msg = `🏛️ *${college.toUpperCase()}*\n`;
     msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
     msg += `─────────────────────\n\n`;
     
     msg += `${greeting} *${name}*,\n\n`;
-    msg += `Kindly note your invigilation duty schedule for this week:\n\n`;
+    msg += `This is an official intimation regarding your invigilation duties for the upcoming week. Please find the schedule below:\n\n`;
 
+    // 4. Loop through duties
     duties.forEach(d => {
-        const rTime = calculateReportTime(d.time);
+        // Calculate Reporting Time (assumed helper function exists)
+        const rTime = window.calculateReportTime ? window.calculateReportTime(d.time) : d.time;
+
         msg += `🗓 *${d.date}* (${d.day})\n`;
         msg += `⏰ ${d.session} Session  |  ${d.time}\n`;
         msg += `↪️ Report by: *${rTime}*\n`;
         msg += `─────────────────────\n`;
     });
 
-    msg += `\n🛑 *INSTRUCTIONS:*\n`;
+    // 5. General Instructions
+    msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
-    msg += `2️⃣ Mobile phones should be in *silent mode* inside the hall.\n`;
-    msg += `3️⃣ View General Instructions: https://bit.ly/gvc-exam\n\n`;
+    msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
+    msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
     
-    msg += `♻️ *ADJUSTMENTS:*\n`;
-    msg += `For adjustments/exchanges, please visit the Portal:\n`;
-    msg += `🔗 https://examflow-de08f.web.app/invigilation.html\n\n`;
-    msg += `⚠️ *Important:* If your Exchange Request is not picked up, you must arrange a replacement personally.\n\n`;
+    // 6. Exchange Instructions & Link
+    msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
+    msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
+    msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
+    msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
     
-    msg += `Exam Cell, ${college}, Palakkad\n`;
-    msg += `_This is an automated system alert._`;
+    // 7. Footer
+    msg += `Thank you for your cooperation.\n\n`;
+    msg += `Regards,\n`;
+    msg += `*Chief Superintendent*\n`;
+    msg += `Exam Cell, ${college}`;
 
     return msg;
 };
-
 
 
 
