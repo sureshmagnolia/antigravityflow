@@ -309,6 +309,7 @@ function setupLiveSync(collegeId, mode) {
                 if (emailToRender) {
                     renderStaffCalendar(emailToRender);
                     if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
+                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
                 }
             }
         }
@@ -1302,14 +1303,11 @@ function renderStaffCalendar(myEmail) {
 
     const firstDayIndex = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
-    // --- 1. CURRENT TIME CHECK ---
     const now = new Date();
 
     // Group Slots
     const slotsByDate = {};
     Object.keys(invigilationSlots).forEach(key => {
-        // 🟢 HIDE SOFT-DELETED SLOTS
         if (invigilationSlots[key].isHidden) return;
 
         const [dStr, tStr] = key.split(' | ');
@@ -1352,9 +1350,7 @@ function renderStaffCalendar(myEmail) {
                 const needed = slot.required;
                 const available = Math.max(0, needed - filled);
 
-                // --- 2. TIME & STATUS CALCULATIONS ---
                 const slotDateObj = parseDate(slot.key);
-                // Assume session ends 3 hours after start for visual purposes
                 const sessionEndTime = new Date(slotDateObj);
                 sessionEndTime.setHours(sessionEndTime.getHours() + 3);
                 const isPast = sessionEndTime < now;
@@ -1364,11 +1360,6 @@ function renderStaffCalendar(myEmail) {
                 const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
                 const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isAdminLocked = slot.isAdminLocked || false;
-                
-                // --- 3. SMART COMPLETION CHECK ---
-                // It is "Done" if: 
-                // A) Attendance explicitly marked OR 
-                // B) I was assigned AND the time has passed
                 const isCompleted = (slot.attendance && slot.attendance.includes(myEmail)) || (isAssigned && isPast);
 
                 let badgeClass = "bg-gradient-to-br from-green-50 to-green-100 text-green-800 border-green-200";
@@ -1377,70 +1368,33 @@ function renderStaffCalendar(myEmail) {
                 let glowClass = "";
 
                 if (isCompleted) {
-                    // COMPLETED / PAST DUTY -> DARK GREEN
                     badgeClass = "bg-green-800 text-white border-green-900 md:bg-gradient-to-br md:from-green-700 md:to-green-800 md:border-green-600";
-                    icon = "✅"; 
-                    statusText = ""; // Minimal text
-                    glowClass = "md:shadow-lg md:shadow-green-900";
-                }
-                else if (isPostedByMe) {
-                    if (isAdminLocked) {
-                        badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300";
-                        icon = "🛡️";
-                        statusText = "Frozen";
-                    } else {
-                        badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300";
-                        icon = "⏳";
-                        statusText = "Posted";
-                    }
-                }
-                else if (isAssigned) {
-                     if (isAdminLocked) {
-                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300";
-                        icon = "🛡️";
-                        statusText = "Duty";
-                    } else if (slot.isLocked) {
-                        badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold";
-                        icon = "🔒";
-                        statusText = "Duty";
-                        glowClass = "shadow-sm shadow-blue-100";
-                    } else {
-                        badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold";
-                        icon = "👮";
-                        statusText = "Duty";
-                        glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300";
-                    }
-                }
-                else if (isMarketAvailable) {
-                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse";
-                    icon = "♻️";
-                    statusText = "Exchange";
-                }
-                else if (isUnavailable) {
+                    icon = "✅"; statusText = ""; glowClass = "md:shadow-lg md:shadow-green-900";
+                } else if (isPostedByMe) {
+                    if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; icon = "🛡️"; statusText = "Frozen"; }
+                    else { badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; icon = "⏳"; statusText = "Posted"; }
+                } else if (isAssigned) {
+                     if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; icon = "🛡️"; statusText = "Duty"; }
+                     else if (slot.isLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; icon = "🔒"; statusText = "Duty"; glowClass = "shadow-sm shadow-blue-100"; }
+                     else { badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; icon = "👮"; statusText = "Duty"; glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; }
+                } else if (isMarketAvailable) {
+                    badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; icon = "♻️"; statusText = "Exchange";
+                } else if (isUnavailable) {
+                    // ✅ CHECK IF MARKED BY ADMIN
+                    const uEntry = slot.unavailable ? slot.unavailable.find(u => (typeof u === 'string' ? u : u.email) === myEmail) : null;
+                    const isAdminMarked = uEntry && uEntry.markedBy === 'Admin';
+                    
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
-                    icon = "⛔";
-                    statusText = "Unavail";
-                }
-                else if (isAdminLocked) {
-                    badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200";
-                    icon = "🛡️"; 
-                    statusText = "Paused"; 
-                }
-                else if (slot.isLocked) {
-                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200";
-                    icon = "🔒";
-                    statusText = "Locked";
-                }
-                // --- 4. PAST UNASSIGNED SLOTS (Fixes "Light Green" Issue) ---
-                else if (isPast) {
-                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75";
-                    icon = "⏹️";
-                    statusText = "Done";
-                }
-                else if (filled >= needed) {
-                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200";
-                    icon = "🈵";
-                    statusText = "Full";
+                    icon = isAdminMarked ? "🛡️" : "⛔";
+                    statusText = isAdminMarked ? "Admin" : "Unavail";
+                } else if (isAdminLocked) {
+                    badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; icon = "🛡️"; statusText = "Paused"; 
+                } else if (slot.isLocked) {
+                    badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; icon = "🔒"; statusText = "Locked";
+                } else if (isPast) {
+                    badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; icon = "⏹️"; statusText = "Done";
+                } else if (filled >= needed) {
+                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; icon = "🈵"; statusText = "Full";
                 }
 
                 const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
@@ -1465,16 +1419,26 @@ function renderStaffCalendar(myEmail) {
                 let hasUnavail = false;
                 let unavailHtml = `<div class="flex flex-col gap-0.5 p-0.5 md:p-2 mt-7 md:mt-8 w-full">`;
 
-                if (adv.FN && adv.FN.some(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail))) {
-                    hasUnavail = true;
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ⛔</span><span class="hidden md:inline">FN ⛔ Unavail</span></div>`;
-                }
-                if (adv.AN && adv.AN.some(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail))) {
-                    hasUnavail = true;
-                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ⛔</span><span class="hidden md:inline">AN ⛔ Unavail</span></div>`;
-                }
-                unavailHtml += `</div>`;
+                // Helper to find entry
+                const findEntry = (list) => list ? list.find(u => (typeof u === 'string' ? u === myEmail : u.email === myEmail)) : null;
 
+                const fnEntry = findEntry(adv.FN);
+                if (fnEntry) {
+                    hasUnavail = true;
+                    const isAdm = fnEntry.markedBy === 'Admin';
+                    const icon = isAdm ? "🛡️" : "⛔";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ${icon}</span><span class="hidden md:inline">FN ${icon} Unavail</span></div>`;
+                }
+                
+                const anEntry = findEntry(adv.AN);
+                if (anEntry) {
+                    hasUnavail = true;
+                    const isAdm = anEntry.markedBy === 'Admin';
+                    const icon = isAdm ? "🛡️" : "⛔";
+                    unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ${icon}</span><span class="hidden md:inline">AN ${icon} Unavail</span></div>`;
+                }
+                
+                unavailHtml += `</div>`;
                 if (hasUnavail) contentHtml += unavailHtml;
             }
         }
