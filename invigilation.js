@@ -2324,10 +2324,17 @@ window.confirmUnavailable = async function () {
         logActivity("Session Unavailability", `Marked ${getNameFromEmail(email)} unavailable for ${key}. Reason: ${reason}`);
 
         await syncSlotsToCloud();
-        
+    
         window.closeModal('unavailable-modal');
         window.closeModal('day-detail-modal'); 
 
+    // --- NEW: If Admin was in Manual Mode, re-open it ---
+    const manualModal = document.getElementById('manual-allocation-modal');
+    // Check if we were editing this specific key
+    if (document.getElementById('manual-session-key').value === key) {
+        window.openManualAllocationModal(key);
+    } else {
+        // Standard Refresh
         renderStaffCalendar(email);
         if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
     }
@@ -5958,9 +5965,6 @@ window.filterManualStaff = function () {
 
 
 
-// [In invigilation.js]
-// Replace the existing openManualAllocationModal function with this:
-
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
     const requiredCount = parseInt(slot.required) || 0; 
@@ -5982,7 +5986,7 @@ window.openManualAllocationModal = function (key) {
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = requiredCount;
 
-    // --- 4. SMART SORTING ---
+    // --- 4. SMART SORTING (Same as before) ---
     const targetDate = parseDate(key);
     const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     const weekNum = getWeekOfMonth(targetDate);
@@ -5995,13 +5999,12 @@ window.openManualAllocationModal = function (key) {
     const staffContext = {};
     staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
 
-    // Build Context (Check conflicts with other slots)
+    // Build Context
     Object.keys(invigilationSlots).forEach(k => {
         if (k === key) return;
         const sSlot = invigilationSlots[k];
         const sDate = parseDate(k);
         const sDateString = sDate.toDateString();
-
         const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
         const sWeek = getWeekOfMonth(sDate);
         const isSameWeek = (sMonth === monthStr && sWeek === weekNum);
@@ -6024,30 +6027,24 @@ window.openManualAllocationModal = function (key) {
             const done = getDutiesDoneCount(s.email);
             const target = calculateStaffTarget(s);
             const pending = Math.max(0, target - done);
-
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
-
-            // Base Score: Pending Duty Priority
             let score = pending * 100;
             let badges = [];
 
-            // Penalties
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
 
-            // Dept Saturation Check
+            // Dept Saturation
             const assignedList = slot.assigned || [];
             const totalAssigned = assignedList.length;
             const myDeptCount = assignedList.filter(email => {
                 const member = staffData.find(st => st.email === email);
                 return member && member.dept === s.dept;
             }).length;
-
             const totalInDept = staffData.filter(st => st.dept === s.dept).length;
-            const isExempt = (totalInDept === 1);
-
-            if (!isExempt) {
+            
+            if (totalInDept > 1) {
                 const potentialRatio = (myDeptCount + 1) / (totalAssigned + 1);
                 if (potentialRatio > 0.5) {
                     score -= 500;
@@ -6057,7 +6054,7 @@ window.openManualAllocationModal = function (key) {
 
             return { ...s, pending, score, badges };
         })
-        .sort((a, b) => b.score - a.score); // Highest Score First
+        .sort((a, b) => b.score - a.score);
 
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
@@ -6065,34 +6062,24 @@ window.openManualAllocationModal = function (key) {
     const availList = document.getElementById('manual-available-list');
     availList.innerHTML = '';
 
-    // 🟢 FIX: Prioritize Volunteers (Existing Assignments)
     const assignedSet = new Set(slot.assigned || []);
     let currentSelectionCount = 0;
     
-    // Count how many assigned people are actually valid/ranked
     let preFilledCount = 0;
-    rankedStaff.forEach(s => {
-         if(assignedSet.has(s.email)) preFilledCount++;
-    });
-
-    // Determine how many *more* slots we need to auto-fill
+    rankedStaff.forEach(s => { if(assignedSet.has(s.email)) preFilledCount++; });
     let slotsToAutoFill = Math.max(0, requiredCount - preFilledCount);
 
     rankedStaff.forEach(s => {
         const isUnavailable = isUserUnavailable(slot, s.email, key);
         const isAssigned = assignedSet.has(s.email);
 
-        // Filter: Hide unavailable staff, UNLESS they are already assigned (keep them visible/checked)
+        // Filter: Hide unavailable staff, UNLESS they are already assigned
         if (isUnavailable && !isAssigned) return;
 
         let isChecked = false;
-
-        // SELECTION RULE 1: If they volunteered/are assigned, ALWAYS check them.
         if (isAssigned) {
             isChecked = true;
-        } 
-        // SELECTION RULE 2: If we still have space, auto-check the top ranked staff.
-        else if (slotsToAutoFill > 0) {
+        } else if (slotsToAutoFill > 0) {
             isChecked = true;
             slotsToAutoFill--;
         }
@@ -6102,10 +6089,16 @@ window.openManualAllocationModal = function (key) {
         const checkState = isChecked ? 'checked' : '';
         const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
         const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
+        const warningHtml = s.badges.map(b => `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`).join('');
 
-        const warningHtml = s.badges.map(b =>
-            `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`
-        ).join('');
+        // --- NEW: Add "Mark Unavailable" Button ---
+        // We pass the key and the email to a new helper function
+        const unavailBtn = `
+            <button onclick="adminMarkUnavailable('${key}', '${s.email}')" 
+                    class="ml-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition" 
+                    title="Mark Unavailable / Sick">
+                ⛔
+            </button>`;
 
         availList.innerHTML += `
             <tr class="${rowClass} border-b last:border-0 transition text-xs">
@@ -6123,8 +6116,11 @@ window.openManualAllocationModal = function (key) {
                         </div>
                     </div>
                 </td>
-                <td class="px-2 py-2 md:px-3 text-center font-mono font-bold ${pendingColor} w-10 md:w-16 text-xs md:text-sm">
-                    ${s.pending}
+                <td class="px-2 py-2 md:px-3 text-center w-16 md:w-20">
+                     <div class="flex items-center justify-center gap-1">
+                        <span class="font-mono font-bold ${pendingColor} text-xs md:text-sm">${s.pending}</span>
+                        ${unavailBtn}
+                     </div>
                 </td>
             </tr>`;
     });
@@ -6133,13 +6129,14 @@ window.openManualAllocationModal = function (key) {
         availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
     }
 
-    // 6. Render Unavailable List (Unchanged)
+    // 6. Render Unavailable List (Now with Delete Button)
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
 
     const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push(u));
+    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
 
+    // Merge Advance Unavailability
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
     const t = timeStr ? timeStr.toUpperCase() : "";
@@ -6147,9 +6144,11 @@ window.openManualAllocationModal = function (key) {
 
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-            if (!allUnavailable.some(existing => (typeof existing === 'string' ? existing : existing.email) === u.email)) {
-                allUnavailable.push(u);
-            }
+             const email = (typeof u === 'string') ? u : u.email;
+             if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === email)) {
+                 const entry = (typeof u === 'string') ? { email: u, reason: "Advance Leave" } : u;
+                 allUnavailable.push({...entry, type: 'Advance'});
+             }
         });
     }
 
@@ -6158,11 +6157,22 @@ window.openManualAllocationModal = function (key) {
             const email = (typeof u === 'string') ? u : u.email;
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
             const s = staffData.find(st => st.email === email) || { name: email };
+            const isAdvance = u.type === 'Advance';
+
+            // --- NEW: Remove Button Logic ---
+            // If it's advance leave, we warn them. If session, we just delete.
+            const removeAction = `adminRemoveUnavailable('${key}', '${email}', ${isAdvance})`;
 
             unavList.innerHTML += `
                 <div class="bg-white p-2 rounded border border-red-100 text-[10px] md:text-xs shadow-sm mb-1 flex justify-between items-center">
-                    <div class="font-bold text-red-700 truncate mr-2">${s.name}</div>
-                    <div class="text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded whitespace-nowrap">${reason}</div>
+                    <div class="flex items-center gap-2">
+                         <span class="font-bold text-red-700 truncate">${s.name}</span>
+                         <span class="text-[9px] text-gray-400">(${isAdvance ? 'Gen' : 'Slot'})</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded whitespace-nowrap">${reason}</span>
+                        <button onclick="${removeAction}" class="text-red-400 hover:text-red-600 hover:bg-red-50 rounded px-1 font-bold text-sm">×</button>
+                    </div>
                 </div>`;
         });
     } else {
@@ -8973,6 +8983,60 @@ function getSourceBadge(source) {
     }
 }
 
+
+// --- ADMIN: Mark Someone Unavailable (From Manual Modal) ---
+window.adminMarkUnavailable = function(key, email) {
+    // 1. Populate the Unavailability Modal hidden fields
+    document.getElementById('unav-key').value = key;
+    document.getElementById('unav-email').value = email;
+    
+    // 2. Clear previous inputs
+    document.getElementById('unav-reason').value = "";
+    document.getElementById('unav-details').value = "";
+    document.getElementById('unav-details-container').classList.add('hidden');
+    
+    // 3. Switch Modals
+    // We keep manual modal open in background? No, standard is to focus on one.
+    // We will close manual, handle auth, then user must re-open manual to see changes.
+    window.closeModal('manual-allocation-modal');
+    window.openModal('unavailable-modal');
+    
+    // 4. Update the "Save" button in unavailable modal to know it came from Admin
+    // (The standard confirmUnavailable function will handle the saving and sync)
+};
+
+// --- ADMIN: Remove Unavailability (From Manual Modal) ---
+window.adminRemoveUnavailable = async function(key, email, isAdvance) {
+    if(!confirm(`Remove unavailability status for this staff member?`)) return;
+
+    if (isAdvance) {
+        // Handle Advance Leave (Complex because it's in a different object)
+        const [dateStr, timeStr] = key.split(' | ');
+        let session = "FN";
+        const t = timeStr ? timeStr.toUpperCase() : "";
+        if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+
+        if (advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+             advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => 
+                (typeof u === 'string' ? u !== email : u.email !== email)
+             );
+             await saveAdvanceUnavailability();
+        }
+    } else {
+        // Handle Slot Specific
+        const slot = invigilationSlots[key];
+        if (slot && slot.unavailable) {
+            slot.unavailable = slot.unavailable.filter(u => 
+                (typeof u === 'string' ? u !== email : u.email !== email)
+            );
+            await syncSlotsToCloud();
+        }
+    }
+
+    // Refresh the view
+    // Since we are inside the manual modal, we should re-render it to show the change.
+    window.openManualAllocationModal(key);
+};
 
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
