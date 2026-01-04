@@ -9340,6 +9340,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         roomSelectionModal.classList.add('hidden');
         updateAllotmentDisplay(); // Now reads the saved data and shows Serial #
+        if (window.renderInvigilationPanel) window.renderInvigilationPanel(); 
+
     }
 
 
