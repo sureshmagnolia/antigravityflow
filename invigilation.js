@@ -4644,18 +4644,28 @@ function generateWeeklySMS(firstName, duties) {
     return `${firstName}: Duties: ${shortList}. Portal: gvc.ac.in/exam -CS`;
 }
 
-// 3. Daily WhatsApp (Elaborate & Formal - Safe Emojis)
-function generateDailyWhatsApp(name, dateStr, duties) {
+// --- HELPER: Generate Daily WhatsApp (Reminder) ---
+window.generateDailyWhatsApp = function(name, dateStr, duties) {
+    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Exam Cell";
+
     let dutyList = "";
     duties.forEach(d => {
         const rTime = calculateReportTime(d.time);
-        // Using ▪️ (Square) and 🕒 (Clock) instead of complex emojis
         dutyList += `\n▪️ *Session:* ${d.session} (${d.time})\n   🕒 *Report by:* ${rTime}\n`;
     });
 
-    // Using 🔔 (Bell) and ➡️ (Arrow) which are standard
-    return `🔔 *INVIGILATION DUTY REMINDER* 🔔\n\nDear *${name}*,\n\nThis is to inform you that you have invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n*Duty Details:*${dutyList}\n➡️ *Instructions:*\n1. Kindly abide by the rules and regulations of the University.\n2. Please report to the Chief Superintendent's office *before the stipulated time*.\n3. In case of any inconvenience/leave, you are strictly requested to *arrange a replacement* to ensure the examination is conducted uninterrupted.\n\nThank you for your cooperation.\n\n- Chief Superintendent\nExam Wing`;
-}
+    return `🔔 *DUTY REMINDER FOR TOMORROW* 🔔\n\n` +
+           `Dear *${name}*,\n\n` +
+           `This is a reminder regarding your invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n` +
+           `*Duty Details:*${dutyList}\n` +
+           `🛑 *INSTRUCTIONS:*\n` +
+           `1. Report to Chief Supdt office *30 mins before* exam.\n` +
+           `2. Keep mobile phones in *silent mode*.\n\n` +
+           `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
+           `Thank you,\n` +
+           `*Chief Superintendent*\n${college}\n` + 
+           `_Automated Alert_`;
+};
 
 // 4. Daily SMS (Shortest)
 function generateDailySMS(firstName, dateStr, duties) {
@@ -4668,12 +4678,18 @@ function generateDailySMS(firstName, dateStr, duties) {
     return `${firstName}: Duty Tmrw ${shortDate} (${sessions}). Report ${firstTime}. -CS`;
 }
 
-function calculateReportTime(timeStr) {
+// --- HELPER: Time Calculation (Global) ---
+window.calculateReportTime = function(timeStr) {
     try {
         let [time, mod] = timeStr.split(' ');
         let [h, m] = time.split(':');
         let date = new Date();
-        date.setHours(parseInt(h) + (mod === 'PM' && h !== '12' ? 12 : 0));
+        
+        let hour = parseInt(h);
+        if (mod === 'PM' && hour !== 12) hour += 12;
+        if (mod === 'AM' && hour === 12) hour = 0;
+        
+        date.setHours(hour);
         date.setMinutes(parseInt(m));
 
         // Subtract 30 mins
@@ -4684,11 +4700,13 @@ function calculateReportTime(timeStr) {
         let rm = date.getMinutes();
         let rMod = rh >= 12 ? 'PM' : 'AM';
         rh = rh % 12;
-        rh = rh ? rh : 12;
+        rh = rh ? rh : 12; // 0 becomes 12
+        
         return `${String(rh).padStart(2, '0')}:${String(rm).padStart(2, '0')} ${rMod}`;
-    } catch (e) { return timeStr; }
-}
-
+    } catch (e) { 
+        return timeStr; // Fallback if parsing fails
+    }
+};
 // --- UI Helper: Mark button as sent ---
 window.markAsSent = function (btn) {
     btn.classList.remove('bg-blue-600', 'bg-orange-600', 'hover:bg-blue-700', 'hover:bg-orange-700');
@@ -5100,60 +5118,82 @@ window.editStaff = function (index) {
 }
 
 
-
-
-// --- HELPER: Professional Email Template ---
-function generateProfessionalEmail(name, dutiesArray, title) {
-    const collegeName = collegeData.examCollegeName || "Government Victoria College";
+// --- HELPER: Generate Professional HTML Email ---
+window.generateProfessionalEmail = function(name, dutiesArray, title) {
+    const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
 
     let rows = dutiesArray.map(d => {
-        // Calculate Report Time
         const reportTime = calculateReportTime(d.time);
         return `
-        <tr>
-            <td style="padding: 8px; border: 1px solid #ddd;">${d.date}</td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${d.session} (${d.time})</td>
-            <td style="padding: 8px; border: 1px solid #ddd; color: #c0392b; font-weight: bold;">${reportTime}</td>
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
+                <strong>${d.date}</strong> <br> 
+                <span style="font-size: 11px; color: #6b7280; text-transform: uppercase;">${d.day}</span>
+            </td>
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #374151;">
+                <span style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">${d.session}</span> 
+                ${d.time}
+            </td>
+            <td style="padding: 12px; border: 1px solid #e5e7eb; color: #c0392b; font-weight: bold;">
+                ${reportTime}
+            </td>
         </tr>`;
     }).join('');
 
     return `
-    <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px;">
-        <p>Dear <b>${name}</b>,</p>
-        <p>This is an official intimation regarding your ${title} at <b>${collegeName}</b>.</p>
-        
-        <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
-            <thead>
-                <tr style="background-color: #f8f9fa; text-align: left;">
-                    <th style="padding: 8px; border: 1px solid #ddd;">Date</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Session</th>
-                    <th style="padding: 8px; border: 1px solid #ddd;">Reporting Time</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${rows}
-            </tbody>
-        </table>
-
-        <div style="background-color: #eef2ff; padding: 10px; border-radius: 5px; margin: 20px 0; font-size: 13px;">
-            <strong>Instructions:</strong><br>
-            Please report to the Chief Superintendent's office 30 minutes prior to the commencement of the examination.<br>
-            <a href="https://bit.ly/gvc-exam" style="color: #4f46e5;">View General Instructions</a>
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
+            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
         </div>
 
-        <p style="font-size: 13px; color: #666;">
-            <em>For adjustments, please post in the <a href="http://www.gvc.ac.in/exam" style="color: #666;">Exam Portal</a>.</em><br>
-            <span style="color: #c0392b; font-weight: bold;">Important: If your Exchange Request is not picked up, you must arrange a replacement personally.</span>
-        </p>
-        
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-        <p style="font-size: 12px; color: #999;">
-            <b>Exam Cell, ${collegeName}</b><br>
-            <i>This is an automated system alert. Please do not reply directly to this email.</i>
-        </p>
+        <div style="padding: 25px;">
+            <p style="font-size: 15px; color: #111827; margin-top: 0;">Dear <b>${name}</b>,</p>
+            <p style="color: #4b5563; line-height: 1.6; font-size: 14px;">
+                This is an official intimation regarding your invigilation duties. Please find your schedule below:
+            </p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #f9fafb; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Date</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Session</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; color: #4b5563;">Reporting Time</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+
+            <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                <strong style="color: #92400e; font-size: 13px;">🛑 Instructions:</strong>
+                <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
+                    <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
+                    <li>Mobile phones should be in <strong>silent mode</strong> inside the hall.</li>
+                    <li><a href="https://bit.ly/gvc-exam" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 15px; padding: 10px; background-color: #f3f4f6; border-radius: 4px; font-size: 13px; color: #374151;">
+                <p style="margin: 0 0 8px 0;">
+                    ♻️ For adjustments, please post in the <a href="https://examflow-de08f.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
+                </p>
+                <p style="margin: 0; color: #dc2626; font-weight: bold;">
+                    Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
+                </p>
+            </div>
+        </div>
+
+        <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.4;">
+                <strong>Exam Cell, ${collegeName}, Palakkad</strong><br>
+                This is an automated system alert. Please do not reply directly to this email.
+            </p>
+        </div>
     </div>
     `;
-}
+};
+
+
 // --- HELPER: Convert WhatsApp Text to HTML for Email ---
 function formatMessageForEmail(text) {
     if (!text) return "";
@@ -8464,21 +8504,21 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 };
 
 
-// --- HELPER: Generate Weekly WhatsApp (With Reporting Time) ---
+
+
+
+// --- HELPER: Generate Weekly WhatsApp ---
 window.generateWeeklyWhatsApp = function(name, duties) {
     const now = new Date();
     const hours = now.getHours();
     
-    // 1. Polite Time-Based Greeting
     let greeting = "Greetings";
     if (hours < 12) greeting = "Good Morning";
     else if (hours < 16) greeting = "Good Afternoon";
     else greeting = "Good Evening";
 
-    // 2. Get College Name Safely
-    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "EXAMINATION CELL";
+    const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVERNMENT VICTORIA COLLEGE";
     
-    // 3. Build Message
     let msg = `🏛️ *${college.toUpperCase()}*\n`;
     msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
     msg += `─────────────────────\n\n`;
@@ -8486,21 +8526,26 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `${greeting} *${name}*,\n\n`;
     msg += `Kindly note your invigilation duty schedule for this week:\n\n`;
 
-    // 4. Loop through duties
     duties.forEach(d => {
-        // Calculate 30 mins prior
         const rTime = calculateReportTime(d.time);
-
         msg += `🗓 *${d.date}* (${d.day})\n`;
         msg += `⏰ ${d.session} Session  |  ${d.time}\n`;
         msg += `↪️ Report by: *${rTime}*\n`;
         msg += `─────────────────────\n`;
     });
 
-    // 5. Footer
-    msg += `\nThank you for your support.\n\n`;
-    msg += `Regards,\n`;
-    msg += `*Chief Superintendent*`;
+    msg += `\n🛑 *INSTRUCTIONS:*\n`;
+    msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
+    msg += `2️⃣ Mobile phones should be in *silent mode* inside the hall.\n`;
+    msg += `3️⃣ View General Instructions: https://bit.ly/gvc-exam\n\n`;
+    
+    msg += `♻️ *ADJUSTMENTS:*\n`;
+    msg += `For adjustments/exchanges, please visit the Portal:\n`;
+    msg += `🔗 https://examflow-de08f.web.app/invigilation.html\n\n`;
+    msg += `⚠️ *Important:* If your Exchange Request is not picked up, you must arrange a replacement personally.\n\n`;
+    
+    msg += `Exam Cell, ${college}, Palakkad\n`;
+    msg += `_This is an automated system alert._`;
 
     return msg;
 };
