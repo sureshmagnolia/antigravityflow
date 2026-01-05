@@ -4564,9 +4564,16 @@ window.openSlotReminderModal = function (key) {
             const [d, t] = slotKey.split(' | ');
             const isAN = (t.includes("PM") || t.startsWith("12"));
             const sessionCode = isAN ? "AN" : "FN";
+            
+            // ✅ FIX: Calculate Day Name (e.g. MONDAY)
+            // Parse DD.MM.YYYY
+            const [dayPart, monthPart, yearPart] = d.split('.');
+            const dateObj = new Date(`${yearPart}-${monthPart}-${dayPart}`); 
+            const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' }); // e.g. Monday
             slot.assigned.forEach(email => {
                 if (!dailyDuties[email]) dailyDuties[email] = [];
-                dailyDuties[email].push({ date: d, time: t, session: sessionCode });
+                // ✅ FIX: Include 'day' in the object
+                dailyDuties[email].push({ date: d, day: dayName, time: t, session: sessionCode });
             });
         }
     });
