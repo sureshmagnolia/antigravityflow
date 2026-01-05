@@ -1102,6 +1102,7 @@ function renderStaffTable() {
         } else {
             actionButtons = `
                 <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
+                    <button onclick="window.sendWelcomeMessage('${staff.email}')" class="flex-1 md:flex-none text-green-600 hover:text-green-800 bg-green-50 px-2 py-1.5 rounded border border-green-100 transition text-xs font-bold text-center" title="Send Welcome WhatsApp">👋</button>
                     <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
                     <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
                     <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
@@ -2572,6 +2573,49 @@ window.runAutoAllocation = async function () {
 //-------------------
 
 
+// ==========================================
+// 👋 WELCOME MESSAGE SYSTEM
+// ==========================================
+window.generateWelcomeText = function(name, dept) {
+    // Construct Name-Dept format (e.g. Yasir-MATH)
+    const displayName = `${name}-${dept}`;
+    
+    return `🔴🔴🔴
+Hi, ${displayName}, Welcome to GVC. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
+https://examflow-de08f.web.app/invigilation.html
+ Any changes may be reported in advance to SAS @ 9447955360 or to EC @9074061026. 
+🟢 *Kindly check the General instructions to invigilators here: https://bit.ly/gvc-exam*
+Please join the examination whatsapp group for latest updates using the following link
+ https://chat.whatsapp.com/LvfrheUDh4d4T63r7Bg1cv
+Also join IQAC GVC Whatsapp group Here
+https://chat.whatsapp.com/5VW4qyHBLbEEk34Bb5adZb
+Staff Club GVC group here
+https://chat.whatsapp.com/3qZbuKa4Sj2A65rcKOj4Kt
+United Victorians here
+https://chat.whatsapp.com/EK9bvCADLDDEQfuExJIV4Y
+All links will be active after replying to this message
+For any queries contact examinations@gvc.ac.in _Exam Committee - 9447955360_ This is an automatically generated message`;
+};
+window.sendWelcomeMessage = function(email) {
+    // Safe robust lookup
+    const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+    if (!staff) return alert("Staff record not found.");
+    const msg = window.generateWelcomeText(staff.name, staff.dept);
+    
+    let phone = staff.phone || "";
+    phone = phone.replace(/\D/g, ''); // Clean number
+    if (phone.length === 10) phone = "91" + phone;
+    // Open WhatsApp
+    const url = phone 
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` 
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+        
+    window.open(url, '_blank');
+};
+
+
+
+
 window.saveNewStaff = async function () {
     // 1. Capture Inputs
     const indexStr = document.getElementById('stf-edit-index').value;
@@ -2697,7 +2741,15 @@ window.saveNewStaff = async function () {
         } else {
             renderStaffTable();
             updateAdminUI();
-            alert(isEditMode ? "Staff profile updated successfully." : "New staff added successfully.");
+            
+            if (isEditMode) {
+                alert("Staff profile updated successfully.");
+            } else {
+                // ✅ NEW: Prompt to send welcome message immediately
+                if (confirm("✅ New staff added successfully.\n\nDo you want to send the 'Welcome to GVC' WhatsApp message now?")) {
+                    window.sendWelcomeMessage(email);
+                }
+            }
         }
 
     } catch (e) {
