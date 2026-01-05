@@ -2576,14 +2576,31 @@ window.runAutoAllocation = async function () {
 // ==========================================
 // 👋 WELCOME MESSAGE SYSTEM
 // ==========================================
+
 window.generateWelcomeText = function(name, dept) {
-    // Construct Name-Dept format (e.g. Yasir-MATH)
+    // 1. Dynamic College Name
+    const cName = (typeof collegeName !== 'undefined' && collegeName) ? collegeName : "Government Victoria College";
+    // 2. Find Active CS and SAS
+    const today = new Date();
+    
+    const getRolePhone = (role) => {
+        const staff = staffData.find(s => 
+            s.roleHistory && s.roleHistory.some(r => r.role === role && new Date(r.start) <= today && new Date(r.end) >= today)
+        );
+        if (staff && staff.phone) {
+             return staff.phone.replace(/\D/g, ''); // Return clean phone
+        }
+        return "9447955360"; // Default Fallback if no one assigned
+    };
+    const sasPhone = getRolePhone("Senior Asst. Superintendent");
+    const csPhone = getRolePhone("Chief Superintendent");
+    // Construct Name-Dept format
     const displayName = `${name}-${dept}`;
     
     return `🔴🔴🔴
-Hi, ${displayName}, Welcome to GVC. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
+Hi, ${displayName}, Welcome to ${cName}. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
 https://examflow-de08f.web.app/invigilation.html
- Any changes may be reported in advance to SAS @ 9447955360 or to EC @9074061026. 
+ Any changes may be reported in advance to SAS @ ${sasPhone} or to CS @ ${csPhone}. 
 🟢 *Kindly check the General instructions to invigilators here: https://bit.ly/gvc-exam*
 Please join the examination whatsapp group for latest updates using the following link
  https://chat.whatsapp.com/LvfrheUDh4d4T63r7Bg1cv
@@ -2594,8 +2611,9 @@ https://chat.whatsapp.com/3qZbuKa4Sj2A65rcKOj4Kt
 United Victorians here
 https://chat.whatsapp.com/EK9bvCADLDDEQfuExJIV4Y
 All links will be active after replying to this message
-For any queries contact examinations@gvc.ac.in _Exam Committee - 9447955360_ This is an automatically generated message`;
+For any queries contact examinations@gvc.ac.in _Exam Committee - ${sasPhone}_ This is an automatically generated message`;
 };
+
 window.sendWelcomeMessage = function(email) {
     // Safe robust lookup
     const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
