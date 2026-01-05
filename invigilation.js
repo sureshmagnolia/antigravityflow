@@ -4484,7 +4484,7 @@ window.openSlotReminderModal = function (key) {
     title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
     subtitle.textContent = "Send reminders for ALL duties on this day.";
     list.innerHTML = '';
-    currentEmailQueue = [];
+    window.currentEmailQueue = [];
 
     // Find ALL Sessions for this Date
     const dailyDuties = {};
@@ -4528,10 +4528,12 @@ window.openSlotReminderModal = function (key) {
         const duties = dailyDuties[email];
         duties.sort((a, b) => a.time.localeCompare(b.time));
 
-        const staff = staffData.find(s => s.email === email);
+        // FIX: Case-insensitive search + Fallback
+        const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
         const fullName = staff ? staff.name : email;
         const firstName = getFirstName(fullName);
-        const staffEmail = staff ? staff.email : "";
+        // FIX: If staff not found, use the raw email from the duty list
+        const staffEmail = staff ? staff.email : email;
 
         let phone = staff ? (staff.phone || "") : "";
         phone = phone.replace(/\D/g, '');
@@ -4542,7 +4544,7 @@ window.openSlotReminderModal = function (key) {
         const btnId = `email-btn-${index}`;
 
         if (staffEmail) {
-            currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
+            window.currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
         }
 
         // *** UPDATED: Generate detailed daily message ***
