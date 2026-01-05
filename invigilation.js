@@ -6611,7 +6611,7 @@ window.printDutyNotification = function (key) {
     const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
     const sessionCode = isAN ? "AN" : "FN";
     const reportTime = calculateReportTime(timeStr);
-    const logoUrl = "logo.png";
+    const logoUrl = "CollegeLogo.png";
 
     // 2. LAYOUT LOGIC (Limit 20)
     const totalStaff = slot.assigned.length;
