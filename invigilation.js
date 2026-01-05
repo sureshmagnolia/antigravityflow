@@ -5472,6 +5472,15 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
 
     return `
     <div style="font-family: Helvetica, Arial, sans-serif; color: #333; line-height: 1.6; max-width: 800px;">
+
+
+        <!-- ✅ NEW: Header Block with Logo -->
+        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center; border-radius: 6px 6px 0 0; margin-bottom: 20px;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">${collegeName}</h2>
+            <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">Department Duty List</p>
+        </div>
+    
         <p>Dear Head of Department (<b>${deptName}</b>),</p>
         <p>Please find below the consolidated invigilation duty list for faculty members of your department for <b>Week ${weekNum} (${monthStr})</b>.</p>
         
