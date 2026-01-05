@@ -4811,8 +4811,10 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     }).join('');
 
     return `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
-        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+    <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+            <!-- ✅ NEW: College Logo -->
+            <img src="CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
         </div>
