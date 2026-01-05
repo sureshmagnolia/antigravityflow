@@ -4813,7 +4813,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     return `
     <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
             <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
@@ -5302,7 +5302,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
         <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
             <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
         </div>
@@ -5476,7 +5476,7 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
 
         <!-- ✅ NEW: Header Block with Logo -->
         <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center; border-radius: 6px 6px 0 0; margin-bottom: 20px;">
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">Department Duty List</p>
         </div>
@@ -9041,7 +9041,7 @@ window.generateHtmlEmailBody = function(name, duties) {
     <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
         <div style="background:#4f46e5;color:white;padding:20px;text-align:center;">
         <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 10px; display: inline-block;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin:0;font-size:18px;text-transform:uppercase;">${college}</h2>
             <p style="margin:5px 0 0;font-size:13px;opacity:0.9;">Invigilation Duty Intimation</p>
         </div>
