@@ -1,4 +1,4 @@
-/* drive_sync.js - Google Drive Sync Logic (Complete Backup) */
+/* drive_sync.js - Persistent Google Drive Sync */
 
 const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
 const API_KEY = ''; 
@@ -10,25 +10,14 @@ let gapiInited = false;
 let gisInited = false;
 let driveFileId = null;
 
-// Complete List of All System Data Keys
+// Complete Data Keys
 const DATA_KEYS = [
-    'examRoomConfig', 
-    'examStreamsConfig', 
-    'examCollegeName', 
-    'examAbsenteeList', 
-    'examQPCodes', 
-    'examBaseData', 
-    'examRoomAllotment', 
-    'examScribeList', 
-    'examScribeAllotment', 
-    'examRulesConfig', 
-    'examInvigilationSlots', 
-    'examStaffData', 
-    'examInvigilatorMapping',
-    // Newly Added Keys:
-    'invigAdvanceUnavailability',
-    'examSessionNames',
-    'examRemunerationConfig'
+    'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
+    'examAbsenteeList', 'examQPCodes', 'examBaseData', 
+    'examRoomAllotment', 'examScribeList', 'examScribeAllotment', 
+    'examRulesConfig', 'examInvigilationSlots', 'examStaffData', 
+    'examInvigilatorMapping', 'invigAdvanceUnavailability',
+    'examSessionNames', 'examRemunerationConfig'
 ];
 
 // 1. Initialize Google API Client (GAPI)
@@ -37,9 +26,7 @@ function gapiLoaded() {
 }
 
 async function intializeGapiClient() {
-    await gapi.client.init({
-        discoveryDocs: [DISCOVERY_DOC],
-    });
+    await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
     gapiInited = true;
     checkAuth();
 }
@@ -49,35 +36,82 @@ function gisLoaded() {
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
-        callback: '',
+        callback: '', // Set dynamically
     });
     gisInited = true;
     checkAuth();
 }
 
+// 3. Check Auth & Auto-Reconnect
 function checkAuth() {
     if (gapiInited && gisInited) {
         const btn = document.getElementById('btn-connect-drive');
         if (btn) btn.classList.remove('hidden');
+
+        // AUTO-CONNECT if previously connected
+        if (localStorage.getItem('isDriveConnected') === 'true') {
+            restoreSession();
+        }
     }
 }
 
-// 3. Connect (Login)
-function handleAuthClick() {
+function restoreSession() {
     tokenClient.callback = async (resp) => {
-        if (resp.error) throw resp;
-        document.getElementById('btn-connect-drive').innerHTML = "✅ Connected to Drive";
-        document.getElementById('drive-controls').classList.remove('hidden');
-        await findBackupFile(); 
+        if (resp.error) {
+            console.warn("Silent auth failed", resp);
+            localStorage.removeItem('isDriveConnected'); // Reset if invalid
+            return;
+        }
+        showConnectedState();
+        await findBackupFile();
     };
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+    // Prompt: '' allows silent auth if consent exists
+    tokenClient.requestAccessToken({ prompt: '' });
+}
+
+// 4. Manual Connect / Disconnect Toggle
+function handleAuthClick() {
+    const isConnected = localStorage.getItem('isDriveConnected') === 'true';
+
+    if (isConnected) {
+        // DISCONNECT LOGIC
+        const token = gapi.client.getToken();
+        if (token) {
+            google.accounts.oauth2.revoke(token.access_token);
+            gapi.client.setToken(null);
+        }
+        localStorage.removeItem('isDriveConnected');
+        document.getElementById('btn-connect-drive').innerHTML = "🔗 Connect Google Drive";
+        document.getElementById('btn-connect-drive').classList.remove('bg-green-600', 'hover:bg-green-700');
+        document.getElementById('btn-connect-drive').classList.add('bg-blue-600', 'hover:bg-blue-700');
+        document.getElementById('drive-controls').classList.add('hidden');
+        document.getElementById('last-sync-time').textContent = "Not Synced";
     } else {
-        tokenClient.requestAccessToken({ prompt: '' });
+        // CONNECT LOGIC
+        tokenClient.callback = async (resp) => {
+            if (resp.error) throw resp;
+            localStorage.setItem('isDriveConnected', 'true');
+            showConnectedState();
+            await findBackupFile(); 
+        };
+        // Prompt 'consent' forces layout to ensure refresh token logic works if needed
+        if (gapi.client.getToken() === null) {
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        } else {
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
     }
 }
 
-// 4. Find Existing Backup
+function showConnectedState() {
+    const btn = document.getElementById('btn-connect-drive');
+    btn.innerHTML = "❌ Disconnect Drive";
+    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+    document.getElementById('drive-controls').classList.remove('hidden');
+}
+
+// 5. Find Existing Backup
 async function findBackupFile() {
     try {
         const response = await gapi.client.drive.files.list({
@@ -91,13 +125,14 @@ async function findBackupFile() {
             document.getElementById('last-sync-time').textContent = lastMod;
         } else {
             driveFileId = null;
+            document.getElementById('last-sync-time').textContent = "No backup found";
         }
     } catch (err) {
         console.error('Error finding file:', err);
     }
 }
 
-// 5. SYNC LOGIC (Safe & Complete)
+// 6. SYNC DATA (Upload)
 async function syncData() {
     const btn = document.getElementById('btn-manual-sync');
     const originalText = btn.innerHTML;
@@ -105,29 +140,17 @@ async function syncData() {
     btn.disabled = true;
 
     try {
-        // A. Prepare Local Data
         const localData = {};
         DATA_KEYS.forEach(key => {
             const val = localStorage.getItem(key);
             if (val) {
-                try {
-                    // Try parsing JSON first
-                    localData[key] = JSON.parse(val);
-                } catch (e) {
-                    // If parse fails (it's plain text like name), store logic as string
-                    localData[key] = val;
-                }
+                try { localData[key] = JSON.parse(val); } 
+                catch (e) { localData[key] = val; }
             }
         });
         
-        // Convert to pretty JSON Blob
         const blob = new Blob([JSON.stringify(localData, null, 2)], { type: 'application/json' });
-
-        // B. Upload
-        const metadata = {
-            'name': 'examflow_backup.json',
-            'mimeType': 'application/json'
-        };
+        const metadata = { 'name': 'examflow_backup.json', 'mimeType': 'application/json' };
 
         if (driveFileId) {
             await updateFile(driveFileId, metadata, blob);
@@ -138,7 +161,7 @@ async function syncData() {
         localStorage.setItem('lastGoogleSync', Date.now());
         btn.innerHTML = "✅ Sync Complete";
         setTimeout(() => btn.innerHTML = originalText, 3000);
-        alert("✅ Full System Backup Saved to Google Drive!");
+        alert("✅ Backup Successful!");
         await findBackupFile(); 
 
     } catch (err) {
@@ -179,10 +202,10 @@ async function updateFile(id, metadata, blob) {
     });
 }
 
-// 6. RESTORE (Pull from Cloud)
+// 7. RESTORE DATA
 async function restoreFromDrive() {
     if (!driveFileId) return alert("No backup found in Drive.");
-    if (!confirm("⚠️ WARNING: This will OVERWRITE your local data with the backup from Google Drive.\n\nContinue?")) return;
+    if (!confirm("⚠️ OVERWRITE WARNING\n\nThis will replace all local data with the Drive backup.\nAre you sure?")) return;
 
     try {
         const response = await gapi.client.drive.files.get({
@@ -194,7 +217,6 @@ async function restoreFromDrive() {
         Object.keys(cloudData).forEach(key => {
             if (DATA_KEYS.includes(key)) {
                 const val = cloudData[key];
-                // Check format and restore accordingly
                 if (typeof val === 'object') {
                    localStorage.setItem(key, JSON.stringify(val));
                 } else {
@@ -203,7 +225,7 @@ async function restoreFromDrive() {
             }
         });
         
-        alert("✅ Data Restored! Reloading page...");
+        alert("✅ Restore Complete! Reloading...");
         location.reload();
         
     } catch (err) {
