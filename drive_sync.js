@@ -1,4 +1,4 @@
-/* drive_sync.js - Resilient Connection & Versioned Backups */
+/* drive_sync.js - Optimistic UI & Debug Mode */
 
 const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -36,7 +36,14 @@ function gisLoaded() {
 function checkAuth() {
     if (gapiInited && gisInited) {
         document.getElementById('btn-connect-drive').classList.remove('hidden');
-        if (localStorage.getItem('isDriveConnected') === 'true') {
+        
+        const isConnected = localStorage.getItem('isDriveConnected') === 'true';
+        console.log("Check Auth: Flag =", isConnected);
+
+        if (isConnected) {
+            // OPTIMISTIC: Show Green immediately
+            showConnectedState();
+            console.log("Attempting Restore Session...");
             restoreSession();
         }
     }
@@ -45,15 +52,17 @@ function checkAuth() {
 function restoreSession() {
     tokenClient.callback = async (resp) => {
         if (resp.error) {
-            console.warn("Silent auth failed:", resp);
-            // DO NOT REMOVE FLAG. Just ask for help.
-            showReconnectState(); 
+            console.warn("Silent Auth Error:", resp);
+            // alert("Debug: Silent Auth Failed (" + resp.error + ")");
+            showReconnectState(); // Fallback to Yellow
         } else {
+            console.log("Silent Auth Success!");
             if (resp.access_token) gapi.client.setToken(resp);
-            showConnectedState();
+            // No need to call showConnectedState again (already green), just get stats
+            findLatestBackupTime();
         }
     };
-    // Try silent first
+    // Attempt silent
     tokenClient.requestAccessToken({ prompt: '' });
 }
 
@@ -63,18 +72,15 @@ function showConnectedState() {
     const btn = document.getElementById('btn-connect-drive');
     btn.innerHTML = "❌ Disconnect Drive";
     btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
-    btn.onclick = disconnectDrive; // Bind directly
-    
+    btn.onclick = disconnectDrive;
     document.getElementById('drive-controls').classList.remove('hidden');
-    findLatestBackupTime(); 
 }
 
 function showReconnectState() {
     const btn = document.getElementById('btn-connect-drive');
     btn.innerHTML = "⚠️ Reconnect Drive";
     btn.className = "px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded transition";
-    btn.onclick = handleAuthClick; // Click to fix
-    // Keep controls hidden until fixed
+    btn.onclick = handleAuthClick; 
     document.getElementById('drive-controls').classList.add('hidden');
 }
 
@@ -83,7 +89,6 @@ function showDisconnectedState() {
     btn.innerHTML = "🔗 Connect Google Drive";
     btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
     btn.onclick = handleAuthClick;
-    
     document.getElementById('drive-controls').classList.add('hidden');
     document.getElementById('last-sync-time').textContent = "";
 }
@@ -105,8 +110,8 @@ function handleAuthClick() {
         
         localStorage.setItem('isDriveConnected', 'true');
         showConnectedState();
+        findLatestBackupTime();
     };
-    // Force consent if needed, or just select account
     if (gapi.client.getToken() === null) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
     } else {
@@ -119,9 +124,7 @@ function handleAuthClick() {
 async function getBackupFolder() {
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     const res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
-    
     if (res.result.files.length > 0) return res.result.files[0].id;
-    
     const meta = { 'name': 'ExamFlow_Backups', 'mimeType': 'application/vnd.google-apps.folder' };
     const createRes = await gapi.client.drive.files.create({ resource: meta, fields: 'id' });
     return createRes.result.id;
@@ -161,17 +164,18 @@ async function syncData() {
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
         const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
-        
-        const fileMeta = { 'name': fileName, 'parents': [folderId] };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(fileMeta)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(localData, null, 2)], { type: 'application/json' }));
 
+        // Two-Step Upload
+        const createRes = await gapi.client.drive.files.create({
+            resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
+            fields: 'id'
+        });
+        
         const accessToken = gapi.client.getToken().access_token;
-        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-            body: form
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${createRes.result.id}?uploadType=media`, {
+            method: 'PATCH',
+            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }),
+            body: JSON.stringify(localData, null, 2)
         });
 
         await manageRetention(folderId);
@@ -196,9 +200,8 @@ async function manageRetention(folderId) {
         orderBy: 'createdTime desc',
         fields: 'files(id)'
     });
-    const files = res.result.files;
-    if (files.length > 5) {
-        for (const f of files.slice(5)) await gapi.client.drive.files.delete({ fileId: f.id });
+    if (res.result.files.length > 5) {
+        for (const f of res.result.files.slice(5)) await gapi.client.drive.files.delete({ fileId: f.id });
     }
 }
 
@@ -276,7 +279,6 @@ window.executeRestore = async function(fileId) {
     } catch (e) { alert("Restore Error: " + e.message); }
 };
 
-// Animation Style
 if (!document.getElementById('drive-anim-style')) {
     const style = document.createElement('style');
     style.id = 'drive-anim-style';
