@@ -1,4 +1,4 @@
-/* drive_sync.js - Versioned Backups (Last 5) */
+/* drive_sync.js - Robust Persistence & Folders */
 
 const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -7,9 +7,7 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 let tokenClient;
 let gapiInited = false;
 let gisInited = false;
-let backupFolderId = null;
 
-// Complete Data Keys
 const DATA_KEYS = [
     'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
     'examAbsenteeList', 'examQPCodes', 'examBaseData', 
@@ -29,7 +27,7 @@ async function intializeGapiClient() {
 
 function gisLoaded() {
     tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID, focus: false, scope: SCOPES, callback: '',
+        client_id: CLIENT_ID, focus: false, scope: SCOPES, callback: '', // Dynamic callback
     });
     gisInited = true;
     checkAuth();
@@ -38,33 +36,56 @@ function gisLoaded() {
 function checkAuth() {
     if (gapiInited && gisInited) {
         document.getElementById('btn-connect-drive').classList.remove('hidden');
-        if (localStorage.getItem('isDriveConnected') === 'true') restoreSession();
+        if (localStorage.getItem('isDriveConnected') === 'true') {
+            console.log("Found Drive flag, attempting release...");
+            restoreSession();
+        }
     }
 }
 
 function restoreSession() {
+    // 1. Define Callback for Silent Auth
     tokenClient.callback = async (resp) => {
-        if (resp.error) localStorage.removeItem('isDriveConnected');
-        else showConnectedState();
+        if (resp.error) {
+            console.warn("Silent auth failed:", resp);
+            localStorage.removeItem('isDriveConnected');
+        } else {
+            console.log("Silent auth success!");
+            // CRITICAL FIX: Tell GAPI about the new token
+            if (resp.access_token) gapi.client.setToken(resp);
+            showConnectedState();
+        }
     };
+    // 2. Request Token Silently
     tokenClient.requestAccessToken({ prompt: '' });
 }
 
 // --- AUTH HANDLERS ---
 function handleAuthClick() {
-    if (localStorage.getItem('isDriveConnected') === 'true') {
+    const isConnected = localStorage.getItem('isDriveConnected') === 'true';
+
+    if (isConnected) {
+        // DISCONNECT
         const token = gapi.client.getToken();
         if (token) google.accounts.oauth2.revoke(token.access_token);
         gapi.client.setToken(null);
         localStorage.removeItem('isDriveConnected');
+        
+        // Reset UI
         document.getElementById('drive-controls').classList.add('hidden');
+        document.getElementById('last-sync-time').textContent = "";
         const btn = document.getElementById('btn-connect-drive');
         btn.innerHTML = "🔗 Connect Google Drive";
-        btn.classList.replace('bg-green-600', 'bg-blue-600');
-        btn.classList.replace('hover:bg-green-700', 'hover:bg-blue-700');
+        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        
     } else {
+        // CONNECT
         tokenClient.callback = async (resp) => {
             if (resp.error) throw resp;
+            // CRITICAL FIX: Set Token Here too
+            if (resp.access_token) gapi.client.setToken(resp);
+            
             localStorage.setItem('isDriveConnected', 'true');
             showConnectedState();
         };
@@ -75,26 +96,41 @@ function handleAuthClick() {
 function showConnectedState() {
     const btn = document.getElementById('btn-connect-drive');
     btn.innerHTML = "❌ Disconnect Drive";
-    btn.classList.replace('bg-blue-600', 'bg-green-600');
-    btn.classList.replace('hover:bg-blue-700', 'hover:bg-green-700');
+    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+    btn.classList.add('bg-green-600', 'hover:bg-green-700');
     document.getElementById('drive-controls').classList.remove('hidden');
+    // Also try to find backup info to show stats
+    findLatestBackupTime(); 
+}
+
+async function findLatestBackupTime() {
+    try {
+        const folderId = await getBackupFolder();
+        const res = await gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and trashed=false`,
+            orderBy: 'createdTime desc',
+            fields: 'files(createdTime)',
+            pageSize: 1
+        });
+        if(res.result.files.length > 0) {
+            const last = new Date(res.result.files[0].createdTime).toLocaleString();
+            document.getElementById('last-sync-time').textContent = last;
+        } else {
+            document.getElementById('last-sync-time').textContent = "No backups yet";
+        }
+    } catch(e) { console.error(e); }
 }
 
 // --- FOLDER & SYNC LOGIC ---
 
 async function getBackupFolder() {
-    // 1. Check if folder exists
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     const res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     
     if (res.result.files.length > 0) {
         return res.result.files[0].id;
     } else {
-        // 2. Create if missing
-        const meta = {
-            'name': 'ExamFlow_Backups',
-            'mimeType': 'application/vnd.google-apps.folder'
-        };
+        const meta = { 'name': 'ExamFlow_Backups', 'mimeType': 'application/vnd.google-apps.folder' };
         const createRes = await gapi.client.drive.files.create({ resource: meta, fields: 'id' });
         return createRes.result.id;
     }
@@ -107,25 +143,21 @@ async function syncData() {
     btn.disabled = true;
 
     try {
-        // 1. Get Folder
         const folderId = await getBackupFolder();
 
-        // 2. Prepare Payload
         const localData = {};
         DATA_KEYS.forEach(k => {
             const v = localStorage.getItem(k);
-            if(v) {
-                try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; }
-            }
+            if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
         });
         const content = JSON.stringify(localData, null, 2);
-        const fileName = `backup_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        // Format: YYYY-MM-DD_HH-mm-ss
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        const fileName = `Backup_${dateStr}_${timeStr}.json`;
         
-        // 3. Upload New File
-        const fileMeta = {
-            'name': fileName,
-            'parents': [folderId]
-        };
+        const fileMeta = { 'name': fileName, 'parents': [folderId] };
         
         const form = new FormData();
         form.append('metadata', new Blob([JSON.stringify(fileMeta)], { type: 'application/json' }));
@@ -138,11 +170,10 @@ async function syncData() {
             body: form
         });
 
-        // 4. Cleanup Old Files (Keep 5)
         await manageRetention(folderId);
 
         localStorage.setItem('lastGoogleSync', Date.now());
-        document.getElementById('last-sync-time').textContent = new Date().toLocaleString();
+        document.getElementById('last-sync-time').textContent = now.toLocaleString();
         
         btn.innerHTML = "✅ Saved!";
         setTimeout(() => btn.innerHTML = originalText, 2000);
@@ -157,17 +188,15 @@ async function syncData() {
 }
 
 async function manageRetention(folderId) {
-    // List all backup files in folder, sorted by createdTime
     const q = `'${folderId}' in parents and trashed=false`;
     const res = await gapi.client.drive.files.list({
         q: q,
         orderBy: 'createdTime desc',
-        fields: 'files(id, name, createdTime)'
+        fields: 'files(id)', // Only need ID to delete
     });
     
     const files = res.result.files;
     if (files.length > 5) {
-        // Delete extras
         const toDelete = files.slice(5);
         for (const f of toDelete) {
             await gapi.client.drive.files.delete({ fileId: f.id });
@@ -175,33 +204,25 @@ async function manageRetention(folderId) {
     }
 }
 
-// --- RESTORE UI & LOGIC ---
+// --- RESTORE UI ---
 
 async function restoreFromDrive() {
-    // 1. Firebase Conflict Check
+    // Firebase Check
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
-        const proceed = confirm(
-            "⚠️ FIREBASE SYNC ACTIVE ⚠️\n\n" +
-            "You are currently connected to the live database.\n" +
-            "Restoring a backup will OVERWRITE your local data and may conflict with the cloud.\n\n" +
-            "Are you sure you want to proceed?"
-        );
+        const proceed = confirm("⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?");
         if (!proceed) return;
     }
 
     try {
         const folderId = await getBackupFolder();
-        const q = `'${folderId}' in parents and trashed=false`;
         const res = await gapi.client.drive.files.list({
-            q: q,
+            q: `'${folderId}' in parents and trashed=false`,
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
         
         const files = res.result.files;
         if (files.length === 0) return alert("No backups found.");
-
-        // Show Selection UI
         showRestoreModal(files);
 
     } catch (e) {
@@ -210,32 +231,37 @@ async function restoreFromDrive() {
 }
 
 function showRestoreModal(files) {
-    // Basic Modal HTML injection
-    let listHtml = files.map(f => `
-        <div class="p-3 border-b hover:bg-gray-100 cursor-pointer flex justify-between items-center" 
+    let listHtml = files.map((f, i) => `
+        <div class="p-4 border-b hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors" 
              onclick="executeRestore('${f.id}')">
             <div>
-                <div class="font-bold text-sm">${f.name}</div>
-                <div class="text-xs text-gray-500">${new Date(f.createdTime).toLocaleString()}</div>
+                <div class="font-bold text-gray-800">${f.name}</div>
+                <div class="text-xs text-gray-500">${new Date(f.createdTime).toLocaleString()} ${i===0?'(Latest)':''}</div>
             </div>
-            <button class="bg-blue-500 text-white px-3 py-1 rounded text-xs">Restore</button>
+            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm shadow-sm transition-transform active:scale-95">
+                Restore
+            </button>
         </div>
     `).join('');
 
     const modal = document.createElement('div');
     modal.id = "drive-restore-modal";
-    modal.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+    modal.className = "fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-[100]";
     modal.innerHTML = `
-        <div class="bg-white rounded-lg shadow-xl w-96 max-h-[80vh] overflow-hidden flex flex-col">
-            <div class="p-4 bg-gray-100 border-b flex justify-between items-center">
-                <h3 class="font-bold">Select Version to Restore</h3>
-                <button onclick="document.getElementById('drive-restore-modal').remove()" class="text-xl">&times;</button>
+        <div class="bg-white rounded-xl shadow-2xl w-[28rem] max-h-[80vh] overflow-hidden flex flex-col animate-fadeIn">
+            <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-lg text-gray-800">Restore Backup</h3>
+                    <p class="text-xs text-gray-500">Select a version to restore</p>
+                </div>
+                <button onclick="document.getElementById('drive-restore-modal').remove()" 
+                        class="text-gray-400 hover:text-gray-700 text-2xl font-light focus:outline-none">&times;</button>
             </div>
-            <div class="overflow-y-auto flex-1">
+            <div class="overflow-y-auto flex-1 custom-scrollbar">
                 ${listHtml}
             </div>
-            <div class="p-2 text-center text-xs text-gray-400 border-t">
-                Displaying last ${files.length} backups
+            <div class="p-3 text-center text-xs text-gray-400 bg-gray-50 border-t">
+                Displaying last ${files.length} versions
             </div>
         </div>
     `;
@@ -244,13 +270,9 @@ function showRestoreModal(files) {
 
 window.executeRestore = async function(fileId) {
     document.getElementById('drive-restore-modal').remove();
-    
-    if(!confirm("Are you sure you want to restore this version?")) return;
-
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
         const cloudData = response.result;
-
         Object.keys(cloudData).forEach(key => {
             if (DATA_KEYS.includes(key)) {
                 const val = cloudData[key];
@@ -258,11 +280,12 @@ window.executeRestore = async function(fileId) {
                 else localStorage.setItem(key, val);
             }
         });
-
-        alert("✅ Restored logic applied! Reloading...");
+        alert("✅ Restored successfully! Reloading...");
         location.reload();
-
-    } catch (e) {
-        alert("Restore Error: " + e.message);
-    }
+    } catch (e) { alert("Restore Error: " + e.message); }
 };
+
+// Add fade-in animation style
+const style = document.createElement('style');
+style.innerHTML = `@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-fadeIn { animation: fadeIn 0.2s ease-out; }`;
+document.head.appendChild(style);
