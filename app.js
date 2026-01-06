@@ -504,6 +504,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 loginBtn.classList.add('hidden');
                 logoutBtn.classList.remove('hidden');
 
+                // [ADD THIS BLOCK] ---------------------------
+                // Show Cloud Features (Pro)
+                const portalSection = document.getElementById('student-portal-section');
+                if (portalSection) portalSection.classList.remove('hidden');
+
                 // --- SHOW User Info & Sync Status ---
                 userInfoDiv.classList.add('md:block'); // Show on Desktop
                 if (mobileSyncDot) mobileSyncDot.classList.remove('hidden'); // Show on Mobile
