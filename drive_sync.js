@@ -1,12 +1,15 @@
 /* drive_sync.js - Google Drive Sync Logic */
-const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; // <--- PASTE YOUR CLIENT ID
-const API_KEY = 'YOUR_OPTIONAL_API_KEY'; // (Optional for Drive API, mostly needed for Discovery)
+
+const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
+const API_KEY = ''; // Optional
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
 let tokenClient;
 let gapiInited = false;
 let gisInited = false;
-let driveFileId = null; // ID of examflow_backup.json
+let driveFileId = null;
+
 const DATA_KEYS = [
     'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
     'examAbsenteeList', 'examQPCodes', 'examBaseData', 
@@ -14,43 +17,45 @@ const DATA_KEYS = [
     'examRulesConfig', 'examInvigilationSlots', 'examStaffData', 
     'examInvigilatorMapping'
 ];
-/**
- * 1. Initialize Google Identity Services
- */
+
+// 1. Initialize Google API Client (GAPI)
 function gapiLoaded() {
     gapi.load('client', intializeGapiClient);
 }
+
 async function intializeGapiClient() {
     await gapi.client.init({
-        // apiKey: API_KEY, // Optional
         discoveryDocs: [DISCOVERY_DOC],
     });
     gapiInited = true;
     checkAuth();
 }
+
+// 2. Initialize Google Identity Services (GIS)
 function gisLoaded() {
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
-        callback: '', // defined later look at requestAccessToken
+        callback: '', // Defined explicitly in handleAuthClick
     });
     gisInited = true;
     checkAuth();
 }
+
 function checkAuth() {
     if (gapiInited && gisInited) {
-        document.getElementById('btn-connect-drive').classList.remove('hidden');
+        const btn = document.getElementById('btn-connect-drive');
+        if (btn) btn.classList.remove('hidden');
     }
 }
-/**
- * 2. Connect (Login)
- */
+
+// 3. Connect (Login)
 function handleAuthClick() {
     tokenClient.callback = async (resp) => {
         if (resp.error) throw resp;
         document.getElementById('btn-connect-drive').innerHTML = "✅ Connected to Drive";
         document.getElementById('drive-controls').classList.remove('hidden');
-        await findBackupFile(); // Check if file exists
+        await findBackupFile(); 
     };
     if (gapi.client.getToken() === null) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -58,9 +63,8 @@ function handleAuthClick() {
         tokenClient.requestAccessToken({ prompt: '' });
     }
 }
-/**
- * 3. Find Existing Backup File
- */
+
+// 4. Find Existing Backup
 async function findBackupFile() {
     try {
         const response = await gapi.client.drive.files.list({
@@ -70,76 +74,74 @@ async function findBackupFile() {
         const files = response.result.files;
         if (files && files.length > 0) {
             driveFileId = files[0].id;
-            console.log('Found Backup:', files[0]);
-            document.getElementById('last-sync-time').textContent = new Date(files[0].modifiedTime).toLocaleString();
+            const lastMod = new Date(files[0].modifiedTime).toLocaleString();
+            document.getElementById('last-sync-time').textContent = lastMod;
         } else {
-            console.log('No backup found. A new one will be created on Sync.');
             driveFileId = null;
         }
     } catch (err) {
         console.error('Error finding file:', err);
     }
 }
-/**
- * 4. SYNC LOGIC (The Core Request)
- */
+
+// 5. SYNC LOGIC (With Safety Checks)
 async function syncData() {
     const btn = document.getElementById('btn-manual-sync');
+    const originalText = btn.innerHTML;
     btn.innerHTML = "⏳ Syncing...";
     btn.disabled = true;
+
     try {
         // A. Prepare Local Data
         const localData = {};
         DATA_KEYS.forEach(key => {
             const val = localStorage.getItem(key);
-            if (val) localData[key] = JSON.parse(val);
+            if (val) {
+                try {
+                    // Try to parse as JSON (e.g. objects, arrays)
+                    localData[key] = JSON.parse(val);
+                } catch (e) {
+                    // Fallback: It's a raw string (e.g. College Name)
+                    localData[key] = val;
+                }
+            }
         });
-        const blob = new Blob([JSON.stringify(localData)], { type: 'application/json' });
-        // B. Check Cloud Version
-        let cloudIsNewer = false;
-        if (driveFileId) {
-            const fileMeta = await gapi.client.drive.files.get({
-                fileId: driveFileId,
-                fields: 'modifiedTime'
-            });
-            const cloudTime = new Date(fileMeta.result.modifiedTime).getTime();
-            const localTimeStr = localStorage.getItem('lastGoogleSync');
-            const localTime = localTimeStr ? parseInt(localTimeStr) : 0;
-            
-            // Simple logic: If Cloud is > 1 min newer than last sync, ask user
-            // (Or just implement "Cloud Wins" or "Local Wins" buttons)
-            // Here we assume "Push" (Overwrite Cloud) for simplicity unless implemented as a merge.
-            // But per request: "Sync latest data".
-            
-            // DOWNLOAD to compare?
-            // Real sync is complex. Let's do: Download -> Compare -> Ask.
-            // For now, we'll implement "Push" (Save to Drive) and "Pull" (Restore).
-            // This button will be "Push".
-        }
-        // C. Upload (Update or Create)
+        const blob = new Blob([JSON.stringify(localData, null, 2)], { type: 'application/json' });
+
+        // B. Upload
         const metadata = {
             'name': 'examflow_backup.json',
             'mimeType': 'application/json'
         };
-        const func = driveFileId ? updateFile : createFile;
-        await func(driveFileId, metadata, blob);
+
+        if (driveFileId) {
+            await updateFile(driveFileId, metadata, blob);
+        } else {
+            await createFile(metadata, blob);
+        }
+
         localStorage.setItem('lastGoogleSync', Date.now());
-        btn.innerHTML = "🔄 Sync Now";
+        btn.innerHTML = "✅ Sync Complete";
+        setTimeout(() => btn.innerHTML = originalText, 3000);
         alert("✅ Data Saved to Google Drive!");
-        await findBackupFile(); // Refresh time
+        await findBackupFile(); 
+
     } catch (err) {
         console.error("Sync Error:", err);
         alert("Sync Failed: " + err.message);
-        btn.innerHTML = "🔄 Sync Now";
+        btn.innerHTML = "❌ Failed";
+        setTimeout(() => btn.innerHTML = originalText, 3000);
     }
     btn.disabled = false;
 }
-// Helper: Multipart Upload
-async function createFile(id, metadata, blob) {
+
+// Upload Helpers
+async function createFile(metadata, blob) {
     const accessToken = gapi.client.getToken().access_token;
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', blob);
+
     const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
@@ -148,24 +150,25 @@ async function createFile(id, metadata, blob) {
     const val = await res.json();
     driveFileId = val.id;
 }
-// Helper: Update Existing File
+
 async function updateFile(id, metadata, blob) {
     const accessToken = gapi.client.getToken().access_token;
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify({ mimeType: 'application/json' })], { type: 'application/json' }));
     form.append('file', blob);
+
     await fetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart`, {
         method: 'PATCH',
         headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
         body: form
     });
 }
-/**
- * 5. RESTORE (Pull from Cloud)
- */
+
+// 6. RESTORE (Pull from Cloud)
 async function restoreFromDrive() {
     if (!driveFileId) return alert("No backup found in Drive.");
-    if (!confirm("This will OVERWRITE all local data with the version from Google Drive. Continue?")) return;
+    if (!confirm("Overwrite local data with Google Drive backup?")) return;
+
     try {
         const response = await gapi.client.drive.files.get({
             fileId: driveFileId,
@@ -173,14 +176,18 @@ async function restoreFromDrive() {
         });
         const cloudData = response.result;
         
-        // Restore Keys
         Object.keys(cloudData).forEach(key => {
             if (DATA_KEYS.includes(key)) {
-                localStorage.setItem(key, JSON.stringify(cloudData[key]));
+                const val = cloudData[key];
+                if (typeof val === 'object') {
+                   localStorage.setItem(key, JSON.stringify(val));
+                } else {
+                   localStorage.setItem(key, val);
+                }
             }
         });
         
-        alert("✅ Data Restored! Reloading...");
+        alert("✅ Restored! Reloading...");
         location.reload();
         
     } catch (err) {
