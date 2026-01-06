@@ -1,7 +1,7 @@
-/* drive_sync.js - Google Drive Sync Logic */
+/* drive_sync.js - Google Drive Sync Logic (Complete Backup) */
 
 const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
-const API_KEY = ''; // Optional
+const API_KEY = ''; 
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 
@@ -10,12 +10,25 @@ let gapiInited = false;
 let gisInited = false;
 let driveFileId = null;
 
+// Complete List of All System Data Keys
 const DATA_KEYS = [
-    'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
-    'examAbsenteeList', 'examQPCodes', 'examBaseData', 
-    'examRoomAllotment', 'examScribeList', 'examScribeAllotment', 
-    'examRulesConfig', 'examInvigilationSlots', 'examStaffData', 
-    'examInvigilatorMapping'
+    'examRoomConfig', 
+    'examStreamsConfig', 
+    'examCollegeName', 
+    'examAbsenteeList', 
+    'examQPCodes', 
+    'examBaseData', 
+    'examRoomAllotment', 
+    'examScribeList', 
+    'examScribeAllotment', 
+    'examRulesConfig', 
+    'examInvigilationSlots', 
+    'examStaffData', 
+    'examInvigilatorMapping',
+    // Newly Added Keys:
+    'invigAdvanceUnavailability',
+    'examSessionNames',
+    'examRemunerationConfig'
 ];
 
 // 1. Initialize Google API Client (GAPI)
@@ -36,7 +49,7 @@ function gisLoaded() {
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
-        callback: '', // Defined explicitly in handleAuthClick
+        callback: '',
     });
     gisInited = true;
     checkAuth();
@@ -84,7 +97,7 @@ async function findBackupFile() {
     }
 }
 
-// 5. SYNC LOGIC (With Safety Checks)
+// 5. SYNC LOGIC (Safe & Complete)
 async function syncData() {
     const btn = document.getElementById('btn-manual-sync');
     const originalText = btn.innerHTML;
@@ -98,14 +111,16 @@ async function syncData() {
             const val = localStorage.getItem(key);
             if (val) {
                 try {
-                    // Try to parse as JSON (e.g. objects, arrays)
+                    // Try parsing JSON first
                     localData[key] = JSON.parse(val);
                 } catch (e) {
-                    // Fallback: It's a raw string (e.g. College Name)
+                    // If parse fails (it's plain text like name), store logic as string
                     localData[key] = val;
                 }
             }
         });
+        
+        // Convert to pretty JSON Blob
         const blob = new Blob([JSON.stringify(localData, null, 2)], { type: 'application/json' });
 
         // B. Upload
@@ -123,7 +138,7 @@ async function syncData() {
         localStorage.setItem('lastGoogleSync', Date.now());
         btn.innerHTML = "✅ Sync Complete";
         setTimeout(() => btn.innerHTML = originalText, 3000);
-        alert("✅ Data Saved to Google Drive!");
+        alert("✅ Full System Backup Saved to Google Drive!");
         await findBackupFile(); 
 
     } catch (err) {
@@ -167,7 +182,7 @@ async function updateFile(id, metadata, blob) {
 // 6. RESTORE (Pull from Cloud)
 async function restoreFromDrive() {
     if (!driveFileId) return alert("No backup found in Drive.");
-    if (!confirm("Overwrite local data with Google Drive backup?")) return;
+    if (!confirm("⚠️ WARNING: This will OVERWRITE your local data with the backup from Google Drive.\n\nContinue?")) return;
 
     try {
         const response = await gapi.client.drive.files.get({
@@ -179,6 +194,7 @@ async function restoreFromDrive() {
         Object.keys(cloudData).forEach(key => {
             if (DATA_KEYS.includes(key)) {
                 const val = cloudData[key];
+                // Check format and restore accordingly
                 if (typeof val === 'object') {
                    localStorage.setItem(key, JSON.stringify(val));
                 } else {
@@ -187,11 +203,11 @@ async function restoreFromDrive() {
             }
         });
         
-        alert("✅ Restored! Reloading...");
+        alert("✅ Data Restored! Reloading page...");
         location.reload();
         
     } catch (err) {
         console.error(err);
-        alert("Restore failed.");
+        alert("Restore failed: " + err.message);
     }
 }
