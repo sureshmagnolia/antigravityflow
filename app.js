@@ -7532,30 +7532,46 @@ window.real_populate_session_dropdown = function () {
             });
             if(reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
 
-            // Time-Based Default
-            const today = new Date();
-            const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
-            const currentHour = today.getHours();
-            let fnSession = "", anSession = "";
-
+           // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
+            const nowTime = now.getTime(); // Current timestamp
+            let activeTodaySession = null;
+            let nextUpcomingSession = null;
+            let minDiff = Infinity; // For finding the nearest future session
             allStudentSessions.forEach(session => {
+                // Populate Options
                 const opt = `<option value="${session}">${session}</option>`;
                 sessionSelect.innerHTML += opt;
                 if(reportsSessionSelect) reportsSessionSelect.innerHTML += opt;
                 if(editSessionSelect) editSessionSelect.innerHTML += opt;
                 if(searchSessionSelect) searchSessionSelect.innerHTML += opt;
-
-                if (session.startsWith(todayStr)) {
-                    const timePart = (session.split('|')[1] || "").toUpperCase();
-                    if (timePart.includes("PM") || timePart.trim().startsWith("12")) {
-                        if (!anSession) anSession = session;
-                    } else {
-                        if (!fnSession) fnSession = session;
-                    }
+                // 1. Parse Session Date & Time
+                const [datePart, timePart] = session.split('|').map(s => s.trim());
+                if (!datePart || !timePart) return;
+                // Parse Date (DD.MM.YYYY)
+                const [dd, mm, yyyy] = datePart.split('.');
+                const [timeStr, period] = timePart.split(' '); // "9:30 AM" -> ["9:30", "AM"]
+                let [hours, minutes] = timeStr.split(':').map(Number);
+                if (period && period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+                if (period && period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+                const sessionStart = new Date(yyyy, mm - 1, dd, hours, minutes);
+                const sessionEndWindow = new Date(sessionStart.getTime() + (60 * 60 * 1000)); // Start + 1 Hr
+                // 2. Logic: Is this "Today's Active Session"? (Now < Start + 1 Hr)
+                if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
+                     if (!activeTodaySession) activeTodaySession = session; 
+                }
+                // 3. Logic: Find "Next Upcoming Session" (Earliest Future Session)
+                const diff = sessionStart.getTime() - nowTime;
+                if (diff > 0 && diff < minDiff) { 
+                    minDiff = diff;
+                    nextUpcomingSession = session;
                 }
             });
+            // PRIORITY: 1. Active Today -> 2. Next Upcoming -> 3. First in List
+            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
 
-            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
+            
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             // Set Value & Initialize Trigger UI
@@ -7938,26 +7954,41 @@ window.real_populate_qp_code_session_dropdown = function () {
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
+
             sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>';
-
-            const today = new Date();
-            const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
-            const currentHour = today.getHours();
-            let fnSession = "", anSession = "";
-
+            // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('en-GB').replace(/\//g, '.');
+            const nowTime = now.getTime();
+            let activeTodaySession = null;
+            let nextUpcomingSession = null;
+            let minDiff = Infinity;
             allStudentSessions.forEach(session => {
                 sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
-                if (session.startsWith(todayStr)) {
-                    const timePart = (session.split('|')[1] || "").toUpperCase();
-                    if (timePart.includes("PM") || timePart.trim().startsWith("12")) {
-                        if (!anSession) anSession = session;
-                    } else {
-                        if (!fnSession) fnSession = session;
-                    }
+                // 1. Parse
+                const [datePart, timePart] = session.split('|').map(s => s.trim());
+                if (!datePart || !timePart) return;
+                const [dd, mm, yyyy] = datePart.split('.');
+                const [timeStr, period] = timePart.split(' ');
+                let [hours, minutes] = timeStr.split(':').map(Number);
+                if (period === 'PM' && hours !== 12) hours += 12;
+                if (period === 'AM' && hours === 12) hours = 0;
+                const sessionStart = new Date(yyyy, mm - 1, dd, hours, minutes);
+                const sessionEndWindow = new Date(sessionStart.getTime() + (60 * 60 * 1000));
+                if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
+                    if (!activeTodaySession) activeTodaySession = session;
+                }
+                const diff = sessionStart.getTime() - nowTime;
+                if (diff > 0 && diff < minDiff) {
+                    minDiff = diff;
+                    nextUpcomingSession = session;
                 }
             });
+            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
 
-            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
+
+
+            
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             if (targetVal) {
@@ -8808,25 +8839,36 @@ window.real_populate_qp_code_session_dropdown = function () {
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
             allotmentSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
-
-            const today = new Date();
-            const todayStr = today.toLocaleDateString('en-GB').replace(/\//g, '.');
-            const currentHour = today.getHours();
-            let fnSession = "", anSession = "";
-
+            // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
+            const now = new Date();
+            const todayStr = now.toLocaleDateString('en-GB').replace(/\//g, '.');
+            const nowTime = now.getTime();
+            let activeTodaySession = null;
+            let nextUpcomingSession = null;
+            let minDiff = Infinity;
             allStudentSessions.forEach(session => {
                 allotmentSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
-                if (session.startsWith(todayStr)) {
-                    const timePart = (session.split('|')[1] || "").toUpperCase();
-                    if (timePart.includes("PM") || timePart.trim().startsWith("12")) {
-                        if (!anSession) anSession = session;
-                    } else {
-                        if (!fnSession) fnSession = session;
-                    }
+                // 1. Parse
+                const [datePart, timePart] = session.split('|').map(s => s.trim());
+                if (!datePart || !timePart) return;
+                const [dd, mm, yyyy] = datePart.split('.');
+                const [timeStr, period] = timePart.split(' ');
+                let [hours, minutes] = timeStr.split(':').map(Number);
+                if (period === 'PM' && hours !== 12) hours += 12;
+                if (period === 'AM' && hours === 12) hours = 0;
+                const sessionStart = new Date(yyyy, mm - 1, dd, hours, minutes);
+                const sessionEndWindow = new Date(sessionStart.getTime() + (60 * 60 * 1000));
+                if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
+                    if (!activeTodaySession) activeTodaySession = session;
+                }
+                const diff = sessionStart.getTime() - nowTime;
+                if (diff > 0 && diff < minDiff) {
+                    minDiff = diff;
+                    nextUpcomingSession = session;
                 }
             });
-
-            let defaultSession = currentHour >= 12 ? (anSession || fnSession) : (fnSession || anSession);
+            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
+            
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             if (targetVal) {
