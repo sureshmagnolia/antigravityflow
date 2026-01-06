@@ -1,4 +1,4 @@
-/* drive_sync.js - Optimistic UI & Debug Mode */
+/* drive_sync.js - Token Caching & Persistent Connection */
 
 const CLIENT_ID = '1097009779148-nkdd0ovfphsdo4uj9a6bbu09fnsd607j.apps.googleusercontent.com'; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -37,13 +37,20 @@ function checkAuth() {
     if (gapiInited && gisInited) {
         document.getElementById('btn-connect-drive').classList.remove('hidden');
         
-        const isConnected = localStorage.getItem('isDriveConnected') === 'true';
-        console.log("Check Auth: Flag =", isConnected);
+        const storedToken = localStorage.getItem('drive_access_token');
+        const expiry = localStorage.getItem('drive_token_expiry');
+        const now = Date.now();
 
-        if (isConnected) {
-            // OPTIMISTIC: Show Green immediately
+        if (storedToken && expiry && now < parseInt(expiry)) {
+            // 1. Token is VALID. Reuse it!
+            console.log("Restoring valid session from storage...");
+            gapi.client.setToken({ access_token: storedToken });
+            localStorage.setItem('isDriveConnected', 'true'); // Ensure flag matches
             showConnectedState();
-            console.log("Attempting Restore Session...");
+        } 
+        else if (localStorage.getItem('isDriveConnected') === 'true') {
+            // 2. Token Expired, but was connected. Try refresh.
+            console.log("Token expired. Attempting silent refresh...");
             restoreSession();
         }
     }
@@ -52,18 +59,28 @@ function checkAuth() {
 function restoreSession() {
     tokenClient.callback = async (resp) => {
         if (resp.error) {
-            console.warn("Silent Auth Error:", resp);
-            // alert("Debug: Silent Auth Failed (" + resp.error + ")");
-            showReconnectState(); // Fallback to Yellow
+            console.warn("Silent Auth Failed:", resp);
+            showReconnectState(); // Ask user to click
         } else {
-            console.log("Silent Auth Success!");
-            if (resp.access_token) gapi.client.setToken(resp);
-            // No need to call showConnectedState again (already green), just get stats
-            findLatestBackupTime();
+            handleTokenResponse(resp);
         }
     };
-    // Attempt silent
     tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function handleTokenResponse(resp) {
+    if (resp.access_token) {
+        // Save Token & Expiry (Expires in 3599 seconds usually)
+        const expiresIn = (resp.expires_in || 3599) * 1000; 
+        const expiryTime = Date.now() + expiresIn - 60000; // Buffer 1 min
+        
+        localStorage.setItem('drive_access_token', resp.access_token);
+        localStorage.setItem('drive_token_expiry', expiryTime);
+        localStorage.setItem('isDriveConnected', 'true');
+        
+        gapi.client.setToken(resp);
+        showConnectedState();
+    }
 }
 
 // --- UI STATES ---
@@ -74,6 +91,7 @@ function showConnectedState() {
     btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
     btn.onclick = disconnectDrive;
     document.getElementById('drive-controls').classList.remove('hidden');
+    findLatestBackupTime();
 }
 
 function showReconnectState() {
@@ -89,6 +107,7 @@ function showDisconnectedState() {
     btn.innerHTML = "🔗 Connect Google Drive";
     btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
     btn.onclick = handleAuthClick;
+    
     document.getElementById('drive-controls').classList.add('hidden');
     document.getElementById('last-sync-time').textContent = "";
 }
@@ -100,17 +119,15 @@ function disconnectDrive() {
     if (token) google.accounts.oauth2.revoke(token.access_token);
     gapi.client.setToken(null);
     localStorage.removeItem('isDriveConnected');
+    localStorage.removeItem('drive_access_token');
+    localStorage.removeItem('drive_token_expiry');
     showDisconnectedState();
 }
 
 function handleAuthClick() {
     tokenClient.callback = async (resp) => {
         if (resp.error) throw resp;
-        if (resp.access_token) gapi.client.setToken(resp);
-        
-        localStorage.setItem('isDriveConnected', 'true');
-        showConnectedState();
-        findLatestBackupTime();
+        handleTokenResponse(resp);
     };
     if (gapi.client.getToken() === null) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -119,7 +136,7 @@ function handleAuthClick() {
     }
 }
 
-// --- FOLDER & SYNC LOGIC ---
+// --- FOLDER & UPLOAD LOGIC ---
 
 async function getBackupFolder() {
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
@@ -165,7 +182,6 @@ async function syncData() {
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
         const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
 
-        // Two-Step Upload
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
             fields: 'id'
