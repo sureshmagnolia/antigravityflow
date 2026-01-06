@@ -11,6 +11,9 @@
     <script src="jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <script src="drive_sync.js" defer></script>
+    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <link rel="stylesheet" href="style.css?v=20251206_1315">
 
@@ -1226,6 +1229,43 @@
                     </div>
 
 
+
+<!-- Google Drive Sync Section -->
+<div class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg mb-6 mt-4">
+    <h2 class="text-xl font-bold text-indigo-800 mb-2 flex items-center gap-2">
+        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12.01 1.984C8.834 1.984 6.012 3.65 4.385 6.135l-2.02-3.49C4.76 0.942 8.21.01 12.01.01c4.522 0 8.49 2.193 11.025 5.56L20.45 9.1c-1.84-2.8-4.9-4.696-8.44-4.696-1.07 0-2.09.21-3.03.58l2.03 3.5c.32-.1.66-.16 1.01-.16 1.94 0 3.52 1.58 3.52 3.52 0 .58-.16 1.12-.43 1.58l-2.6-4.5h-5.02l2.6 4.5c-.32.55-.5 1.19-.5 1.88 0 2.12 1.72 3.84 3.84 3.84 1.14 0 2.15-.5 2.85-1.28l3.14 5.38c-1.63 1.8-3.99 2.94-6.62 2.94-5.11 0-9.26-4.15-9.26-9.26 0-3.37 1.81-6.35 4.63-8.03l2.58 4.47z"/>
+        </svg>
+        Google Drive Sync
+    </h2>
+    <p class="text-sm text-gray-600 mb-3">Back up your exam data to your personal Google Drive.</p>
+    <!-- Connect Button -->
+    <button id="btn-connect-drive" onclick="handleAuthClick()" 
+        class="hidden bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 font-bold transition">
+        🔗 Connect Google Drive
+    </button>
+    <!-- Sync Controls (Hidden until connected) -->
+    <div id="drive-controls" class="hidden mt-4 flex items-center gap-4">
+        
+        <div>
+            <button id="btn-manual-sync" onclick="syncData()" 
+                class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 font-bold flex items-center gap-2">
+                🔄 Sync Now (Push)
+            </button>
+            <p class="text-[10px] text-gray-500 mt-1">Last Sync: <span id="last-sync-time">Never</span></p>
+        </div>
+        <div class="h-8 border-l border-gray-300 mx-2"></div>
+        <button onclick="restoreFromDrive()" 
+            class="bg-white border border-red-300 text-red-600 px-3 py-1.5 rounded hover:bg-red-50 text-sm font-medium">
+            📥 Restore from Drive
+        </button>
+    </div>
+</div>
+
+
+
+
+                    
 
 <div class="bg-gradient-to-r from-red-50 to-orange-50 border border-red-100 p-6 rounded-2xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm relative overflow-hidden group cursor-pointer hover:shadow-md transition-all" id="btn-enter-danger-zone">
     
