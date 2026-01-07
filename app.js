@@ -14903,6 +14903,14 @@ if (btnSessionReschedule) {
 
                 const roomInfo = currentRoomConfig[room.name] || {};
                 const displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;
+// --- 1. TRUNCATE LOGIC (Max 5 Words) ---
+if (displayLoc) {
+    const words = displayLoc.split(' ');
+    if (words.length > 5) {
+        displayLoc = words.slice(0, 5).join(' ') + '...';
+    }
+}
+                
                 const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:5px;">(Scribe)</span>` : "";
 
                 // --- FORMAT INFO: Name + Dept | Phone ---
@@ -15027,14 +15035,14 @@ if (btnSessionReschedule) {
                 <thead>
                     <tr>
                         <th style="width: 5%;">Sl</th>
-                        <th style="width: 15%; text-align:left;">Hall / Location</th>
+                        <th style="width: 25%; text-align:left;">Hall / Location</th>
                         <th style="width: 20%; text-align:left;">Invigilator</th>
-                        <th style="width: 13%;">RNBB</th>
+                        <th style="width: 8%;">RNBB</th>
                         <th style="width: 6%;">Asgd</th>
                         <th style="width: 6%;">Used</th>
                         <th style="width: 6%;">Retd</th>
                         <th style="width: 10%;">Remarks</th>
-                        <th style="width: 19%;">Sign</th>
+                        <th style="width: 15%;">Sign</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
