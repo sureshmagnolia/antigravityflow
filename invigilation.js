@@ -1,4 +1,4 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+import { getAuth, signInWithRedirect, GoogleAuthProvider, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -155,7 +155,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
+document.getElementById('login-btn').addEventListener('click', () => signInWithRedirect(auth, provider));
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
