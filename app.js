@@ -16702,60 +16702,51 @@ window.executeBulkDelete = async function() {
     
 
 
+
 window.downloadInvigilationListPDF = function () {
-    // A. Initial Setup
-    let sessionKey = "";
-    if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
-        sessionKey = allotmentSessionSelect.value;
-    } else {
-        const selectEl = document.getElementById('allotment-session-select'); 
-        if (selectEl) sessionKey = selectEl.value;
-    }
+    const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
+        ? allotmentSessionSelect.value 
+        : document.getElementById('allotment-session-select')?.value;
     if (!sessionKey) return alert("Please select a session first.");
     const [date, time] = sessionKey.split(' | ');
-    // B. Load Data (Same as Print)
+    // 1. Data Loading
     const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]'); // Needed for empty row calculation
+    const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]');
+    const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
     const sessionScribeMap = (JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}'))[sessionKey] || {};
-    // C. Logic to Build Room List (Replicating Print Logic)
+    // 2. Room List Re-creation
+    const sessionAllotment = allAllotments[sessionKey] || [];
     const roomList = [];
-    const serialMap = {}; // You might need to replicate getRoomSerialMap if available, else standard sort
     
-    // Note: Assuming 'currentSessionAllotment' is available globally. If not, we might miss Regular rooms.
-    // Try to recover from window variable if possible, otherwise rely on Invig Map keys.
-    const allRoomsInMap = Object.keys(currentSessionInvigs);
-    if(typeof currentSessionAllotment !== 'undefined') {
-        currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-    } else {
-        // Fallback: Use keys from invig map
-        allRoomsInMap.forEach(rName => roomList.push({ name: rName, stream: "Regular", isScribe: false })); // Approximate stream
-    }
-    // Add Scribe Rooms
-    Object.values(sessionScribeMap).forEach(rName => {
-        if(!roomList.find(r=>r.name === rName)) roomList.push({ name: rName, stream: "Regular", isScribe: true });
+    sessionAllotment.forEach(r => {
+        roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false });
     });
-    // D. Build Stream Counts (For Empty Rows)
+    Object.values(sessionScribeMap).forEach(rName => {
+        if(!roomList.find(r=>r.name === rName)) {
+            roomList.push({ name: rName, stream: "Regular", isScribe: true });
+        }
+    });
     const streamCounts = {};
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    const globalScribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
     sessionStudents.forEach(s => {
         const sStream = s.Stream || "Regular";
         if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
-        streamCounts[sStream].candidates++;
+        scribeRegNos.has(s['Register Number']) ? streamCounts[sStream].scribes++ : streamCounts[sStream].candidates++;
     });
-    // E. Group By Stream
     const streams = {};
     roomList.forEach(r => {
         const s = r.stream || "Regular";
         if (!streams[s]) streams[s] = [];
         streams[s].push(r);
     });
-    // F. Construct Table Body
+    // 3. Rows Generation
     const bodyRows = [];
     let srNo = 1;
-    
     const truncate = (str, n) => {
         if (!str) return "";
         const w = str.split(' ');
@@ -16766,35 +16757,37 @@ window.downloadInvigilationListPDF = function () {
         sortedStreamNames.splice(sortedStreamNames.indexOf("Regular"), 1);
         sortedStreamNames.unshift("Regular");
     }
-    // 1. STREAMS Loop
     sortedStreamNames.forEach(streamName => {
         const list = streams[streamName];
         list.sort((a,b) => a.name.localeCompare(b.name));
-        // Stream Header Row
         bodyRows.push([{ 
             content: (streamName === "Regular" ? "REGULAR STREAM" : streamName.toUpperCase()), 
             colSpan: 9, 
-            styles: { fillColor: [243, 244, 246], fontStyle: 'bold', halign: 'left' } 
+            styles: { fillColor: [243, 244, 246], fontStyle: 'bold', halign: 'left', textColor: 0 } 
         }]);
-        // Rooms
         list.forEach(room => {
             const invigName = currentSessionInvigs[room.name] || "-";
             const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {}; 
             
+            let invigCell = invigName;
+            if (invigName !== "-") {
+                const meta = [];
+                if(staff.dept) meta.push(staff.dept);
+                if(staff.phone) meta.push(staff.phone);
+                if(meta.length > 0) invigCell += `\n${meta.join(' | ')}`; 
+            }
             let loc = roomConfig[room.name]?.location || room.name;
             loc = truncate(loc, 5);
             if(room.isScribe) loc += " (Scribe)";
             bodyRows.push([
                 srNo++,
                 loc,
-                { content: invigName, styles: { fontStyle: 'bold' } },
-                "",
-                "", "", "", "", ""
+                { content: invigCell, styles: { fontStyle: 'bold' } }, 
+                "", "", "", "", "", "", ""
             ]);
         });
-        // Exact Empty Rows Logic
-        const stats = streamCounts[streamName] || { candidates: 0 };
-        const totalReq = Math.ceil(stats.candidates / 30);
+        const stats = streamCounts[streamName] || { candidates: 0, scribes: 0 };
+        const totalReq = Math.ceil(stats.candidates / 30) + stats.scribes;
         const emptyRowsNeeded = Math.max(2, totalReq - list.length);
         for(let i=0; i<emptyRowsNeeded; i++) {
             bodyRows.push([
@@ -16803,7 +16796,6 @@ window.downloadInvigilationListPDF = function () {
             ]);
         }
     });
-    // 2. RESERVES Logic
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const slot = invigSlots[sessionKey];
     if (slot && slot.assigned && slot.assigned.length > 0) {
@@ -16814,24 +16806,22 @@ window.downloadInvigilationListPDF = function () {
             if (staff && !assignedNames.has(staff.name)) reserves.push(staff);
         });
         if (reserves.length > 0) {
-            // Reserve Header
             bodyRows.push([{ 
                 content: "RESERVES / RELIEVERS", 
                 colSpan: 9, 
                 styles: { fillColor: [255, 247, 237], textColor: [154, 52, 18], fontStyle: 'bold', halign: 'center' } 
             }]);
-            // Reserve Rows
             reserves.forEach((staff, idx) => {
                 bodyRows.push([
                     { content: idx + 1, halign: 'center' },
-                    { content: staff.name, colSpan: 3, styles: { fontStyle: 'bold' } }, // Merged Name
-                    { content: staff.dept || "", colSpan: 3 }, // Merged Dept
-                    { content: staff.phone || "", colSpan: 2 } // Merged Phone
+                    { content: staff.name, colSpan: 3, styles: { fontStyle: 'bold' } },
+                    { content: staff.dept || "", colSpan: 3 },
+                    { content: staff.phone || "", colSpan: 2 }
                 ]);
             });
         }
     }
-    // G. Generate PDF
+    // 4. Generate PDF
     if (!window.jspdf) return alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -16846,15 +16836,40 @@ window.downloadInvigilationListPDF = function () {
         body: bodyRows,
         startY: 32,
         theme: 'grid',
-        styles: { fontSize: 9, lineColor: 0, lineWidth: 0.1, cellPadding: 2, textColor: 0 },
+        styles: { fontSize: 9, lineColor: 0, lineWidth: 0.1, cellPadding: 2, textColor: 0, valign: 'middle' },
         columnStyles: {
             0: { cellWidth: 10, halign: 'center' },
-            1: { cellWidth: 40 },
-            2: { cellWidth: 40 }, 
+            1: { cellWidth: 47 }, 
+            2: { cellWidth: 38 }, 
             3: { cellWidth: 15 }, 
+            4: { cellWidth: 11 }, 
+            5: { cellWidth: 11 }, 
+            6: { cellWidth: 11 }, 
+            7: { cellWidth: 19 },
             8: { cellWidth: 'auto' }
+        },
+        // --- 5. FOOTER (Signatures) ---
+        didDrawPage: function (data) {
+            // Only on the last page? Or check y position.
+            // Using lastAutoTable.finalY assumes we want it at the END of the content.
+            // didDrawPage runs for every page, we can check if it's the last page if needed.
+            // But jspdf-autotable doesn't track "last page" easily in didDrawPage.
+            // Better strategy: Add text AFTER the table is done.
         }
     });
+    // Add Signatures after table
+    let finalY = doc.lastAutoTable.finalY || 40;
+    
+    // Check if space exists, else add page
+    if (finalY > 250) {
+        doc.addPage();
+        finalY = 20;
+    }
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    
+    doc.text("Senior Assistant Superintendent", 40, finalY + 25, { align: "center" });
+    doc.text("Chief Superintendent", 170, finalY + 25, { align: "center" });
     doc.save(`Invigilation_List_${date}.pdf`);
 };
 
