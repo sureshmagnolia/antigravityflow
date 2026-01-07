@@ -16709,30 +16709,59 @@ window.downloadInvigilationListPDF = function () {
         : document.getElementById('allotment-session-select')?.value;
     if (!sessionKey) return alert("Please select a session first.");
     const [date, time] = sessionKey.split(' | ');
-    // 1. Data Loading
+    // 1. Data Sources
     const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
     const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]');
-    const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
-    const sessionScribeMap = (JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}'))[sessionKey] || {};
-    // 2. Room List Re-creation
-    const sessionAllotment = allAllotments[sessionKey] || [];
-    const roomList = [];
     
-    sessionAllotment.forEach(r => {
-        roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false });
-    });
+    // Scribe Data
+    const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+    // 2. ROBUST Room List Builder (Triple Fallback)
+    const roomList = [];
+    let sourceUsed = "none";
+    
+    // Method A: Global Variable (Screen State)
+    if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+        currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
+        sourceUsed = "global";
+    } 
+    // Method B: Storage Allotment Data
+    else {
+         const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
+         const sessionAllotment = allAllotments[sessionKey];
+         if (sessionAllotment && Array.isArray(sessionAllotment)) {
+             sessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
+             sourceUsed = "storage";
+         }
+         // Method C: Inference from Invigilator Mapping (Last Resort)
+         else {
+             const mappedRooms = Object.keys(currentSessionInvigs);
+             if (mappedRooms.length > 0) {
+                 mappedRooms.forEach(rName => roomList.push({ name: rName, stream: "Regular", isScribe: false }));
+                 sourceUsed = "inference";
+             }
+         }
+    }
+    // Always add Scribe Rooms (deduplicated)
     Object.values(sessionScribeMap).forEach(rName => {
         if(!roomList.find(r=>r.name === rName)) {
             roomList.push({ name: rName, stream: "Regular", isScribe: true });
         }
     });
+    if(roomList.length === 0) {
+        // Only Reserves will print if this happens
+        console.warn("PDF: No regular rooms found. Check if session has allotment.");
+    }
+    // 3. Preparation & Sorting
     const streamCounts = {};
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    // Scribe RegNo List
+    let scribeRegNos = new Set();
     const globalScribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
-    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    if(Array.isArray(globalScribeList)) scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
     sessionStudents.forEach(s => {
         const sStream = s.Stream || "Regular";
         if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
@@ -16744,7 +16773,7 @@ window.downloadInvigilationListPDF = function () {
         if (!streams[s]) streams[s] = [];
         streams[s].push(r);
     });
-    // 3. Rows Generation
+    // 4. Generate Rows
     const bodyRows = [];
     let srNo = 1;
     const truncate = (str, n) => {
@@ -16786,6 +16815,7 @@ window.downloadInvigilationListPDF = function () {
                 "", "", "", "", "", "", ""
             ]);
         });
+        // Exact Empty Rows Logic
         const stats = streamCounts[streamName] || { candidates: 0, scribes: 0 };
         const totalReq = Math.ceil(stats.candidates / 30) + stats.scribes;
         const emptyRowsNeeded = Math.max(2, totalReq - list.length);
@@ -16796,6 +16826,7 @@ window.downloadInvigilationListPDF = function () {
             ]);
         }
     });
+    // 5. Reserves
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const slot = invigSlots[sessionKey];
     if (slot && slot.assigned && slot.assigned.length > 0) {
@@ -16821,7 +16852,7 @@ window.downloadInvigilationListPDF = function () {
             });
         }
     }
-    // 4. Generate PDF
+    // 6. Final PDF
     if (!window.jspdf) return alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -16847,31 +16878,17 @@ window.downloadInvigilationListPDF = function () {
             6: { cellWidth: 11 }, 
             7: { cellWidth: 19 },
             8: { cellWidth: 'auto' }
-        },
-        // --- 5. FOOTER (Signatures) ---
-        didDrawPage: function (data) {
-            // Only on the last page? Or check y position.
-            // Using lastAutoTable.finalY assumes we want it at the END of the content.
-            // didDrawPage runs for every page, we can check if it's the last page if needed.
-            // But jspdf-autotable doesn't track "last page" easily in didDrawPage.
-            // Better strategy: Add text AFTER the table is done.
         }
     });
-    // Add Signatures after table
     let finalY = doc.lastAutoTable.finalY || 40;
-    
-    // Check if space exists, else add page
-    if (finalY > 250) {
-        doc.addPage();
-        finalY = 20;
-    }
+    if (finalY > 250) { doc.addPage(); finalY = 20; }
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    
     doc.text("Senior Assistant Superintendent", 40, finalY + 25, { align: "center" });
     doc.text("Chief Superintendent", 170, finalY + 25, { align: "center" });
     doc.save(`Invigilation_List_${date}.pdf`);
 };
+
 
 
     
