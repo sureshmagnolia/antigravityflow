@@ -14902,8 +14902,7 @@ if (btnSessionReschedule) {
                 const invigPhone = staffInfo.phone;
 
                 const roomInfo = currentRoomConfig[room.name] || {};
-                const displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;
-// --- 1. TRUNCATE LOGIC (Max 5 Words) ---
+                let displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;// --- 1. TRUNCATE LOGIC (Max 5 Words) ---
 if (displayLoc) {
     const words = displayLoc.split(' ');
     if (words.length > 5) {
