@@ -16699,6 +16699,111 @@ window.executeBulkDelete = async function() {
 
 
 
+    
+
+// --- NEW FUNCTION: Download PDF of Invigilation List ---
+window.downloadInvigilationListPDF = function () {
+    // 1. Get Session Key (Try multiple sources to be safe)
+    let sessionKey = "";
+    if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
+        sessionKey = allotmentSessionSelect.value;
+    } else {
+        const selectEl = document.getElementById('allotment-session-select'); 
+        if (selectEl) sessionKey = selectEl.value;
+    }
+    if (!sessionKey) return alert("Please select a session first.");
+    // 2. Gather Data
+    const [date, time] = sessionKey.split(' | ');
+    const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+    const currentSessionInvigs = invigMap[sessionKey] || {};
+    const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const rows = [];
+    let srNo = 1;
+    // Helper: Truncate to 5 words
+    const truncate = (str, n) => {
+        if (!str) return "";
+        const words = str.split(' ');
+        return (words.length > n) ? words.slice(0, n).join(' ') + '...' : str;
+    };
+    // Get Rooms & Sort
+    const sortedRooms = Object.keys(currentSessionInvigs).sort();
+    sortedRooms.forEach(roomName => {
+        const invigName = currentSessionInvigs[roomName];
+        
+        // Find Staff Details
+        const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {};
+        
+        // Display Location Logic
+        let displayLoc = roomName;
+        const rInfo = roomConfig[roomName];
+        if (rInfo && rInfo.location && rInfo.location.trim()) {
+            displayLoc = rInfo.location;
+        }
+        
+        // Apply Truncation
+        displayLoc = truncate(displayLoc, 5);
+        rows.push([
+            srNo++,
+            displayLoc,         // Hall / Location
+            invigName,          // Invigilator Name
+            "",                 // RNBB
+            "",                 // Asgd
+            "",                 // Used
+            "",                 // Retd
+            "",                 // Remarks
+            ""                  // Sign
+        ]);
+    });
+    // 3. Generate PDF
+    if (!window.jspdf) {
+        return alert("PDF Library not loaded. Please refresh the page.");
+    }
+    
+    const { jsPDF } = window.jspdf; 
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(14);
+    doc.text("GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
+    doc.setFontSize(11);
+    doc.text("Invigilation Duty List", 105, 22, { align: "center" });
+    doc.setFontSize(10);
+    doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
+    // Table
+    doc.autoTable({
+        head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
+        body: rows,
+        startY: 32,
+        theme: 'grid',
+        headStyles: { 
+            fillColor: [255, 255, 255], 
+            textColor: 0, 
+            lineColor: 0, 
+            lineWidth: 0.1,
+            halign: 'center'
+        },
+        styles: { 
+            fontSize: 9, 
+            lineColor: 0, 
+            lineWidth: 0.1,
+            cellPadding: 2,
+            textColor: 0
+        },
+        columnStyles: {
+            0: { cellWidth: 10, halign: 'center' }, // Sl
+            1: { cellWidth: 40 }, // Hall/Location
+            2: { cellWidth: 40 }, // Invigilator
+            3: { cellWidth: 15 }, // RNBB
+            4: { cellWidth: 12 }, // Asgd
+            5: { cellWidth: 12 }, // Used
+            6: { cellWidth: 12 }, // Retd
+            7: { cellWidth: 25 }, // Remarks
+            8: { cellWidth: 'auto' } // Sign
+        }
+    });
+    doc.save(`Invigilation_List_${date}.pdf`);
+};
 
 
     
