@@ -16701,9 +16701,9 @@ window.executeBulkDelete = async function() {
 
     
 
-// --- NEW FUNCTION: Download PDF of Invigilation List ---
+
 window.downloadInvigilationListPDF = function () {
-    // 1. Get Session Key (Try multiple sources to be safe)
+    // A. Initial Setup
     let sessionKey = "";
     if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
         sessionKey = allotmentSessionSelect.value;
@@ -16712,98 +16712,154 @@ window.downloadInvigilationListPDF = function () {
         if (selectEl) sessionKey = selectEl.value;
     }
     if (!sessionKey) return alert("Please select a session first.");
-    // 2. Gather Data
     const [date, time] = sessionKey.split(' | ');
+    // B. Load Data (Same as Print)
     const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    const rows = [];
+    const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]'); // Needed for empty row calculation
+    const sessionScribeMap = (JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}'))[sessionKey] || {};
+    // C. Logic to Build Room List (Replicating Print Logic)
+    const roomList = [];
+    const serialMap = {}; // You might need to replicate getRoomSerialMap if available, else standard sort
+    
+    // Note: Assuming 'currentSessionAllotment' is available globally. If not, we might miss Regular rooms.
+    // Try to recover from window variable if possible, otherwise rely on Invig Map keys.
+    const allRoomsInMap = Object.keys(currentSessionInvigs);
+    if(typeof currentSessionAllotment !== 'undefined') {
+        currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
+    } else {
+        // Fallback: Use keys from invig map
+        allRoomsInMap.forEach(rName => roomList.push({ name: rName, stream: "Regular", isScribe: false })); // Approximate stream
+    }
+    // Add Scribe Rooms
+    Object.values(sessionScribeMap).forEach(rName => {
+        if(!roomList.find(r=>r.name === rName)) roomList.push({ name: rName, stream: "Regular", isScribe: true });
+    });
+    // D. Build Stream Counts (For Empty Rows)
+    const streamCounts = {};
+    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    sessionStudents.forEach(s => {
+        const sStream = s.Stream || "Regular";
+        if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
+        streamCounts[sStream].candidates++;
+    });
+    // E. Group By Stream
+    const streams = {};
+    roomList.forEach(r => {
+        const s = r.stream || "Regular";
+        if (!streams[s]) streams[s] = [];
+        streams[s].push(r);
+    });
+    // F. Construct Table Body
+    const bodyRows = [];
     let srNo = 1;
-    // Helper: Truncate to 5 words
+    
     const truncate = (str, n) => {
         if (!str) return "";
-        const words = str.split(' ');
-        return (words.length > n) ? words.slice(0, n).join(' ') + '...' : str;
+        const w = str.split(' ');
+        return (w.length > n) ? w.slice(0, n).join(' ') + '...' : str;
     };
-    // Get Rooms & Sort
-    const sortedRooms = Object.keys(currentSessionInvigs).sort();
-    sortedRooms.forEach(roomName => {
-        const invigName = currentSessionInvigs[roomName];
-        
-        // Find Staff Details
-        const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {};
-        
-        // Display Location Logic
-        let displayLoc = roomName;
-        const rInfo = roomConfig[roomName];
-        if (rInfo && rInfo.location && rInfo.location.trim()) {
-            displayLoc = rInfo.location;
-        }
-        
-        // Apply Truncation
-        displayLoc = truncate(displayLoc, 5);
-        rows.push([
-            srNo++,
-            displayLoc,         // Hall / Location
-            invigName,          // Invigilator Name
-            "",                 // RNBB
-            "",                 // Asgd
-            "",                 // Used
-            "",                 // Retd
-            "",                 // Remarks
-            ""                  // Sign
-        ]);
-    });
-    // 3. Generate PDF
-    if (!window.jspdf) {
-        return alert("PDF Library not loaded. Please refresh the page.");
+    const sortedStreamNames = Object.keys(streams).sort();
+    if(sortedStreamNames.includes("Regular")) {
+        sortedStreamNames.splice(sortedStreamNames.indexOf("Regular"), 1);
+        sortedStreamNames.unshift("Regular");
     }
-    
-    const { jsPDF } = window.jspdf; 
+    // 1. STREAMS Loop
+    sortedStreamNames.forEach(streamName => {
+        const list = streams[streamName];
+        list.sort((a,b) => a.name.localeCompare(b.name));
+        // Stream Header Row
+        bodyRows.push([{ 
+            content: (streamName === "Regular" ? "REGULAR STREAM" : streamName.toUpperCase()), 
+            colSpan: 9, 
+            styles: { fillColor: [243, 244, 246], fontStyle: 'bold', halign: 'left' } 
+        }]);
+        // Rooms
+        list.forEach(room => {
+            const invigName = currentSessionInvigs[room.name] || "-";
+            const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {}; 
+            
+            let loc = roomConfig[room.name]?.location || room.name;
+            loc = truncate(loc, 5);
+            if(room.isScribe) loc += " (Scribe)";
+            bodyRows.push([
+                srNo++,
+                loc,
+                { content: invigName, styles: { fontStyle: 'bold' } },
+                "",
+                "", "", "", "", ""
+            ]);
+        });
+        // Exact Empty Rows Logic
+        const stats = streamCounts[streamName] || { candidates: 0 };
+        const totalReq = Math.ceil(stats.candidates / 30);
+        const emptyRowsNeeded = Math.max(2, totalReq - list.length);
+        for(let i=0; i<emptyRowsNeeded; i++) {
+            bodyRows.push([
+                { content: "-", styles: { halign: 'center', textColor: [200,200,200] } },
+                "", "", "", "", "", "", "", ""
+            ]);
+        }
+    });
+    // 2. RESERVES Logic
+    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const slot = invigSlots[sessionKey];
+    if (slot && slot.assigned && slot.assigned.length > 0) {
+        const assignedNames = new Set(Object.values(currentSessionInvigs));
+        const reserves = [];
+        slot.assigned.forEach(email => {
+            const staff = staffData.find(s => s.email === email);
+            if (staff && !assignedNames.has(staff.name)) reserves.push(staff);
+        });
+        if (reserves.length > 0) {
+            // Reserve Header
+            bodyRows.push([{ 
+                content: "RESERVES / RELIEVERS", 
+                colSpan: 9, 
+                styles: { fillColor: [255, 247, 237], textColor: [154, 52, 18], fontStyle: 'bold', halign: 'center' } 
+            }]);
+            // Reserve Rows
+            reserves.forEach((staff, idx) => {
+                bodyRows.push([
+                    { content: idx + 1, halign: 'center' },
+                    { content: staff.name, colSpan: 3, styles: { fontStyle: 'bold' } }, // Merged Name
+                    { content: staff.dept || "", colSpan: 3 }, // Merged Dept
+                    { content: staff.phone || "", colSpan: 2 } // Merged Phone
+                ]);
+            });
+        }
+    }
+    // G. Generate PDF
+    if (!window.jspdf) return alert("PDF Library not loaded.");
+    const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    
-    // Header
     doc.setFontSize(14);
     doc.text("GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
     doc.setFontSize(11);
     doc.text("Invigilation Duty List", 105, 22, { align: "center" });
     doc.setFontSize(10);
     doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
-    // Table
     doc.autoTable({
         head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
-        body: rows,
+        body: bodyRows,
         startY: 32,
         theme: 'grid',
-        headStyles: { 
-            fillColor: [255, 255, 255], 
-            textColor: 0, 
-            lineColor: 0, 
-            lineWidth: 0.1,
-            halign: 'center'
-        },
-        styles: { 
-            fontSize: 9, 
-            lineColor: 0, 
-            lineWidth: 0.1,
-            cellPadding: 2,
-            textColor: 0
-        },
+        styles: { fontSize: 9, lineColor: 0, lineWidth: 0.1, cellPadding: 2, textColor: 0 },
         columnStyles: {
-            0: { cellWidth: 10, halign: 'center' }, // Sl
-            1: { cellWidth: 40 }, // Hall/Location
-            2: { cellWidth: 40 }, // Invigilator
-            3: { cellWidth: 15 }, // RNBB
-            4: { cellWidth: 12 }, // Asgd
-            5: { cellWidth: 12 }, // Used
-            6: { cellWidth: 12 }, // Retd
-            7: { cellWidth: 25 }, // Remarks
-            8: { cellWidth: 'auto' } // Sign
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 40 },
+            2: { cellWidth: 40 }, 
+            3: { cellWidth: 15 }, 
+            8: { cellWidth: 'auto' }
         }
     });
     doc.save(`Invigilation_List_${date}.pdf`);
 };
+
+
+    
 
 
     
