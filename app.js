@@ -9368,13 +9368,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             stream: targetStream
         });
 
-        // Update Scribe Map
-        newStudents.forEach(s => {
-            const reg = s['Register Number'];
-            if (globalScribeList.some(g => g.regNo === reg)) {
-                currentScribeAllotment[reg] = roomName;
-            }
-        });
+       
 
         // --- AUTO SAVE & SYNC ---
         saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
