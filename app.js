@@ -9354,7 +9354,12 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        const newStudents = candidates.slice(0, capacity);
+        // SMART ALLOTMENT: If remaining students are <= 33, put them ALL in this room
+        let limit = capacity;
+        if (candidates.length <= 33) {
+            limit = candidates.length;
+            }
+        const newStudents = candidates.slice(0, limit);
 
         if (newStudents.length === 0) {
             alert(`No unallotted students found for stream: ${targetStream}`);
