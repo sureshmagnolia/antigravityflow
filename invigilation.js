@@ -8512,7 +8512,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
             <span class="text-xs font-bold text-gray-500">${window.currentEmailQueue.length} Staff Members</span>
         </div>
         
-        <button onclick="confirmBulkSend()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+        <button onclick="processBulkQueue()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             Send Emails to All (${window.currentEmailQueue.length})
         </button>
@@ -9112,6 +9112,90 @@ window.adminMarkUnavailable = function(key, email) {
     window.openModal('unavailable-modal');
 };
 
+
+
+// 1. Missing Generator for Department Emails
+window.generateDepartmentConsolidatedEmail = function(deptName, duties, title) {
+    const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
+
+    let rows = duties.map(d => {
+        const reportTime = window.calculateReportTime ? window.calculateReportTime(d.time) : d.time;
+        return `
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px; border: 1px solid #e5e7eb;"><strong>${d.date}</strong> <span style="font-size: 10px; text-transform: uppercase;">${d.session}</span></td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;"><b>${d.name}</b></td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;">${d.time}</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb; color: #c0392b; font-weight: bold;">${reportTime}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+        <div style="background-color: #0d9488; color: white; padding: 20px; text-align: center;">
+            <h2 style="margin: 0; font-size: 18px;">${collegeName}</h2>
+            <p style="margin: 5px 0 0; font-size: 13px;">${title}</p>
+        </div>
+        <div style="padding: 25px;">
+            <p>Please find below the consolidated invigilation duty schedule for <b>${deptName}</b>.</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px;">
+                <thead>
+                    <tr style="background-color: #f9fafb; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #e5e7eb;">Date</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb;">Faculty</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb;">Time</th>
+                        <th style="padding: 10px; border: 1px solid #e5e7eb;">Reporting</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+};
+
+// 2. Missing Bulk Sender for Departments
+window.sendBulkDeptEmails = async function () {
+    const pendingItems = window.currentDeptEmailQueue.filter(i => i.status === 'pending' && i.email);
+    if (pendingItems.length === 0) return alert("No valid pending emails to send.");
+    if (!confirm(`Start bulk sending to ${pendingItems.length} Departments?`)) return;
+
+    // UI Feedback
+    const btn = document.getElementById('btn-bulk-dept-send');
+    const bar = document.getElementById('dept-progress-bar');
+    const fill = document.getElementById('dept-progress-fill');
+    const txt = document.getElementById('dept-status-text');
+    
+    if (btn) btn.classList.add('hidden');
+    if (bar) bar.classList.remove('hidden');
+    if (txt) { txt.classList.remove('hidden'); txt.textContent = "Starting..."; }
+
+    let successCount = 0;
+    for (let i = 0; i < pendingItems.length; i++) {
+        const item = pendingItems[i];
+        if (txt) txt.textContent = `Sending to ${item.dept} (${i + 1}/${pendingItems.length})...`;
+        if (fill) fill.style.width = `${Math.round(((i + 1) / pendingItems.length) * 100)}%`;
+
+        try {
+            await fetch(googleScriptUrl, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ to: item.email, subject: item.subject, body: item.body })
+            });
+            item.status = 'sent';
+            successCount++;
+            
+            // Update individual row status if exists
+            const rStatus = document.getElementById(item.statusId);
+            if (rStatus) { rStatus.textContent = "Sent"; rStatus.classList.remove('hidden'); rStatus.classList.add('text-green-600'); }
+        } catch (e) { console.error(e); }
+        
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    
+    if (txt) txt.textContent = "Completed.";
+    alert(`Batch Complete. Sent to ${successCount} departments.`);
+    if (btn) btn.classList.remove('hidden');
+    if (bar) bar.classList.add('hidden');
+};
 
 // --- ADMIN: Remove Unavailability (From Manual Modal) ---
 window.adminRemoveUnavailable = async function(key, email, isAdvance) {
