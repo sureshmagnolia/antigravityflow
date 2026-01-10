@@ -6051,6 +6051,49 @@ window.openManualAllocationModal = function (key) {
     document.getElementById('manual-modal-title').textContent = key;
     document.getElementById('manual-modal-req').textContent = requiredCount;
 
+
+    // --- NEW: Current Assignments List (with Replace Option) ---
+    const assignedListContainer = document.getElementById('manual-assigned-list-container'); 
+    if (!assignedListContainer) {
+        // Inject Container if missing (One-time setup)
+        const header = document.getElementById('manual-modal-title').parentNode.parentNode;
+        const newDiv = document.createElement('div');
+        newDiv.id = 'manual-assigned-list-container';
+        newDiv.className = "mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200 hidden"; // Hidden by default
+        header.parentNode.insertBefore(newDiv, header.nextSibling);
+    }
+
+    const assignedContainer = document.getElementById('manual-assigned-list-container');
+    if (slot.assigned && slot.assigned.length > 0) {
+        assignedContainer.innerHTML = `<h4 class="text-xs font-bold text-gray-500 uppercase mb-2">Current Assignments</h4>`;
+        const listDiv = document.createElement('div');
+        listDiv.className = "space-y-1";
+        
+        slot.assigned.forEach(email => {
+            const s = staffData.find(st => st.email === email);
+            const name = s ? s.name : email;
+            
+            const item = document.createElement('div');
+            item.className = "flex justify-between items-center bg-white p-2 rounded border border-gray-200 shadow-sm";
+            item.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">${name.charAt(0)}</div>
+                    <span class="text-xs font-bold text-gray-800">${name}</span>
+                </div>
+                <button onclick="openReplaceModal('${key}', '${email}')" class="text-[10px] bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-2 py-1 rounded font-bold transition flex items-center gap-1 shadow-sm">
+                    🔄 Replace
+                </button>
+            `;
+            listDiv.appendChild(item);
+        });
+        assignedContainer.appendChild(listDiv);
+        assignedContainer.classList.remove('hidden');
+    } else {
+        if(assignedContainer) assignedContainer.classList.add('hidden');
+    }
+
+    
+
     // --- 4. HANDLE BUTTON STATE (LOCK LOGIC) ---
     const saveBtn = document.querySelector('#manual-allocation-modal button[onclick="saveManualAllocation()"]');
     const headerDiv = document.getElementById('manual-modal-title').parentNode;
@@ -9025,6 +9068,122 @@ window.processBulkQueue = async function() {
     document.getElementById('btn-bulk-send').classList.remove('hidden');
     document.getElementById('bulk-progress-container').classList.add('hidden');
 };
+
+
+
+// --- REPLACE INVIGILATOR LOGIC ---
+
+window.openReplaceModal = function (key, oldEmail) {
+    const s = staffData.find(st => st.email === oldEmail);
+    const oldName = s ? s.name : oldEmail;
+
+    document.getElementById('replace-session-key').value = key;
+    document.getElementById('replace-old-email').value = oldEmail;
+    document.getElementById('replace-modal-subtitle').textContent = `Replacing: ${oldName}`;
+    
+    // Reset Search
+    const input = document.getElementById('replace-search-input');
+    input.value = "";
+    document.getElementById('replace-search-results').classList.add('hidden');
+    resetReplaceSelection();
+    
+    // Setup Search Logic (Specific to this modal)
+    setupSearchHandler('replace-search-input', 'replace-search-results', null, false);
+    
+    // Override click handler for Results to capture selection
+    const resultsDiv = document.getElementById('replace-search-results');
+    
+    // Add specific listener for this input
+    input.oninput = function() {
+        const query = this.value.toLowerCase();
+        if(query.length < 2) { resultsDiv.classList.add('hidden'); return; }
+        
+        const slot = invigilationSlots[key];
+        const assignedSet = new Set(slot.assigned || []);
+        
+        let matches = staffData.filter(staff => 
+            staff.status !== 'archived' && 
+            !assignedSet.has(staff.email) // Exclude already assigned
+        );
+        
+        matches = matches.filter(staff => staff.name.toLowerCase().includes(query) || staff.dept.toLowerCase().includes(query));
+        
+        resultsDiv.innerHTML = '';
+        if(matches.length === 0) {
+            resultsDiv.innerHTML = `<div class="p-2 text-xs text-gray-400 italic text-center">No matches found.</div>`;
+        } else {
+            matches.forEach(staff => {
+                const div = document.createElement('div');
+                div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
+                div.innerHTML = `
+                    <span class="font-bold text-gray-800 text-xs">${staff.name}</span>
+                    <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${staff.dept}</span>
+                `;
+                div.onclick = () => selectReplacement(staff);
+                resultsDiv.appendChild(div);
+            });
+        }
+        resultsDiv.classList.remove('hidden');
+    };
+
+    window.openModal('replace-invigilator-modal');
+}
+
+window.selectReplacement = function(staff) {
+    document.getElementById('replace-search-input').value = staff.name;
+    document.getElementById('replace-search-results').classList.add('hidden');
+    
+    document.getElementById('replace-selected-name').textContent = staff.name;
+    document.getElementById('replace-selected-dept').textContent = `${staff.dept} | ${staff.designation || ''}`;
+    
+    // Store Selected Email temporarily
+    document.getElementById('replace-search-input').dataset.selectedEmail = staff.email;
+    
+    document.getElementById('replace-confirm-area').classList.remove('hidden');
+}
+
+window.resetReplaceSelection = function() {
+    document.getElementById('replace-confirm-area').classList.add('hidden');
+    document.getElementById('replace-search-input').dataset.selectedEmail = "";
+    document.getElementById('replace-search-input').value = "";
+}
+
+window.confirmInvigilatorSwap = async function() {
+    const key = document.getElementById('replace-session-key').value;
+    const oldEmail = document.getElementById('replace-old-email').value;
+    const newEmail = document.getElementById('replace-search-input').dataset.selectedEmail;
+    
+    if(!newEmail) return alert("Please select a substitute first.");
+    
+    const slot = invigilationSlots[key];
+    if(!slot) return;
+    
+    // 1. Update Data
+    slot.assigned = slot.assigned.map(e => e === oldEmail ? newEmail : e);
+    
+    // 2. Log
+    const oldName = getNameFromEmail(oldEmail);
+    const newName = getNameFromEmail(newEmail);
+    logActivity("Staff Replaced", `Admin replaced ${oldName} with ${newName} for session ${key}.`);
+    
+    // 3. Update Sync
+    updateSyncStatus("Saving Swap...", "neutral");
+    await syncSlotsToCloud();
+    updateSyncStatus("Swap Saved", "success");
+    
+    // 4. Refresh UI
+    window.closeModal('replace-invigilator-modal');
+    
+    // Refresh Manual Modal (to show new list)
+    openManualAllocationModal(key);
+    
+    // Refresh Main Grid
+    renderSlotsGridAdmin();
+    
+    // Refresh if needed
+    if(typeof renderStaffTable === 'function') renderStaffTable();
+}
+
 
 window.cancelBulkSending = function() {
     window.isBulkSendingCancelled = true;
