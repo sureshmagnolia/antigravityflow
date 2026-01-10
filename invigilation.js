@@ -9072,7 +9072,7 @@ window.generateHtmlEmailBody = function(name, duties) {
                 <strong>⚠️ Important Instructions:</strong>
                 <ul style="margin:5px 0 0 20px;padding:0;">
                     <li>Please report to the Exam Cell <strong>30 minutes</strong> before the start time.</li>
-                    <li>Mobile phones are strictly prohibited inside the exam hall.</li>
+                    <li>Mobile phones should be strictly maintained in silent mode inside the exam hall.</li>
                 </ul>
             </div>
             
