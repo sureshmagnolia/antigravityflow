@@ -15043,50 +15043,26 @@ if (displayLoc) {
         w.document.write(`
         <html>
         <head>
+            <!-- ... (keep existing head/style) ... -->
             <title>Invigilation List - ${date}</title>
             <style>
                 body { font-family: 'Arial', sans-serif; padding: 20px; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; font-weight: bold; }
+                .header { text-align: center; margin-bottom: 15px; }
+                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; }
                 .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
                 .header h3 { margin: 5px 0 0; font-size: 12pt; }
                 
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10pt; }
-                th { background: #eee; border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; }
-                td { vertical-align: middle; border: 1px solid #000; padding: 5px;}
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+                th { background: #eee; border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
+                td { vertical-align: middle; }
                 
-                /* Footer Layout Fix */
-                .footer { 
-                    margin-top: 60px; 
-                    display: flex; 
-                    justify-content: space-between; 
-                    font-size: 11pt; 
-                    padding: 0 50px; /* Add padding to bring signatories in slightly */
-                }
-                .sign-box { 
-                    text-align: center; 
-                    width: 300px; 
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: flex-end;
-                    min-height: 60px;
-                }
-                .official-name {
-                    font-weight: bold;
-                    font-size: 12pt;
-                    margin-bottom: 5px;
-                    text-transform: uppercase;
-                }
-                .official-role {
-                    font-weight: normal;
-                    border-top: 1px dashed #ccc; /* Optional: subtle guide line, or remove completely */
-                    padding-top: 5px;
-                }
+                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
+                .footer div { text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px; }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>${collegeName || "College Name"}</h1>
+                <h1>${currentCollegeName}</h1>
                 <h2>${examName}</h2>
                 <h3>${date} &nbsp;|&nbsp; ${time}</h3>
             </div>
@@ -15107,13 +15083,13 @@ if (displayLoc) {
                 <tbody>${rowsHtml}</tbody>
             </table>
             <div class="footer">
-                <div class="sign-box">
-                   <div class="official-name">${seniorName || ""}</div>
-                   <div class="official-role" style="${seniorName ? 'border-top:none;' : 'border-top:1px solid #000;'}">Senior Assistant Superintendent</div>
+                <div>
+                   ${seniorName ? `<div style="margin-bottom:5px; font-weight:normal;">${seniorName}</div>` : '<br>'}
+                   Senior Assistant Superintendent
                 </div>
-                <div class="sign-box">
-                   <div class="official-name">${chiefName || ""}</div>
-                   <div class="official-role" style="${chiefName ? 'border-top:none;' : 'border-top:1px solid #000;'}">Chief Superintendent</div>
+                <div>
+                   ${chiefName ? `<div style="margin-bottom:5px; font-weight:normal;">${chiefName}</div>` : '<br>'}
+                   Chief Superintendent
                 </div>
             </div>
             <script>window.onload = () => window.print();<\/script>
