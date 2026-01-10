@@ -14780,6 +14780,22 @@ if (btnSessionReschedule) {
         }
     }
 
+    // --- Helper: Fetch Active Official for Date ---
+    function getOfficialForDate(roleName, dateObj) {
+        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+        // Normalize Target Date
+        const target = new Date(dateObj);
+        target.setHours(12, 0, 0, 0); 
+
+        const found = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
+            const start = new Date(r.start); start.setHours(0,0,0,0);
+            const end = new Date(r.end); end.setHours(23,59,59,999);
+            // Flexible Role Check
+            return (r.role === roleName) && (target >= start && target <= end);
+        }));
+        return found ? found.name : ""; 
+    }
+    
 
     // 5. Print List (Final: Stream-Wise Empty Rows + Invig Names + Dept + Mobile)
     window.printInvigilatorList = function () {
@@ -15014,10 +15030,20 @@ if (displayLoc) {
         
         
         // 6. Generate Print Window
+       let dateObj = new Date();
+        try {
+            const [d, m, y] = date.split('.');
+            dateObj = new Date(y, m - 1, d);
+        } catch(e) {}
+        
+        const seniorName = getOfficialForDate("Senior Asst. Superintendent", dateObj);
+        const chiefName = getOfficialForDate("Chief Superintendent", dateObj);
+        
         const w = window.open('', '_blank');
         w.document.write(`
         <html>
         <head>
+            <!-- ... (keep existing head/style) ... -->
             <title>Invigilation List - ${date}</title>
             <style>
                 body { font-family: 'Arial', sans-serif; padding: 20px; }
@@ -15040,7 +15066,6 @@ if (displayLoc) {
                 <h2>${examName}</h2>
                 <h3>${date} &nbsp;|&nbsp; ${time}</h3>
             </div>
-
             <table>
                 <thead>
                     <tr>
@@ -15057,12 +15082,16 @@ if (displayLoc) {
                 </thead>
                 <tbody>${rowsHtml}</tbody>
             </table>
-
             <div class="footer">
-                <div>Senior Assistant Superintendent</div>
-                <div>Chief Superintendent</div>
+                <div>
+                   ${seniorName ? `<div style="margin-bottom:5px; font-weight:normal;">${seniorName}</div>` : '<br>'}
+                   Senior Assistant Superintendent
+                </div>
+                <div>
+                   ${chiefName ? `<div style="margin-bottom:5px; font-weight:normal;">${chiefName}</div>` : '<br>'}
+                   Chief Superintendent
+                </div>
             </div>
-
             <script>window.onload = () => window.print();<\/script>
         </body>
         </html>
