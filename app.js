@@ -14498,10 +14498,14 @@ if (btnSessionReschedule) {
                     <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
                         ${getNameHtml(assignedName)}
 
-                       <div class="flex gap-1 w-full sm:w-auto">     
-                           <!-- CHANGED: Now calls openReplaceInvigModal -->
-                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Replace</button>
+                       <div class="flex flex-wrap justify-end gap-1 w-full sm:w-auto">     
+                           <!-- CHANGE: Session Pool (Existing Logic) -->
+                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100" title="Change from Available Session Staff">Change</button>
                            
+                           <!-- REPLACE: Global Pool (New Logic) -->
+                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-teal-600 hover:text-teal-800 bg-teal-50 px-2 py-1 rounded hover:bg-teal-100 transition border border-teal-100" title="Replace from Global Staff List">Replace</button>
+                           
+                           <!-- SWAP: Between Rooms (Existing Logic) -->
                            ${allRooms.length > 1 ? `
                            <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>` : ''}
                         </div>
