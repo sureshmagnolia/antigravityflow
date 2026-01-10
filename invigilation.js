@@ -1388,8 +1388,17 @@ function renderStaffCalendar(myEmail) {
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
                     icon = isAdminMarked ? "🛡️" : "⛔";
                     statusText = isAdminMarked ? "Admin" : "Unavail";
-                } else if (isAdminLocked) {
-                    badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; icon = "🛡️"; statusText = "Paused"; 
+                    } else if (isAdminLocked) {
+                    if (isPast) {
+                        // 🟢 FIX: Show Past Admin Locks as Standard Grey/Locked
+                        badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
+                        icon = "🔒"; 
+                        statusText = "Locked";
+                    } else {
+                        badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; 
+                        icon = "🛡️"; 
+                        statusText = "Paused"; 
+                    }
                 } else if (slot.isLocked) {
                     badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; icon = "🔒"; statusText = "Locked";
                 } else if (isPast) {
