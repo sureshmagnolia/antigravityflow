@@ -8512,10 +8512,10 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
             <span class="text-xs font-bold text-gray-500">${window.currentEmailQueue.length} Staff Members</span>
         </div>
         
-        <button onclick="processBulkQueue()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            Send Emails to All (${window.currentEmailQueue.length})
-        </button>
+<button id="btn-bulk-send" onclick="processBulkQueue()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+    Send Emails to All (${window.currentEmailQueue.length})
+</button>
         
         <div id="bulk-progress-container" class="hidden mt-2">
             <div class="w-full bg-gray-200 rounded-full h-2.5">
