@@ -733,6 +733,56 @@
 
 
 
+    <!-- REPLACE INVIGILATOR MODAL -->
+    <div id="replace-invigilator-modal"
+        class="hidden fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+        
+        <div class="glass-panel w-full max-w-md transform transition-all scale-100 animate-slide-up bg-white flex flex-col max-h-[85vh] rounded-xl shadow-2xl overflow-hidden pointer-events-auto">
+            
+            <div class="bg-indigo-600 p-4 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 class="text-white font-bold text-lg">Replace Invigilator</h3>
+                    <p class="text-indigo-100 text-xs" id="replace-modal-subtitle">Select a substitute staff member</p>
+                </div>
+                <button onclick="closeModal('replace-invigilator-modal')" class="text-white hover:text-indigo-200 text-2xl leading-none">&times;</button>
+            </div>
+
+            <div class="p-4 flex-1 overflow-y-auto custom-scroll">
+                
+                <input type="hidden" id="replace-session-key">
+                <input type="hidden" id="replace-old-email">
+
+                <div class="mb-4">
+                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Search Substitute</label>
+                     <div class="relative">
+                        <input type="text" id="replace-search-input" placeholder="Type name to search..." 
+                            class="w-full p-3 pl-10 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        <svg class="w-5 h-5 text-gray-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        
+                        <div id="replace-search-results" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-xl mt-1 max-h-60 overflow-y-auto custom-scroll hidden">
+                        </div>
+                     </div>
+                </div>
+
+                <div id="replace-confirm-area" class="hidden bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-center">
+                    <p class="text-xs text-gray-500 uppercase font-bold mb-2">Selected Substitute</p>
+                    <div class="font-bold text-gray-800 text-lg mb-1" id="replace-selected-name">Name</div>
+                    <div class="text-xs text-gray-500 mb-4" id="replace-selected-dept">Dept</div>
+                    
+                    <button onclick="confirmInvigilatorSwap()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg shadow hover:bg-indigo-700 transition transform active:scale-95 flex items-center justify-center gap-2">
+                        <span>🔄</span> Confirm Replacement
+                    </button>
+                    <button onclick="resetReplaceSelection()" class="mt-2 text-xs text-gray-500 underline hover:text-gray-700">Cancel Selection</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    
+
+    
+
     <div id="add-staff-modal"
         class="hidden fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex justify-center items-center z-50">
         <div class="glass-panel p-6 w-full max-w-lg m-4 animate-slide-up bg-white/90">
