@@ -14499,9 +14499,11 @@ if (btnSessionReschedule) {
                         ${getNameHtml(assignedName)}
 
                        <div class="flex gap-1 w-full sm:w-auto">     
-                       <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Change</button>
-                            ${allRooms.length > 1 ? `
-                        <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>` : ''}
+                           <!-- CHANGED: Now calls openReplaceInvigModal -->
+                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100">Replace</button>
+                           
+                           ${allRooms.length > 1 ? `
+                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>` : ''}
                         </div>
                     </div>
                 `;
@@ -16895,7 +16897,87 @@ window.downloadInvigilationListPDF = function () {
 };
 
 
+    // --- NEW: Open Replace Modal ---
+    window.openReplaceInvigModal = function (roomName) {
+        const modal = document.getElementById('invigilator-select-modal');
+        const list = document.getElementById('invig-options-list');
+        const input = document.getElementById('invig-search-input');
+        const subtitle = document.getElementById('invig-modal-subtitle');
+        const sessionKey = allotmentSessionSelect.value;
 
+        if (subtitle) {
+             // Show "Replacing" context
+            subtitle.textContent = `Replacing invigilator for: ${roomName}`;
+            subtitle.classList.add('text-orange-600'); 
+        }
+
+        input.value = "";
+        modal.classList.remove('hidden');
+        setTimeout(() => input.focus(), 100);
+
+        const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+        const slot = invigSlots[sessionKey];
+
+        if (!slot || !slot.assigned || slot.assigned.length === 0) {
+            list.innerHTML = '<p class="text-xs text-red-500 text-center py-4">No staff available.</p>';
+            return;
+        }
+
+        const assignedSet = new Set(Object.values(currentInvigMapping));
+        // Remove current room from "used" set so other staff aren't blocked checks if needed
+        // But mainly we want to show AVAILABLE people
+
+        const renderList = (filter = "") => {
+            let html = "";
+            const q = filter.toLowerCase();
+            let hasResults = false;
+
+            slot.assigned.forEach(email => {
+                const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: 'Unknown' };
+                
+                // Exclude the CURRENT invigilator of this room
+                if (currentInvigMapping[roomName] === staff.name) return;
+
+                if (staff.name.toLowerCase().includes(q)) {
+                    hasResults = true;
+                    const isTaken = assignedSet.has(staff.name);
+
+                    // Allow selecting even if taken (Swap Logic) OR restrict? 
+                    // For pure "Replace", usually we pick a FREE person.
+                    // Let's assume we pick FREE people.
+                    const bgClass = isTaken ? "bg-gray-50 opacity-60 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer bg-white";
+                    const clickAction = isTaken ? "" : `onclick="window.replaceInvigilator('${roomName.replace(/'/g, "\\'")}', '${staff.name.replace(/'/g, "\\'")}')"`;
+                    
+                    const status = isTaken
+                        ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Busy</span>'
+                        : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
+
+                    html += `
+                    <div ${clickAction} class="p-2 rounded border-b border-gray-100 flex justify-between items-center transition ${bgClass}">
+                        <div><div class="text-sm font-bold text-gray-800">${staff.name}</div><div class="text-[10px] text-gray-500">${staff.dept}</div></div>
+                        ${status}
+                    </div>`;
+                }
+            });
+            list.innerHTML = hasResults ? html : '<p class="text-center text-gray-400 text-xs py-2">No matching staff.</p>';
+        };
+        renderList();
+        input.oninput = (e) => renderList(e.target.value);
+    };
+
+    // --- NEW: Execute Replace ---
+    window.replaceInvigilator = function(room, name) {
+        if(!confirm(`Confirm replace with ${name}?`)) return;
+        window.saveInvigAssignment(room, name); // Reuse existing save logic
+        
+        // Reset Modal Title
+        const subtitle = document.getElementById('invig-modal-subtitle');
+        if(subtitle) {
+             subtitle.classList.remove('text-orange-600');
+             subtitle.textContent = "";
+        }
+    };
     
 
 
