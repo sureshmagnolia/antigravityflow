@@ -15083,13 +15083,13 @@ if (displayLoc) {
                 <tbody>${rowsHtml}</tbody>
             </table>
             <div class="footer">
-                <div>
-                   ${seniorName ? `<div style="margin-bottom:5px; font-weight:normal;">${seniorName}</div>` : '<br>'}
-                   Senior Assistant Superintendent
+                <div class="sign-box">
+                   <div class="official-name">${seniorName || ""}</div>
+                   <div class="official-role" style="${seniorName ? 'border-top:none;' : 'border-top:1px solid #000;'}">Senior Assistant Superintendent</div>
                 </div>
-                <div>
-                   ${chiefName ? `<div style="margin-bottom:5px; font-weight:normal;">${chiefName}</div>` : '<br>'}
-                   Chief Superintendent
+                <div class="sign-box">
+                   <div class="official-name">${chiefName || ""}</div>
+                   <div class="official-role" style="${chiefName ? 'border-top:none;' : 'border-top:1px solid #000;'}">Chief Superintendent</div>
                 </div>
             </div>
             <script>window.onload = () => window.print();<\/script>
