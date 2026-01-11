@@ -365,7 +365,7 @@ export async function toggleWeekAdminLock(monthStr, weekNum, lockState) {
 // ==========================================
 
 export function renderSlotsGridAdmin() {
-    const ui = { adminSlotsGrid: document.getElementById('admin-slots-grid-container') }; // Re-select
+    const ui = { adminSlotsGrid: document.getElementById('admin-slots-grid') }; // Fixed: correct element ID
     if (!ui.adminSlotsGrid) return;
     ui.adminSlotsGrid.innerHTML = '';
 
