@@ -14372,7 +14372,7 @@ if (btnSessionReschedule) {
 
     let swapSourceRoom = null; // Track which room is selected for swapping
 
-     // 1. Render the Main Assignment Panel (Refined PC & Mobile Layout)
+    // 1. Render the Main Assignment Panel (Vertical Buttons on PC)
     window.renderInvigilationPanel = function () {
         const section = document.getElementById('invigilator-assignment-section');
         const list = document.getElementById('invigilator-list-container');
@@ -14452,13 +14452,13 @@ if (btnSessionReschedule) {
 
             // --- SMART NAME DISPLAY ---
             const getNameHtml = (name) => `
-            <div class="flex items-center gap-2.5 mb-3 sm:mb-0 bg-green-50/80 p-2 sm:p-0 rounded-lg sm:bg-transparent border sm:border-0 border-green-100 w-full sm:w-auto">
+            <div class="flex items-center gap-2.5 mb-3 sm:mb-0 bg-green-50/80 p-2 sm:p-0 rounded-lg sm:bg-transparent border sm:border-0 border-green-100 w-full sm:w-auto h-full">
                  <div class="bg-green-100 text-green-700 p-1.5 rounded-full shrink-0">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                  </div>
                  <div class="min-w-0 flex-1">
                      <div class="text-[10px] text-green-600 uppercase font-bold tracking-wider leading-none mb-0.5 sm:hidden">Invigilator</div>
-                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate sm:max-w-[200px]" title="${name}">${name}</div>
+                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate" title="${name}">${name}</div>
                  </div>
             </div>`;
 
@@ -14468,9 +14468,9 @@ if (btnSessionReschedule) {
                 // === SWAP MODE ===
                 if (swapSourceRoom === roomName) {
                     actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-2">
-                        ${getNameHtml(assignedName)}
-                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-2 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full h-full gap-2">
+                        <div class="flex-1">${getNameHtml(assignedName)}</div>
+                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-2 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm h-full">
                             Cancel Swap
                         </button>
                     </div>`;
@@ -14479,43 +14479,51 @@ if (btnSessionReschedule) {
                     const btnColor = assignedName ? "bg-indigo-600 hover:bg-indigo-700" : "bg-green-600 hover:bg-green-700";
                     
                     const btnHtml = `
-                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto ${btnColor} text-white border border-transparent px-4 py-2 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5">
+                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full h-full ${btnColor} text-white border border-transparent px-4 py-2 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                         ${btnLabel}
                     </button>`;
 
                     actionHtml = assignedName ? 
-                        `<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-2">
-                            ${getNameHtml(assignedName)}
-                            ${btnHtml}
+                        `<div class="flex flex-col sm:flex-row items-stretch w-full h-full gap-2">
+                            <div class="flex-1">${getNameHtml(assignedName)}</div>
+                            <div class="sm:w-32">${btnHtml}</div>
                         </div>` : btnHtml;
                 }
             } else {
                 // === NORMAL MODE ===
                 if (assignedName) {
+                    // STACKED BUTTONS: Grid on Mobile (1 row), Flex-Col on PC (Vertical Stack)
                     actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-3">
-                        ${getNameHtml(assignedName)}
+                    <div class="flex flex-col sm:flex-row items-stretch w-full h-full gap-3">
+                        
+                        <!-- Name Area (Middle) -->
+                        <div class="flex-1 flex items-center">
+                            ${getNameHtml(assignedName)}
+                        </div>
 
-                       <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto sm:justify-end">     
-                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-md hover:bg-indigo-100 transition border border-indigo-200 shadow-sm" title="Change Staff">
-                                Change
-                           </button>
-                           
-                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 px-3 py-2 rounded-md hover:bg-teal-100 transition border border-teal-200 shadow-sm" title="Replace Staff">
-                                Replace
-                           </button>
-                           
-                           ${allRooms.length > 1 ? `
-                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-orange-700 bg-orange-50 px-3 py-2 rounded-md hover:bg-orange-100 transition border border-orange-200 shadow-sm" title="Swap">
-                                Swap
-                           </button>` : ''}
+                        <!-- Button Stack (Right - Fixed Width on PC) -->
+                        <div class="sm:border-l border-gray-100 sm:pl-3 w-full sm:w-28 flex flex-col justify-center">
+                           <div class="grid grid-cols-3 sm:flex sm:flex-col gap-1.5 w-full">     
+                               <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-1.5 rounded hover:bg-indigo-100 transition border border-indigo-200" title="Change Staff">
+                                    Change
+                               </button>
+                               
+                               <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-1.5 rounded hover:bg-teal-100 transition border border-teal-200" title="Replace Staff">
+                                    Replace
+                               </button>
+                               
+                               ${allRooms.length > 1 ? `
+                               <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded hover:bg-orange-100 transition border border-orange-200" title="Swap">
+                                    Swap
+                               </button>` : ''}
+                            </div>
                         </div>
                     </div>
                 `;
                 } else {
                     actionHtml = `
-                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full sm:w-auto mt-2 sm:mt-0 bg-white border-2 border-dashed border-indigo-300 text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm flex items-center justify-center gap-2 group">
+                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full h-full sm:h-auto mt-2 sm:mt-0 bg-white border-2 border-dashed border-indigo-300 text-indigo-600 px-4 py-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm flex items-center justify-center gap-2 group">
                         <span class="bg-indigo-100 text-indigo-600 rounded-full w-5 h-5 flex items-center justify-center group-hover:bg-indigo-200 transition">+</span>
                         Assign Invigilator
                     </button>
@@ -14523,13 +14531,13 @@ if (btnSessionReschedule) {
                 }
             }
 
-            // PC LAYOUT: Flex container with clearly defined widths
+            // PC LAYOUT: 3 Columns [Room Info | Separator | Actions]
             list.innerHTML += `
             <div class="bg-white rounded-xl shadow-sm ${cardBorder} transition-all duration-200 hover:shadow-md mb-3 overflow-hidden">
-                <div class="flex flex-col sm:flex-row sm:items-stretch">
+                <div class="flex flex-col sm:flex-row sm:items-stretch min-h-[85px]">
                     
-                    <!-- LEFT PANEL: Room Info (Fixed width on PC: 40%) -->
-                    <div class="p-3 sm:p-4 flex items-start gap-4 sm:w-[50%] min-w-0">
+                    <!-- LEFT PANEL: Room Info (Fixed 40% on PC) -->
+                    <div class="p-3 sm:p-4 flex items-start gap-3 sm:w-[40%] min-w-0 border-b sm:border-b-0 sm:border-r border-gray-100">
                         <div class="flex flex-col items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-100 shadow-sm shrink-0">
                             <span class="text-[9px] text-gray-400 uppercase leading-none mb-0.5 font-bold">Hall</span>
                             <span>${serial}</span>
@@ -14549,9 +14557,8 @@ if (btnSessionReschedule) {
                         </div>
                     </div>
 
-                    <!-- RIGHT PANEL: Actions (Flex-1 on PC) -->
-                    <!-- Added border-l for separation on PC -->
-                    <div class="p-3 sm:p-4 w-full sm:w-auto sm:flex-1 bg-gray-50/30 sm:bg-white border-t sm:border-t-0 sm:border-l border-gray-100 flex flex-col justify-center">
+                    <!-- RIGHT PANEL: Actions (Flex-1) -->
+                    <div class="p-3 sm:px-4 sm:py-2 flex-1 bg-gray-50/20 sm:bg-white flex flex-col justify-center">
                         ${actionHtml}
                     </div>
                 </div>
@@ -14559,7 +14566,7 @@ if (btnSessionReschedule) {
         `;
         });
     };
-
+    
     
 
     // 2. Handle Swap Interaction
