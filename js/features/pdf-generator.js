@@ -254,3 +254,47 @@ export function downloadInvigilationListPDF() {
 
     doc.save(`Invigilation_List_${date}.pdf`);
 }
+
+// ==========================================
+// 📄 PLACEHOLDER EXPORTS (To Be Implemented)
+// ==========================================
+
+export function generateSeatingPDF() {
+    alert("This feature is under development. Please use the Reports tab for now.");
+}
+
+export function downloadRoomwiseAttendancePDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadConsolidatedAttendancePDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadInvigilationOrderPDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadSeatingPlanPDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadSeatingPlanPDF_Alt() {
+    alert("This feature is under development.");
+}
+
+export function downloadRoomLabelsPDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadMalpracticeFormPDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadRelievingOrderPDF() {
+    alert("This feature is under development.");
+}
+
+export function downloadMessBillPDF() {
+    alert("This feature is under development.");
+}

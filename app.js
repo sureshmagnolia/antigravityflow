@@ -310,6 +310,9 @@ window.downloadMalpracticeFormPDF = downloadMalpracticeFormPDF;
 window.downloadRelievingOrderPDF = downloadRelievingOrderPDF;
 window.downloadMessBillPDF = downloadMessBillPDF;
 
+// [CRITICAL] Expose Sync for Loader & Features
+// NOTE: These are assigned inside DOMContentLoaded after functions are defined
+
 // Also hook the populate wrapper if needed (already handled in Python bridge section potentially, but let's ensure)
 let isSyncing = false;
 let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
@@ -323,6 +326,9 @@ let allocUnsub = null;
 let staffUnsub = null;
 let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
+
+let allStudentData = [];
+Object.defineProperty(window, 'allStudentData', { get: () => allStudentData, set: (v) => allStudentData = v });
 
 document.addEventListener('DOMContentLoaded', () => {
     populateAllExamDropdowns(); // <--- ADD THIS LINE
@@ -1181,6 +1187,10 @@ document.addEventListener('DOMContentLoaded', () => {
             isSyncing = false;
         }
     }
+
+    // [CRITICAL] Expose sync functions to window after they are defined
+    window.syncDataToCloud = syncDataToCloud;
+    window.syncSessionToCloud = (sessionKey) => syncDataToCloud('allocation');
 
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
 

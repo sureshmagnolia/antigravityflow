@@ -10,7 +10,14 @@ import {
     renderInvigilationPanel, handleSwapClick, performSwap,
     openInvigModal, saveInvigAssignment, autoAssignInvigilators,
     unassignAllInvigilators, openReplaceInvigModal, replaceInvigilator
-} from './features/invigilation-panel.js'; // <--- NEW IMPORTS
+} from './features/invigilation-panel.js';
+import {
+    renderRoomAllotment, populate_room_allotment_session_dropdown,
+    saveRoomAllotment, autoAllotRooms, clearAllotmentForSession,
+    downloadAllotmentCSV, printRoomAllotment, viewRoomAllotmentStatus,
+    openManualAllocationModal, closeManualAllocationModal,
+    saveManualAllocation, deleteManualAllocation, allocateOneRoom
+} from './features/room-allotment.js';
 
 console.log(`🌉 Legacy Bridge Initializing - ${APP_INFO.VERSION}`);
 
@@ -37,5 +44,20 @@ window.autoAssignInvigilators = autoAssignInvigilators;
 window.unassignAllInvigilators = unassignAllInvigilators;
 window.openReplaceInvigModal = openReplaceInvigModal;
 window.replaceInvigilator = replaceInvigilator;
+
+// Room Allotment exposure
+window.renderRoomAllotment = renderRoomAllotment;
+window.populate_room_allotment_session_dropdown = populate_room_allotment_session_dropdown;
+window.saveRoomAllotment = saveRoomAllotment;
+window.autoAllotRooms = autoAllotRooms;
+window.clearAllotmentForSession = clearAllotmentForSession;
+window.downloadAllotmentCSV = downloadAllotmentCSV;
+window.printRoomAllotment = printRoomAllotment;
+window.viewRoomAllotmentStatus = viewRoomAllotmentStatus;
+window.openManualAllocationModal = openManualAllocationModal;
+window.closeManualAllocationModal = closeManualAllocationModal;
+window.saveManualAllocation = saveManualAllocation;
+window.deleteManualAllocation = deleteManualAllocation;
+window.allocateOneRoom = allocateOneRoom;
 
 console.log("✅ Legacy Bridge Active: Globals injected.");
