@@ -14373,10 +14373,11 @@ if (btnSessionReschedule) {
     let swapSourceRoom = null; // Track which room is selected for swapping
 
     // 1. Render the Main Assignment Panel (Fixed: Keeps Names Visible in Swap Mode)
+     // 1. Render the Main Assignment Panel (Smart Mobile Layout)
     window.renderInvigilationPanel = function () {
         const section = document.getElementById('invigilator-assignment-section');
         const list = document.getElementById('invigilator-list-container');
-        const sessionKey = allotmentSessionSelect.value;
+        const sessionKey = allotmentSessionSelect.value; // Access global variable
 
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
@@ -14385,7 +14386,7 @@ if (btnSessionReschedule) {
 
         // A. Consolidate Rooms
         const roomDataMap = {};
-        if (currentSessionAllotment && currentSessionAllotment.length > 0) {
+        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && currentSessionAllotment.length > 0) {
             currentSessionAllotment.forEach(room => {
                 if (!roomDataMap[room.roomName]) roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
                 roomDataMap[room.roomName].count += room.students.length;
@@ -14416,13 +14417,16 @@ if (btnSessionReschedule) {
 
         // --- SWAP MODE BANNER ---
         if (swapSourceRoom) {
-            list.innerHTML += `
-            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold p-3 rounded-lg mb-3 flex justify-between items-center shadow-sm sticky top-0 z-10">
+             list.innerHTML += `
+            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold p-3 rounded-lg mb-3 flex justify-between items-center shadow-sm sticky top-0 z-10 animate-fade-in-down">
                 <div class="flex items-center gap-2">
-                    <span class="animate-pulse">🔄</span> 
-                    <span>Select a target room to swap invigilators.</span>
+                    <span class="animate-pulse text-xl">🔄</span> 
+                    <div>
+                        <div class="uppercase text-[10px] opacity-70 tracking-wider">Swap Mode Active</div>
+                        <div>Select a target room for <strong>${swapSourceRoom}</strong></div>
+                    </div>
                 </div>
-                <button onclick="window.handleSwapClick('${swapSourceRoom.replace(/'/g, "\\'")}')" class="bg-white border border-orange-200 px-3 py-1 rounded hover:bg-orange-100 transition text-[10px]">Cancel</button>
+                <button onclick="window.handleSwapClick('${swapSourceRoom.replace(/'/g, "\\'")}')" class="bg-white border border-orange-200 text-orange-700 px-3 py-1.5 rounded-md hover:bg-orange-100 transition text-xs font-bold shadow-sm">Cancel</button>
             </div>
         `;
         }
@@ -14438,22 +14442,25 @@ if (btnSessionReschedule) {
             const safeRoomName = roomName.replace(/'/g, "\\'");
 
             const streamBadges = Array.from(room.streams).map(s => {
-                let color = "bg-blue-100 text-blue-800 border-blue-200";
-                if (s === "Scribe") color = "bg-orange-100 text-orange-800 border-orange-200";
-                else if (s !== "Regular") color = "bg-purple-100 text-purple-800 border-purple-200";
+                let color = "bg-blue-50 text-blue-700 border-blue-100";
+                if (s === "Scribe") color = "bg-orange-50 text-orange-700 border-orange-100";
+                else if (s !== "Regular") color = "bg-purple-50 text-purple-700 border-purple-100";
                 return `<span class="text-[9px] px-1.5 py-0.5 rounded border ${color} font-bold uppercase tracking-wide whitespace-nowrap">${s}</span>`;
             }).join(' ');
 
-            let cardBorder = assignedName ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white";
-            if (swapSourceRoom === roomName) cardBorder = "border-orange-400 ring-2 ring-orange-100 bg-orange-50";
+            let cardBorder = assignedName ? "border-l-4 border-l-green-500 border-y border-r border-gray-200 bg-white" : "border-l-4 border-l-gray-300 border-y border-r border-gray-200 bg-gray-50/50";
+            if (swapSourceRoom === roomName) cardBorder = "border-l-4 border-l-orange-500 border-y border-r border-orange-200 bg-orange-50 ring-2 ring-orange-100";
 
-            // --- NAME DISPLAY HELPER ---
+            // --- SMART NAME DISPLAY ---
             const getNameHtml = (name) => `
-            <div class="flex items-center gap-2 min-w-0 mb-2 sm:mb-0 sm:mr-2">
-                 <div class="bg-green-100 text-green-700 p-1 rounded-full shrink-0">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+            <div class="flex items-center gap-2.5 mb-3 sm:mb-0 bg-green-50/80 p-2 sm:p-0 rounded-lg sm:bg-transparent border sm:border-0 border-green-100 w-full sm:w-auto">
+                 <div class="bg-green-100 text-green-700 p-1.5 rounded-full shrink-0">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                  </div>
-                 <span class="text-xs font-bold text-green-800 truncate max-w-[150px] sm:max-w-[200px]" title="${name}">${name}</span>
+                 <div class="min-w-0 flex-1">
+                     <div class="text-[10px] text-green-600 uppercase font-bold tracking-wider leading-none mb-0.5 sm:hidden">Invigilator</div>
+                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate sm:max-w-[180px]" title="${name}">${name}</div>
+                 </div>
             </div>`;
 
             let actionHtml = "";
@@ -14461,95 +14468,96 @@ if (btnSessionReschedule) {
             if (swapSourceRoom) {
                 // === SWAP MODE ===
                 if (swapSourceRoom === roomName) {
-                    // SOURCE ROOM (Show Name + Cancel)
                     actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-2">
                         ${getNameHtml(assignedName)}
-                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
-                            Cancel
+                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-2 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm">
+                            Cancel Swap
                         </button>
                     </div>`;
                 } else {
-                    // TARGET ROOM
                     const btnLabel = assignedName ? "Swap Here" : "Move Here";
                     const btnColor = assignedName ? "bg-indigo-600 hover:bg-indigo-700" : "bg-green-600 hover:bg-green-700";
-
+                    
                     const btnHtml = `
-                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto ${btnColor} text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto ${btnColor} text-white border border-transparent px-4 py-2 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                         ${btnLabel}
                     </button>`;
 
-                    if (assignedName) {
-                        // Occupied Target: Show Name + Swap Button
-                        actionHtml = `
-                        <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto">
+                    actionHtml = assignedName ? 
+                        `<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-2">
                             ${getNameHtml(assignedName)}
                             ${btnHtml}
-                        </div>`;
-                    } else {
-                        // Empty Target: Just Move Button
-                        actionHtml = btnHtml;
-                    }
+                        </div>` : btnHtml;
                 }
             } else {
                 // === NORMAL MODE ===
                 if (assignedName) {
                     actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-end sm:items-center justify-between w-full sm:w-auto gap-2 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-green-100 mt-2 sm:mt-0">
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-3">
                         ${getNameHtml(assignedName)}
 
-                       <div class="flex flex-wrap justify-end gap-1 w-full sm:w-auto">     
-                           <!-- CHANGE: Session Pool (Existing Logic) -->
-                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition border border-indigo-100" title="Change from Available Session Staff">Change</button>
+                       <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">     
+                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-2 rounded-md hover:bg-indigo-100 transition border border-indigo-200" title="Change Staff">
+                                Change
+                           </button>
                            
-                           <!-- REPLACE: Global Pool (New Logic) -->
-                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-teal-600 hover:text-teal-800 bg-teal-50 px-2 py-1 rounded hover:bg-teal-100 transition border border-teal-100" title="Replace from Global Staff List">Replace</button>
+                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 px-2 py-2 rounded-md hover:bg-teal-100 transition border border-teal-200" title="Replace Staff">
+                                Replace
+                           </button>
                            
-                           <!-- SWAP: Between Rooms (Existing Logic) -->
                            ${allRooms.length > 1 ? `
-                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none text-[10px] font-bold text-orange-600 hover:text-orange-800 bg-orange-50 px-2 py-1 rounded hover:bg-orange-100 transition border border-orange-100" title="Swap with another hall">Swap</button>` : ''}
+                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-orange-700 bg-orange-50 px-2 py-2 rounded-md hover:bg-orange-100 transition border border-orange-200" title="Swap">
+                                Swap
+                           </button>` : ''}
                         </div>
                     </div>
                 `;
                 } else {
                     actionHtml = `
-                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full sm:w-auto mt-2 sm:mt-0 bg-indigo-600 text-white border border-transparent px-4 py-1.5 rounded text-xs font-bold hover:bg-indigo-700 transition shadow-sm flex items-center justify-center gap-1">
-                        <span>+</span> Assign
+                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full sm:w-auto mt-2 sm:mt-0 bg-white border-2 border-dashed border-indigo-300 text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm flex items-center justify-center gap-2 group">
+                        <span class="bg-indigo-100 text-indigo-600 rounded-full w-5 h-5 flex items-center justify-center group-hover:bg-indigo-200 transition">+</span>
+                        Assign Invigilator
                     </button>
                 `;
                 }
             }
 
             list.innerHTML += `
-            <div class="p-3 border rounded-lg shadow-sm ${cardBorder} hover:shadow-md transition mb-2">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-3">
+            <div class="bg-white rounded-xl shadow-sm ${cardBorder} transition-all duration-200 hover:shadow-md mb-3 overflow-hidden">
+                <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                    
+                    <!-- Left: Room Info -->
                     <div class="flex items-start gap-3 min-w-0">
-                        <div class="flex flex-col items-center justify-center w-10 h-10 bg-gray-100 text-gray-600 rounded-lg font-bold text-xs border border-gray-200 shrink-0">
-                            <span class="text-[8px] text-gray-400 uppercase leading-none mb-0.5">Hall</span>
-                            <span>#${serial}</span>
+                        <div class="flex flex-col items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-100 shadow-sm shrink-0">
+                            <span class="text-[9px] text-gray-400 uppercase leading-none mb-0.5 font-bold">Hall</span>
+                            <span>${serial}</span>
                         </div>
-                        <div class="min-w-0 flex-1">
-                            <div class="font-bold text-gray-800 text-sm flex flex-wrap items-baseline gap-1">
-                                <span class="truncate">${roomName}</span>
-                                <span class="text-xs text-gray-400 font-normal truncate">${location ? `(${location})` : ''}</span>
+                        <div class="min-w-0 flex-1 pt-0.5">
+                            <div class="font-bold text-gray-800 text-base leading-tight break-words pr-2">
+                                ${roomName}
                             </div>
-                            <div class="flex flex-wrap items-center gap-2 mt-1.5">
-                                <span class="text-[10px] text-gray-500 font-semibold bg-white px-1.5 py-0.5 rounded border border-gray-200 shadow-sm whitespace-nowrap">
-                                    👥 ${room.count}
+                             ${location ? `<div class="text-xs text-gray-500 font-medium mt-0.5 truncate flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>${location}</div>` : ''}
+                            
+                            <div class="flex flex-wrap items-center gap-2 mt-2">
+                                <span class="text-[10px] text-gray-600 font-bold bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 whitespace-nowrap flex items-center gap-1">
+                                    <span>👥</span> ${room.count}
                                 </span>
                                 ${streamBadges}
                             </div>
                         </div>
                     </div>
-                    <div class="sm:text-right min-w-[200px]">
+
+                    <!-- Right: Actions -->
+                    <div class="w-full sm:w-auto sm:text-right min-w-[240px] pt-2 sm:pt-0 sm:pl-4 border-t sm:border-t-0 border-gray-100 sm:border-l sm:border-gray-50 mt-1 sm:mt-0">
                         ${actionHtml}
                     </div>
                 </div>
             </div>
         `;
         });
-    }
+    };
 
     
 
