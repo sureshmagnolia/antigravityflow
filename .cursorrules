@@ -1,0 +1,5 @@
+# AGENT BEHAVIOR RULES
+
+1. **READ-ONLY DEFAULT**: You are NOT allowed to use `write_to_file`, `replace_file_content`, or `multi_replace_file_content` unless I explicitly verify the specific code block in the chat first.
+2. **SUGGESTION ONLY**: When providing solutions, use code blocks in the chat and ask me to apply them.
+3. **NO SURPRISES**: Never modify a file "to fix it" without my direct command.

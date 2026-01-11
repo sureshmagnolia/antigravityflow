@@ -1,15 +1,15 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+﻿import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 // --- NEW IMPORTS FOR RECAPTCHA (Add this) ---
-import { initializeAppCheck, ReCaptchaV3Provider } 
+import { initializeAppCheck, ReCaptchaV3Provider }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
-import { getApp } 
+import { getApp }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 
 // --- INITIALIZE APP CHECK ---
-const app = getApp(); 
+const app = getApp();
 
 // 1. DYNAMIC DEBUG MODE
 // This automatically detects if you are running locally or on the live web.
@@ -30,8 +30,44 @@ const appCheck = initializeAppCheck(app, {
     provider: new ReCaptchaV3Provider('6LcMiSQsAAAAABfK5nXqVJ_vo6GwU4DFfBN7-u5K'),
 
     // Automatically refresh the token in the background
-    isTokenAutoRefreshEnabled: true 
+    isTokenAutoRefreshEnabled: true
 });
+
+// [MODULARIZED IMPORTS]
+import {
+    renderSlotsGridAdmin, changeAdminMonth, updateAdminUI, renderStaffTable,
+    toggleLock, lockAllSessions, changeSlotReq, cancelDuty, setAvailability,
+    confirmUnavailable, waNotify, calculateSlotsFromSchedule, toggleAdminLock,
+    toggleWeekAdminLock, editStaff, saveNewStaff, deleteStaff,
+    generateWelcomeText, sendWelcomeMessage, runAutoAllocation,
+    renderStaffRankList, changeRankPage, getSlotReserves, notifySlotReserves
+} from './js/features/admin-dashboard.js';
+
+// [GLOBAL EXPOSURE FOR HTML HANDLERS]
+window.renderSlotsGridAdmin = renderSlotsGridAdmin;
+window.changeAdminMonth = changeAdminMonth;
+window.updateAdminUI = updateAdminUI;
+window.renderStaffTable = renderStaffTable;
+window.toggleLock = toggleLock;
+window.lockAllSessions = lockAllSessions;
+window.changeSlotReq = changeSlotReq;
+window.cancelDuty = cancelDuty;
+window.setAvailability = setAvailability;
+window.confirmUnavailable = confirmUnavailable;
+window.waNotify = waNotify;
+window.calculateSlotsFromSchedule = calculateSlotsFromSchedule;
+window.toggleAdminLock = toggleAdminLock;
+window.toggleWeekAdminLock = toggleWeekAdminLock;
+window.editStaff = editStaff;
+window.saveNewStaff = saveNewStaff;
+window.deleteStaff = deleteStaff;
+window.generateWelcomeText = generateWelcomeText;
+window.sendWelcomeMessage = sendWelcomeMessage;
+window.runAutoAllocation = runAutoAllocation;
+window.renderStaffRankList = renderStaffRankList;
+window.changeRankPage = changeRankPage;
+window.getSlotReserves = getSlotReserves;
+window.notifySlotReserves = notifySlotReserves;
 const auth = window.firebase.auth;
 const db = window.firebase.db;
 const provider = window.firebase.provider;
@@ -131,6 +167,41 @@ const ui = {
     attSubSelect: document.getElementById('att-substitute-select')
 };
 
+// ==========================================
+// 🌐 GLOBAL EXPORTS (For Modular Features)
+// ==========================================
+window.getInvigSlots = () => invigilationSlots;
+window.setInvigSlots = (v) => invigilationSlots = v;
+window.getStaffData = () => staffData;
+window.setStaffData = (v) => staffData = v;
+window.getUnavailability = () => advanceUnavailability;
+window.setUnavailability = (v) => advanceUnavailability = v;
+window.getCurrentUser = () => currentUser;
+window.getCollegeData = () => collegeData;
+window.getCurrentAdminDate = () => currentAdminDate;
+window.setCurrentAdminDate = (v) => currentAdminDate = v;
+window.getCurrentCollegeId = () => currentCollegeId;
+
+// Utilities (Hoisted)
+window.getInternalParseDate = () => parseDate;
+window.getInternalWeekOfMonth = () => getWeekOfMonth;
+window.getInternalGetName = () => getNameFromEmail;
+window.getInternalLogActivity = () => logActivity;
+window.getInternalSyncSlots = () => syncSlotsToCloud;
+window.getInternalSaveAdvance = () => saveAdvanceUnavailability;
+window.getInternalUpdateSync = () => updateSyncStatus;
+window.getInternalIsActionAllowed = () => isActionAllowed;
+window.getInternalRenderStaffUpcoming = () => renderStaffUpcomingSummary;
+window.getInternalDutiesDone = () => getDutiesDoneCount;
+window.getInternalCalcTarget = () => calculateStaffTarget;
+window.getInternalDesignations = () => designationsConfig;
+window.getInternalRoles = () => rolesConfig;
+window.getInternalPopulateDept = () => populateDepartmentSelect;
+window.getInternalLiveStatus = () => window.getLiveStatusIcon; // Assuming explicit global
+window.getInternalGlobalLive = () => globalLiveUsers; // Explicit global
+window.getStaffListLocked = () => isStaffListLocked;
+window.setStaffListLocked = (v) => isStaffListLocked = v;
+
 // --- AUTHENTICATION ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -149,7 +220,7 @@ onAuthStateChanged(auth, async (user) => {
         if (cloudUnsubscribe) cloudUnsubscribe();
         if (slotsUnsubscribe) slotsUnsubscribe();
         if (staffUnsubscribe) staffUnsubscribe();
-        
+
         showView('login');
         document.getElementById('auth-section').classList.add('hidden');
     }
@@ -215,7 +286,7 @@ async function verifyAndLaunch(collegeId, user) {
 
         if (snap.exists()) {
             const data = snap.data();
-            
+
             // Check Role
             const isAdmin = data.allowedUsers?.includes(user.email);
             const isStaff = data.staffAccessList?.includes(user.email);
@@ -257,20 +328,20 @@ function initializeSession(id, adminStatus, roleName) {
 
 function setupLiveSync(collegeId, mode) {
     console.log(`📡 Setting up Live Sync in ${mode} mode for ${collegeId}`);
-    
+
     // Clear any existing listeners to prevent leaks
     if (cloudUnsubscribe) cloudUnsubscribe();
     if (slotsUnsubscribe) slotsUnsubscribe();
-    if (staffUnsubscribe) staffUnsubscribe(); 
+    if (staffUnsubscribe) staffUnsubscribe();
 
     // --- 1. LISTEN TO COLLEGE CONFIG (Always Live) ---
     const docRef = doc(db, "colleges", collegeId);
-    
+
     cloudUnsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
             updateSyncStatus("Synced", "success");
             const data = docSnap.data();
-            
+
             // 1. Update Global Variables
             collegeName = data.examCollegeName || "College";
             // Store settings safely
@@ -303,8 +374,8 @@ function setupLiveSync(collegeId, mode) {
                 // If staff view is open, refresh calendar
                 let emailToRender = currentUser ? currentUser.email : null;
                 if (staffData.length > 0 && currentUser) {
-                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                     if (me) emailToRender = me.email;
+                    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                    if (me) emailToRender = me.email;
                 }
                 if (emailToRender) {
                     renderStaffCalendar(emailToRender);
@@ -326,7 +397,7 @@ function setupLiveSync(collegeId, mode) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
                 localStorage.setItem('examStaffData', data.examStaffData || '[]');
-                
+
                 // Update Admin UI immediately
                 renderStaffTable();
                 updateAdminUI();
@@ -345,7 +416,7 @@ function setupLiveSync(collegeId, mode) {
                 if (currentUser) {
                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
                     if (me && document.getElementById('view-staff').classList.contains('hidden')) {
-                         initStaffDashboard(me);
+                        initStaffDashboard(me);
                     }
                 }
             }
@@ -361,12 +432,12 @@ function applyCollegeConfig(data, mode, triggerRender) {
     rolesConfig = { ...DEFAULT_ROLES, ...savedRoles };
     googleScriptUrl = collegeData.invigGoogleScriptUrl || "";
     departmentsConfig = JSON.parse(collegeData.invigDepartments || JSON.stringify(DEFAULT_DEPARTMENTS));
-    
+
     const vacConfig = JSON.parse(collegeData.invigVacationConfig || '{}');
     vacationStart = vacConfig.start || "";
     vacationEnd = vacConfig.end || "";
     vacationExtraHolidays = new Set(vacConfig.holidays || []);
-    
+
     if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
     if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
 
@@ -636,654 +707,7 @@ function getWeekOfMonth(date) {
     const dayOfMonth = date.getDate();
     return Math.ceil((dayOfMonth + startOffset) / 7);
 }
-function updateAdminUI() {
-    document.getElementById('stat-total-staff').textContent = staffData.length;
-    const acYear = getCurrentAcademicYear();
-    document.getElementById('lbl-academic-year').textContent = `AY: ${acYear.label}`;
-
-    // Populate Designation Dropdown (Existing)
-    const desigSelect = document.getElementById('stf-designation');
-    if (desigSelect) desigSelect.innerHTML = Object.keys(designationsConfig).map(r => `<option value="${r}">${r}</option>`).join('');
-
-    // NEW: Populate Department Dropdown
-    populateDepartmentSelect();
-
-    renderStaffTable();
-}
-// --- HELPER: Get First Name ---
-function getFirstName(fullName) {
-    if (!fullName) return "";
-    return fullName.split(' ')[0]; // "Abdul Raheem" -> "Abdul"
-}
-
-// --- AUTOMATIC EMAIL SYSTEM (Google Apps Script) ---
-window.sendSingleEmail = function (btn, email, name, subject, message) {
-    if (!email) return alert("No email address for this faculty.");
-    // Use the global variable from your settings
-    if (!googleScriptUrl) return alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
-
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = `<svg class="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Sending`;
-    btn.classList.remove('bg-gray-700', 'hover:bg-gray-800');
-    btn.classList.add('bg-gray-400', 'cursor-wait');
-
-    // Convert newlines to <br> for HTML email if the script expects HTML
-    // Or send as is if it handles text. Based on your "beautiful" request, HTML is better.
-    const htmlBody = message.replace(/\n/g, '<br>');
-
-    // Send via Proxy (Google Script)
-    fetch(googleScriptUrl, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" }, // Changed to json for body
-        body: JSON.stringify({
-            to: email,
-            subject: subject,
-            body: htmlBody 
-        })
-    })
-    .then(() => {
-        console.log('Request sent to Google Script');
-        btn.innerHTML = `
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            Sent
-        `;
-        btn.classList.remove('bg-gray-400', 'cursor-wait');
-        btn.classList.add('bg-green-600', 'hover:bg-green-700', 'cursor-default');
-
-        // Log Activity
-        if (typeof logActivity === 'function') logActivity("Email Sent", `Auto-email sent to ${name} (${email}).`);
-    })
-    .catch(error => {
-        console.error('FAILED...', error);
-        alert("Network Error: Could not reach Google Script.\nCheck your internet or the Script URL.");
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        btn.classList.add('bg-red-600');
-    });
-}
-
-// --- NEW: ADMIN POSTING LOCK FUNCTIONS ---
-
-window.toggleAdminLock = async function (key) {
-    if (!invigilationSlots[key]) return;
-    
-    // Toggle state
-    invigilationSlots[key].isAdminLocked = !invigilationSlots[key].isAdminLocked;
-    
-    // Force Standard Lock on if Admin Locked
-    if (invigilationSlots[key].isAdminLocked) {
-        invigilationSlots[key].isLocked = true;
-    }
-    
-    // 1. Render immediately (Optimistic UI update)
-    renderSlotsGridAdmin();
-    
-    const status = invigilationSlots[key].isAdminLocked ? "LOCKED" : "UNLOCKED";
-    logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
-    
-    // 2. Sync to Cloud
-    await syncSlotsToCloud();
-}
-
-window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
-    if (!confirm(`${lockState ? '🔒 LOCK' : '🔓 UNLOCK'} Admin Posting for ${monthStr} Week ${weekNum}?\n\nThis will prevent staff from adding unavailability.`)) return;
-
-    let changed = false;
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-
-        if (mStr === monthStr && wNum === weekNum) {
-            // Apply Admin Lock State
-            if (!!invigilationSlots[key].isAdminLocked !== lockState) {
-                invigilationSlots[key].isAdminLocked = lockState;
-                
-                // LOGIC CHANGE: If Locking Admin, also enforce Standard Lock
-                if (lockState === true) {
-                    invigilationSlots[key].isLocked = true;
-                }
-                
-                changed = true;
-            }
-        }
-    });
-
-    if (changed) {
-        logActivity("Weekly Admin Lock", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} posting for ${monthStr} Week ${weekNum}.`);
-        await syncSlotsToCloud();
-        renderSlotsGridAdmin();
-    } else {
-        alert("No changes needed.");
-    }
-}
-
-
-
-
-
-function renderSlotsGridAdmin() {
-    if (!ui.adminSlotsGrid) return;
-    ui.adminSlotsGrid.innerHTML = '';
-
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const currentMonthStr = monthNames[currentAdminDate.getMonth()];
-    const currentYear = currentAdminDate.getFullYear();
-
-    // 1. Navigation Bar
-    const navHtml = `
-        <div class="col-span-full flex justify-between items-center glass-panel p-2 md:p-3 rounded-lg border-0 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
-            <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
-                <span class="hidden md:inline">Prev</span> ⬅️
-            </button>
-            <h3 class="text-sm md:text-lg font-black text-indigo-800 uppercase tracking-wide flex items-center gap-1 md:gap-2 whitespace-nowrap">
-                <span>📅</span> ${currentMonthStr} <span class="text-gray-500 text-xs md:text-lg">'${String(currentYear).slice(-2)}</span>
-            </h3>
-            <button onclick="changeAdminMonth(1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
-                ➡️ <span class="hidden md:inline">Next</span>
-            </button>
-        </div>`;
-    ui.adminSlotsGrid.innerHTML = navHtml;
-
-    const slotItems = [];
-
-    // 2A. COLLECT REAL SLOTS
-    Object.keys(invigilationSlots).forEach(key => {
-        if (invigilationSlots[key].isHidden) return; // Skip deleted
-
-        const date = parseDate(key);
-        if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
-            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });
-        }
-    });
-
-    // 2B. COLLECT GHOST SLOTS (Unavailability without Exam)
-    if (typeof advanceUnavailability !== 'undefined') {
-        Object.keys(advanceUnavailability).forEach(dateStr => {
-            const [d, m, y] = dateStr.split('.').map(Number);
-            if (m - 1 !== currentAdminDate.getMonth() || y !== currentAdminDate.getFullYear()) return;
-
-            const dateObj = new Date(y, m - 1, d);
-            const leaves = advanceUnavailability[dateStr];
-
-            const hasRealSlot = (sessionType) => {
-                return slotItems.some(item => {
-                    if (item.type !== 'REAL') return false;
-                    const [kDate, kTime] = item.key.split(' | ');
-                    if (kDate !== dateStr) return false;
-                    
-                    let [h] = kTime.trim().split(':')[0].split(' '); 
-                    let t = kTime.trim().toUpperCase();
-                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;
-                    if (t.includes('AM') && parseInt(h) === 12) h = 0;
-                    
-                    const slotPeriod = h < 13 ? 'FN' : 'AN';
-                    return slotPeriod === sessionType;
-                });
-            };
-
-            if (leaves.FN && leaves.FN.length > 0 && !hasRealSlot('FN')) {
-                slotItems.push({ key: `${dateStr} | FN`, date: dateObj, type: 'GHOST', session: 'FN', count: leaves.FN.length, list: leaves.FN });
-            }
-            if (leaves.AN && leaves.AN.length > 0 && !hasRealSlot('AN')) {
-                slotItems.push({ key: `${dateStr} | AN`, date: dateObj, type: 'GHOST', session: 'AN', count: leaves.AN.length, list: leaves.AN });
-            }
-        });
-    }
-
-    if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
-        return;
-    }
-
-    // 3. Group by Week
-    const groupedSlots = {};
-    slotItems.forEach(item => {
-        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const weekNum = getWeekOfMonth(item.date);
-        const groupKey = `${mStr}-W${weekNum}`;
-        if (!groupedSlots[groupKey]) groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
-        groupedSlots[groupKey].items.push(item);
-    });
-
-    const sortedGroupKeys = Object.keys(groupedSlots).sort((a, b) => groupedSlots[a].items[0].date - groupedSlots[b].items[0].date);
-
-    // 4. Render Groups
-    sortedGroupKeys.forEach(gKey => {
-        const group = groupedSlots[gKey];
-
-        ui.adminSlotsGrid.innerHTML += `
-            <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
-                <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
-                    Week ${group.week}
-                </span>
-                <div class="flex gap-2">
-                    <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-l hover:bg-gray-50 font-bold border-r-0" title="Lock Standard Booking">🔒 Std</button>
-                        <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
-                    </div>
-                    <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
-                    </div>
-                    <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
-                    
-                    <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" class="text-[10px] bg-green-600 text-white border border-green-700 px-2 py-1 rounded hover:bg-green-700 font-bold shadow-sm flex items-center gap-1">📢 Notify</button>
-                </div>
-            </div>`;
-
-        group.items.sort((a, b) => {
-            if (a.date - b.date !== 0) return a.date - b.date;
-            const aS = a.key.includes('FN') || (a.key.includes('AM') && !a.key.includes('12:')) ? 0 : 1;
-            const bS = b.key.includes('FN') || (b.key.includes('AM') && !b.key.includes('12:')) ? 0 : 1;
-            return aS - bS;
-        });
-
-        group.items.forEach((item) => {
-            if (item.type === 'GHOST') {
-                const encodedList = encodeURIComponent(JSON.stringify(item.list));
-                ui.adminSlotsGrid.innerHTML += `
-                    <div class="relative border-l-[6px] border-gray-300 bg-gray-50 p-3 rounded-xl shadow-sm hover:shadow-md transition w-full mb-3 opacity-90 border border-gray-200 border-l-gray-400">
-                        <div class="flex justify-between items-start mb-2">
-                            <h4 class="font-bold text-gray-500 text-xs flex items-center gap-1">
-                                <span class="text-sm">🗓️</span> 
-                                <span>${item.key}</span>
-                            </h4>
-                            <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">No Exam</span>
-                        </div>
-                        <div class="text-[10px] text-gray-500 mb-3 italic">No exam scheduled, but staff have reported unavailability.</div>
-                        <button onclick="openGhostUnavailabilityModal('${item.key}', '${encodedList}')" class="w-full bg-white text-red-600 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 flex items-center justify-center gap-1 shadow-sm">⛔ View ${item.count} Unavailability</button>
-                    </div>`;
-                return;
-            }
-
-            const { key, slot } = item;
-            const filled = slot.assigned.length;
-            const isAdminLocked = slot.isAdminLocked || false;
-
-            // --- 🟢 NEW: Calculate TOTAL Issues (Session + Advance) ---
-            const [dateStr, timeStr] = key.split(' | ');
-            let session = "FN";
-            const t = timeStr ? timeStr.toUpperCase() : "";
-            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
-
-            const uniqueIssues = new Set();
-            
-            // 1. Add Session Specific
-            if (slot.unavailable) {
-                slot.unavailable.forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
-            }
-            
-            // 2. Add Advance Leave
-            if (typeof advanceUnavailability !== 'undefined' && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-                advanceUnavailability[dateStr][session].forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
-            }
-            
-            const totalIssues = uniqueIssues.size;
-            // -----------------------------------------------------------
-
-            let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
-            let statusIcon = "🔓";
-            
-            if (isAdminLocked) {
-                themeClasses = "border-amber-500 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100";
-                statusIcon = "🛡️";
-            } else if (slot.isLocked) {
-                themeClasses = "border-red-500 bg-gradient-to-br from-white via-red-50 to-red-100 shadow-red-100";
-                statusIcon = "🔒";
-            } else if (filled >= slot.required) {
-                themeClasses = "border-green-500 bg-gradient-to-br from-white via-green-50 to-green-100 shadow-green-100";
-                statusIcon = "✅";
-            }
-
-            const adminBtnStyle = isAdminLocked 
-                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
-                : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
-
-            ui.adminSlotsGrid.innerHTML += `
-                <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
-                    <div class="flex justify-between items-start mb-2">
-                        <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
-                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
-                            <span>${key}</span>
-                        </h4>
-                        <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
-                            <button onclick="changeSlotReq('${key}', -1)" class="px-2 py-1 hover:bg-gray-100 border-r border-gray-200 font-bold">-</button>
-                            <span class="px-2 font-bold text-gray-800">${filled}/${slot.required}</span>
-                            <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 font-bold">+</button>
-                        </div>
-                    </div>
-                    
-                    <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm min-h-[1.5rem]">
-                        <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
-                    </div>
-                    
-                    ${isAdminLocked ? '<div class="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-200 mb-2 text-center">🛡️ Posting Restricted (Admin)</div>' : ''}
-                    
-                    ${totalIssues > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2 shadow-sm transition">⛔ ${totalIssues} Issue(s) Reported</button>` : ''}
-                    
-                    <div class="flex gap-1.5 mt-2">
-                        <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
-                            ${slot.isLocked ? '🔓 Open Std' : '🔒 Lock Std'}
-                        </button>
-                        <button onclick="toggleAdminLock('${key}')" class="flex-1 text-[10px] border rounded-lg py-1.5 font-bold shadow-sm ${adminBtnStyle}">
-                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-4 gap-1.5 mt-2">
-                        <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
-                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
-                         <button onclick="openManualAllocationModal('${key}')" class="bg-white text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-50 text-[10px]">Edit</button>
-                         <button onclick="deleteSlot('${key}')" class="bg-white text-red-600 border border-red-200 rounded py-1 hover:bg-red-50 text-[10px]">🗑️</button>
-                    </div>
-                </div>`;
-        });
-    });
-    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
-}
-
-
-
-
-
-
-
-
-
-// REPLACE your existing renderStaffTable function with this SAFE version
-function renderStaffTable() {
-    if (!ui.staffTableBody) return;
-    ui.staffTableBody.innerHTML = '';
-
-    const filterInput = document.getElementById('staff-search');
-    const filter = filterInput ? filterInput.value.toLowerCase() : "";
-    const today = new Date();
-
-    // 1. Filter & Map Data (SAFE MODE)
-    const filteredItems = staffData
-        .map((staff, i) => ({ ...staff, originalIndex: i }))
-        .filter(item => {
-            if (item.status === 'archived') return false;
-
-            // --- THE FIX: Handle missing data safely ---
-            if (filter) {
-                const name = (item.name || "").toLowerCase();
-                const dept = (item.dept || "").toLowerCase();
-                const desig = (item.designation || "").toLowerCase();
-                const email = (item.email || "").toLowerCase(); // Also search email
-
-                if (!name.includes(filter) && 
-                    !dept.includes(filter) && 
-                    !desig.includes(filter) && 
-                    !email.includes(filter)) {
-                    return false;
-                }
-            }
-            return true;
-        })
-        .sort((a, b) => {
-            // 1. Live Status Priority (Online > Idle > Offline)
-            const getStatusRank = (email) => {
-                // FIX: Access the local 'globalLiveUsers' variable directly (removed 'window.')
-                // Also handle case-insensitivity to be safe
-                if (!globalLiveUsers) return 0;
-                
-                const key = email; 
-                // Try exact match, then lowercase match if needed
-                const user = globalLiveUsers[key] || globalLiveUsers[key.toLowerCase()];
-                
-                if (!user) return 0; // Offline (Gray)
-
-                const s = user.status;
-                if (s === 'online') return 2; // Highest Priority (Green)
-                if (s === 'idle') return 1;   // Medium Priority (Yellow)
-                return 0;                     // Lowest Priority (Gray)
-            };
-
-            const rankA = getStatusRank(a.email);
-            const rankB = getStatusRank(b.email);
-
-            // If ranks are different, put higher rank first
-            if (rankA !== rankB) return rankB - rankA;
-
-            // 2. Secondary Sort: Department (A-Z)
-            const deptA = (a.dept || "").toLowerCase();
-            const deptB = (b.dept || "").toLowerCase();
-            if (deptA < deptB) return -1;
-            if (deptA > deptB) return 1;
-
-            // 3. Tertiary Sort: Name (A-Z)
-            return (a.name || "").localeCompare(b.name || "");
-        });
-
-    // 2. Pagination Logic
-    const totalPages = Math.ceil(filteredItems.length / STAFF_PER_PAGE) || 1;
-    if (currentStaffPage > totalPages) currentStaffPage = totalPages;
-    if (currentStaffPage < 1) currentStaffPage = 1;
-
-    const start = (currentStaffPage - 1) * STAFF_PER_PAGE;
-    const end = start + STAFF_PER_PAGE;
-    const pageItems = filteredItems.slice(start, end);
-
-    // Update Controls
-    const pageInfo = document.getElementById('staff-page-info');
-    if (pageInfo) pageInfo.textContent = `Page ${currentStaffPage} of ${totalPages} (${filteredItems.length} Staff)`;
-    
-    // 3. Render Rows
-    pageItems.forEach((staff) => {
-        const index = staff.originalIndex;
-        // Fallback for missing names
-        const safeName = staff.name || staff.email.split('@')[0];
-        const safeDept = staff.dept || "General";
-
-        const target = calculateStaffTarget(staff);
-        const done = getDutiesDoneCount(staff.email);
-        const pending = Math.max(0, target - done);
-        const liveIcon = window.getLiveStatusIcon ? window.getLiveStatusIcon(staff.email) : '';
-        const statusColor = pending > 3 ? 'text-red-600 font-bold' : (pending > 0 ? 'text-orange-600' : 'text-green-600');
-
-        let activeRoleLabel = "";
-        if (staff.roleHistory && staff.roleHistory.length > 0) {
-            const activeRole = staff.roleHistory.find(r => {
-                const start = new Date(r.start);
-                const end = new Date(r.end);
-                return start <= today && end >= today;
-            });
-            if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
-        }
-
-        let actionButtons = "";
-        if (isStaffListLocked) {
-            actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
-        } else {
-            actionButtons = `
-                <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
-                    <button onclick="window.sendWelcomeMessage('${staff.email}')" class="flex-1 md:flex-none text-green-600 hover:text-green-800 bg-green-50 px-2 py-1.5 rounded border border-green-100 transition text-xs font-bold text-center" title="Send Welcome WhatsApp">👋</button>
-                    <button onclick="editStaff(${index})" class="flex-1 md:flex-none text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 transition text-xs font-bold text-center">Edit</button>
-                    <button onclick="openRoleAssignmentModal(${index})" class="flex-1 md:flex-none text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1.5 rounded border border-indigo-100 transition text-xs font-bold text-center">Role</button>
-                    <button onclick="deleteStaff(${index})" class="flex-1 md:flex-none text-red-500 hover:text-red-700 font-bold px-3 py-1.5 rounded hover:bg-red-50 transition bg-white border border-red-100 text-center">&times;</button>
-                </div>`;
-        }
-
-        const row = document.createElement('tr');
-        row.className = "block md:table-row bg-white/80 backdrop-blur md:hover:bg-gray-50 border border-white/40 md:border-0 md:border-b md:border-gray-100 rounded-xl md:rounded-none shadow-sm md:shadow-none mb-4 md:mb-0 p-4 md:p-0";
-
-        row.innerHTML = `
-            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 border-b-0 md:border-b border-gray-100 w-full md:w-auto">
-                <div class="hidden md:flex items-center">
-                    <div class="mr-2">${liveIcon}</div> 
-                    <div class="h-8 w-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-xs mr-3 shrink-0">${safeName.charAt(0)}</div>
-                    <div>
-                        <div class="text-sm font-bold text-gray-800">${safeName}</div>
-                        <div class="text-xs text-gray-500 mt-0.5"><span class="font-semibold text-gray-600">${safeDept}</span> | ${staff.designation || ""} ${activeRoleLabel}</div>
-                    </div>
-                </div>
-
-<div class="md:hidden">
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center gap-3">
-                             <div class="mr-1">${liveIcon}</div> 
-                             <div class="h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shadow-sm">${safeName.charAt(0)}</div>
-                            <div>
-                                <div class="text-sm font-bold text-gray-900">${safeName}</div>
-                                <div class="text-xs text-gray-500 font-medium">${safeDept} ${activeRoleLabel}</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100 text-xs mb-3">
-                        <div class="text-center w-1/3">
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Target</div>
-                            <div class="font-mono text-gray-600 font-bold text-sm">${target}</div>
-                        </div>
-                        <div class="text-center w-1/3 border-l border-gray-200">
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Done</div>
-                            <div>
-                                <button onclick="openCompletedDutiesModal('${staff.email}')" 
-                                        class="font-mono text-blue-600 font-bold text-sm hover:underline decoration-blue-300">
-                                    ${done}
-                                </button>
-                            </div>
-                        </div>
-                        <div class="text-center w-1/3 border-l border-gray-200">
-                            <div class="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Pending</div>
-                            <div class="font-mono font-bold text-sm ${statusColor}">${pending}</div>
-                        </div>
-                    </div>
-                </div>
-
-
-
-
-
-                
-            </td>
-
-
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm text-gray-600" title="Target Duty Load">${target}</td>
-            
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm font-bold">
-                <button onclick="openCompletedDutiesModal('${staff.email}')" 
-                        class="text-blue-600 hover:text-blue-800 hover:underline decoration-blue-300 underline-offset-4 transition px-2 py-1 rounded hover:bg-blue-50" 
-                        title="Click to view duty history">
-                    ${done}
-                </button>
-            </td>
-            
-            <td class="hidden md:table-cell px-6 py-3 text-center font-mono text-sm ${statusColor}" title="Pending Duties">${pending}</td>
-
-
-
-
-
-
-            <td class="block md:table-cell px-0 md:px-6 py-0 md:py-3 md:text-right md:whitespace-nowrap">${actionButtons}</td>
-        `;
-        ui.staffTableBody.appendChild(row);
-    });
-}
-
-function renderStaffRankList(myEmail) {
-    // 1. Calculate and Sort
-    const rankedStaff = staffData
-        .filter(s => s.status !== 'archived')
-        .map(s => {
-            const target = calculateStaffTarget(s);
-            const done = getDutiesDoneCount(s.email);
-            const pending = target - done;
-            return { ...s, done, pending };
-        })
-        .sort((a, b) => {
-            if (b.pending !== a.pending) return b.pending - a.pending;
-            return a.name.localeCompare(b.name);
-        });
-
-    // 2. Pagination Logic
-    const totalPages = Math.ceil(rankedStaff.length / RANK_PER_PAGE) || 1;
-    if (currentRankPage > totalPages) currentRankPage = totalPages;
-    if (currentRankPage < 1) currentRankPage = 1;
-
-    const start = (currentRankPage - 1) * RANK_PER_PAGE;
-    const end = start + RANK_PER_PAGE;
-    const pageItems = rankedStaff.slice(start, end);
-
-    // 3. Generate List HTML
-    const listHtml = pageItems.map((s, i) => {
-        const absoluteIndex = start + i;
-        const isMe = s.email === myEmail;
-        const bgClass = isMe ? "bg-indigo-50 border-indigo-200" : "bg-gray-50 border-transparent hover:bg-gray-100";
-        const textClass = isMe ? "text-indigo-700 font-bold" : "text-gray-700";
-        const rankBadge = absoluteIndex < 3 ? `text-orange-500 font-black` : `text-gray-400 font-medium`;
-        const displayPending = Math.max(0, s.pending);
-
-        let roleBadge = "";
-        if (s.roleHistory) {
-            const today = new Date();
-            const activeRole = s.roleHistory.find(r => new Date(r.start) <= today && new Date(r.end) >= today);
-            if (activeRole) roleBadge = `<span class="ml-1 text-[8px] uppercase font-bold bg-purple-100 text-purple-700 px-1 py-0.5 rounded border border-purple-200">${activeRole.role}</span>`;
-        }
-
-        return `
-            <div class="flex items-center justify-between p-2 rounded border ${bgClass} text-xs transition mb-1">
-                <div class="flex items-center gap-2 overflow-hidden">
-                    <span class="${rankBadge} w-6 text-center shrink-0 text-[10px]">${absoluteIndex + 1}</span>
-                    <div class="flex flex-col min-w-0">
-                        <div class="flex items-center gap-1">
-                            <span class="truncate ${textClass}">${s.name}</span>
-                            ${roleBadge}
-                        </div>
-                        <span class="text-[9px] text-gray-400 truncate">${s.dept}</span>
-                    </div>
-                </div>
-                
-                <div class="text-right flex items-center gap-1 bg-white px-2 py-1 rounded border border-gray-100 shadow-sm shrink-0">
-                     <span class="font-mono font-bold text-green-600" title="Completed Duties">${s.done}</span>
-                     <span class="text-gray-300 text-[10px]">/</span>
-                     <span class="font-mono font-bold ${displayPending > 0 ? 'text-red-600' : 'text-gray-400'}" title="Pending Duties">${displayPending}</span>
-                </div>
-            </div>`;
-    }).join('');
-
-    // 4. Generate Pagination HTML (Updated with extra padding)
-    const prevDisabled = (currentRankPage === 1) ? "disabled opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer";
-    const nextDisabled = (currentRankPage === totalPages) ? "disabled opacity-50 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer";
-
-    const paginationHtml = `
-        <div class="flex justify-between items-center w-full bg-white py-2">
-            <button onclick="changeRankPage(-1)" ${prevDisabled} class="px-3 py-1.5 rounded border border-gray-200 text-gray-600 text-[10px] font-bold transition flex items-center gap-1 bg-white shadow-sm">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-                Prev
-            </button>
-            
-            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                ${currentRankPage} <span class="text-gray-300">/</span> ${totalPages}
-            </span>
-            
-            <button onclick="changeRankPage(1)" ${nextDisabled} class="px-3 py-1.5 rounded border border-gray-200 text-gray-600 text-[10px] font-bold transition flex items-center gap-1 bg-white shadow-sm">
-                Next
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-            </button>
-        </div>
-    `;
-
-    // 5. Inject Content into respective containers
-
-    // Desktop
-    const deskList = document.getElementById('staff-rank-list');
-    const deskPag = document.getElementById('staff-rank-pagination');
-    if (deskList) { deskList.innerHTML = listHtml; deskList.scrollTop = 0; }
-    if (deskPag) deskPag.innerHTML = paginationHtml;
-
-    // Mobile
-    const mobList = document.getElementById('staff-rank-list-mobile');
-    const mobPag = document.getElementById('staff-rank-mobile-pagination');
-    if (mobList) { mobList.innerHTML = listHtml; mobList.scrollTop = 0; }
-    if (mobPag) mobPag.innerHTML = paginationHtml;
-}
+// [MOVED to features/admin-dashboard.js]
 
 
 // --- ADD THIS NEW FUNCTION AT THE END OR WITH OTHER EXPORTS ---
@@ -1375,29 +799,29 @@ function renderStaffCalendar(myEmail) {
                     if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-amber-100 to-orange-100 text-amber-700 border-amber-300"; icon = "🛡️"; statusText = "Frozen"; }
                     else { badgeClass = "bg-gradient-to-br from-orange-400 to-orange-500 text-white border-orange-300"; icon = "⏳"; statusText = "Posted"; }
                 } else if (isAssigned) {
-                     if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; icon = "🛡️"; statusText = "Duty"; }
-                     else if (slot.isLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; icon = "🔒"; statusText = "Duty"; glowClass = "shadow-sm shadow-blue-100"; }
-                     else { badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; icon = "👮"; statusText = "Duty"; glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; }
+                    if (isAdminLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold ring-1 ring-amber-300"; icon = "🛡️"; statusText = "Duty"; }
+                    else if (slot.isLocked) { badgeClass = "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-800 border-blue-300 font-bold"; icon = "🔒"; statusText = "Duty"; glowClass = "shadow-sm shadow-blue-100"; }
+                    else { badgeClass = "bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-blue-400 font-bold"; icon = "👮"; statusText = "Duty"; glowClass = "shadow-lg shadow-blue-200 ring-1 ring-blue-300"; }
                 } else if (isMarketAvailable) {
                     badgeClass = "bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 animate-pulse"; icon = "♻️"; statusText = "Exchange";
                 } else if (isUnavailable) {
                     // ✅ CHECK IF MARKED BY ADMIN
                     const uEntry = slot.unavailable ? slot.unavailable.find(u => (typeof u === 'string' ? u : u.email) === myEmail) : null;
                     const isAdminMarked = uEntry && uEntry.markedBy === 'Admin';
-                    
+
                     badgeClass = "bg-gradient-to-br from-red-50 to-red-100 text-red-600 border-red-200 opacity-60 grayscale-[50%]";
                     icon = isAdminMarked ? "🛡️" : "⛔";
                     statusText = isAdminMarked ? "Admin" : "Unavail";
-                    } else if (isAdminLocked) {
+                } else if (isAdminLocked) {
                     if (isPast) {
                         // 🟢 FIX: Show Past Admin Locks as Standard Grey/Locked
-                        badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; 
-                        icon = "🔒"; 
+                        badgeClass = "bg-gray-100 text-gray-400 border-gray-200";
+                        icon = "🔒";
                         statusText = "Locked";
                     } else {
-                        badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200"; 
-                        icon = "🛡️"; 
-                        statusText = "Paused"; 
+                        badgeClass = "bg-gradient-to-br from-amber-50 to-amber-100 text-amber-400 border-amber-200";
+                        icon = "🛡️";
+                        statusText = "Paused";
                     }
                 } else if (slot.isLocked) {
                     badgeClass = "bg-gray-100 text-gray-400 border-gray-200"; icon = "🔒"; statusText = "Locked";
@@ -1439,7 +863,7 @@ function renderStaffCalendar(myEmail) {
                     const icon = isAdm ? "🛡️" : "⛔";
                     unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">FN ${icon}</span><span class="hidden md:inline">FN ${icon} Unavail</span></div>`;
                 }
-                
+
                 const anEntry = findEntry(adv.AN);
                 if (anEntry) {
                     hasUnavail = true;
@@ -1447,7 +871,7 @@ function renderStaffCalendar(myEmail) {
                     const icon = isAdm ? "🛡️" : "⛔";
                     unavailHtml += `<div onclick="openDayDetail('${dateStr}', '${myEmail}')" class="bg-red-50/80 border border-red-100 text-red-500 rounded md:rounded-lg p-0.5 md:p-1 text-[8px] md:text-[9px] font-bold text-center shadow-sm cursor-pointer hover:bg-red-100 transition truncate"><span class="md:hidden">AN ${icon}</span><span class="hidden md:inline">AN ${icon} Unavail</span></div>`;
                 }
-                
+
                 unavailHtml += `</div>`;
                 if (hasUnavail) contentHtml += unavailHtml;
             }
@@ -1588,15 +1012,15 @@ window.openDayDetail = function (dateStr, email) {
     const [dd, mm, yyyy] = dateStr.split('.');
     const currentD = new Date(yyyy, mm - 1, dd);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); 
-    
+    today.setHours(0, 0, 0, 0);
+
     const maxDate = new Date(today);
-    maxDate.setMonth(today.getMonth() + 3); 
+    maxDate.setMonth(today.getMonth() + 3);
 
     const isPast = currentD < today;
     const isTooFar = currentD > maxDate;
     const isRestricted = isPast || isTooFar;
-    
+
     let restrictLabel = "";
     if (isPast) restrictLabel = "(Past Date - Locked)";
     if (isTooFar) restrictLabel = "(>3 Months - Locked)";
@@ -1632,7 +1056,7 @@ window.openDayDetail = function (dateStr, email) {
                 if (isAN) isAssignedAN = true;
                 else isAssignedFN = true;
             }
-            
+
             // Track Admin Locks
             if (isAdminLocked) {
                 if (isAN) adminLockAN = true;
@@ -1641,39 +1065,39 @@ window.openDayDetail = function (dateStr, email) {
 
             // --- Action Buttons ---
             let actionHtml = "";
-            
+
             if (isRestricted) {
-                 if (isAssigned) {
-                     actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
-                 } else if (isUnavailable) {
-                     actionHtml = `<div class="w-full bg-red-50 text-red-500 border border-red-100 text-xs py-2 rounded font-bold text-center">⛔ Marked Unavailable ${restrictLabel}</div>`;
-                 } else {
-                     actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
-                 }
-            } 
+                if (isAssigned) {
+                    actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
+                } else if (isUnavailable) {
+                    actionHtml = `<div class="w-full bg-red-50 text-red-500 border border-red-100 text-xs py-2 rounded font-bold text-center">⛔ Marked Unavailable ${restrictLabel}</div>`;
+                } else {
+                    actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
+                }
+            }
             else if (isAdminLocked) {
-                 if (isAssigned) {
-                     if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                     } else {
-                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
-                     }
-                 } else {
-                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm"><span>🛡️</span> Posting Restricted by Admin</div>`;
-                 }
+                if (isAssigned) {
+                    if (isPostedByMe) {
+                        actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
+                    } else {
+                        actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
+                    }
+                } else {
+                    actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm"><span>🛡️</span> Posting Restricted by Admin</div>`;
+                }
             }
             else {
                 if (isAssigned) {
                     if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
+                        actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
                     } else if (isLocked) {
                         actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
                     } else {
                         actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
                     }
                 } else if (marketOffers.length > 0) {
-                     let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
-                     actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
+                    let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
+                    actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
                 } else if (isUnavailable) {
                     actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
                 } else {
@@ -1692,11 +1116,11 @@ window.openDayDetail = function (dateStr, email) {
                     if (!s) return '';
                     const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
                     const statusIcon = isExchanging ? "⏳" : "✅";
-                    
+
                     // Fixed: Removed Reference to reserveBadge
                     return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span></div>`;
                 }).join('');
-                
+
                 staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
             }
 
@@ -1708,10 +1132,10 @@ window.openDayDetail = function (dateStr, email) {
 
     // 3. ADVANCE / GENERAL UNAVAILABILITY SECTION
     if (isRestricted) {
-         let reasonMsg = isPast ? "Date in Past" : "Date > 3 Months ahead";
-         container.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200"><div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center"><p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p></div></div>`;
-         window.openModal('day-detail-modal');
-         return;
+        let reasonMsg = isPast ? "Date in Past" : "Date > 3 Months ahead";
+        container.innerHTML += `<div class="mt-4 pt-4 border-t border-gray-200"><div class="bg-gray-100 p-3 rounded-lg border border-gray-200 text-center"><p class="text-xs text-gray-500 font-bold italic">🚫 Unavailability Editing Locked (${reasonMsg})</p></div></div>`;
+        window.openModal('day-detail-modal');
+        return;
     }
 
     const adv = advanceUnavailability[dateStr] || { FN: [], AN: [] };
@@ -1782,10 +1206,7 @@ function updateHeaderButtons(currentView) {
 }
 
 // --- HELPER: Change Month ---
-window.changeAdminMonth = function (delta) {
-    currentAdminDate.setMonth(currentAdminDate.getMonth() + delta);
-    renderSlotsGridAdmin();
-}
+// [MOVED] window.changeAdminMonth
 function switchToStaffView() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (me) initStaffDashboard(me);
@@ -1803,8 +1224,8 @@ async function syncSlotsToCloud() {
     try {
         // Write to 'system_data/slots'
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
-        await setDoc(ref, { 
-            examInvigilationSlots: JSON.stringify(invigilationSlots) 
+        await setDoc(ref, {
+            examInvigilationSlots: JSON.stringify(invigilationSlots)
         }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
@@ -1820,8 +1241,8 @@ async function syncStaffToCloud() {
         // Write to 'system_data/staff'
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "staff");
         // Note: We only save staffData here. InvigMapping is saved separately or merged if needed.
-        await setDoc(ref, { 
-            examStaffData: JSON.stringify(staffData) 
+        await setDoc(ref, {
+            examStaffData: JSON.stringify(staffData)
         }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
@@ -1940,8 +1361,8 @@ async function saveAdvanceUnavailability() {
     try {
         // Write to 'system_data/slots' (grouped with slots)
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
-        await setDoc(ref, { 
-            invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) 
+        await setDoc(ref, {
+            invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
         }, { merge: true });
         updateSyncStatus("Synced", "success");
     } catch (e) {
@@ -1950,11 +1371,11 @@ async function saveAdvanceUnavailability() {
     }
 }
 // Function to toggle the "Details" box in the unavailability modal
-window.toggleUnavDetails = function() {
+window.toggleUnavDetails = function () {
     const reasonEl = document.getElementById('unav-reason');
     const container = document.getElementById('unav-details-container');
     if (!reasonEl || !container) return;
-    
+
     const reason = reasonEl.value;
     // Show details box only for specific reasons
     if (['OD', 'DL', 'Medical', 'Other'].includes(reason)) {
@@ -1965,7 +1386,7 @@ window.toggleUnavDetails = function() {
 }
 
 
-window.toggleAdvance = async function(dateStr, email, session) {
+window.toggleAdvance = async function (dateStr, email, session) {
     // [VALIDATION CHECK]
     if (!isActionAllowed(dateStr)) return;
 
@@ -1999,18 +1420,18 @@ window.toggleAdvance = async function(dateStr, email, session) {
 
     if (existingEntry) {
         // REMOVE (Simple Confirm)
-        if(confirm(`Remove 'Unavailable' status for ${session}?`)) {
+        if (confirm(`Remove 'Unavailable' status for ${session}?`)) {
             // A. UPDATE LOCAL DATA INSTANTLY
             advanceUnavailability[dateStr][session] = list.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-            
+
             // B. UPDATE UI INSTANTLY
             try {
-                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
-                if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-            } catch(e) { console.error("UI Update failed", e); }
+                if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+            } catch (e) { console.error("UI Update failed", e); }
 
             // C. CLOSE MODAL INSTANTLY
-            window.closeModal('day-detail-modal'); 
+            window.closeModal('day-detail-modal');
 
             // D. SYNC TO CLOUD (Background)
             try {
@@ -2018,7 +1439,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
                 try {
                     const staffName = getNameFromEmail(email);
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from ${dateStr} (${session}) unavailability list.`);
-                } catch (e) {}
+                } catch (e) { }
 
                 await saveAdvanceUnavailability();
             } catch (err) {
@@ -2028,21 +1449,21 @@ window.toggleAdvance = async function(dateStr, email, session) {
         }
     } else {
         // ADD (Open Modal for Reason)
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`; 
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|${session}`;
         document.getElementById('unav-email').value = email;
         document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
-        
+
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
         const detailsContainer = document.getElementById('unav-details-container');
-        if(detailsContainer) detailsContainer.classList.add('hidden');
-        
+        if (detailsContainer) detailsContainer.classList.add('hidden');
+
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
 }
 
-window.toggleWholeDay = async function(dateStr, email) {
+window.toggleWholeDay = async function (dateStr, email) {
     // [VALIDATION CHECK 1: Date Restrictions]
     if (!isActionAllowed(dateStr)) return;
 
@@ -2064,10 +1485,10 @@ window.toggleWholeDay = async function(dateStr, email) {
 
     // 1. Safety check for data structure
     if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-    
+
     const fnList = advanceUnavailability[dateStr].FN || [];
     const anList = advanceUnavailability[dateStr].AN || [];
-    
+
     // Check if user is in BOTH lists
     const isFn = fnList.some(u => (typeof u === 'string' ? u === email : u.email === email));
     const isAn = anList.some(u => (typeof u === 'string' ? u === email : u.email === email));
@@ -2075,16 +1496,16 @@ window.toggleWholeDay = async function(dateStr, email) {
 
     if (isFullDay) {
         // CLEAR BOTH
-        if(confirm("Clear unavailability for the WHOLE DAY?")) {
+        if (confirm("Clear unavailability for the WHOLE DAY?")) {
             // A. UPDATE LOCAL DATA INSTANTLY
             advanceUnavailability[dateStr].FN = fnList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             advanceUnavailability[dateStr].AN = anList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-            
+
             // B. UPDATE UI INSTANTLY
             try {
-                if(typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
-                if(typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-            } catch(e) { console.error("UI Update failed", e); }
+                if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+                if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
+            } catch (e) { console.error("UI Update failed", e); }
 
             // C. CLOSE MODAL INSTANTLY
             window.closeModal('day-detail-modal');
@@ -2094,7 +1515,7 @@ window.toggleWholeDay = async function(dateStr, email) {
                 try {
                     const staffName = getNameFromEmail(email);
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from Whole Day ${dateStr}.`);
-                } catch (e) {}
+                } catch (e) { }
 
                 await saveAdvanceUnavailability();
             } catch (err) {
@@ -2104,14 +1525,14 @@ window.toggleWholeDay = async function(dateStr, email) {
         }
     } else {
         // MARK BOTH
-        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`; 
+        document.getElementById('unav-key').value = `ADVANCE|${dateStr}|WHOLE`;
         document.getElementById('unav-email').value = email;
         document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
         document.getElementById('unav-reason').value = "";
         document.getElementById('unav-details').value = "";
         const detailsContainer = document.getElementById('unav-details-container');
-        if(detailsContainer) detailsContainer.classList.add('hidden');
-        
+        if (detailsContainer) detailsContainer.classList.add('hidden');
+
         window.closeModal('day-detail-modal');
         window.openModal('unavailable-modal');
     }
@@ -2120,465 +1541,15 @@ window.toggleWholeDay = async function(dateStr, email) {
 
 
 // --- STANDARD EXPORTS ---
-window.toggleLock = async function (key) {
-    if (!invigilationSlots[key]) return;
-
-    invigilationSlots[key].isLocked = !invigilationSlots[key].isLocked;
-    
-    // 1. Render immediately
-    renderSlotsGridAdmin();
-
-    const status = invigilationSlots[key].isLocked ? "LOCKED" : "UNLOCKED";
-    logActivity("Session Lock Toggle", `Admin ${status} session ${key}.`);
-    
-    await syncSlotsToCloud();
-}
-
-// --- NEW: Lock All Function ---
-window.lockAllSessions = async function () {
-    if (!confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
-
-    let changed = false;
-    Object.keys(invigilationSlots).forEach(key => {
-        if (!invigilationSlots[key].isLocked) {
-            invigilationSlots[key].isLocked = true;
-            changed = true;
-        }
-    });
-
-    if (!confirm("Confirm duty?")) return;
-
-    const slot = invigilationSlots[key];
-    slot.assigned.push(email);
-
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(email); // Refresh
-}
-
-window.changeSlotReq = async function (key, delta) {
-    const slot = invigilationSlots[key];
-    const newReq = slot.required + delta;
-    if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
-    if (newReq < 1) return;
-    slot.required = newReq;
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-}
-
-
-window.cancelDuty = async function (key, email, isLocked) {
-    if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
-    if (confirm("Cancel duty?")) {
-        invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
-        const me = staffData.find(s => s.email === email);
-        if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
-        logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
-        await syncSlotsToCloud();
-        await syncStaffToCloud();
-        window.closeModal('day-detail-modal');
-    }
-}
-function toggleUnavDetails() {
-    const reasonEl = document.getElementById('unav-reason');
-    const container = document.getElementById('unav-details-container');
-    if (!reasonEl || !container) return;
-
-    const reason = reasonEl.value;
-    if (['OD', 'DL', 'Medical'].includes(reason)) {
-        container.classList.remove('hidden');
-    } else {
-        container.classList.add('hidden');
-    }
-}
-
-window.setAvailability = async function (key, email, isAvailable) {
-    // [VALIDATION CHECK 1: Date Restrictions]
-    const [dateStr] = key.split(' | ');
-    if (!isActionAllowed(dateStr)) return;
-
-    // [VALIDATION CHECK 2: Admin Posting Lock]
-    // If trying to mark UNAVAILABLE and Admin Lock is ON -> BLOCK IT
-    const slot = invigilationSlots[key];
-    if (!isAvailable && slot && slot.isAdminLocked) {
-        alert("🚫 Posting Locked! You cannot mark unavailability for this slot as the Admin is finalizing assignments.");
-        return;
-    }
-
-    if (isAvailable) {
-        if (confirm("Mark available?")) {
-            invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
-            logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
-            await syncSlotsToCloud();
-
-            // *** FIX: Update List Live ***
-            if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-
-            window.closeModal('day-detail-modal');
-            renderStaffCalendar(email); // Update calendar colors
-        }
-    } else {
-        document.getElementById('unav-key').value = key;
-        document.getElementById('unav-email').value = email;
-        document.getElementById('unav-marked-by').value = 'Self'; // <--- ADD THIS
-        document.getElementById('unav-reason').value = "";
-        document.getElementById('unav-details').value = "";
-        document.getElementById('unav-details-container').classList.add('hidden');
-        window.closeModal('day-detail-modal');
-        window.openModal('unavailable-modal');
-    }
-}
-
-window.confirmUnavailable = async function () {
-    const key = document.getElementById('unav-key').value;
-    const email = document.getElementById('unav-email').value;
-    const reason = document.getElementById('unav-reason').value;
-    const details = document.getElementById('unav-details').value.trim();
-    // NEW: Capture Source
-    const markedBy = document.getElementById('unav-marked-by').value || 'Self'; 
-
-    // 1. Validation
-    if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked && markedBy !== 'Admin') {
-        return alert("🚫 Posting Locked! Admin has locked this slot.");
-    }
-    
-    if (!reason) return alert("Select a reason.");
-    if (['OD', 'DL', 'Medical', 'Other'].includes(reason) && !details) return alert("Details required.");
-
-    // NEW: Create Entry Object with Metadata
-    const entry = { 
-        email: email, 
-        reason: reason, 
-        details: details || "",
-        markedBy: markedBy,
-        timestamp: new Date().toISOString()
-    };
-
-    if (key.startsWith('ADVANCE|')) {
-        // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
-        const [_, dateStr, session] = key.split('|');
-
-        if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-        if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
-        if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
-
-        if (session === 'WHOLE') {
-            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            
-            advanceUnavailability[dateStr].FN.push(entry);
-            advanceUnavailability[dateStr].AN.push(entry);
-            
-            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);
-        } else {
-            if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
-            
-            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            advanceUnavailability[dateStr][session].push(entry);
-
-            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);
-        }
-
-        await saveAdvanceUnavailability();
-        
-    } else {
-        // --- CASE B: SLOT SPECIFIC ---
-        if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
-        
-        invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => 
-            (typeof u === 'string' ? u !== email : u.email !== email)
-        );
-
-        invigilationSlots[key].unavailable.push(entry);
-        logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
-
-        await syncSlotsToCloud();
-    }
-
-    // Cleanup & Refresh
-    window.closeModal('unavailable-modal');
-    window.closeModal('day-detail-modal'); 
-
-    // Refresh Manual Modal if open
-    const manualKey = document.getElementById('manual-session-key').value;
-    if (document.getElementById('manual-allocation-modal').classList.contains('hidden') === false && manualKey === key) {
-        window.openManualAllocationModal(key);
-    } else {
-        renderStaffCalendar(email);
-        if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
-    }
-};
-
-window.waNotify = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
-
-    // Get first valid phone with prefix
-    let phone = "";
-    for (const email of slot.assigned) {
-        const s = staffData.find(st => st.email === email);
-        if (s && s.phone) {
-            let p = s.phone.replace(/\D/g, '');
-            if (p.length === 10) p = "91" + p;
-            if (p.length >= 10) {
-                phone = p;
-                break;
-            }
-        }
-    }
-
-    if (!phone) return alert("No valid phone numbers found.");
-    const msg = encodeURIComponent(`Exam Duty: ${key}.`);
-    window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
-}
-
-// LIGHTWEIGHT VERSION: Just refreshes the slots from the cloud
-window.calculateSlotsFromSchedule = async function () {
-    const btn = document.querySelector('button[onclick="calculateSlotsFromSchedule()"]');
-    if (btn) { btn.disabled = true; btn.innerText = "⏳ Refreshing Slots..."; }
-
-    try {
-        if(!currentCollegeId) throw new Error("You are not logged in.");
-
-        updateSyncStatus("Fetching Slots...", "neutral");
-        
-        // 1. Fetch ONLY the slots document
-        const { db, doc, getDoc } = window.firebase;
-        const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
-        const snapshot = await getDoc(slotsRef);
-
-        if (snapshot.exists()) {
-            const data = snapshot.data();
-            const cloudSlots = JSON.parse(data.examInvigilationSlots || '{}');
-            
-            // 2. Update Local State
-            invigilationSlots = cloudSlots;
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
-            
-            if (data.invigAdvanceUnavailability) {
-                advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
-                localStorage.setItem('invigAdvanceUnavailability', data.invigAdvanceUnavailability);
-            }
-
-            // 3. Update UI
-            if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-            
-            alert("✅ Synced! Loaded latest invigilation requirements from cloud.");
-            updateSyncStatus("Synced", "success");
-        } else {
-            alert("⚠️ No slot data found in cloud. Please save data in the main Exam App first.");
-        }
-
-    } catch (e) {
-        console.error("Slot Sync Error:", e);
-        alert("❌ Error: " + e.message);
-        updateSyncStatus("Sync Failed", "error");
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
-    }
-}
-
-
-
-// --- HELPER: Get Slot Reserves (Last N assigned staff) ---
-window.getSlotReserves = function (key) {
-    const slot = invigilationSlots[key];
-    if (!slot || !slot.assigned) return [];
-
-    // 1. Determine Reserve Count
-    let rCount = slot.reserveCount;
-    
-    // Fallback if 'reserveCount' missing (Legacy Data)
-    if (rCount === undefined) {
-        // Formula: Base = floor(Total / 1.1)
-        const estBase = Math.floor(slot.required / 1.1);
-        rCount = Math.max(0, slot.required - estBase);
-    }
-
-    // 2. Calculate Base Requirement (Active Duty)
-    const baseReq = slot.required - rCount;
-
-    // 3. Identification:
-    // Reserves are any staff assigned AFTER the Base Requirement is met.
-    if (slot.assigned.length <= baseReq) return []; // Slot not full enough to have reserves
-
-    const reserveEmails = slot.assigned.slice(baseReq);
-    return reserveEmails.map(e => staffData.find(s => s.email === e)).filter(s => s);
-}
-
-window.notifySlotReserves = async function (key) {
-    const reserves = getSlotReserves(key);
-    if (reserves.length === 0) return alert("No reserves identified (Assigned <= Required).");
-
-    const names = reserves.map(r => r.name).join(", ");
-    if (!confirm(`Send Notifications to ${reserves.length} Reserves?\n\n${names}`)) return;
-
-    updateSyncStatus("Sending...", "neutral");
-    // Email Logic Reuse
-    let sent = 0;
-    for (const r of reserves) {
-        try {
-            await sendSingleEmail(null, r.email, r.name, "Reserve Duty Alert", `You are on RESERVE duty for ${key}. Please be available.`);
-            sent++;
-        } catch (e) { }
-    }
-    updateSyncStatus("Done", "success");
-    alert(`Sent ${sent} notifications.`);
-}
-
-// --- REFINED AUTO-ALLOCATION (Session-Based Reserves) ---
-window.runAutoAllocation = async function () {
-    if (!confirm("⚡ Run SESSION-BASED Auto-Assignment?\n\nThis will fill slots to REQUIRED + 10% (Reserves).\n\nRules:\n1. Highest Pending First.\n2. Exclude Adjacent Days (Rules applied to EVERYONE).\n3. Dept Saturation (Exempt Single Faculty).\n\nAssign?")) return;
-
-    // 1. Identify Target Slots
-    const targetSlots = [];
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        if (!slot.isLocked) {
-            targetSlots.push({ key, date: parseDate(key), slot });
-        }
-    });
-
-    if (targetSlots.length === 0) return alert("No unlocked slots found.");
-
-    targetSlots.sort((a, b) => a.date - b.date);
-
-    // 2. Prepare Staff Stats
-    const deptCounts = {};
-    const singleFacultyDepts = new Set();
-
-    // First Pass: Count Depts
-    staffData.forEach(s => {
-        if (s.status !== 'archived') {
-            deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
-        }
-    });
-
-    Object.keys(deptCounts).forEach(d => {
-        if (deptCounts[d] === 1) singleFacultyDepts.add(d);
-    });
-
-    let eligibleStaff = staffData.map(s => ({
-        ...s,
-        pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-        weeklyLoad: {}
-    }));
-
-    // Pre-fill existing assignment load
-    Object.keys(invigilationSlots).forEach(k => {
-        const d = parseDate(k);
-        const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(d);
-        const weekKey = `${mStr}-${wNum}`;
-
-        invigilationSlots[k].assigned.forEach(email => {
-            const s = eligibleStaff.find(st => st.email === email);
-            if (s) {
-                if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
-                s.weeklyLoad[weekKey]++;
-            }
-        });
-    });
-
-    let assignedCount = 0;
-    const logEntries = [];
-
-    // 3. Process Slots
-    for (const target of targetSlots) {
-        const { key, date, slot } = target;
-
-        // TARGET: Required + 10%
-        const targetCount = slot.required;
-        const needed = targetCount - slot.assigned.length;
-
-        if (needed <= 0) continue;
-
-        const currentWeekKey = `${date.toLocaleString('default', { month: 'long', year: 'numeric' })}-${getWeekOfMonth(date)}`;
-
-        // Context for Adjacent Rule (Global Check)
-        const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
-        const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
-
-        const prevKeyStart = `${prevDate.getDate().toString().padStart(2, '0')}.${(prevDate.getMonth() + 1).toString().padStart(2, '0')}.${prevDate.getFullYear()}`;
-        const nextKeyStart = `${nextDate.getDate().toString().padStart(2, '0')}.${(nextDate.getMonth() + 1).toString().padStart(2, '0')}.${nextDate.getFullYear()}`;
-
-        // Lookup adjacent assignments
-        const adjacentAssigned = new Set();
-        Object.keys(invigilationSlots).forEach(k => {
-            if (k.startsWith(prevKeyStart) || k.startsWith(nextKeyStart)) {
-                invigilationSlots[k].assigned.forEach(e => adjacentAssigned.add(e));
-            }
-        });
-
-        // Dept Context
-        const slotDeptCounts = {};
-        slot.assigned.forEach(email => {
-            const s = staffData.find(st => st.email === email);
-            if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
-        });
-
-        // Score Candidates
-        const candidates = eligibleStaff.map(s => {
-            if (s.status === 'archived') return null;
-            if (slot.assigned.includes(s.email)) return null;
-            if (isUserUnavailable(slot, s.email, key)) return null;
-
-            // --- EXEMPTION LOGIC ---
-            const isSingleFaculty = singleFacultyDepts.has(s.dept);
-
-            // 1. Adjacent Day Rule (Applies to ALL, logic: Skip if adjacent)
-            if (adjacentAssigned.has(s.email)) return null;
-
-            // 2. Dept Saturation (Skip if > 50%, UNLESS Single Faculty)
-            const dTotal = deptCounts[s.dept] || 0;
-            if (!isSingleFaculty && dTotal > 1) {
-                const dAssigned = slotDeptCounts[s.dept] || 0;
-                if (dAssigned >= Math.ceil(dTotal * 0.5)) return null;
-            }
-
-            let score = s.pending * 100;
-            let warnings = [];
-
-            // Weekly Soft Limit
-            if (s.weeklyLoad[currentWeekKey] >= 3) {
-                score -= 5000;
-                warnings.push("Max 3/wk");
-            }
-
-            return { staff: s, score, warnings };
-        }).filter(c => c !== null);
-
-        // Sort: Highest Pending First
-        candidates.sort((a, b) => b.score - a.score);
-
-        // Take Top candidates
-        const toAssign = candidates.slice(0, needed);
-
-        toAssign.forEach(choice => {
-            slot.assigned.push(choice.staff.email);
-            choice.staff.pending--;
-            if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
-            choice.staff.weeklyLoad[currentWeekKey]++;
-
-            slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
-            assignedCount++;
-        });
-    }
-
-    // 5. Logging
-    if (assignedCount > 0) {
-        logActivity("Global Auto-Assign", `Admin ran session-based auto-assign. Filled ${assignedCount} slots.`);
-    }
-
-    await syncSlotsToCloud();
-    renderSlotsGridAdmin();
-
-   alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
-}
+// [MOVED to features/admin-dashboard.js]
+// - toggleLock
+// - lockAllSessions
+// - changeSlotReq
+// - cancelDuty
+// - setAvailability
+// - confirmUnavailable
+// - waNotify
+// - calculateSlotsFromSchedule
 //-------------------
 
 
@@ -2586,18 +1557,18 @@ window.runAutoAllocation = async function () {
 // 👋 WELCOME MESSAGE SYSTEM
 // ==========================================
 
-window.generateWelcomeText = function(name, dept) {
+window.generateWelcomeText = function (name, dept) {
     // 1. Dynamic College Name
     const cName = (typeof collegeName !== 'undefined' && collegeName) ? collegeName : "Government Victoria College";
     // 2. Find Active CS and SAS
     const today = new Date();
-    
+
     const getRolePhone = (role) => {
-        const staff = staffData.find(s => 
+        const staff = staffData.find(s =>
             s.roleHistory && s.roleHistory.some(r => r.role === role && new Date(r.start) <= today && new Date(r.end) >= today)
         );
         if (staff && staff.phone) {
-             return staff.phone.replace(/\D/g, ''); // Return clean phone
+            return staff.phone.replace(/\D/g, ''); // Return clean phone
         }
         return "9447955360"; // Default Fallback if no one assigned
     };
@@ -2605,7 +1576,7 @@ window.generateWelcomeText = function(name, dept) {
     const csPhone = getRolePhone("Chief Superintendent");
     // Construct Name-Dept format
     const displayName = `${name}-${dept}`;
-    
+
     return `🔴🔴🔴
 Hi, ${displayName}, Welcome to ${cName}. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
 https://examflow-de08f.web.app/invigilation.html
@@ -2623,192 +1594,32 @@ All links will be active after replying to this message
 For any queries contact examinations@gvc.ac.in _Exam Committee - ${sasPhone}_ This is an automatically generated message`;
 };
 
-window.sendWelcomeMessage = function(email) {
+window.sendWelcomeMessage = function (email) {
     // Safe robust lookup
     const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
     if (!staff) return alert("Staff record not found.");
     const msg = window.generateWelcomeText(staff.name, staff.dept);
-    
+
     let phone = staff.phone || "";
     phone = phone.replace(/\D/g, ''); // Clean number
     if (phone.length === 10) phone = "91" + phone;
     // Open WhatsApp
-    const url = phone 
-        ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` 
+    const url = phone
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
         : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-        
+
     window.open(url, '_blank');
 };
 
 
 
 
-window.saveNewStaff = async function () {
-    // 1. Capture Inputs
-    const indexStr = document.getElementById('stf-edit-index').value;
-    const isEditMode = (indexStr !== "");
-    const index = isEditMode ? parseInt(indexStr) : -1;
-
-    const name = document.getElementById('stf-name').value.trim();
-    const email = document.getElementById('stf-email').value.trim();
-    const phone = document.getElementById('stf-phone').value.trim();
-    const dept = document.getElementById('stf-dept').value;
-    const designation = document.getElementById('stf-designation').value;
-    const date = document.getElementById('stf-join').value;
-
-    // --- LOGIC: Available Days ---
-    let availableDays = [1, 2, 3, 4, 5, 6]; // Default: Full Availability
-
-    if (designation === "Guest Lecturer") {
-        availableDays = Array.from(document.querySelectorAll('.stf-day-chk:checked')).map(c => parseInt(c.value));
-    }
-
-    // 2. Validation
-    if (!name || !email) return alert("Name and Email are required.");
-
-    // Change Button to Loading State
-    const saveBtn = document.querySelector('#add-staff-modal button[onclick="saveNewStaff()"]');
-    const originalText = saveBtn ? saveBtn.innerText : "Save";
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerText = "Saving...";
-    }
-
-    try {
-        if (isEditMode) {
-            // --- UPDATE EXISTING STAFF ---
-            const oldData = staffData[index];
-            const oldEmail = oldData.email;
-
-            // Email Migration Logic
-            if (oldEmail !== email) {
-                if (staffData.some(s => s.email === email && s !== oldData)) {
-                    throw new Error("This email is already used by another staff member.");
-                }
-                if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) {
-                    throw new Error("Cancelled by user.");
-                }
-
-                await removeStaffAccess(oldEmail);
-                await addStaffAccess(email);
-
-                // Deep Find & Replace in Slots (Migration)
-                let slotsChanged = false;
-                Object.keys(invigilationSlots).forEach(key => {
-                    const slot = invigilationSlots[key];
-                    if (slot.assigned.includes(oldEmail)) { slot.assigned = slot.assigned.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                    if (slot.attendance && slot.attendance.includes(oldEmail)) { slot.attendance = slot.attendance.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                    if (slot.exchangeRequests && slot.exchangeRequests.includes(oldEmail)) { slot.exchangeRequests = slot.exchangeRequests.map(e => e === oldEmail ? email : e); slotsChanged = true; }
-                    if (slot.supervision) {
-                        if (slot.supervision.cs === oldEmail) { slot.supervision.cs = email; slotsChanged = true; }
-                        if (slot.supervision.sas === oldEmail) { slot.supervision.sas = email; slotsChanged = true; }
-                    }
-                    if (slot.unavailable) {
-                        let unavChanged = false;
-                        slot.unavailable = slot.unavailable.map(u => {
-                            if (typeof u === 'string' && u === oldEmail) { unavChanged = true; return email; }
-                            if (typeof u === 'object' && u.email === oldEmail) { unavChanged = true; return { ...u, email: email }; }
-                            return u;
-                        });
-                        if (unavChanged) slotsChanged = true;
-                    }
-                });
-                if (slotsChanged) await syncSlotsToCloud();
-
-                // Migrate Advance Unavailability
-                let advanceChanged = false;
-                Object.keys(advanceUnavailability).forEach(dateKey => {
-                    ['FN', 'AN'].forEach(sess => {
-                        if (advanceUnavailability[dateKey] && advanceUnavailability[dateKey][sess]) {
-                            advanceUnavailability[dateKey][sess] = advanceUnavailability[dateKey][sess].map(u => {
-                                if (u.email === oldEmail) { advanceChanged = true; return { ...u, email: email }; }
-                                return u;
-                            });
-                        }
-                    });
-                });
-                if (advanceChanged) await saveAdvanceUnavailability();
-            }
-
-            logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
-            
-            // Update Local Array
-            staffData[index] = {
-                ...oldData,
-                name, email, phone, dept, designation, joiningDate: date,
-                preferredDays: availableDays
-            };
-
-        } else {
-            // --- ADD NEW STAFF ---
-            if (staffData.some(s => s.email === email)) throw new Error("Staff with this email already exists.");
-
-            const newObj = {
-                name, email, phone, dept, designation, joiningDate: date,
-                dutiesDone: 0, roleHistory: [],
-                preferredDays: availableDays
-            };
-            
-            // 1. Update Permissions First
-            await addStaffAccess(email);
-            
-            // 2. Update Local Data
-            staffData.push(newObj);
-            logActivity("New Staff Added", `Admin added new staff: ${name} (${email}).`);
-        }
-
-        // --- CRITICAL FIX: SYNC BEFORE CLOSING ---
-        await syncStaffToCloud(); 
-        
-        // --- UI Updates ---
-        window.closeModal('add-staff-modal');
-        
-        if (!isAdmin) {
-            window.location.reload();
-        } else {
-            renderStaffTable();
-            updateAdminUI();
-            
-            if (isEditMode) {
-                alert("Staff profile updated successfully.");
-            } else {
-                // ✅ NEW: Prompt to send welcome message immediately
-                if (confirm("✅ New staff added successfully.\n\nDo you want to send the 'Welcome to GVC' WhatsApp message now?")) {
-                    window.sendWelcomeMessage(email);
-                }
-            }
-        }
-
-    } catch (e) {
-        console.error(e);
-        if (e.message !== "Cancelled by user.") {
-            alert("❌ Error: " + e.message);
-        }
-    } finally {
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.innerText = originalText;
-        }
-    }
-}
-
-
-
-
-window.deleteStaff = async function (index) {
-    const staff = staffData[index];
-    if (!staff) return;
-
-    if (confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
-        // Soft Delete
-        staffData[index].status = 'archived';
-        logActivity("Staff Archived", `Admin archived staff member: ${staff.name} (${staff.email}).`);
-        await syncStaffToCloud();
-        await removeStaffAccess(staff.email); // Optional: Block login
-        renderStaffTable();
-        alert("Staff archived successfully.");
-    }
-}
+// [MOVED to features/admin-dashboard.js]
+// - saveNewStaff
+// - deleteStaff
+// - generatedWelcomeText
+// - sendWelcomeMessage
+// 1. Capture Inputs
 window.openRoleAssignmentModal = function (index) {
     const staff = staffData[index];
     const modal = document.getElementById('role-assignment-modal');
@@ -2837,14 +1648,14 @@ window.saveRoleAssignment = async function () {
 
 window.removeRoleFromStaff = async function (sIdx, rIdx) {
     // 1. Capture the role name BEFORE deleting it
-    const roleName = staffData[sIdx].roleHistory[rIdx].role; 
-    
+    const roleName = staffData[sIdx].roleHistory[rIdx].role;
+
     // 2. Delete the role
     staffData[sIdx].roleHistory.splice(rIdx, 1);
-    
+
     // 3. Log it (Now roleName is defined)
     logActivity("Role Removed", `Removed role '${roleName}' from ${staffData[sIdx].name}.`);
-    
+
     await syncStaffToCloud();
     window.closeModal('role-assignment-modal');
     renderStaffTable();
@@ -2877,15 +1688,15 @@ window.openInconvenienceModal = function (key) {
 
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-             const email = (typeof u === 'string') ? u : u.email;
-             // Prevent duplicates
-             if (!allUnavailable.some(existing => existing.email === email)) {
-                 const entry = (typeof u === 'string') ? { email: u, reason: "Leave/OD" } : u;
-                 allUnavailable.push({ ...entry, type: 'Advance' });
-             }
+            const email = (typeof u === 'string') ? u : u.email;
+            // Prevent duplicates
+            if (!allUnavailable.some(existing => existing.email === email)) {
+                const entry = (typeof u === 'string') ? { email: u, reason: "Leave/OD" } : u;
+                allUnavailable.push({ ...entry, type: 'Advance' });
+            }
         });
     }
-    
+
     // ... (Empty check) ...
 
     const list = document.getElementById('inconvenience-list');
@@ -2893,13 +1704,13 @@ window.openInconvenienceModal = function (key) {
 
     allUnavailable.forEach(u => {
         const s = staffData.find(st => st.email === u.email) || { name: u.email };
-        
+
         // --- GOD MODE TAGS ---
         let sourceTag = "";
         if (u.markedBy === 'Admin') {
             sourceTag = `<span class="bg-amber-100 text-amber-700 text-[9px] px-2 py-0.5 rounded border border-amber-200 font-bold ml-2">🛡️ Marked by Admin</span>`;
         } else if (u.markedBy === 'Self') {
-             sourceTag = `<span class="bg-blue-50 text-blue-600 text-[9px] px-2 py-0.5 rounded border border-blue-100 ml-2">👤 Self Reported</span>`;
+            sourceTag = `<span class="bg-blue-50 text-blue-600 text-[9px] px-2 py-0.5 rounded border border-blue-100 ml-2">👤 Self Reported</span>`;
         }
 
         const reason = u.reason || "N/A";
@@ -3428,12 +2239,12 @@ async function volunteer(key, email) {
     if (slot.isAdminLocked) {
         return alert("🚫 Posting Locked! This slot is reserved for manual assignment by the Admin.");
     }
-    
+
     // 2. Standard Lock
     if (slot.isLocked) {
         return alert("🚫 Slot Locked! Contact Admin.");
     }
-    
+
     const [datePart] = key.split(' | ');
 
     // Check conflicts
@@ -3540,7 +2351,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     await syncStaffToCloud();
 
     alert(`Success! You have accepted the duty from ${sellerName}.`);
-    
+
     window.closeModal('day-detail-modal');
     renderStaffCalendar(buyerEmail);
     renderExchangeMarket(buyerEmail);
@@ -3549,7 +2360,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
 
 window.postForExchange = async function (key, email) {
     const slot = invigilationSlots[key];
-    
+
     // 1. ADMIN LOCK CHECK
     if (slot.isAdminLocked) {
         return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. New exchange requests are disabled.");
@@ -3568,7 +2379,7 @@ window.postForExchange = async function (key, email) {
     if (!slot.exchangeRequests.includes(email)) {
         slot.exchangeRequests.push(email);
         logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
-        
+
         try {
             renderStaffCalendar(email);
             if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
@@ -4056,17 +2867,17 @@ window.openCompletedDutiesModal = function (email) {
 
     // --- 4. NEW: INJECT WHATSAPP SHARE BUTTON (ADMIN ONLY) ---
     const footer = document.querySelector('#completed-duties-modal .text-right');
-    
+
     if (footer) {
         let waBtn = '';
-        
+
         // CHECK isAdmin HERE
         if (history.length > 0 && typeof isAdmin !== 'undefined' && isAdmin) {
             // Find staff phone
             const staff = staffData.find(s => s.email === email);
             const phone = staff && staff.phone ? staff.phone.replace(/\D/g, '') : "";
             const validPhone = phone.length >= 10 ? (phone.length === 10 ? "91" + phone : phone) : "";
-            
+
             // Build Message
             let msg = `*Duty History: ${staffName}*\nAY: ${acYear.label}\n----------------\n`;
 
@@ -4074,28 +2885,28 @@ window.openCompletedDutiesModal = function (email) {
                 const [dStr, tStr] = h.key.split(' | ');
                 const [d, m, y] = dStr.split('.'); // Get full date components
                 const shortYear = y.slice(-2);     // Extract last 2 digits (e.g., 2025 -> 25)
-                
+
                 const isAN = (tStr.includes("PM") || tStr.startsWith("12"));
                 const sess = isAN ? "AN" : "FN";
-                
+
                 // Format: DD.MM.YY
-                msg += `${i+1}. ${d}.${m}.${shortYear} (${sess}) - ${h.role}\n`;
+                msg += `${i + 1}. ${d}.${m}.${shortYear} (${sess}) - ${h.role}\n`;
             });
 
 
 
-            
+
             msg += `----------------\n*Total: ${history.length}*`;
-            
+
             const link = validPhone ? `https://wa.me/${validPhone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-            
+
             waBtn = `
                 <a href="${link}" target="_blank" class="inline-flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded transition shadow-sm mr-2 no-underline">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
                     WhatsApp
                 </a>`;
         }
-        
+
         // Update Footer HTML
         footer.innerHTML = `
             ${waBtn}
@@ -4216,53 +3027,53 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 let hasAdjacent = false;
                 const prevDateStr = prevDate.toDateString();
                 const nextDateStr = nextDate.toDateString();
-                
+
                 targetSlots.forEach(t => {
-                   if ((t.date.toDateString() === prevDateStr || t.date.toDateString() === nextDateStr) && t.slot.assigned.includes(s.email)) {
-                       hasAdjacent = true;
-                   }
+                    if ((t.date.toDateString() === prevDateStr || t.date.toDateString() === nextDateStr) && t.slot.assigned.includes(s.email)) {
+                        hasAdjacent = true;
+                    }
                 });
-                
-                if (hasAdjacent) { 
-                    score -= 1000; 
-                    warnings.push("Adjacent"); 
+
+                if (hasAdjacent) {
+                    score -= 1000;
+                    warnings.push("Adjacent");
                 }
 
                 // --- 2. Same Day Rule ---
                 const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
-                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) { 
-                    score -= 2000; 
-                    warnings.push("Same Day"); 
+                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) {
+                    score -= 2000;
+                    warnings.push("Same Day");
                 }
 
                 // --- 3. Weekly Soft Limit ---
                 const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) { 
-                    score -= 5000; 
-                    warnings.push("Max 3/wk"); 
+                if (dutiesThisWeek >= 3) {
+                    score -= 5000;
+                    warnings.push("Max 3/wk");
                 }
 
                 // --- 4. Dept Saturation (Soft Penalty) ---
                 const dTotal = deptCounts[s.dept] || 0;
                 const isSingleFaculty = singleFacultyDepts.has(s.dept);
-                
+
                 if (!isSingleFaculty && dTotal > 1) {
                     const dAssigned = slotDeptCounts[s.dept] || 0;
                     const totalAssignedInSlot = slot.assigned.length + (i + 1);
                     const potentialRatio = (dAssigned + 1) / targetCount;
-                    
+
                     if (potentialRatio > 0.5) {
-                        score -= 4000; 
+                        score -= 4000;
                         warnings.push("Dept Saturation");
                     }
                 }
-                
+
                 // Add score penalty for unassigned staff (who have zero duties) if the pending count is already 0
                 // This is a subtle tie-breaker to prevent over-assigning staff who hit their target (pending=0)
                 if (s.pending <= 0) {
-                     score -= 50;
+                    score -= 50;
                 }
-                
+
                 // Final score rounding for cleaner logs
                 score = Math.round(score);
 
@@ -4285,8 +3096,8 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 assignedCount++;
 
                 // --- ENHANCED LOGGING ---
-                const warningText = choice.warnings.length > 0 
-                    ? `<span class="text-red-500 ml-1">(${choice.warnings.join(", ")})</span>` 
+                const warningText = choice.warnings.length > 0
+                    ? `<span class="text-red-500 ml-1">(${choice.warnings.join(", ")})</span>`
                     : '<span class="text-gray-400 ml-1">(No Breaches)</span>';
 
                 let logEntry = `<div class="text-[10px] border-b border-gray-100/50 pb-1 mb-1">
@@ -4294,7 +3105,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                     <span class="text-gray-500">(Score: ${choice.score})</span> 
                     ${warningText}
                 </div>`;
-                
+
                 if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b border-gray-200/50"><div class="font-bold text-gray-700 text-xs">Auto-Assign Run (${timestamp})</div></div>`;
                 slot.allocationLog += logEntry;
 
@@ -4302,8 +3113,8 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                     logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
                 }
             } else {
-                 // Log failure to fill slot
-                 let logEntry = `<div class="text-[10px] border-b border-gray-100/50 pb-1 mb-1">
+                // Log failure to fill slot
+                let logEntry = `<div class="text-[10px] border-b border-gray-100/50 pb-1 mb-1">
                     <span class="text-red-700 font-bold">Failed:</span> Could not find an eligible staff member for position ${slot.assigned.length + 1}.
                 </div>`;
                 if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b border-gray-200/50"><div class="font-bold text-gray-700 text-xs">Auto-Assign Run (${timestamp})</div></div>`;
@@ -4361,7 +3172,7 @@ async function logActivity(action, details) {
 
         // Create a new document reference in the 'logs' sub-collection
         const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
-        
+
         // Write a new document (Infinite scaling, no 1MB limit)
         await setDoc(doc(logsColRef), {
             t: timestamp,
@@ -4417,18 +3228,18 @@ window.viewActivityLogs = function () {
 
     const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
     // This query is much faster and safer than downloading the whole file
-    const q = query(logsColRef, orderBy("t", "desc"), limit(100)); 
+    const q = query(logsColRef, orderBy("t", "desc"), limit(100));
 
     activityLogUnsubscribe = onSnapshot(q, (snapshot) => {
         const logs = [];
         snapshot.forEach(doc => {
             logs.push(doc.data());
         });
-        
+
         // Cache data for search filtering
-        window.cachedLogs = logs; 
+        window.cachedLogs = logs;
         filterDisplayedLogs(""); // Render all initially
-        
+
     }, (error) => {
         console.error("Log Read Error:", error);
         list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Access Denied or Connection Lost.</div>';
@@ -4456,7 +3267,7 @@ function filterDisplayedLogs(query) {
         const dateObj = new Date(e.t);
         const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
         const dateStr = dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-        
+
         // Handle cases where email might be missing or short
         const userDisplay = e.u ? e.u.split('@')[0] : "Unknown";
 
@@ -4496,7 +3307,7 @@ window.openWeeklyNotificationModal = function (monthStr, weekNum) {
 
     title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
     subtitle.textContent = "Select category to proceed.";
-    list.innerHTML = ''; 
+    list.innerHTML = '';
 
     // Check for duties first
     let totalDuties = 0;
@@ -4573,11 +3384,11 @@ window.openSlotReminderModal = function (key) {
             const [d, t] = slotKey.split(' | ');
             const isAN = (t.includes("PM") || t.startsWith("12"));
             const sessionCode = isAN ? "AN" : "FN";
-            
+
             // ✅ FIX: Calculate Day Name (e.g. MONDAY)
             // Parse DD.MM.YYYY
             const [dayPart, monthPart, yearPart] = d.split('.');
-            const dateObj = new Date(`${yearPart}-${monthPart}-${dayPart}`); 
+            const dateObj = new Date(`${yearPart}-${monthPart}-${dayPart}`);
             const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' }); // e.g. Monday
             slot.assigned.forEach(email => {
                 if (!dailyDuties[email]) dailyDuties[email] = [];
@@ -4682,16 +3493,16 @@ window.openSlotReminderModal = function (key) {
 // ==========================================
 
 // --- 1. TIME HELPER (Global) ---
-window.calculateReportTime = function(timeStr) {
+window.calculateReportTime = function (timeStr) {
     try {
         let [time, mod] = timeStr.split(' ');
         let [h, m] = time.split(':');
         let date = new Date();
-        
+
         let hour = parseInt(h);
         if (mod === 'PM' && hour !== 12) hour += 12;
         if (mod === 'AM' && hour === 12) hour = 0;
-        
+
         date.setHours(hour);
         date.setMinutes(parseInt(m));
 
@@ -4704,29 +3515,29 @@ window.calculateReportTime = function(timeStr) {
         let rMod = rh >= 12 ? 'PM' : 'AM';
         rh = rh % 12;
         rh = rh ? rh : 12; // 0 becomes 12
-        
+
         return `${String(rh).padStart(2, '0')}:${String(rm).padStart(2, '0')} ${rMod}`;
-    } catch (e) { 
+    } catch (e) {
         return timeStr; // Fallback if parsing fails
     }
 };
 
 // --- 2. WEEKLY WHATSAPP (Professional & Official) ---
-window.generateWeeklyWhatsApp = function(name, duties) {
+window.generateWeeklyWhatsApp = function (name, duties) {
     const now = new Date();
     const hours = now.getHours();
-    
+
     let greeting = "Greetings";
     if (hours < 12) greeting = "Good Morning";
     else if (hours < 16) greeting = "Good Afternoon";
     else greeting = "Good Evening";
 
     const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVERNMENT VICTORIA COLLEGE";
-    
+
     let msg = `🏛️ *${college.toUpperCase()}*\n`;
     msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
     msg += `─────────────────────\n\n`;
-    
+
     msg += `${greeting} *${name}*,\n\n`;
     msg += `This is an official intimation regarding your invigilation duties for the upcoming week. Please find the schedule below:\n\n`;
 
@@ -4742,12 +3553,12 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
     msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
-    
+
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
     msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
     msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
     msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
-    
+
     msg += `Thank you for your cooperation.\n\n`;
     msg += `Regards,\n`;
     msg += `*Chief Superintendent*\n`;
@@ -4757,8 +3568,8 @@ window.generateWeeklyWhatsApp = function(name, duties) {
 };
 
 // --- 3. WEEKLY SMS (Concise) ---
-window.generateWeeklySMS = function(firstName, duties) {
-   const shortList = duties.map(d => {
+window.generateWeeklySMS = function (firstName, duties) {
+    const shortList = duties.map(d => {
         const [dd, mm, yyyy] = d.date.split('.');
         const shortDate = `${dd}.${mm}`;
         return `${shortDate}(${d.session})`;
@@ -4768,7 +3579,7 @@ window.generateWeeklySMS = function(firstName, duties) {
 };
 
 // --- 4. DAILY WHATSAPP (Reminder) ---
-window.generateDailyWhatsApp = function(name, dateStr, duties) {
+window.generateDailyWhatsApp = function (name, dateStr, duties) {
     const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Exam Cell";
 
     let dutyList = "";
@@ -4778,27 +3589,27 @@ window.generateDailyWhatsApp = function(name, dateStr, duties) {
     });
 
     return `🔔 *DUTY REMINDER FOR TOMORROW* 🔔\n\n` +
-           `Dear *${name}*,\n\n` +
-           `This is a reminder regarding your invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n` +
-           `*Duty Details:*${dutyList}\n` +
-           `🛑 *INSTRUCTIONS:*\n` +
-           `1. Report to Chief Supdt office *30 mins before* exam.\n` +
-           `2. Keep mobile phones in *silent mode*.\n\n` +
-           `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
-           `Thank you,\n` +
-           `*Chief Superintendent*\n${college}\n` + 
-           `_Automated Alert_`;
+        `Dear *${name}*,\n\n` +
+        `This is a reminder regarding your invigilation duty scheduled for tomorrow, *${dateStr}*.\n\n` +
+        `*Duty Details:*${dutyList}\n` +
+        `🛑 *INSTRUCTIONS:*\n` +
+        `1. Report to Chief Supdt office *30 mins before* exam.\n` +
+        `2. Keep mobile phones in *silent mode*.\n\n` +
+        `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
+        `Thank you,\n` +
+        `*Chief Superintendent*\n${college}\n` +
+        `_Automated Alert_`;
 };
 
 // --- 5. DAILY SMS (Concise) ---
-window.generateDailySMS = function(firstName, dateStr, duties) {
+window.generateDailySMS = function (firstName, dateStr, duties) {
     const sessions = duties.map(d => d.session).join('&');
     const firstTime = window.calculateReportTime(duties[0].time);
     return `${firstName}: Duty Tmrw ${dateStr} (${sessions}). Report ${firstTime}. Link: https://examflow-de08f.web.app/invigilation.html -CS`;
 };
 
 // --- 6. PROFESSIONAL EMAIL GENERATOR (Unified) ---
-window.generateProfessionalEmail = function(name, dutiesArray, title) {
+window.generateProfessionalEmail = function (name, dutiesArray, title) {
     const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
 
     let rows = dutiesArray.map(d => {
@@ -5286,7 +4097,7 @@ window.editStaff = function (index) {
 
 
 // --- HELPER: Generate Professional HTML Email ---
-window.generateProfessionalEmail = function(name, dutiesArray, title) {
+window.generateProfessionalEmail = function (name, dutiesArray, title) {
     const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
 
     let rows = dutiesArray.map(d => {
@@ -5391,13 +4202,13 @@ window.sendBulkEmails = async function (btnId) {
     if (statusText) statusText.classList.remove('hidden');
 
     let sentCount = 0;
-    
+
     for (let i = 0; i < window.currentEmailQueue.length; i++) {
         const item = window.currentEmailQueue[i];
-        
+
         // Update Status
-        if (statusText) statusText.textContent = `Sending ${i+1} of ${window.currentEmailQueue.length} to ${item.name}...`;
-        if (progressFill) progressFill.style.width = `${Math.round(((i+1) / window.currentEmailQueue.length) * 100)}%`;
+        if (statusText) statusText.textContent = `Sending ${i + 1} of ${window.currentEmailQueue.length} to ${item.name}...`;
+        if (progressFill) progressFill.style.width = `${Math.round(((i + 1) / window.currentEmailQueue.length) * 100)}%`;
 
         // Update Individual Button Row
         const rowBtn = document.getElementById(item.btnId);
@@ -5426,9 +4237,9 @@ window.sendBulkEmails = async function (btnId) {
                 rowBtn.classList.add('bg-green-600', 'cursor-default');
             }
             sentCount++;
-            
+
             // Delay
-            await new Promise(r => setTimeout(r, 800)); 
+            await new Promise(r => setTimeout(r, 800));
 
         } catch (e) {
             console.error(e);
@@ -5441,7 +4252,7 @@ window.sendBulkEmails = async function (btnId) {
 
     if (statusText) statusText.textContent = `Done! Sent ${sentCount} emails.`;
     alert(`Batch Process Complete.\nSent: ${sentCount}`);
-    
+
     // Reset (Optional)
     // btn.classList.remove('hidden');
     // if (progressBar) progressBar.classList.add('hidden');
@@ -5690,7 +4501,7 @@ window.handleMasterRestore = function (input) {
             }
 
             // 2. Safety Check
-            const confirmMsg = (mode === '1') 
+            const confirmMsg = (mode === '1')
                 ? "⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE ALL system data (Staff, Settings, Duties).\nThis cannot be undone.\n\nType 'CONFIRM' to proceed:"
                 : "⚠️ PARTIAL RESTORE ⚠️\n\nThis will OVERWRITE duty assignments and unavailability in the current schedule using data from the backup.\n\nType 'CONFIRM' to proceed:";
 
@@ -5726,10 +4537,10 @@ window.handleMasterRestore = function (input) {
                     invigGlobalTarget: globalDutyTarget,
                     invigGoogleScriptUrl: googleScriptUrl
                 };
-            } 
+            }
             else {
                 // --- PARTIAL RESTORE (Volunteers & Inconvenience) ---
-                
+
                 // 1. Restore Advance Unavailability (General Leave)
                 if (d.advanceUnavailability) {
                     advanceUnavailability = d.advanceUnavailability;
@@ -5741,16 +4552,16 @@ window.handleMasterRestore = function (input) {
 
                 Object.keys(backupSlots).forEach(key => {
                     const bSlot = backupSlots[key];
-                    
+
                     // Only restore if the slot exists in the current system (e.g. correct date/time matches)
                     if (invigilationSlots[key]) {
                         invigilationSlots[key].assigned = bSlot.assigned || [];
                         invigilationSlots[key].unavailable = bSlot.unavailable || [];
                         invigilationSlots[key].exchangeRequests = bSlot.exchangeRequests || [];
-                        
+
                         // Optional: Restore attendance if needed, otherwise skip
                         // invigilationSlots[key].attendance = bSlot.attendance || [];
-                        
+
                         restoreCount++;
                     }
                 });
@@ -6034,8 +4845,8 @@ window.filterManualStaff = function () {
 
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
-    const requiredCount = parseInt(slot.required) || 0; 
-    
+    const requiredCount = parseInt(slot.required) || 0;
+
     // --- 1. DETERMINE MODE ---
     // We allow opening even if NOT locked, but restrict actions
     const isFullEditMode = slot.isAdminLocked;
@@ -6101,7 +4912,7 @@ window.openManualAllocationModal = function (key) {
         const sDateString = sDate.toDateString();
         const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
         const sWeek = getWeekOfMonth(sDate);
-        
+
         (sSlot.assigned || []).forEach(email => {
             if (staffContext[email]) {
                 if (sMonth === monthStr && sWeek === weekNum) staffContext[email].weekCount++;
@@ -6124,7 +4935,7 @@ window.openManualAllocationModal = function (key) {
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
-            
+
             // Dept Saturation
             const assignedList = slot.assigned || [];
             const myDeptCount = assignedList.filter(e => {
@@ -6132,7 +4943,7 @@ window.openManualAllocationModal = function (key) {
                 return m && m.dept === s.dept;
             }).length;
             const totalInDept = staffData.filter(st => st.dept === s.dept).length;
-            
+
             if (totalInDept > 1 && ((myDeptCount + 1) / (assignedList.length + 1) > 0.5)) {
                 score -= 500;
                 badges.push("Dept Saturation");
@@ -6150,9 +4961,9 @@ window.openManualAllocationModal = function (key) {
 
     const assignedSet = new Set(slot.assigned || []);
     let currentSelectionCount = 0;
-    
+
     let preFilledCount = 0;
-    rankedStaff.forEach(s => { if(assignedSet.has(s.email)) preFilledCount++; });
+    rankedStaff.forEach(s => { if (assignedSet.has(s.email)) preFilledCount++; });
     let slotsToAutoFill = Math.max(0, requiredCount - preFilledCount);
 
     rankedStaff.forEach(s => {
@@ -6215,7 +5026,7 @@ window.openManualAllocationModal = function (key) {
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
+    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({ ...u, type: 'Session' }));
 
     // Merge Advance
     const [dateStr, timeStr] = key.split(' | ');
@@ -6225,11 +5036,11 @@ window.openManualAllocationModal = function (key) {
 
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
-             const email = (typeof u === 'string') ? u : u.email;
-             if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === email)) {
-                 const entry = (typeof u === 'string') ? { email: u, reason: "Advance Leave" } : u;
-                 allUnavailable.push({...entry, type: 'Advance'});
-             }
+            const email = (typeof u === 'string') ? u : u.email;
+            if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === email)) {
+                const entry = (typeof u === 'string') ? { email: u, reason: "Advance Leave" } : u;
+                allUnavailable.push({ ...entry, type: 'Advance' });
+            }
         });
     }
 
@@ -6270,7 +5081,7 @@ window.updateManualCounts = function () {
 
 window.saveManualAllocation = async function () {
     const key = document.getElementById('manual-session-key').value;
-    
+
     // --- SECURITY CHECK ---
     if (!invigilationSlots[key].isAdminLocked) {
         return alert("⚠️ Security Alert\n\nThis slot is currently OPEN. You must 'Lock (🛡️)' it before you can manually edit staff assignments.");
@@ -6285,17 +5096,17 @@ window.saveManualAllocation = async function () {
 
         let logHtml = "";
         if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
-             // ... (Keep your existing log generation logic here) ...
-             // Re-paste the logic from previous turn if needed, or just wrap this check around existing function body
-             logHtml = `
+            // ... (Keep your existing log generation logic here) ...
+            // Re-paste the logic from previous turn if needed, or just wrap this check around existing function body
+            logHtml = `
                 <div class="mb-3 pb-2 border-b border-gray-200">
                     <div class="font-bold text-gray-800">Assignment Logic Report</div>
                     <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
                 </div>
                 <div class="mb-3">
                     <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>`;
-             
-             selectedEmails.forEach((email, i) => {
+
+            selectedEmails.forEach((email, i) => {
                 const rankData = lastManualRanking.find(s => s.email === email);
                 if (rankData) {
                     const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
@@ -6321,7 +5132,7 @@ window.saveManualAllocation = async function () {
                 updateAssignmentMeta(slot, email, 'ADMIN');
             }
         });
-        
+
         if (slot.assignmentMeta) {
             Object.keys(slot.assignmentMeta).forEach(e => {
                 if (!selectedEmails.includes(e)) delete slot.assignmentMeta[e];
@@ -7013,16 +5824,16 @@ function renderStaffUpcomingSummary(email) {
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         const date = parseDate(key);
-        
+
         // Find the specific entry object for this user
-        const unavEntry = slot.unavailable 
-            ? slot.unavailable.find(u => (typeof u === 'string' ? u === email : u.email === email)) 
+        const unavEntry = slot.unavailable
+            ? slot.unavailable.find(u => (typeof u === 'string' ? u === email : u.email === email))
             : null;
 
         if (date >= today && unavEntry) {
             const [dStr, tStr] = key.split(' | ');
             const sess = tStr.includes("PM") || tStr.startsWith("12") ? "AN" : "FN";
-            
+
             // Check for Admin Tag
             const markedByAdmin = (typeof unavEntry === 'object' && unavEntry.markedBy === 'Admin');
             const tag = markedByAdmin ? " (🛡️ By Admin)" : "";
@@ -7036,10 +5847,10 @@ function renderStaffUpcomingSummary(email) {
         const d = parseDate(dateStr + " | 00:00 AM");
         if (d >= today) {
             const entry = advanceUnavailability[dateStr];
-            
+
             // Helpers to find specific entry objects
             const findEntry = (list) => list ? list.find(u => (typeof u === 'string' ? u === email : u.email === email)) : null;
-            
+
             const fnEntry = findEntry(entry.FN);
             const anEntry = findEntry(entry.AN);
 
@@ -7263,7 +6074,7 @@ window.openHodMonitorModal = function () {
             const date = new Date(y, m - 1, d);
 
             // 2. Validate Date Object
-            if (isNaN(date.getTime())) return; 
+            if (isNaN(date.getTime())) return;
             if (date < today) return;
 
             const dayEntry = getDayEntry(date, dateStr);
@@ -7386,7 +6197,7 @@ window.openDashboardInvigModal = function (sessionKey) {
 
         sortedEmails.forEach(email => {
             const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "Unknown", phone: "" };
-            
+
             // GOD MODE: Get Badge
             const meta = slot.assignmentMeta ? slot.assignmentMeta[email] : null;
             const sourceBadge = meta ? getSourceBadge(meta.source) : '';
@@ -7520,11 +6331,11 @@ function isActionAllowed(dateInput) {
 
 // NOTE: 'vacationExtraHolidays', 'vacationStart', 'vacationEnd' are defined in Global State at top.
 
-window.openVacationReportModal = function() {
+window.openVacationReportModal = function () {
     // 1. Set Inputs from Saved State (or defaults)
     const today = new Date();
     const year = today.getFullYear();
-    
+
     // Use saved values if they exist, otherwise default to April-May
     const startVal = vacationStart || `${year}-04-01`;
     const endVal = vacationEnd || `${year}-05-31`;
@@ -7538,11 +6349,11 @@ window.openVacationReportModal = function() {
     // 2. Attach Auto-Save Listeners
     startInput.onchange = saveVacationConfig;
     endInput.onchange = saveVacationConfig;
-    
+
     // 3. Clear Input & Render
     document.getElementById('vac-holiday-input').value = "";
     renderVacationHolidays();
-    
+
     window.openModal('vacation-report-modal');
 }
 
@@ -7550,7 +6361,7 @@ window.openVacationReportModal = function() {
 async function saveVacationConfig() {
     const s = document.getElementById('vac-start').value;
     const e = document.getElementById('vac-end').value;
-    
+
     // Update Global State
     vacationStart = s;
     vacationEnd = e;
@@ -7565,15 +6376,15 @@ async function saveVacationConfig() {
         const ref = doc(db, "colleges", currentCollegeId);
         await updateDoc(ref, { invigVacationConfig: JSON.stringify(config) });
         // Optional: console.log("Vacation config saved.");
-    } catch(err) {
+    } catch (err) {
         console.error("Failed to save vacation config", err);
     }
 }
 
-window.addVacationHoliday = async function() {
+window.addVacationHoliday = async function () {
     const input = document.getElementById('vac-holiday-input');
     const dateVal = input.value; // YYYY-MM-DD
-    
+
     if (!dateVal) return;
 
     if (vacationExtraHolidays.has(dateVal)) {
@@ -7584,11 +6395,11 @@ window.addVacationHoliday = async function() {
     vacationExtraHolidays.add(dateVal);
     renderVacationHolidays();
     input.value = ""; // Clear input
-    
+
     await saveVacationConfig(); // Save to Cloud
 }
 
-window.removeVacationHoliday = async function(dateStr) {
+window.removeVacationHoliday = async function (dateStr) {
     vacationExtraHolidays.delete(dateStr);
     renderVacationHolidays();
     await saveVacationConfig(); // Save to Cloud
@@ -7621,7 +6432,7 @@ function renderVacationHolidays() {
     });
 }
 
-window.generateVacationReport = function() {
+window.generateVacationReport = function () {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
@@ -7629,7 +6440,7 @@ window.generateVacationReport = function() {
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
-    
+
     // Helper: Check if date is Holiday
     const isHoliday = (d) => {
         const day = d.getDay();
@@ -7655,14 +6466,14 @@ window.generateVacationReport = function() {
         Object.keys(invigilationSlots).forEach(key => {
             const slot = invigilationSlots[key];
             const dateObj = parseDate(key);
-            
+
             // Check Range & Attendance
             if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
                 // Determine Session
                 const [dStr, tStr] = key.split(' | ');
                 const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
                 const sessCode = isAN ? "AN" : "FN";
-                
+
                 // Store raw data for sorting
                 rawSessions.push({
                     dateObj: dateObj,
@@ -7682,7 +6493,7 @@ window.generateVacationReport = function() {
 
         // 3. SORT DATES & SESSIONS
         dutyDates.sort((a, b) => a - b);
-        
+
         // Sort sessions: Date ASC, then FN before AN
         rawSessions.sort((a, b) => {
             const timeDiff = a.dateObj - b.dateObj;
@@ -7692,10 +6503,10 @@ window.generateVacationReport = function() {
 
         // 4. CALCULATE INTERVENING HOLIDAYS
         const interveningDates = [];
-        
+
         for (let i = 0; i < dutyDates.length - 1; i++) {
             const current = dutyDates[i];
-            const next = dutyDates[i+1];
+            const next = dutyDates[i + 1];
 
             // Get dates between
             let temp = new Date(current);
@@ -7707,7 +6518,7 @@ window.generateVacationReport = function() {
             while (temp < next) {
                 if (!isHoliday(temp)) {
                     isGapValid = false; // Gap broken by a working day
-                    break; 
+                    break;
                 }
                 gapDates.push(new Date(temp));
                 temp.setDate(temp.getDate() + 1);
@@ -7723,7 +6534,7 @@ window.generateVacationReport = function() {
         const dutyDaysCount = dutyDates.length;
         const interveningCount = interveningDates.length;
         const totalEligible = dutyDaysCount + interveningCount;
-        
+
         // Formats
         const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
         const sessionsStr = rawSessions.map(s => s.str).join(', ');
@@ -7748,11 +6559,11 @@ window.generateVacationReport = function() {
     reportData.sort((a, b) => {
         const deptA = (a.dept || "").toLowerCase();
         const deptB = (b.dept || "").toLowerCase();
-        
+
         // Primary Sort: Department
         if (deptA < deptB) return -1;
         if (deptA > deptB) return 1;
-        
+
         // Secondary Sort: Name
         return a.name.localeCompare(b.name);
     });
@@ -7772,7 +6583,7 @@ function printVacationReport(data, start, end) {
     data.forEach((row, i) => {
         rowsHtml += `
             <tr>
-                <td style="text-align:center;">${i+1}</td>
+                <td style="text-align:center;">${i + 1}</td>
                 <td>
                     <b>${row.name}</b><br>
                     ${row.desig}<br>
@@ -7861,9 +6672,9 @@ function printVacationReport(data, start, end) {
 // 🎓 NEW ACADEMIC YEAR LOGIC
 // ==========================================
 
-window.startNewAcademicYear = async function() {
+window.startNewAcademicYear = async function () {
     // 1. Initial Warning
-    if(!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
+    if (!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
         return;
     }
 
@@ -7877,16 +6688,16 @@ window.startNewAcademicYear = async function() {
     }
 
     const btn = document.querySelector('button[onclick="startNewAcademicYear()"]');
-    if(btn) {
+    if (btn) {
         btn.disabled = true;
         btn.innerHTML = "♻️ Resetting System...";
     }
-    
+
     updateSyncStatus("Wiping Session Data...", "neutral");
 
     try {
         // 4. Reset Local State (Preserving Profiles & Configs)
-        
+
         // A. Calculate New Start Date (June 1st of Current Cycle)
         const acYear = getCurrentAcademicYear();
         const y = acYear.start.getFullYear();
@@ -7897,7 +6708,7 @@ window.startNewAcademicYear = async function() {
         // B. Reset Staff Counters & Dates
         staffData = staffData.map(s => ({
             ...s,
-            dutiesDone: 0, 
+            dutiesDone: 0,
             dutiesAssigned: 0,
             joiningDate: newJoinDate, // <--- RESET JOIN DATE
             // Keep: name, email, phone, dept, designation, roleHistory, preferredDays
@@ -7912,7 +6723,7 @@ window.startNewAcademicYear = async function() {
 
         // 5. Update Main Cloud Document
         const collegeRef = doc(db, "colleges", currentCollegeId);
-        
+
         // Update specific fields (Configurations like Roles/Targets are PRESERVED automatically by updateDoc)
         await updateDoc(collegeRef, {
             examStaffData: JSON.stringify(staffData), // Save the reset staff list
@@ -7932,14 +6743,14 @@ window.startNewAcademicYear = async function() {
 
         updateSyncStatus("Year Started", "success");
         alert(`✅ New Academic Year Started Successfully.\n\n- All staff joining dates reset to ${newJoinDate}.\n- Duty counts reset to 0.\n- Previous sessions & logs cleared.`);
-        
+
         window.location.reload();
 
     } catch (e) {
         console.error(e);
         alert("Error resetting system: " + e.message);
         updateSyncStatus("Reset Failed", "error");
-        if(btn) {
+        if (btn) {
             btn.disabled = false;
             btn.innerHTML = "⚠️ Start New Academic Year";
         }
@@ -7950,16 +6761,16 @@ window.startNewAcademicYear = async function() {
 // ==========================================
 // 🟢 LIVE STAFF PRESENCE SYSTEM (Final Corrected Version)
 // ==========================================
-let globalLiveUsers = {}; 
+let globalLiveUsers = {};
 let presenceUnsubscribe = null;
 
 // OPTIMIZED: Only fetches users active in the last 24 hours
-window.initLivePresence = function(myEmail, myName, isAdmin) {
+window.initLivePresence = function (myEmail, myName, isAdmin) {
     if (!currentCollegeId || !myEmail) return;
 
     const myRef = doc(db, "colleges", currentCollegeId, "live_presence", myEmail);
     const platform = window.innerWidth < 768 ? "Mobile" : "Desktop";
-    
+
     const sendHeartbeat = (statusOverride) => {
         const status = statusOverride || 'online';
         setDoc(myRef, {
@@ -7974,7 +6785,7 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
     sendHeartbeat('online');
     setInterval(() => {
         if (document.visibilityState === 'visible') sendHeartbeat('online');
-    }, 5 * 60 * 1000); 
+    }, 5 * 60 * 1000);
 
     window.addEventListener('beforeunload', () => sendHeartbeat('offline'));
     document.addEventListener('visibilitychange', () => {
@@ -7985,22 +6796,22 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
     // --- ADMIN LISTENER OPTIMIZATION ---
     if (isAdmin) {
         console.log("🟢 Live Presence: Admin Mode (Optimized Listener)");
-        
+
         // 1. Calculate Timestamp for "24 Hours Ago"
         // We only want to download docs of people who have been active recently.
         const yesterday = new Date();
         yesterday.setHours(yesterday.getHours() - 24);
 
         const presenceCol = collection(db, "colleges", currentCollegeId, "live_presence");
-        
+
         // 2. Create Query: lastSeen > yesterday
         const q = query(presenceCol, where("lastSeen", ">", yesterday));
 
         if (presenceUnsubscribe) presenceUnsubscribe();
-        
+
         presenceUnsubscribe = onSnapshot(q, (snapshot) => {
             const now = Date.now();
-            globalLiveUsers = {}; 
+            globalLiveUsers = {};
             let onlineCount = 0;
 
             snapshot.forEach(doc => {
@@ -8012,8 +6823,8 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
                 const diffMinutes = (now - lastSeenTime) / 1000 / 60;
 
                 if (data.status === 'offline') {
-                     globalLiveUsers[data.email] = { status: 'offline', device: data.device || 'Desktop' };
-                } else if (diffMinutes < 6) { 
+                    globalLiveUsers[data.email] = { status: 'offline', device: data.device || 'Desktop' };
+                } else if (diffMinutes < 6) {
                     globalLiveUsers[data.email] = { status: data.status || 'online', device: data.device || 'Desktop' };
                     if (data.status !== 'idle') onlineCount++;
                 } else if (diffMinutes < 30) {
@@ -8024,12 +6835,12 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
             });
 
             updateLiveStaffWidget(onlineCount);
-            
+
             // Debounced Render (prevent spam updates)
             if (window.renderTimeout) clearTimeout(window.renderTimeout);
             window.renderTimeout = setTimeout(() => {
                 if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-                if (typeof renderStaffTable === 'function') renderStaffTable(); 
+                if (typeof renderStaffTable === 'function') renderStaffTable();
             }, 500);
         });
 
@@ -8039,14 +6850,14 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
 };
 
 // 2. HELPER: Get Status Dot
-window.getLiveStatusIcon = function(email) {
+window.getLiveStatusIcon = function (email) {
     const user = globalLiveUsers[email];
     if (!user) return `<span class="text-gray-300 opacity-20" title="Offline">⚪</span>`;
 
     if (user.status === 'online') {
         const icon = user.device === 'Mobile' ? '📱' : '🟢';
         return `<span class="animate-pulse text-green-500 font-bold" title="Online now">${icon}</span>`;
-    } 
+    }
     if (user.status === 'idle') {
         return `<span class="text-yellow-500" title="Idle">🟡</span>`;
     }
@@ -8056,7 +6867,7 @@ window.getLiveStatusIcon = function(email) {
 // 3. UI: Floating Widget
 function updateLiveStaffWidget(count) {
     let widget = document.getElementById('live-staff-widget');
-    
+
     if (!widget) {
         widget = document.createElement('div');
         widget.id = 'live-staff-widget';
@@ -8080,13 +6891,13 @@ function updateLiveStaffWidget(count) {
 }
 
 // 4. UI: Show List Modal
-window.showLiveStaffModal = function() {
+window.showLiveStaffModal = function () {
     const online = [];
     Object.keys(globalLiveUsers).forEach(email => {
         const u = globalLiveUsers[email];
         const staffRec = staffData.find(s => s.email === email);
         const name = staffRec ? staffRec.name : (u.name || email.split('@')[0]);
-        if (u.status === 'online') online.push({name, device: u.device});
+        if (u.status === 'online') online.push({ name, device: u.device });
     });
 
     let html = `
@@ -8104,7 +6915,7 @@ window.showLiveStaffModal = function() {
         </div>
     `;
 
-    if(typeof UiModal !== 'undefined') UiModal.show("Live Status", html);
+    if (typeof UiModal !== 'undefined') UiModal.show("Live Status", html);
     else alert(online.map(o => o.name).join('\n'));
 };
 // ==========================================
@@ -8119,7 +6930,7 @@ window.downloadAttendancePDF = function () {
     const doc = new jsPDF();
     const acYear = getCurrentAcademicYear();
     const collegeName = collegeData.examCollegeName || "Government Victoria College";
-    
+
     // --- Data Gathering (Same as Print) ---
     const facultyMap = new Map();
     const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
@@ -8168,14 +6979,14 @@ window.downloadAttendancePDF = function () {
     // Header
     doc.setFillColor(30, 41, 59); // Dark Blue Header
     doc.rect(0, 0, 210, 25, 'F');
-    
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.text(collegeName.toUpperCase(), 14, 10);
-    
+
     doc.setFontSize(10);
     doc.text(`Faculty Attendance Register: AY ${acYear.label}`, 14, 18);
-    
+
     // Table
     doc.autoTable({
         head: [['#', 'Name', 'Dept', 'Desig', 'Count', 'Sessions Attended']],
@@ -8204,12 +7015,12 @@ window.downloadAttendancePDF = function () {
 
 
 // 2. VACATION REPORT PDF (Corrected: 7 Columns)
-window.downloadVacationPDF = function() {
+window.downloadVacationPDF = function () {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
     if (!startStr || !endStr) return alert("Please select start and end dates.");
-    
+
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
 
@@ -8235,13 +7046,13 @@ window.downloadVacationPDF = function() {
         Object.keys(invigilationSlots).forEach(key => {
             const slot = invigilationSlots[key];
             const dateObj = parseDate(key);
-            
+
             // Check Range & Attendance
             if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
                 const [dStr, tStr] = key.split(' | ');
                 const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
                 const sessCode = isAN ? "AN" : "FN";
-                
+
                 // Add Session Detail
                 rawSessions.push({
                     dateObj: dateObj,
@@ -8271,7 +7082,7 @@ window.downloadVacationPDF = function() {
         const interveningDates = [];
         for (let i = 0; i < dutyDates.length - 1; i++) {
             const current = dutyDates[i];
-            const next = dutyDates[i+1];
+            const next = dutyDates[i + 1];
             let temp = new Date(current); temp.setDate(temp.getDate() + 1);
             const gapDates = [];
             let isGapValid = true;
@@ -8311,17 +7122,17 @@ window.downloadVacationPDF = function() {
 
     // --- 2. GENERATE PDF ---
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: "landscape" }); 
+    const doc = new jsPDF({ orientation: "landscape" });
     const collegeName = collegeData.examCollegeName || "College";
 
     // Header
     doc.setFillColor(30, 41, 59);
     doc.rect(0, 0, 297, 25, 'F');
-    
+
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.text(collegeName.toUpperCase(), 14, 10);
-    
+
     doc.setFontSize(12);
     doc.text(`Vacation Duty & Earned Leave Report`, 14, 18);
     doc.text(`${startStr} to ${endStr}`, 240, 18);
@@ -8342,15 +7153,15 @@ window.downloadVacationPDF = function() {
         body: tableBody,
         startY: 30,
         theme: 'grid',
-        headStyles: { 
-            fillColor: [30, 41, 59], 
-            textColor: 255, 
+        headStyles: {
+            fillColor: [30, 41, 59],
+            textColor: 255,
             fontStyle: 'bold',
             halign: 'center'
         },
-        styles: { 
-            fontSize: 9, 
-            cellPadding: 3, 
+        styles: {
+            fontSize: 9,
+            cellPadding: 3,
             valign: 'top', // Top align for multiline text
             overflow: 'linebreak'
         },
@@ -8377,12 +7188,12 @@ window.downloadVacationPDF = function() {
 
 //handles the "View List" click from the ghost card.
 
-window.openGhostUnavailabilityModal = function(title, encodedList) {
+window.openGhostUnavailabilityModal = function (title, encodedList) {
     try {
         const list = JSON.parse(decodeURIComponent(encodedList));
-        
+
         let htmlContent = `<div class="p-4"><h3 class="font-bold text-lg mb-3 border-b pb-2">⛔ Unavailability: ${title}</h3>`;
-        
+
         if (list.length === 0) {
             htmlContent += `<p class="text-gray-500">No records found.</p>`;
         } else {
@@ -8391,7 +7202,7 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
                 const email = (typeof u === 'string') ? u : u.email;
                 const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
                 const name = getNameFromEmail(email) || email;
-                
+
                 htmlContent += `
                     <div class="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100">
                         <span class="font-bold text-red-900 text-sm">${name}</span>
@@ -8400,7 +7211,7 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
             });
             htmlContent += `</div>`;
         }
-        
+
         htmlContent += `<div class="mt-4 text-right"><button onclick="closeModal('custom-ghost-modal')" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700">Close</button></div></div>`;
 
         // Use a generic modal container if available, or create one dynamically
@@ -8412,7 +7223,7 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
             modal.innerHTML = `<div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden transform transition-all" id="custom-ghost-content"></div>`;
             document.body.appendChild(modal);
         }
-        
+
         document.getElementById('custom-ghost-content').innerHTML = htmlContent;
         modal.classList.remove('hidden');
 
@@ -8422,9 +7233,9 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
 };
 
 // Helper to close the specific ghost modal
-window.closeModal = function(id) {
+window.closeModal = function (id) {
     const m = document.getElementById(id);
-    if(m) m.classList.add('hidden');
+    if (m) m.classList.add('hidden');
 };
 
 
@@ -8439,10 +7250,10 @@ window.currentEmailQueue = [];
 
 
 // --- 1. STAFF BULK MESSAGING UI (Fixed) ---
-window.triggerBulkStaffEmail = function(monthStr, weekNum) {
+window.triggerBulkStaffEmail = function (monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
-    
+
     subtitle.textContent = "Review drafts. Use 'Send All' to auto-email via System.";
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
@@ -8464,7 +7275,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
             const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("13:") || tStr.startsWith("14:"));
             const sessionCode = isAN ? "AN" : "FN";
             const dayName = date.toLocaleString('en-us', { weekday: 'short' });
-            
+
             invigilationSlots[key].assigned.forEach(email => {
                 if (!dutiesByEmail[email]) dutiesByEmail[email] = [];
                 dutiesByEmail[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
@@ -8494,7 +7305,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('<br>'); // Use <br> for HTML email
         const subject = `Exam Duty Assignment - Week ${weekNum}`;
         const btnId = `email-btn-${index}`;
-        
+
         // Use the HTML Email Generator Helper (Defined below)
         const bodyHTML = window.generateHtmlEmailBody(name, duties);
 
@@ -8540,11 +7351,11 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     window.currentEmailQueue.forEach((item, index) => {
         const staff = staffData.find(s => s.email === item.email);
         const phone = staff ? (staff.phone || "") : "";
-        
+
         // WA Logic
         let waLink = "#";
         let waClass = "opacity-30 cursor-not-allowed grayscale bg-gray-100 text-gray-400";
-        
+
         if (phone) {
             let cleanNum = phone.replace(/\D/g, '');
             if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
@@ -8593,7 +7404,7 @@ window.currentDeptEmailQueue = [];
 
 
 // --- 2. DEPARTMENT BULK MESSAGING UI (APPS SCRIPT) ---
-window.triggerBulkDeptEmail = function(monthStr, weekNum) {
+window.triggerBulkDeptEmail = function (monthStr, weekNum) {
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
 
@@ -8601,9 +7412,9 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     // 1. Gather Raw Duty Data by Dept
-    const rawDeptDuties = {}; 
+    const rawDeptDuties = {};
     window.currentDeptEmailQueue = []; // Reset Queue
-    
+
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
@@ -8634,10 +7445,10 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 
     // 2. Process Departments
     const sortedDepts = Object.keys(rawDeptDuties).sort();
-    
+
     sortedDepts.forEach((dept, index) => {
         const entries = rawDeptDuties[dept];
-        
+
         // 2.1 GROUP BY FACULTY NAME (Crucial Step for Generator)
         // Transform [ {name:'A',...}, {name:'A',...} ]  -->  [ {name:'A', duties:[...]} ]
         const facultyMap = {};
@@ -8729,10 +7540,10 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 
 
 // --- HELPER: Generate Weekly WhatsApp (Professional + Exchange Link) ---
-window.generateWeeklyWhatsApp = function(name, duties) {
+window.generateWeeklyWhatsApp = function (name, duties) {
     const now = new Date();
     const hours = now.getHours();
-    
+
     // 1. Polite Time-Based Greeting
     let greeting = "Greetings";
     if (hours < 12) greeting = "Good Morning";
@@ -8741,12 +7552,12 @@ window.generateWeeklyWhatsApp = function(name, duties) {
 
     // 2. Get College Name
     const college = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "GOVERNMENT VICTORIA COLLEGE";
-    
+
     // 3. Build Message
     let msg = `🏛️ *${college.toUpperCase()}*\n`;
     msg += `📝 *INVIGILATION DUTY INTIMATION*\n`;
     msg += `─────────────────────\n\n`;
-    
+
     msg += `${greeting} *${name}*,\n\n`;
     msg += `This is an official intimation regarding your invigilation duties for the upcoming week. Please find the schedule below:\n\n`;
 
@@ -8766,13 +7577,13 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
     msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
-    
+
     // 6. Exchange Instructions & Link
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
     msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
     msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
     msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
-    
+
     // 7. Footer
     msg += `Thank you for your cooperation.\n\n`;
     msg += `Regards,\n`;
@@ -8787,7 +7598,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
 // --- DEPARTMENT SENDING LOGIC (API) ---
 
 // 1. Single Send
-window.sendSingleDeptEmail = async function(index) {
+window.sendSingleDeptEmail = async function (index) {
     const item = window.currentDeptEmailQueue[index];
     if (!item || !item.email) return;
 
@@ -8815,13 +7626,13 @@ window.sendSingleDeptEmail = async function(index) {
 
         // Success Update
         item.status = 'sent';
-        if (btn) { 
-            btn.innerHTML = "✅ Sent"; 
+        if (btn) {
+            btn.innerHTML = "✅ Sent";
             btn.classList.remove('bg-teal-50', 'text-teal-700', 'hover:bg-teal-600', 'hover:text-white');
             btn.classList.add('bg-green-100', 'text-green-800', 'border-green-200');
         }
         if (status) { status.textContent = "Sent via System"; status.classList.add('text-green-600'); }
-        
+
         // Log it
         if (typeof logActivity === 'function') logActivity("Dept Email Sent", `Sent consolidated list to ${item.dept}`);
 
@@ -8834,7 +7645,7 @@ window.sendSingleDeptEmail = async function(index) {
 };
 
 // 2. Bulk Send
-window.sendBulkDeptEmails = async function() {
+window.sendBulkDeptEmails = async function () {
     const pendingItems = window.currentDeptEmailQueue.filter(i => i.status === 'pending' && i.email);
 
     if (pendingItems.length === 0) return alert("No valid pending emails to send.");
@@ -8845,30 +7656,30 @@ window.sendBulkDeptEmails = async function() {
     const progressBar = document.getElementById('dept-progress-bar');
     const progressFill = document.getElementById('dept-progress-fill');
     const statusText = document.getElementById('dept-status-text');
-    
+
     // Allow cancellation
-    const isCancelled = { value: false }; 
+    const isCancelled = { value: false };
     // You can add a cancel button UI here if desired, similar to staff bulk
 
-    if(mainBtn) mainBtn.classList.add('hidden');
-    if(progressBar) progressBar.classList.remove('hidden');
-    if(statusText) { statusText.classList.remove('hidden'); statusText.textContent = "Initializing..."; }
+    if (mainBtn) mainBtn.classList.add('hidden');
+    if (progressBar) progressBar.classList.remove('hidden');
+    if (statusText) { statusText.classList.remove('hidden'); statusText.textContent = "Initializing..."; }
 
     let successCount = 0;
 
     for (let i = 0; i < pendingItems.length; i++) {
         const item = pendingItems[i];
-        
+
         // Update Status
-        if(statusText) statusText.textContent = `Sending to ${item.dept} (${i+1}/${pendingItems.length})...`;
-        if(progressFill) progressFill.style.width = `${Math.round(((i+1)/pendingItems.length)*100)}%`;
+        if (statusText) statusText.textContent = `Sending to ${item.dept} (${i + 1}/${pendingItems.length})...`;
+        if (progressFill) progressFill.style.width = `${Math.round(((i + 1) / pendingItems.length) * 100)}%`;
 
         // Update Row UI
         const rowBtn = document.getElementById(item.btnId);
         const rowStatus = document.getElementById(item.statusId);
-        
-        if(rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
-        if(rowStatus) { rowStatus.classList.remove('hidden'); rowStatus.textContent = "Sending..."; }
+
+        if (rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
+        if (rowStatus) { rowStatus.classList.remove('hidden'); rowStatus.textContent = "Sending..."; }
 
         try {
             await fetch(googleScriptUrl, {
@@ -8884,41 +7695,41 @@ window.sendBulkDeptEmails = async function() {
 
             successCount++;
             item.status = 'sent';
-            
-            if(rowBtn) { 
-                rowBtn.innerHTML = "✅"; 
+
+            if (rowBtn) {
+                rowBtn.innerHTML = "✅";
                 rowBtn.className = "bg-green-100 text-green-800 border-green-200 px-3 py-1.5 rounded text-xs font-bold shadow-sm flex items-center gap-1 transition shrink-0 border cursor-default";
             }
-            if(rowStatus) { rowStatus.textContent = "Sent"; rowStatus.className = "text-[10px] text-green-600 mt-1 font-mono font-bold"; }
+            if (rowStatus) { rowStatus.textContent = "Sent"; rowStatus.className = "text-[10px] text-green-600 mt-1 font-mono font-bold"; }
 
         } catch (e) {
             console.error(e);
-            if(rowBtn) { rowBtn.textContent = "Failed"; rowBtn.disabled = false; }
-            if(rowStatus) { rowStatus.textContent = "Error"; rowStatus.className = "text-[10px] text-red-500 mt-1 font-mono"; }
+            if (rowBtn) { rowBtn.textContent = "Failed"; rowBtn.disabled = false; }
+            if (rowStatus) { rowStatus.textContent = "Error"; rowStatus.className = "text-[10px] text-red-500 mt-1 font-mono"; }
         }
 
         // Delay to handle rate limits
         await new Promise(r => setTimeout(r, 1000));
     }
 
-    if(statusText) statusText.textContent = "Completed.";
+    if (statusText) statusText.textContent = "Completed.";
     alert(`Batch Complete.\nSent to ${successCount} departments.`);
-    
+
     // Log Bulk Action
     if (typeof logActivity === 'function') logActivity("Bulk Dept Email", `Sent consolidated lists to ${successCount} departments.`);
-    
+
     // Reset UI (Optional, keeping progress bar visible shows completion)
 };
 
 
 
-window.sendSingleEmailFromQueue = function(index) {
+window.sendSingleEmailFromQueue = function (index) {
     const item = window.currentEmailQueue[index];
     if (!item) return;
-    
+
     // Get the button element
     const btn = document.getElementById(item.btnId);
-    
+
     if (confirm(`Send email to ${item.name}?`)) {
         // Call the main send function
         // Note: 'item.body' contains HTML, so we pass it directly
@@ -8926,7 +7737,7 @@ window.sendSingleEmailFromQueue = function(index) {
         // We can pass the HTML as 'message'. The main function might try to replace \n with <br>, 
         // but if we pass HTML, it should be fine or we adjust the main function.
         // Let's adjust the main function call to handle this.
-        
+
         sendSingleEmail(btn, item.email, item.name, item.subject, item.body);
     }
 };
@@ -8952,7 +7763,7 @@ async function sendEmailViaAppsScript(to, subject, body) {
 }
 
 // --- LOGIC: Send Individual Item ---
-window.sendIndividualEmail = async function(index) {
+window.sendIndividualEmail = async function (index) {
     const item = window.currentEmailQueue[index];
     if (!item) return;
 
@@ -8973,16 +7784,16 @@ window.sendIndividualEmail = async function(index) {
 };
 
 // --- LOGIC: Bulk Queue Processor ---
-window.processBulkQueue = async function() {
+window.processBulkQueue = async function () {
     const pendingItems = window.currentEmailQueue.filter(i => i.status === 'pending' && i.email);
-    
+
     if (pendingItems.length === 0) return alert("No pending emails to send.");
     if (!confirm(`Start bulk sending to ${pendingItems.length} recipients?\n\nKeep this window open until finished.`)) return;
 
     // UI Setup
     document.getElementById('btn-bulk-send').classList.add('hidden');
     document.getElementById('bulk-progress-container').classList.remove('hidden');
-    
+
     window.isBulkSendingCancelled = false;
     let sentCount = 0;
 
@@ -8993,40 +7804,40 @@ window.processBulkQueue = async function() {
         }
 
         const item = pendingItems[i];
-        
+
         // Update Status UI
-        document.getElementById('bulk-status-text').textContent = `Sending ${i+1}/${pendingItems.length}: ${item.name}`;
-        document.getElementById('bulk-progress-fill').style.width = `${((i+1) / pendingItems.length) * 100}%`;
+        document.getElementById('bulk-status-text').textContent = `Sending ${i + 1}/${pendingItems.length}: ${item.name}`;
+        document.getElementById('bulk-progress-fill').style.width = `${((i + 1) / pendingItems.length) * 100}%`;
 
         // Update Row UI
         const rowStatus = document.getElementById(`status-msg-${item.id}`);
         const rowBtn = document.getElementById(item.btnId);
-        if(rowStatus) rowStatus.textContent = "Sending...";
-        if(rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
+        if (rowStatus) rowStatus.textContent = "Sending...";
+        if (rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
 
         await sendEmailViaAppsScript(item.email, item.subject, item.body);
 
         // Update Row Success
         item.status = 'sent';
         sentCount++;
-        if(rowStatus) { rowStatus.textContent = "✅ Sent"; rowStatus.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
-        if(rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }
+        if (rowStatus) { rowStatus.textContent = "✅ Sent"; rowStatus.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
+        if (rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }
 
         // Delay 1.2s
-        await new Promise(r => setTimeout(r, 1200)); 
+        await new Promise(r => setTimeout(r, 1200));
     }
 
     document.getElementById('bulk-status-text').textContent = "Process Finished.";
     if (!window.isBulkSendingCancelled) {
         alert(`✅ Bulk Email Complete.\nSuccessfully sent: ${sentCount} emails.`);
     }
-    
+
     // Reset UI
     document.getElementById('btn-bulk-send').classList.remove('hidden');
     document.getElementById('bulk-progress-container').classList.add('hidden');
 };
 
-window.cancelBulkSending = function() {
+window.cancelBulkSending = function () {
     window.isBulkSendingCancelled = true;
     document.getElementById('bulk-status-text').textContent = "Stopping...";
 };
@@ -9036,10 +7847,10 @@ window.cancelBulkSending = function() {
 // ==========================================
 
 // 1. Generate HTML for Staff Email (Individual)
-window.generateHtmlEmailBody = function(name, duties) {
+window.generateHtmlEmailBody = function (name, duties) {
     const college = localStorage.getItem('examCollegeName') || "EXAMINATION CELL";
-    
-    let rows = duties.map(d => 
+
+    let rows = duties.map(d =>
         `<tr>
             <td style="padding:8px;border:1px solid #ddd;font-size:14px;">${d.date}<br><span style="font-size:11px;color:#666;">${d.day}</span></td>
             <td style="padding:8px;border:1px solid #ddd;font-size:14px;"><b>${d.session}</b><br><span style="font-size:11px;color:#666;">${d.time}</span></td>
@@ -9086,7 +7897,7 @@ window.generateHtmlEmailBody = function(name, duties) {
 // --- HELPER: Track Assignment Source (God Mode) ---
 function updateAssignmentMeta(slot, email, source) {
     if (!slot.assignmentMeta) slot.assignmentMeta = {};
-    
+
     // Only set if not already set, or if overwriting
     // We want to preserve the original source if possible, unless it's a new add
     slot.assignmentMeta[email] = {
@@ -9108,7 +7919,7 @@ function getSourceBadge(source) {
 }
 
 // --- ADMIN: Mark Someone Unavailable (From Manual Modal) ---
-window.adminMarkUnavailable = function(key, email) {
+window.adminMarkUnavailable = function (key, email) {
     document.getElementById('unav-key').value = key;
     document.getElementById('unav-email').value = email;
     document.getElementById('unav-marked-by').value = 'Admin'; // <--- KEY CHANGE
@@ -9116,7 +7927,7 @@ window.adminMarkUnavailable = function(key, email) {
     document.getElementById('unav-reason').value = "";
     document.getElementById('unav-details').value = "";
     document.getElementById('unav-details-container').classList.add('hidden');
-    
+
     window.closeModal('manual-allocation-modal');
     window.openModal('unavailable-modal');
 };
@@ -9124,7 +7935,7 @@ window.adminMarkUnavailable = function(key, email) {
 
 
 // 1. Missing Generator for Department Emails
-window.generateDepartmentConsolidatedEmail = function(deptName, duties, title) {
+window.generateDepartmentConsolidatedEmail = function (deptName, duties, title) {
     const collegeName = (typeof currentCollegeName !== 'undefined' ? currentCollegeName : localStorage.getItem('examCollegeName')) || "Government Victoria College";
 
     let rows = duties.map(d => {
@@ -9171,7 +7982,7 @@ window.sendBulkDeptEmails = async function () {
     const bar = document.getElementById('dept-progress-bar');
     const fill = document.getElementById('dept-progress-fill');
     const txt = document.getElementById('dept-status-text');
-    
+
     if (btn) btn.classList.add('hidden');
     if (bar) bar.classList.remove('hidden');
     if (txt) { txt.classList.remove('hidden'); txt.textContent = "Starting..."; }
@@ -9191,15 +8002,15 @@ window.sendBulkDeptEmails = async function () {
             });
             item.status = 'sent';
             successCount++;
-            
+
             // Update individual row status if exists
             const rStatus = document.getElementById(item.statusId);
             if (rStatus) { rStatus.textContent = "Sent"; rStatus.classList.remove('hidden'); rStatus.classList.add('text-green-600'); }
         } catch (e) { console.error(e); }
-        
+
         await new Promise(r => setTimeout(r, 1000));
     }
-    
+
     if (txt) txt.textContent = "Completed.";
     alert(`Batch Complete. Sent to ${successCount} departments.`);
     if (btn) btn.classList.remove('hidden');
@@ -9207,8 +8018,8 @@ window.sendBulkDeptEmails = async function () {
 };
 
 // --- ADMIN: Remove Unavailability (From Manual Modal) ---
-window.adminRemoveUnavailable = async function(key, email, isAdvance) {
-    if(!confirm(`Remove unavailability status for this staff member?`)) return;
+window.adminRemoveUnavailable = async function (key, email, isAdvance) {
+    if (!confirm(`Remove unavailability status for this staff member?`)) return;
 
     if (isAdvance) {
         // Handle Advance Leave (Complex because it's in a different object)
@@ -9218,16 +8029,16 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
         if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
 
         if (advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-             advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => 
+            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u =>
                 (typeof u === 'string' ? u !== email : u.email !== email)
-             );
-             await saveAdvanceUnavailability();
+            );
+            await saveAdvanceUnavailability();
         }
     } else {
         // Handle Slot Specific
         const slot = invigilationSlots[key];
         if (slot && slot.unavailable) {
-            slot.unavailable = slot.unavailable.filter(u => 
+            slot.unavailable = slot.unavailable.filter(u =>
                 (typeof u === 'string' ? u !== email : u.email !== email)
             );
             await syncSlotsToCloud();
@@ -9283,9 +8094,9 @@ window.printAttendanceReport = function () {
     let tableRows = '';
     facultyData.forEach((faculty, index) => {
         const sessionsList = faculty.sessions.map(s => {
-        const [d, m, y] = s.date.split('.');
-        return `${d}.${m}.${y.slice(-2)} (${s.session})`;
-    }).join(' ');
+            const [d, m, y] = s.date.split('.');
+            return `${d}.${m}.${y.slice(-2)} (${s.session})`;
+        }).join(' ');
         tableRows += `<tr class="report-row"><td class="text-center">${index + 1}</td><td><div class="font-semibold">${faculty.name}</div></td><td>${faculty.dept}</td><td class="text-center">${faculty.designation}</td><td class="text-center font-bold">${faculty.sessions.length}</td><td class="text-xs sessions-cell">${sessionsList}</td></tr>`;
     });
 

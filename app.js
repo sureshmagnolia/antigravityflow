@@ -1,3 +1,6 @@
+import { renderRoomAllotment, populate_room_allotment_session_dropdown, saveRoomAllotment, autoAllotRooms, clearAllotmentForSession, downloadAllotmentCSV, printRoomAllotment, viewRoomAllotmentStatus, openManualAllocationModal, closeManualAllocationModal, saveManualAllocation, deleteManualAllocation, allocateOneRoom } from './js/features/room-allotment.js';
+import { generateSeatingPDF, downloadRoomwiseAttendancePDF, downloadConsolidatedAttendancePDF, downloadInvigilationOrderPDF, downloadSeatingPlanPDF, downloadSeatingPlanPDF_Alt, downloadRoomLabelsPDF, downloadMalpracticeFormPDF, downloadRelievingOrderPDF, downloadMessBillPDF } from './js/features/pdf-generator.js';
+
 // --- FUNCTIONS FOR PYTHON  BRIDGE ---
 // These 11 functions MUST be outside the DOMContentLoaded listener
 // to be available when Python loads.
@@ -165,14 +168,14 @@ window.disable_edit_data_tab = disable_edit_data_tab;
 // ==========================================
 async function autoCleanPastGhostData() {
     console.log("🚀 [System] Checking for expired exam data...");
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // 🛡️ SAFETY BUFFER: Keep data for 30 days after the exam date
     // This allows you to delete and re-upload past exams without losing volunteers.
     const cutoffDate = new Date(today);
-    cutoffDate.setDate(today.getDate() - 30); 
+    cutoffDate.setDate(today.getDate() - 30);
 
     let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
@@ -181,7 +184,7 @@ async function autoCleanPastGhostData() {
 
     // 1. Scan Slots
     Object.keys(slots).forEach(slotId => {
-        const dateStr = slotId.split('_')[0]; 
+        const dateStr = slotId.split('_')[0];
         // Handle "DD.MM.YYYY" or "YYYY-MM-DD"
         let slotDate;
         if (dateStr.includes('.')) {
@@ -222,7 +225,7 @@ async function autoCleanPastGhostData() {
     if (hasChanges) {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
-        
+
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('slots');
         }
@@ -280,6 +283,38 @@ function finalizeAppLoad() {
 let currentUser = null;
 let currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
+
+// [MODULAR BRIDGE] Expose globals correctly for Module System
+Object.defineProperty(window, 'currentUser', { get: () => currentUser, set: (v) => currentUser = v });
+Object.defineProperty(window, 'currentCollegeId', { get: () => currentCollegeId, set: (v) => currentCollegeId = v });
+Object.defineProperty(window, 'currentCollegeData', { get: () => currentCollegeData, set: (v) => currentCollegeData = v });
+
+// [MODULAR BRIDGE] Expose imported features to window
+window.renderRoomAllotment = renderRoomAllotment;
+window.saveRoomAllotment = saveRoomAllotment;
+window.autoAllotRooms = autoAllotRooms;
+window.clearAllotmentForSession = clearAllotmentForSession;
+window.downloadAllotmentCSV = downloadAllotmentCSV;
+window.printRoomAllotment = printRoomAllotment;
+window.viewRoomAllotmentStatus = viewRoomAllotmentStatus;
+window.openManualAllocationModal = openManualAllocationModal;
+window.closeManualAllocationModal = closeManualAllocationModal;
+window.saveManualAllocation = saveManualAllocation;
+window.deleteManualAllocation = deleteManualAllocation;
+window.allocateOneRoom = allocateOneRoom; // Important
+
+window.generateSeatingPDF = generateSeatingPDF;
+window.downloadRoomwiseAttendancePDF = downloadRoomwiseAttendancePDF;
+window.downloadConsolidatedAttendancePDF = downloadConsolidatedAttendancePDF;
+window.downloadInvigilationOrderPDF = downloadInvigilationOrderPDF;
+window.downloadSeatingPlanPDF = downloadSeatingPlanPDF;
+window.downloadSeatingPlanPDF_Alt = downloadSeatingPlanPDF_Alt;
+window.downloadRoomLabelsPDF = downloadRoomLabelsPDF;
+window.downloadMalpracticeFormPDF = downloadMalpracticeFormPDF;
+window.downloadRelievingOrderPDF = downloadRelievingOrderPDF;
+window.downloadMessBillPDF = downloadMessBillPDF;
+
+// Also hook the populate wrapper if needed (already handled in Python bridge section potentially, but let's ensure)
 let isSyncing = false;
 let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
 let hasUnsavedAllotment = false; // Tracks if room changes need saving
@@ -586,236 +621,236 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-// --- CENTRALIZED EXAM DROPDOWN POPULATOR ---
-function populateAllExamDropdowns() {
-    // 1. Get the Master List
-    const rulesRaw = localStorage.getItem('examRulesConfig'); 
-    const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
-    const uniqueNames = [...new Set(rules.map(r => r.examName))].sort();
+    // --- CENTRALIZED EXAM DROPDOWN POPULATOR ---
+    function populateAllExamDropdowns() {
+        // 1. Get the Master List
+        const rulesRaw = localStorage.getItem('examRulesConfig');
+        const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
+        const uniqueNames = [...new Set(rules.map(r => r.examName))].sort();
 
-    // 2. Define all dropdowns to update
-    const dropdowns = [
-        { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
-        { id: 'session-new-exam-name', defaultText: '-- Select New Exam Name --' }, // Session Ops
-        { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
-        { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
-        { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
-    ];
+        // 2. Define all dropdowns to update
+        const dropdowns = [
+            { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
+            { id: 'session-new-exam-name', defaultText: '-- Select New Exam Name --' }, // Session Ops
+            { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
+            { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
+            { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
+        ];
 
-    // 3. Populate them
-    dropdowns.forEach(dd => {
-        const select = document.getElementById(dd.id);
-        if (select) {
-            // Keep current value if possible
-            const currentVal = select.value;
-            
-            select.innerHTML = `<option value="">${dd.defaultText}</option>`;
-            
-            if (uniqueNames.length === 0) {
-                // If list is empty, show warning option
-                const opt = document.createElement('option');
-                opt.textContent = "(No Exams Configured in Settings)";
-                opt.disabled = true;
-                select.appendChild(opt);
-            } else {
-                uniqueNames.forEach(name => {
+        // 3. Populate them
+        dropdowns.forEach(dd => {
+            const select = document.getElementById(dd.id);
+            if (select) {
+                // Keep current value if possible
+                const currentVal = select.value;
+
+                select.innerHTML = `<option value="">${dd.defaultText}</option>`;
+
+                if (uniqueNames.length === 0) {
+                    // If list is empty, show warning option
                     const opt = document.createElement('option');
-                    opt.value = name;
-                    opt.textContent = name;
+                    opt.textContent = "(No Exams Configured in Settings)";
+                    opt.disabled = true;
                     select.appendChild(opt);
-                });
-            }
-
-            // Restore selection if it still exists in the new list
-            if (currentVal && uniqueNames.includes(currentVal)) {
-                select.value = currentVal;
-            }
-        }
-    });
-}
-
-
-
-// --- HELPER: Calculate Slot Requirements from Student Data ---
-function updateLocalSlotsFromStudents() {
-    const localBaseData = localStorage.getItem('examBaseData');
-    if (!localBaseData) return false;
-
-    try {
-        const students = JSON.parse(localBaseData);
-        const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
-        const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-        const sessionStats = {};
-
-        // 1. Process Student Data
-        students.forEach(s => {
-            const d = s.Date ? s.Date.trim() : "";
-            const t = s.Time ? s.Time.trim() : "";
-            if (!d || !t) return;
-
-            const key = `${d} | ${t}`;
-            
-            if (!sessionStats[key]) {
-                sessionStats[key] = {
-                    normalStreams: {},
-                    scribeStreams: {},
-                    totalScribes: 0,
-                    totalStudents: 0,
-                    dateStr: d,
-                    timeStr: t
-                };
-            }
-            sessionStats[key].totalStudents++;
-            const strm = s.Stream || "Regular";
-
-            if (scribeRegNos.has(s['Register Number'])) {
-                if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
-                sessionStats[key].scribeStreams[strm]++;
-                sessionStats[key].totalScribes++;
-            } else {
-                if (!sessionStats[key].normalStreams[strm]) sessionStats[key].normalStreams[strm] = 0;
-                sessionStats[key].normalStreams[strm]++;
-            }
-        });
-
-        // 2. Merge with Existing Slots (Smart FN/AN Logic)
-        let existingSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-        let hasChanges = false;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // Helper to check Period (FN < 1 PM <= AN)
-        const getPeriod = (timeStr) => {
-            let [t, mod] = timeStr.trim().split(' ');
-            let [h] = t.split(':').map(Number);
-            if (mod === 'PM' && h !== 12) h += 12;
-            if (mod === 'AM' && h === 12) h = 0;
-            return h < 13 ? 'FN' : 'AN';
-        };
-
-        Object.keys(sessionStats).forEach(generatedKey => {
-            const stats = sessionStats[generatedKey];
-            const genPeriod = getPeriod(stats.timeStr);
-            
-            // --- 🟢 SMART MATCH: Find existing Virtual Slot in same FN/AN block ---
-            let targetKey = generatedKey;
-            
-            if (!existingSlots[generatedKey]) {
-                // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
-                const virtualMatchKey = Object.keys(existingSlots).find(k => {
-                    if (!k.includes('|')) return false;
-                    const [exDate, exTime] = k.split('|').map(s => s.trim());
-                    
-                    // Must be same Date
-                    if (exDate !== stats.dateStr) return false;
-                    
-                    // Must be same Period (FN or AN)
-                    if (getPeriod(exTime) !== genPeriod) return false;
-
-                    // Must be "Virtual" (Created by attendance, so 0 students or undefined)
-                    const slot = existingSlots[k];
-                    return (!slot.studentCount || slot.studentCount === 0);
-                });
-
-                if (virtualMatchKey) {
-                    // FOUND IT! We will Migrate this virtual slot to the real time key
-                    targetKey = generatedKey; // We use the new (Correct) time
-                    existingSlots[targetKey] = { ...existingSlots[virtualMatchKey] }; // Copy staff data
-                    delete existingSlots[virtualMatchKey]; // Remove the old 9:30 slot
-                    hasChanges = true; 
-                }
-            }
-
-            // --- DATE CHECK (Robust Parsing) ---
-            let isPastSession = false;
-            try {
-                // Handle DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY
-                const parts = stats.dateStr.split(/[\.\-\/]/); 
-                let day, month, year;
-                
-                if (parts[0].length === 4) { // YYYY-MM-DD
-                    year = parts[0]; month = parts[1]; day = parts[2];
-                } else { // DD.MM.YYYY
-                    day = parts[0]; month = parts[1]; year = parts[2];
-                }
-                
-                const sessionDate = new Date(year, month - 1, day);
-                sessionDate.setHours(0,0,0,0); // Compare dates only
-                isPastSession = sessionDate < today;
-            } catch(e) {
-                console.warn("Date parse error, assuming Future:", stats.dateStr);
-                isPastSession = false; // Default to Future (Locked) if date is weird
-            }
-
-            // Calculate Required Invigilators
-            let baseRequirement = 0;
-            Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
-            Object.values(stats.scribeStreams).forEach(count => baseRequirement += Math.ceil(count / 5));
-            const reserve = Math.ceil(baseRequirement * 0.10);
-            const totalRequired = baseRequirement + reserve;
-
-            if (!existingSlots[targetKey]) {
-                // CASE A: Create Brand New Slot
-                existingSlots[targetKey] = {
-                    required: totalRequired,
-                    reserveCount: reserve,
-                    assigned: [],
-                    unavailable: [],
-                    isLocked: !isPastSession, // 🔒 Lock Future, Unlock Past
-                    scribeCount: stats.totalScribes,
-                    studentCount: stats.totalStudents
-                };
-                hasChanges = true;
-            } else {
-                // CASE B: Update Existing Slot
-                const slot = existingSlots[targetKey];
-                
-                // 🟢 RE-LOCKING LOGIC:
-                // If the slot WAS empty (Virtual) and is NOW getting students (Real Data),
-                // we treat it as a "New Upload" and FORCE LOCK if it is in the future.
-                const isNewDataUpload = (!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0;
-                
-                if (isNewDataUpload) {
-                     if (!isPastSession) {
-                         slot.isLocked = true; // Force Lock
-                     }
-                     hasChanges = true;
+                } else {
+                    uniqueNames.forEach(name => {
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    });
                 }
 
-                // Update Counts
-                if (slot.required !== totalRequired || slot.studentCount !== stats.totalStudents) {
-                    slot.required = totalRequired;
-                    slot.reserveCount = reserve;
-                    slot.scribeCount = stats.totalScribes;
-                    slot.studentCount = stats.totalStudents;
-                    hasChanges = true;
+                // Restore selection if it still exists in the new list
+                if (currentVal && uniqueNames.includes(currentVal)) {
+                    select.value = currentVal;
                 }
             }
         });
-
-        if (hasChanges) {
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
-            return true;
-        }
-    } catch (e) {
-        console.error("Slot Calc Error:", e);
     }
-    return false;
-}
-
-    
-
-    
 
 
 
+    // --- HELPER: Calculate Slot Requirements from Student Data ---
+    function updateLocalSlotsFromStudents() {
+        const localBaseData = localStorage.getItem('examBaseData');
+        if (!localBaseData) return false;
 
-    
+        try {
+            const students = JSON.parse(localBaseData);
+            const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+            const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+            const sessionStats = {};
+
+            // 1. Process Student Data
+            students.forEach(s => {
+                const d = s.Date ? s.Date.trim() : "";
+                const t = s.Time ? s.Time.trim() : "";
+                if (!d || !t) return;
+
+                const key = `${d} | ${t}`;
+
+                if (!sessionStats[key]) {
+                    sessionStats[key] = {
+                        normalStreams: {},
+                        scribeStreams: {},
+                        totalScribes: 0,
+                        totalStudents: 0,
+                        dateStr: d,
+                        timeStr: t
+                    };
+                }
+                sessionStats[key].totalStudents++;
+                const strm = s.Stream || "Regular";
+
+                if (scribeRegNos.has(s['Register Number'])) {
+                    if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
+                    sessionStats[key].scribeStreams[strm]++;
+                    sessionStats[key].totalScribes++;
+                } else {
+                    if (!sessionStats[key].normalStreams[strm]) sessionStats[key].normalStreams[strm] = 0;
+                    sessionStats[key].normalStreams[strm]++;
+                }
+            });
+
+            // 2. Merge with Existing Slots (Smart FN/AN Logic)
+            let existingSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+            let hasChanges = false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Helper to check Period (FN < 1 PM <= AN)
+            const getPeriod = (timeStr) => {
+                let [t, mod] = timeStr.trim().split(' ');
+                let [h] = t.split(':').map(Number);
+                if (mod === 'PM' && h !== 12) h += 12;
+                if (mod === 'AM' && h === 12) h = 0;
+                return h < 13 ? 'FN' : 'AN';
+            };
+
+            Object.keys(sessionStats).forEach(generatedKey => {
+                const stats = sessionStats[generatedKey];
+                const genPeriod = getPeriod(stats.timeStr);
+
+                // --- 🟢 SMART MATCH: Find existing Virtual Slot in same FN/AN block ---
+                let targetKey = generatedKey;
+
+                if (!existingSlots[generatedKey]) {
+                    // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
+                    const virtualMatchKey = Object.keys(existingSlots).find(k => {
+                        if (!k.includes('|')) return false;
+                        const [exDate, exTime] = k.split('|').map(s => s.trim());
+
+                        // Must be same Date
+                        if (exDate !== stats.dateStr) return false;
+
+                        // Must be same Period (FN or AN)
+                        if (getPeriod(exTime) !== genPeriod) return false;
+
+                        // Must be "Virtual" (Created by attendance, so 0 students or undefined)
+                        const slot = existingSlots[k];
+                        return (!slot.studentCount || slot.studentCount === 0);
+                    });
+
+                    if (virtualMatchKey) {
+                        // FOUND IT! We will Migrate this virtual slot to the real time key
+                        targetKey = generatedKey; // We use the new (Correct) time
+                        existingSlots[targetKey] = { ...existingSlots[virtualMatchKey] }; // Copy staff data
+                        delete existingSlots[virtualMatchKey]; // Remove the old 9:30 slot
+                        hasChanges = true;
+                    }
+                }
+
+                // --- DATE CHECK (Robust Parsing) ---
+                let isPastSession = false;
+                try {
+                    // Handle DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY
+                    const parts = stats.dateStr.split(/[\.\-\/]/);
+                    let day, month, year;
+
+                    if (parts[0].length === 4) { // YYYY-MM-DD
+                        year = parts[0]; month = parts[1]; day = parts[2];
+                    } else { // DD.MM.YYYY
+                        day = parts[0]; month = parts[1]; year = parts[2];
+                    }
+
+                    const sessionDate = new Date(year, month - 1, day);
+                    sessionDate.setHours(0, 0, 0, 0); // Compare dates only
+                    isPastSession = sessionDate < today;
+                } catch (e) {
+                    console.warn("Date parse error, assuming Future:", stats.dateStr);
+                    isPastSession = false; // Default to Future (Locked) if date is weird
+                }
+
+                // Calculate Required Invigilators
+                let baseRequirement = 0;
+                Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
+                Object.values(stats.scribeStreams).forEach(count => baseRequirement += Math.ceil(count / 5));
+                const reserve = Math.ceil(baseRequirement * 0.10);
+                const totalRequired = baseRequirement + reserve;
+
+                if (!existingSlots[targetKey]) {
+                    // CASE A: Create Brand New Slot
+                    existingSlots[targetKey] = {
+                        required: totalRequired,
+                        reserveCount: reserve,
+                        assigned: [],
+                        unavailable: [],
+                        isLocked: !isPastSession, // 🔒 Lock Future, Unlock Past
+                        scribeCount: stats.totalScribes,
+                        studentCount: stats.totalStudents
+                    };
+                    hasChanges = true;
+                } else {
+                    // CASE B: Update Existing Slot
+                    const slot = existingSlots[targetKey];
+
+                    // 🟢 RE-LOCKING LOGIC:
+                    // If the slot WAS empty (Virtual) and is NOW getting students (Real Data),
+                    // we treat it as a "New Upload" and FORCE LOCK if it is in the future.
+                    const isNewDataUpload = (!slot.studentCount || slot.studentCount === 0) && stats.totalStudents > 0;
+
+                    if (isNewDataUpload) {
+                        if (!isPastSession) {
+                            slot.isLocked = true; // Force Lock
+                        }
+                        hasChanges = true;
+                    }
+
+                    // Update Counts
+                    if (slot.required !== totalRequired || slot.studentCount !== stats.totalStudents) {
+                        slot.required = totalRequired;
+                        slot.reserveCount = reserve;
+                        slot.scribeCount = stats.totalScribes;
+                        slot.studentCount = stats.totalStudents;
+                        hasChanges = true;
+                    }
+                }
+            });
+
+            if (hasChanges) {
+                localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
+                return true;
+            }
+        } catch (e) {
+            console.error("Slot Calc Error:", e);
+        }
+        return false;
+    }
+
+
+
+
+
+
+
+
+
     // ==========================================
     // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
     // ==========================================
 
-   // 5. CLOUD DOWNLOAD FUNCTION (Hybrid V2/V1 Support)
+    // 5. CLOUD DOWNLOAD FUNCTION (Hybrid V2/V1 Support)
     function syncDataFromCloud(collegeId) {
         if (!navigator.onLine) {
             console.log("⚠️ Offline Mode. Loading local data.");
@@ -976,13 +1011,13 @@ function updateLocalSlotsFromStudents() {
     }
 
 
-// --- PHASE 4: MODULAR WRITE HELPERS ---
+    // --- PHASE 4: MODULAR WRITE HELPERS ---
 
     function generateSessionId(sessionKey) {
         try {
             // sessionKey format: "DD.MM.YYYY | HH:MM AM"
             const [dateStr, timeStr] = sessionKey.split('|');
-            if(!dateStr || !timeStr) return "UNKNOWN_SESSION";
+            if (!dateStr || !timeStr) return "UNKNOWN_SESSION";
 
             const [d, m, y] = dateStr.trim().split('.');
             const isoDate = `${y}-${m}-${d}`;
@@ -990,7 +1025,7 @@ function updateLocalSlotsFromStudents() {
             const t = timeStr.trim().toUpperCase();
             let sessionType = "FN";
             // Logic: PM or 12:xx or 13:xx+ implies AN.
-            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") || 
+            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") ||
                 t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
                 sessionType = "AN";
             }
@@ -1001,21 +1036,21 @@ function updateLocalSlotsFromStudents() {
         }
     }
 
-   async function syncSessionToCloud(sessionKey) {
+    async function syncSessionToCloud(sessionKey) {
         // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
         if (!currentCollegeId || !navigator.onLine) return;
-        
+
         updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
         const { db, doc, setDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
-        
+
         // 1. Gather Data for THIS Session Only from Global Memory
         const [date, time] = sessionKey.split(' | ');
         const cleanDate = date.trim();
         const cleanTime = time.trim();
 
         const students = allStudentData.filter(s => s.Date === cleanDate && s.Time === cleanTime);
-        
+
         // Rooms (Read from LocalStorage)
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         const sessionAllotment = allAllotments[sessionKey] || [];
@@ -1042,9 +1077,9 @@ function updateLocalSlotsFromStudents() {
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
-            meta: { 
-                studentCount: students.length, 
-                lastUpdated: new Date().toISOString() 
+            meta: {
+                studentCount: students.length,
+                lastUpdated: new Date().toISOString()
             }
         };
 
@@ -1053,15 +1088,15 @@ function updateLocalSlotsFromStudents() {
             // FIX: Use 'currentCollegeId' directly here too
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             updateSyncStatus("Saved (V2)", "success");
-            
+
             // Recalculate Invigilation Slots
             if (typeof updateLocalSlotsFromStudents === 'function') {
                 updateLocalSlotsFromStudents();
             }
-            
+
             // Sync Slots (This function call is fine)
-            await syncDataToCloud('slots'); 
-            
+            await syncDataToCloud('slots');
+
         } catch (e) {
             console.error("Session Sync Error:", e);
             updateSyncStatus("Save Failed", "error");
@@ -1150,7 +1185,7 @@ function updateLocalSlotsFromStudents() {
             isSyncing = false;
         }
     }
-   
+
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
 
     adminBtn.addEventListener('click', () => {
@@ -1225,13 +1260,13 @@ function updateLocalSlotsFromStudents() {
             await UiModal.alert("Error", "Failed to remove: " + e.message);
         }
     }
-// --- TIME NORMALIZER (Fixes 2:00 vs 02:00 issue) ---
+    // --- TIME NORMALIZER (Fixes 2:00 vs 02:00 issue) ---
     // --- UNIVERSAL TIME NORMALIZER (Handles :, ., 24h, 12h) ---
     function normalizeTime(timeStr) {
         if (!timeStr) return "";
-        
+
         const t = timeStr.trim().toUpperCase();
-        
+
         // Regex to find HH, MM, and optional AM/PM
         // Allows ':' or '.' as separators
         // Allows optional space before AM/PM
@@ -1246,7 +1281,7 @@ function updateLocalSlotsFromStudents() {
         // LOGIC A: If AM/PM is present (12-hour format input)
         if (ampm) {
             // Standardize 12-hour formatting (just padding)
-        } 
+        }
         // LOGIC B: No AM/PM (24-hour format input, e.g. "14:30" or "09:30")
         else {
             ampm = h >= 12 ? "PM" : "AM";
@@ -1429,17 +1464,17 @@ function updateLocalSlotsFromStudents() {
     const filterSessionRadio = document.getElementById('filter-session');
     const reportsSessionDropdownContainer = document.getElementById('reports-session-dropdown-container');
     const reportsSessionSelect = document.getElementById('reports-session-select');
-// --- NEW: Toggle Visibility of Future Filter ---
+    // --- NEW: Toggle Visibility of Future Filter ---
     const futureFilterWrapper = document.getElementById('bulk-future-filter-wrapper');
     const filterFutureCheckbox = document.getElementById('filter-future-only');
-    
+
     function toggleFutureFilterVisibility() {
         if (filterAllRadio && filterAllRadio.checked) {
-            if(futureFilterWrapper) futureFilterWrapper.classList.remove('hidden');
+            if (futureFilterWrapper) futureFilterWrapper.classList.remove('hidden');
         } else {
-            if(futureFilterWrapper) futureFilterWrapper.classList.add('hidden');
+            if (futureFilterWrapper) futureFilterWrapper.classList.add('hidden');
             // Optional: Uncheck it when hiding so it doesn't stick
-            if(filterFutureCheckbox) filterFutureCheckbox.checked = false;
+            if (filterFutureCheckbox) filterFutureCheckbox.checked = false;
         }
     }
 
@@ -1531,7 +1566,7 @@ function updateLocalSlotsFromStudents() {
     btnPdfReport.className = "flex-1 inline-flex justify-center items-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 ml-2";
     btnPdfReport.innerHTML = `📄 Download PDF`;
     if (clearReportButton && clearReportButton.parentNode) {
-    // Remove old buttons if they exist to prevent duplicates on reload
+        // Remove old buttons if they exist to prevent duplicates on reload
         const oldPrint = document.getElementById('print-generated-report-btn');
         const oldPdf = document.getElementById('download-pdf-report-btn');
         if (oldPrint) oldPrint.remove();
@@ -1558,1716 +1593,1716 @@ function updateLocalSlotsFromStudents() {
         downloadReportPDF();
     });
 
-// --- MASTER PDF DOWNLOAD DISPATCHER (Updated for Invigilator Summary) ---
-window.downloadReportPDF = function() {
-    const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType) 
-                     ? lastGeneratedReportType 
-                     : "Exam_Report";
+    // --- MASTER PDF DOWNLOAD DISPATCHER (Updated for Invigilator Summary) ---
+    window.downloadReportPDF = function () {
+        const reportType = (typeof lastGeneratedReportType !== 'undefined' && lastGeneratedReportType)
+            ? lastGeneratedReportType
+            : "Exam_Report";
 
-    console.log("📄 Requesting PDF for:", reportType);
+        console.log("📄 Requesting PDF for:", reportType);
 
-    // Map Report Types to Generator Functions
-    const generators = {
-        "Roomwise_Seating_Report": generateRoomWisePDF,
-        "Daywise_Seating_Details": generateDayWisePDF,
-        "Question_Paper_Summary": generateQuestionPaperSummaryPDF,
-        "QP_Distribution_Report": generateQPDistributionPDF,
-        "qp-wise": generateQPDistributionPDF,
-        "Scribe_Proforma": generateScribeProformaPDF,
-        "Room_Stickers": generateRoomStickersPDF,
-        "Invigilator_Summary": generateInvigilatorSummaryPDF  // <--- The New Feature
+        // Map Report Types to Generator Functions
+        const generators = {
+            "Roomwise_Seating_Report": generateRoomWisePDF,
+            "Daywise_Seating_Details": generateDayWisePDF,
+            "Question_Paper_Summary": generateQuestionPaperSummaryPDF,
+            "QP_Distribution_Report": generateQPDistributionPDF,
+            "qp-wise": generateQPDistributionPDF,
+            "Scribe_Proforma": generateScribeProformaPDF,
+            "Room_Stickers": generateRoomStickersPDF,
+            "Invigilator_Summary": generateInvigilatorSummaryPDF  // <--- The New Feature
+        };
+
+        if (generators[reportType] && typeof generators[reportType] === 'function') {
+            generators[reportType]();
+        } else {
+            alert("PDF generation for '" + reportType + "' is not yet implemented.");
+        }
     };
 
-    if (generators[reportType] && typeof generators[reportType] === 'function') {
-        generators[reportType]();
-    } else {
-        alert("PDF generation for '" + reportType + "' is not yet implemented.");
-    }
-};
-    
 
 
-// --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Fixes: QP Codes & Layout) ---
-function generateRoomWisePDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const container = document.getElementById('report-output-area');
-    const pages = container.querySelectorAll('.print-page');
+    // --- OPTIMIZED GENERATOR: ROOM-WISE SEATING REPORT (Fixes: QP Codes & Layout) ---
+    function generateRoomWisePDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const container = document.getElementById('report-output-area');
+        const pages = container.querySelectorAll('.print-page');
 
-    if (pages.length === 0) return alert("No pages found.");
+        if (pages.length === 0) return alert("No pages found.");
 
-    const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+        const btn = document.getElementById('download-pdf-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
-    pages.forEach((page, i) => {
-        if (i > 0) doc.addPage();
-        
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        let currentY = 15;
+        pages.forEach((page, i) => {
+            if (i > 0) doc.addPage();
 
-        // --- 1. HEADER EXTRACTION ---
-        const headerDiv = page.querySelector('.print-header-group');
-        if (headerDiv) {
-            // A. "Ears" (Page No & Stream)
-            const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
-            
-            absoluteDivs.forEach(div => {
-                const text = div.innerText.trim().replace(/\s+/g, ' ');
-                const style = div.getAttribute('style');
-                if (style && (style.includes('left: 0') || style.includes('left:0'))) {
-                    doc.text(text, 14, 10);
-                } else if (style && (style.includes('right: 0') || style.includes('right:0'))) {
-                    doc.text(text, pageWidth - 14, 10, { align: 'right' });
-                }
-            });
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            let currentY = 15;
 
-            // B. Center Titles
-            const h1 = headerDiv.querySelector('h1');
-            const h2s = headerDiv.querySelectorAll('h2');
-            
-            if (h1) {
-                doc.setFontSize(15);
-                doc.setFont("helvetica", "bold");
-                doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 7;
-            }
-
-            if (h2s.length > 0) {
-                doc.setFontSize(11);
-                h2s.forEach(h2 => {
-                    doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                    currentY += 5;
-                });
-            }
-            
-            // Location Header
-            const locHeader = headerDiv.querySelector('.report-location-header');
-            if(locHeader) {
-                doc.setFontSize(10);
-                doc.setFont("helvetica", "normal");
-                doc.text(locHeader.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
-                currentY += 5;
-            }
-        }
-
-        currentY += 2;
-
-        // --- 2. MAIN STUDENT TABLE ---
-        const mainTable = page.querySelector('table.print-table');
-        if (mainTable) {
-            doc.autoTable({
-                html: mainTable,
-                startY: currentY,
-                theme: 'grid',
-                styles: { 
-                    lineColor: [0, 0, 0], 
-                    lineWidth: 0.1, 
-                    textColor: [0, 0, 0], 
-                    fontSize: 10,           
-                    cellPadding: 1.5,       
-                    valign: 'middle',
-                    minCellHeight: 9, // Strict height for 20 rows
-                    overflow: 'linebreak'
-                },
-                headStyles: { 
-                    fillColor: [240, 240, 240], 
-                    textColor: [0, 0, 0], 
-                    fontStyle: 'bold', 
-                    lineWidth: 0.1,
-                    halign: 'center',
-                    minCellHeight: 10
-                },
-                columnStyles: {
-                    0: { cellWidth: 10, halign: 'center' }, // Seat
-                    1: { cellWidth: 50, fontSize: 7, overflow: 'hidden' }, // Course (Tiny font, no wrap)
-                    2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No
-                    3: { cellWidth: 'auto' },               // Name
-                    4: { cellWidth: 25 },                   // Remarks
-                    5: { cellWidth: 20 }                    // Sign
-                },
-                didParseCell: function(data) {
-                    const rowElement = data.cell.raw.parentElement;
-                    if (rowElement && (rowElement.classList.contains('scribe-row-highlight') || rowElement.className.includes('scribe'))) {
-                        data.cell.styles.fillColor = [0, 0, 0];
-                        data.cell.styles.textColor = [255, 255, 255];
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                },
-                margin: { left: 14, right: 14 }
-            });
-            
-            currentY = doc.lastAutoTable.finalY + 8;
-        }
-
-        // --- 3. FOOTER RECONSTRUCTION ---
-        const footer = page.querySelector('.invigilator-footer');
-        if (footer) {
-            // Check for space
-            if (currentY + 65 > pageHeight) {
-                doc.addPage();
-                currentY = 15;
-            }
-
-            // A. Course Summary
-            const sumTable = footer.querySelector('table');
-            if (sumTable) {
+            // --- 1. HEADER EXTRACTION ---
+            const headerDiv = page.querySelector('.print-header-group');
+            if (headerDiv) {
+                // A. "Ears" (Page No & Stream)
+                const absoluteDivs = headerDiv.querySelectorAll('div[style*="absolute"]');
                 doc.setFontSize(9);
                 doc.setFont("helvetica", "bold");
-                doc.text("Course Summary:", 14, currentY);
-                currentY += 2;
 
+                absoluteDivs.forEach(div => {
+                    const text = div.innerText.trim().replace(/\s+/g, ' ');
+                    const style = div.getAttribute('style');
+                    if (style && (style.includes('left: 0') || style.includes('left:0'))) {
+                        doc.text(text, 14, 10);
+                    } else if (style && (style.includes('right: 0') || style.includes('right:0'))) {
+                        doc.text(text, pageWidth - 14, 10, { align: 'right' });
+                    }
+                });
+
+                // B. Center Titles
+                const h1 = headerDiv.querySelector('h1');
+                const h2s = headerDiv.querySelectorAll('h2');
+
+                if (h1) {
+                    doc.setFontSize(15);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(h1.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                    currentY += 7;
+                }
+
+                if (h2s.length > 0) {
+                    doc.setFontSize(11);
+                    h2s.forEach(h2 => {
+                        doc.text(h2.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                        currentY += 5;
+                    });
+                }
+
+                // Location Header
+                const locHeader = headerDiv.querySelector('.report-location-header');
+                if (locHeader) {
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(locHeader.innerText.trim(), pageWidth / 2, currentY, { align: 'center' });
+                    currentY += 5;
+                }
+            }
+
+            currentY += 2;
+
+            // --- 2. MAIN STUDENT TABLE ---
+            const mainTable = page.querySelector('table.print-table');
+            if (mainTable) {
                 doc.autoTable({
-                    html: sumTable,
+                    html: mainTable,
                     startY: currentY,
                     theme: 'grid',
-                    styles: { lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 },
-                    headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold' },
+                    styles: {
+                        lineColor: [0, 0, 0],
+                        lineWidth: 0.1,
+                        textColor: [0, 0, 0],
+                        fontSize: 10,
+                        cellPadding: 1.5,
+                        valign: 'middle',
+                        minCellHeight: 9, // Strict height for 20 rows
+                        overflow: 'linebreak'
+                    },
+                    headStyles: {
+                        fillColor: [240, 240, 240],
+                        textColor: [0, 0, 0],
+                        fontStyle: 'bold',
+                        lineWidth: 0.1,
+                        halign: 'center',
+                        minCellHeight: 10
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 10, halign: 'center' }, // Seat
+                        1: { cellWidth: 50, fontSize: 7, overflow: 'hidden' }, // Course (Tiny font, no wrap)
+                        2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }, // Reg No
+                        3: { cellWidth: 'auto' },               // Name
+                        4: { cellWidth: 25 },                   // Remarks
+                        5: { cellWidth: 20 }                    // Sign
+                    },
+                    didParseCell: function (data) {
+                        const rowElement = data.cell.raw.parentElement;
+                        if (rowElement && (rowElement.classList.contains('scribe-row-highlight') || rowElement.className.includes('scribe'))) {
+                            data.cell.styles.fillColor = [0, 0, 0];
+                            data.cell.styles.textColor = [255, 255, 255];
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    },
                     margin: { left: 14, right: 14 }
                 });
-                currentY = doc.lastAutoTable.finalY + 10;
+
+                currentY = doc.lastAutoTable.finalY + 8;
             }
 
-            // B. Booklet Account Box
-            const boxHeight = 24;
-            doc.setDrawColor(0);
-            doc.setLineWidth(0.2);
-            doc.rect(14, currentY, pageWidth - 28, boxHeight); 
-
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
-            
-            // Header Line
-            doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 7, { align: 'center' });
-            
-            // Label
-            doc.text("Written Booklets (QP Wise):", 16, currentY + 14);
-            
-            // --- C. DYNAMIC QP CODES POPULATION ---
-            let qpString = "";
-            // Find the box in HTML
-            const htmlBox = footer.querySelector('div[style*="border: 1px solid #000"]');
-            if (htmlBox) {
-                // The QP codes are usually in the second DIV child or we extract text
-                // Text looks like: "Written Booklets (QP Wise): QP01:  QP02: "
-                const fullText = htmlBox.innerText;
-                const marker = "Written Booklets (QP Wise):";
-                const endMarker = "Written Booklets Total:";
-                
-                if(fullText.includes(marker)) {
-                    let qpSection = fullText.split(marker)[1];
-                    if(qpSection.includes(endMarker)) qpSection = qpSection.split(endMarker)[0];
-                    
-                    // qpSection is now "QP01:  QP02: "
-                    // We split by colon to find keys
-                    const parts = qpSection.split(':');
-                    const codes = [];
-                    
-                    for(let k=0; k<parts.length-1; k++) {
-                        // The code is the last word of the previous part
-                        // e.g. "QP01" -> "_______"
-                        const fragment = parts[k].trim();
-                        // Get the last word (the QP code)
-                        const words = fragment.split(/\s+/);
-                        const code = words[words.length-1];
-                        if(code) codes.push(code);
-                    }
-                    
-                    if(codes.length > 0) {
-                        qpString = codes.map(c => `${c}: _______`).join("   ");
-                    }
-                }
-            }
-            
-            // Print the QP String
-            doc.setFont("helvetica", "normal");
-            doc.text(qpString, 60, currentY + 14); // Offset to right of label
-
-            // Total Line
-            doc.setFont("helvetica", "bold");
-            doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 21, { align: 'right' });
-
-            currentY += boxHeight + 15;
-
-            // D. Signatures
-            if (footer.innerText.includes("* = Scribe")) {
-                doc.setFontSize(9);
-                doc.setFont("helvetica", "italic");
-                doc.text("* = Scribe Assistance", 14, currentY + 4);
-            }
-
-            // Extract Name
-            let sigText = "Name & Signature of Invigilator";
-            const sigDiv = footer.querySelector('.signature');
-            if (sigDiv) {
-                const rawText = sigDiv.innerText.trim();
-                if (rawText && rawText.replace(/\s/g,'').length > 0 && !rawText.includes("Name & Signature")) {
-                    sigText = rawText;
-                }
-            }
-
-            doc.setLineWidth(0.2);
-            doc.line(pageWidth - 80, currentY, pageWidth - 14, currentY); 
-            
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "normal");
-            doc.text(sigText, 163, currentY + 5, { align: 'center' });
-        }
-    });
-
-    const dateStr = new Date().toISOString().slice(0,10);
-    doc.save(`RoomWise_Report_${dateStr}.pdf`);
-
-    if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-}
-//-----------------Notice Board Seating -----------------------
-
-// --- ULTIMATE PDF GENERATOR: ACCESSIBLE SCRIBE SUMMARY ---
-function generateDayWisePDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded.");
-    }
-
-    const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
-
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        
-        // --- 2. CONFIGURATION ---
-        const PAGE_H = 297;
-        const PAGE_W = 210;
-        const MARGIN = 10;
-        const COL_GAP = 5;
-        const ROW_H = 6;
-        const COURSE_HEADER_H = 7;
-        const COL_HEADER_H = 7;
-        
-        // Grid Dimensions
-        const USABLE_W = PAGE_W - (MARGIN * 2);
-        const COL_W = (USABLE_W - COL_GAP) / 2; 
-        
-        // Column Offsets (Precision Grid)
-        const OFF_LOC = 0;  const W_LOC = 25;
-        const OFF_REG = 25; const W_REG = 30;
-        const OFF_NAME= 55; const W_NAME= 30;
-        const OFF_SEAT= 85; const W_SEAT= 7.5;
-
-        // Limits
-        const ROWS_PER_SIDE = 38; 
-        const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
-
-        // --- 3. HELPER FUNCTIONS ---
-
-        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 8) => {
-            if (!text) return;
-            
-            doc.setFont("helvetica", isBold ? "bold" : "normal");
-            let fontSize = maxFontSize;
-            let lines = [];
-            
-            // Shrink-to-Fit Logic
-            while (fontSize > 4) {
-                doc.setFontSize(fontSize);
-                lines = doc.splitTextToSize(String(text), w - 2); 
-                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
-                
-                if (blockHeight <= (h - 1)) break; 
-                fontSize -= 0.5;
-            }
-            
-            doc.setFontSize(fontSize);
-            
-            // Vertical Centering
-            const lineHeight = fontSize * 0.3527 * 1.2;
-            const totalH = lines.length * lineHeight;
-            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
-
-            lines.forEach((line) => {
-                if (align === "center") {
-                    doc.text(line, x + (w / 2), startY, { align: "center" });
-                } else {
-                    doc.text(line, x + 1, startY);
-                }
-                startY += lineHeight;
-            });
-        };
-
-        const drawReportHeader = (stream, date, time, title, collegeName) => {
-            const w = doc.internal.pageSize.getWidth();
-            let y = 10;
-            
-            doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-            doc.text(stream, w - 14, y, { align: 'right' });
-        
-            y += 10;
-            doc.setFontSize(16); doc.text(collegeName, w/2, y, {align:'center'});
-            y += 7;
-            doc.setFontSize(14); doc.text(title, w/2, y, {align:'center'});
-            y += 6;
-            doc.setFontSize(11); doc.setFont("helvetica", "normal");
-            doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
-            
-            return y + 8; 
-        };
-
-        const drawColumnHeader = (x, y) => {
-            doc.setFillColor(220); // Grey
-            doc.rect(x, y, COL_W, COL_HEADER_H, 'F');
-            doc.setDrawColor(0); // Black Line
-            doc.rect(x, y, COL_W, COL_HEADER_H, 'S'); 
-
-            doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text("Loc", x + OFF_LOC + 2, y + 4.5);
-            doc.text("Reg No", x + OFF_REG + 2, y + 4.5);
-            doc.text("Name", x + OFF_NAME + 2, y + 4.5);
-            doc.text("Seat", x + OFF_SEAT + (W_SEAT/2), y + 4.5, { align: 'center' });
-        };
-
-        // --- 4. PREPARE DATA ---
-        const reportType = 'day-wise';
-        const rawData = getFilteredReportData(reportType); 
-        const dataWithRooms = performOriginalAllocation(rawData);
-        const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
-
-        const sessionsMap = {};
-        dataWithRooms.forEach(row => {
-            const stream = row.Stream || "Regular";
-            const key = `${row.Date}|${row.Time}`;
-            if (!sessionsMap[stream]) sessionsMap[stream] = {};
-            if (!sessionsMap[stream][key]) sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
-            sessionsMap[stream][key].students.push(row);
-            if(scribeRegNos.has(row['Register Number'])) sessionsMap[stream][key].scribes.push(row);
-        });
-
-        // --- 5. RENDER LOOP ---
-        const sortedStreams = Object.keys(sessionsMap).sort((a, b) => {
-            if (a === 'Regular') return -1;
-            if (b === 'Regular') return 1;
-            return a.localeCompare(b);
-        });
-
-        let pageCount = 0;
-
-        sortedStreams.forEach(stream => {
-            const sessions = sessionsMap[stream];
-            Object.keys(sessions).sort().forEach(key => {
-                const sData = sessions[key];
-                
-                sData.students.sort((a, b) => {
-                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    return a['Register Number'].localeCompare(b['Register Number']);
-                });
-
-                const printRows = [];
-                let lastCourse = "";
-                
-                sData.students.forEach(s => {
-                    if (s.Course !== lastCourse) {
-                        printRows.push({ type: 'header', text: s.Course });
-                        lastCourse = s.Course;
-                    }
-                    
-                    const roomName = s['Room No'];
-                    const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
-                    const locText = roomInfo.location ? `${roomName} (${roomInfo.location})` : roomName;
-                    const isScribe = scribeRegNos.has(s['Register Number']);
-
-                    printRows.push({
-                        type: 'data',
-                        loc: locText,
-                        reg: s['Register Number'],
-                        name: s.Name,
-                        seat: isScribe ? "SCR" : s.seatNumber,
-                        isScribe: isScribe
-                    });
-                });
-
-                // PAGINATION LOOP
-                let queue = [...printRows];
-
-                while (queue.length > 0) {
-                    if (pageCount > 0) doc.addPage();
-                    
-                    let startY = drawReportHeader(stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
-                    let currentY = startY + COL_HEADER_H;
-                    
-                    const isTwoCol = queue.length > ROWS_PER_SIDE;
-                    const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
-                    const pageRows = queue.splice(0, limit);
-
-                    let leftRows = [], rightRows = [];
-                    if (isTwoCol) {
-                        const mid = Math.ceil(pageRows.length / 2);
-                        leftRows = pageRows.slice(0, mid);
-                        rightRows = pageRows.slice(mid);
-                    } else {
-                        leftRows = pageRows;
-                    }
-
-                    // DRAW LEFT
-                    drawColumnHeader(MARGIN, startY);
-                    drawDataColumn(doc, leftRows, MARGIN, currentY, COL_W, ROW_H, COURSE_HEADER_H);
-
-                    // DRAW RIGHT
-                    if (rightRows.length > 0) {
-                        const rightX = MARGIN + COL_W + COL_GAP;
-                        drawColumnHeader(rightX, startY);
-                        drawDataColumn(doc, rightRows, rightX, currentY, COL_W, ROW_H, COURSE_HEADER_H);
-                        
-                        const midX = MARGIN + COL_W + (COL_GAP/2);
-                        doc.setDrawColor(0); 
-                        doc.line(midX, startY, midX, PAGE_H - 10);
-                    }
-
-                    pageCount++;
-                }
-
-                // --- SCRIBE SUMMARY (Large Font for Accessibility) ---
-                if (sData.scribes.length > 0) {
+            // --- 3. FOOTER RECONSTRUCTION ---
+            const footer = page.querySelector('.invigilator-footer');
+            if (footer) {
+                // Check for space
+                if (currentY + 65 > pageHeight) {
                     doc.addPage();
-                    let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
-                    
-                    const map = {};
-                    sData.scribes.forEach(s => {
-                        const r = s['Room No'];
-                        if(!map[r]) map[r] = [];
-                        map[r].push(`${s.Name} (${s['Register Number']})`);
+                    currentY = 15;
+                }
+
+                // A. Course Summary
+                const sumTable = footer.querySelector('table');
+                if (sumTable) {
+                    doc.setFontSize(9);
+                    doc.setFont("helvetica", "bold");
+                    doc.text("Course Summary:", 14, currentY);
+                    currentY += 2;
+
+                    doc.autoTable({
+                        html: sumTable,
+                        startY: currentY,
+                        theme: 'grid',
+                        styles: { lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0], fontSize: 8, cellPadding: 1 },
+                        headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
+                        margin: { left: 14, right: 14 }
                     });
+                    currentY = doc.lastAutoTable.finalY + 10;
+                }
 
-                    const sRows = Object.keys(map).sort();
-                    
-                    // Scribe Header
-                    doc.setFillColor(220); doc.setDrawColor(0);
-                    doc.rect(MARGIN, sY, USABLE_W, 10, 'FD'); // Taller header
-                    doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
-                    doc.text("Room Location", MARGIN + 2, sY + 6.5);
-                    doc.text("Candidates", MARGIN + 52, sY + 6.5); 
-                    sY += 10;
+                // B. Booklet Account Box
+                const boxHeight = 24;
+                doc.setDrawColor(0);
+                doc.setLineWidth(0.2);
+                doc.rect(14, currentY, pageWidth - 28, boxHeight);
 
-                    sRows.forEach(r => {
-                        const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
-                        const loc = info.location ? `${r}\n(${info.location})` : r;
-                        const cands = map[r].join(', ');
-                        
-                        const W_ROOM = 48; 
-                        const W_CAND = USABLE_W - W_ROOM;
+                doc.setFontSize(9);
+                doc.setFont("helvetica", "bold");
 
-                        // Calculate Height (Based on 12pt Bold for Candidates)
-                        doc.setFontSize(12); doc.setFont("helvetica", "bold");
-                        const candLines = doc.splitTextToSize(cands, W_CAND - 2);
-                        const candLineHeight = 6.5; 
-                        const hCand = candLines.length * candLineHeight;
-                        
-                        doc.setFontSize(10); doc.setFont("helvetica", "bold"); 
-                        const locLines = doc.splitTextToSize(loc, W_ROOM - 2);
-                        const hLoc = locLines.length * 5;
-                        
-                        const rowH = Math.max(12, hLoc + 4, hCand + 4);
+                // Header Line
+                doc.text("Booklets Received: __________   Used: __________   Balance Returned: __________", pageWidth / 2, currentY + 7, { align: 'center' });
 
-                        // Check Page Break
-                        if (sY + rowH > PAGE_H - 15) {
-                            doc.addPage();
-                            sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
-                            doc.setFillColor(220); doc.setDrawColor(0);
-                            doc.rect(MARGIN, sY, USABLE_W, 10, 'FD');
-                            doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
-                            doc.text("Room Location", MARGIN + 2, sY + 6.5);
-                            doc.text("Candidates", MARGIN + 52, sY + 6.5); 
-                            sY += 10;
+                // Label
+                doc.text("Written Booklets (QP Wise):", 16, currentY + 14);
+
+                // --- C. DYNAMIC QP CODES POPULATION ---
+                let qpString = "";
+                // Find the box in HTML
+                const htmlBox = footer.querySelector('div[style*="border: 1px solid #000"]');
+                if (htmlBox) {
+                    // The QP codes are usually in the second DIV child or we extract text
+                    // Text looks like: "Written Booklets (QP Wise): QP01:  QP02: "
+                    const fullText = htmlBox.innerText;
+                    const marker = "Written Booklets (QP Wise):";
+                    const endMarker = "Written Booklets Total:";
+
+                    if (fullText.includes(marker)) {
+                        let qpSection = fullText.split(marker)[1];
+                        if (qpSection.includes(endMarker)) qpSection = qpSection.split(endMarker)[0];
+
+                        // qpSection is now "QP01:  QP02: "
+                        // We split by colon to find keys
+                        const parts = qpSection.split(':');
+                        const codes = [];
+
+                        for (let k = 0; k < parts.length - 1; k++) {
+                            // The code is the last word of the previous part
+                            // e.g. "QP01" -> "_______"
+                            const fragment = parts[k].trim();
+                            // Get the last word (the QP code)
+                            const words = fragment.split(/\s+/);
+                            const code = words[words.length - 1];
+                            if (code) codes.push(code);
                         }
 
-                        // Draw Room
-                        const roomCenterY = sY + (rowH/2);
-                        drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true, 10);
+                        if (codes.length > 0) {
+                            qpString = codes.map(c => `${c}: _______`).join("   ");
+                        }
+                    }
+                }
 
-                        // Draw Candidates (12pt Bold)
-                        doc.setFont("helvetica", "bold");
-                        doc.setFontSize(12);
-                        let cY = sY + 5; 
-                        candLines.forEach(line => {
-                            doc.text(line, MARGIN + 50, cY + 2);
-                            cY += candLineHeight;
+                // Print the QP String
+                doc.setFont("helvetica", "normal");
+                doc.text(qpString, 60, currentY + 14); // Offset to right of label
+
+                // Total Line
+                doc.setFont("helvetica", "bold");
+                doc.text("Written Booklets Total: __________", pageWidth - 16, currentY + 21, { align: 'right' });
+
+                currentY += boxHeight + 15;
+
+                // D. Signatures
+                if (footer.innerText.includes("* = Scribe")) {
+                    doc.setFontSize(9);
+                    doc.setFont("helvetica", "italic");
+                    doc.text("* = Scribe Assistance", 14, currentY + 4);
+                }
+
+                // Extract Name
+                let sigText = "Name & Signature of Invigilator";
+                const sigDiv = footer.querySelector('.signature');
+                if (sigDiv) {
+                    const rawText = sigDiv.innerText.trim();
+                    if (rawText && rawText.replace(/\s/g, '').length > 0 && !rawText.includes("Name & Signature")) {
+                        sigText = rawText;
+                    }
+                }
+
+                doc.setLineWidth(0.2);
+                doc.line(pageWidth - 80, currentY, pageWidth - 14, currentY);
+
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+                doc.text(sigText, 163, currentY + 5, { align: 'center' });
+            }
+        });
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        doc.save(`RoomWise_Report_${dateStr}.pdf`);
+
+        if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+    //-----------------Notice Board Seating -----------------------
+
+    // --- ULTIMATE PDF GENERATOR: ACCESSIBLE SCRIBE SUMMARY ---
+    function generateDayWisePDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Validation
+        if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+            return alert("No data loaded.");
+        }
+
+        const btn = document.getElementById('download-pdf-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            // --- 2. CONFIGURATION ---
+            const PAGE_H = 297;
+            const PAGE_W = 210;
+            const MARGIN = 10;
+            const COL_GAP = 5;
+            const ROW_H = 6;
+            const COURSE_HEADER_H = 7;
+            const COL_HEADER_H = 7;
+
+            // Grid Dimensions
+            const USABLE_W = PAGE_W - (MARGIN * 2);
+            const COL_W = (USABLE_W - COL_GAP) / 2;
+
+            // Column Offsets (Precision Grid)
+            const OFF_LOC = 0; const W_LOC = 25;
+            const OFF_REG = 25; const W_REG = 30;
+            const OFF_NAME = 55; const W_NAME = 30;
+            const OFF_SEAT = 85; const W_SEAT = 7.5;
+
+            // Limits
+            const ROWS_PER_SIDE = 38;
+            const ROWS_PER_PAGE = ROWS_PER_SIDE * 2;
+
+            // --- 3. HELPER FUNCTIONS ---
+
+            const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 8) => {
+                if (!text) return;
+
+                doc.setFont("helvetica", isBold ? "bold" : "normal");
+                let fontSize = maxFontSize;
+                let lines = [];
+
+                // Shrink-to-Fit Logic
+                while (fontSize > 4) {
+                    doc.setFontSize(fontSize);
+                    lines = doc.splitTextToSize(String(text), w - 2);
+                    const blockHeight = lines.length * (fontSize * 0.3527 * 1.2);
+
+                    if (blockHeight <= (h - 1)) break;
+                    fontSize -= 0.5;
+                }
+
+                doc.setFontSize(fontSize);
+
+                // Vertical Centering
+                const lineHeight = fontSize * 0.3527 * 1.2;
+                const totalH = lines.length * lineHeight;
+                let startY = centerY - (totalH / 2) + (lineHeight / 1.5);
+
+                lines.forEach((line) => {
+                    if (align === "center") {
+                        doc.text(line, x + (w / 2), startY, { align: "center" });
+                    } else {
+                        doc.text(line, x + 1, startY);
+                    }
+                    startY += lineHeight;
+                });
+            };
+
+            const drawReportHeader = (stream, date, time, title, collegeName) => {
+                const w = doc.internal.pageSize.getWidth();
+                let y = 10;
+
+                doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                doc.text(stream, w - 14, y, { align: 'right' });
+
+                y += 10;
+                doc.setFontSize(16); doc.text(collegeName, w / 2, y, { align: 'center' });
+                y += 7;
+                doc.setFontSize(14); doc.text(title, w / 2, y, { align: 'center' });
+                y += 6;
+                doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                doc.text(`${date} | ${time}`, w / 2, y, { align: 'center' });
+
+                return y + 8;
+            };
+
+            const drawColumnHeader = (x, y) => {
+                doc.setFillColor(220); // Grey
+                doc.rect(x, y, COL_W, COL_HEADER_H, 'F');
+                doc.setDrawColor(0); // Black Line
+                doc.rect(x, y, COL_W, COL_HEADER_H, 'S');
+
+                doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                doc.text("Loc", x + OFF_LOC + 2, y + 4.5);
+                doc.text("Reg No", x + OFF_REG + 2, y + 4.5);
+                doc.text("Name", x + OFF_NAME + 2, y + 4.5);
+                doc.text("Seat", x + OFF_SEAT + (W_SEAT / 2), y + 4.5, { align: 'center' });
+            };
+
+            // --- 4. PREPARE DATA ---
+            const reportType = 'day-wise';
+            const rawData = getFilteredReportData(reportType);
+            const dataWithRooms = performOriginalAllocation(rawData);
+            const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
+
+            const sessionsMap = {};
+            dataWithRooms.forEach(row => {
+                const stream = row.Stream || "Regular";
+                const key = `${row.Date}|${row.Time}`;
+                if (!sessionsMap[stream]) sessionsMap[stream] = {};
+                if (!sessionsMap[stream][key]) sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
+                sessionsMap[stream][key].students.push(row);
+                if (scribeRegNos.has(row['Register Number'])) sessionsMap[stream][key].scribes.push(row);
+            });
+
+            // --- 5. RENDER LOOP ---
+            const sortedStreams = Object.keys(sessionsMap).sort((a, b) => {
+                if (a === 'Regular') return -1;
+                if (b === 'Regular') return 1;
+                return a.localeCompare(b);
+            });
+
+            let pageCount = 0;
+
+            sortedStreams.forEach(stream => {
+                const sessions = sessionsMap[stream];
+                Object.keys(sessions).sort().forEach(key => {
+                    const sData = sessions[key];
+
+                    sData.students.sort((a, b) => {
+                        if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                        return a['Register Number'].localeCompare(b['Register Number']);
+                    });
+
+                    const printRows = [];
+                    let lastCourse = "";
+
+                    sData.students.forEach(s => {
+                        if (s.Course !== lastCourse) {
+                            printRows.push({ type: 'header', text: s.Course });
+                            lastCourse = s.Course;
+                        }
+
+                        const roomName = s['Room No'];
+                        const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
+                        const locText = roomInfo.location ? `${roomName} (${roomInfo.location})` : roomName;
+                        const isScribe = scribeRegNos.has(s['Register Number']);
+
+                        printRows.push({
+                            type: 'data',
+                            loc: locText,
+                            reg: s['Register Number'],
+                            name: s.Name,
+                            seat: isScribe ? "SCR" : s.seatNumber,
+                            isScribe: isScribe
+                        });
+                    });
+
+                    // PAGINATION LOOP
+                    let queue = [...printRows];
+
+                    while (queue.length > 0) {
+                        if (pageCount > 0) doc.addPage();
+
+                        let startY = drawReportHeader(stream, sData.date, sData.time, "Seating Details", (typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"));
+                        let currentY = startY + COL_HEADER_H;
+
+                        const isTwoCol = queue.length > ROWS_PER_SIDE;
+                        const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
+                        const pageRows = queue.splice(0, limit);
+
+                        let leftRows = [], rightRows = [];
+                        if (isTwoCol) {
+                            const mid = Math.ceil(pageRows.length / 2);
+                            leftRows = pageRows.slice(0, mid);
+                            rightRows = pageRows.slice(mid);
+                        } else {
+                            leftRows = pageRows;
+                        }
+
+                        // DRAW LEFT
+                        drawColumnHeader(MARGIN, startY);
+                        drawDataColumn(doc, leftRows, MARGIN, currentY, COL_W, ROW_H, COURSE_HEADER_H);
+
+                        // DRAW RIGHT
+                        if (rightRows.length > 0) {
+                            const rightX = MARGIN + COL_W + COL_GAP;
+                            drawColumnHeader(rightX, startY);
+                            drawDataColumn(doc, rightRows, rightX, currentY, COL_W, ROW_H, COURSE_HEADER_H);
+
+                            const midX = MARGIN + COL_W + (COL_GAP / 2);
+                            doc.setDrawColor(0);
+                            doc.line(midX, startY, midX, PAGE_H - 10);
+                        }
+
+                        pageCount++;
+                    }
+
+                    // --- SCRIBE SUMMARY (Large Font for Accessibility) ---
+                    if (sData.scribes.length > 0) {
+                        doc.addPage();
+                        let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
+
+                        const map = {};
+                        sData.scribes.forEach(s => {
+                            const r = s['Room No'];
+                            if (!map[r]) map[r] = [];
+                            map[r].push(`${s.Name} (${s['Register Number']})`);
                         });
 
-                        // Borders
-                        doc.setDrawColor(0);
-                        doc.rect(MARGIN, sY, USABLE_W, rowH); 
-                        doc.line(MARGIN + 50, sY, MARGIN + 50, sY + rowH); 
+                        const sRows = Object.keys(map).sort();
 
-                        sY += rowH;
-                    });
-                    pageCount++;
-                }
-            });
-        });
+                        // Scribe Header
+                        doc.setFillColor(220); doc.setDrawColor(0);
+                        doc.rect(MARGIN, sY, USABLE_W, 10, 'FD'); // Taller header
+                        doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
+                        doc.text("Room Location", MARGIN + 2, sY + 6.5);
+                        doc.text("Candidates", MARGIN + 52, sY + 6.5);
+                        sY += 10;
 
-        // --- HELPER: DRAW COLUMN CONTENT ---
-        function drawDataColumn(pdf, rows, xBase, yStart, colW, rowH, headerH) {
-            let y = yStart;
-            
-            const xLoc  = xBase + OFF_LOC;
-            const xReg  = xBase + OFF_REG;
-            const xName = xBase + OFF_NAME;
-            const xSeat = xBase + OFF_SEAT;
+                        sRows.forEach(r => {
+                            const info = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[r]) ? currentRoomConfig[r] : {};
+                            const loc = info.location ? `${r}\n(${info.location})` : r;
+                            const cands = map[r].join(', ');
 
-            // Merging Pre-Calculation
-            const mergeMap = []; 
-            for(let i=0; i<rows.length; i++) mergeMap[i] = { span: 1, isStart: true, skip: false };
+                            const W_ROOM = 48;
+                            const W_CAND = USABLE_W - W_ROOM;
 
-            for(let i=0; i<rows.length; i++) {
-                if (rows[i].type !== 'data' || mergeMap[i].skip) continue;
-                let span = 1;
-                for(let j=i+1; j<rows.length; j++) {
-                    if (rows[j].type === 'data' && rows[j].loc === rows[i].loc) {
-                        span++;
-                        mergeMap[j].skip = true;
-                    } else break;
-                }
-                mergeMap[i].span = span;
-            }
+                            // Calculate Height (Based on 12pt Bold for Candidates)
+                            doc.setFontSize(12); doc.setFont("helvetica", "bold");
+                            const candLines = doc.splitTextToSize(cands, W_CAND - 2);
+                            const candLineHeight = 6.5;
+                            const hCand = candLines.length * candLineHeight;
 
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                
-                if (row.type === 'header') {
-                    pdf.setFillColor(0); 
-                    pdf.rect(xBase, y, colW, headerH, 'F');
-                    pdf.setTextColor(255);
-                    drawSmartText(row.text, xBase + 2, y + (headerH/2), colW - 4, headerH, "left", true, 9);
-                    y += headerH;
-                } else {
-                    pdf.setDrawColor(0); 
-                    pdf.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0); 
+                            doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                            const locLines = doc.splitTextToSize(loc, W_ROOM - 2);
+                            const hLoc = locLines.length * 5;
 
-                    const rowCenterY = y + (rowH / 2);
+                            const rowH = Math.max(12, hLoc + 4, hCand + 4);
 
-                    // LOC: Merged Drawing
-                    if (!mergeMap[i].skip) {
-                        const span = mergeMap[i].span;
-                        const totalMergeH = span * rowH;
-                        const mergeCenterY = y + (totalMergeH / 2);
-                        
-                        drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
-                        
-                        const blockBottomY = y + totalMergeH;
-                        pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); 
-                        pdf.line(xBase + W_LOC, y, xBase + W_LOC, blockBottomY); 
-                        pdf.line(xBase, y, xBase, blockBottomY); 
+                            // Check Page Break
+                            if (sY + rowH > PAGE_H - 15) {
+                                doc.addPage();
+                                sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
+                                doc.setFillColor(220); doc.setDrawColor(0);
+                                doc.rect(MARGIN, sY, USABLE_W, 10, 'FD');
+                                doc.setTextColor(0); doc.setFontSize(11); doc.setFont("helvetica", "bold");
+                                doc.text("Room Location", MARGIN + 2, sY + 6.5);
+                                doc.text("Candidates", MARGIN + 52, sY + 6.5);
+                                sY += 10;
+                            }
+
+                            // Draw Room
+                            const roomCenterY = sY + (rowH / 2);
+                            drawSmartText(loc, MARGIN, roomCenterY, W_ROOM, rowH, "left", true, 10);
+
+                            // Draw Candidates (12pt Bold)
+                            doc.setFont("helvetica", "bold");
+                            doc.setFontSize(12);
+                            let cY = sY + 5;
+                            candLines.forEach(line => {
+                                doc.text(line, MARGIN + 50, cY + 2);
+                                cY += candLineHeight;
+                            });
+
+                            // Borders
+                            doc.setDrawColor(0);
+                            doc.rect(MARGIN, sY, USABLE_W, rowH);
+                            doc.line(MARGIN + 50, sY, MARGIN + 50, sY + rowH);
+
+                            sY += rowH;
+                        });
+                        pageCount++;
                     }
+                });
+            });
 
-                    drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true, 8);
-                    drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe, 8);
-                    drawSmartText(String(row.seat), xSeat, rowCenterY, W_SEAT, rowH, "center", true, 8);
+            // --- HELPER: DRAW COLUMN CONTENT ---
+            function drawDataColumn(pdf, rows, xBase, yStart, colW, rowH, headerH) {
+                let y = yStart;
 
-                    const lineY = y + rowH;
-                    pdf.line(xBase + W_LOC, lineY, xBase + colW, lineY); 
-                    pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY); 
-                    pdf.line(xBase + OFF_NAME, y, xBase + OFF_NAME, lineY); 
-                    pdf.line(xBase + OFF_SEAT, y, xBase + OFF_SEAT, lineY); 
-                    pdf.line(xBase + colW, y, xBase + colW, lineY); 
+                const xLoc = xBase + OFF_LOC;
+                const xReg = xBase + OFF_REG;
+                const xName = xBase + OFF_NAME;
+                const xSeat = xBase + OFF_SEAT;
 
-                    y += rowH;
+                // Merging Pre-Calculation
+                const mergeMap = [];
+                for (let i = 0; i < rows.length; i++) mergeMap[i] = { span: 1, isStart: true, skip: false };
+
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i].type !== 'data' || mergeMap[i].skip) continue;
+                    let span = 1;
+                    for (let j = i + 1; j < rows.length; j++) {
+                        if (rows[j].type === 'data' && rows[j].loc === rows[i].loc) {
+                            span++;
+                            mergeMap[j].skip = true;
+                        } else break;
+                    }
+                    mergeMap[i].span = span;
                 }
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+
+                    if (row.type === 'header') {
+                        pdf.setFillColor(0);
+                        pdf.rect(xBase, y, colW, headerH, 'F');
+                        pdf.setTextColor(255);
+                        drawSmartText(row.text, xBase + 2, y + (headerH / 2), colW - 4, headerH, "left", true, 9);
+                        y += headerH;
+                    } else {
+                        pdf.setDrawColor(0);
+                        pdf.setTextColor(row.isScribe ? 200 : 0, row.isScribe ? 50 : 0, 0);
+
+                        const rowCenterY = y + (rowH / 2);
+
+                        // LOC: Merged Drawing
+                        if (!mergeMap[i].skip) {
+                            const span = mergeMap[i].span;
+                            const totalMergeH = span * rowH;
+                            const mergeCenterY = y + (totalMergeH / 2);
+
+                            drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
+
+                            const blockBottomY = y + totalMergeH;
+                            pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY);
+                            pdf.line(xBase + W_LOC, y, xBase + W_LOC, blockBottomY);
+                            pdf.line(xBase, y, xBase, blockBottomY);
+                        }
+
+                        drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true, 8);
+                        drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe, 8);
+                        drawSmartText(String(row.seat), xSeat, rowCenterY, W_SEAT, rowH, "center", true, 8);
+
+                        const lineY = y + rowH;
+                        pdf.line(xBase + W_LOC, lineY, xBase + colW, lineY);
+                        pdf.line(xBase + OFF_REG, y, xBase + OFF_REG, lineY);
+                        pdf.line(xBase + OFF_NAME, y, xBase + OFF_NAME, lineY);
+                        pdf.line(xBase + OFF_SEAT, y, xBase + OFF_SEAT, lineY);
+                        pdf.line(xBase + colW, y, xBase + colW, lineY);
+
+                        y += rowH;
+                    }
+                }
+                pdf.setDrawColor(0);
+                pdf.line(xBase, yStart, xBase + colW, yStart);
             }
-            pdf.setDrawColor(0);
-            pdf.line(xBase, yStart, xBase + colW, yStart);
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`DayWise_Report_${dateStr}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Error:", e);
+            alert("Error: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
+    }
+    //------------------------------------------------------------------
+    // --- ROOM STICKERS PDF (2 Per Page - Boxed Columns, Session Info, Stream, No Location Box) ---
+    function generateRoomStickersPDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Validation
+        const reportContainer = document.getElementById('report-output-area');
+        const pages = reportContainer ? reportContainer.querySelectorAll('.print-page-sticker') : [];
+
+        if (pages.length === 0) {
+            return alert("Please generate the Room Stickers HTML report first.");
         }
 
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`DayWise_Report_${dateStr}.pdf`);
+        const btn = document.getElementById('download-pdf-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Printing Stickers..."; }
 
-    } catch (e) {
-        console.error("PDF Error:", e);
-        alert("Error: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-    }
-}
-//------------------------------------------------------------------
-// --- ROOM STICKERS PDF (2 Per Page - Boxed Columns, Session Info, Stream, No Location Box) ---
-function generateRoomStickersPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    const reportContainer = document.getElementById('report-output-area');
-    const pages = reportContainer ? reportContainer.querySelectorAll('.print-page-sticker') : [];
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const PAGE_W = 210;
+            const MARGIN_X = 10;
+            const STICKER_H = 135;
+            const STICKER_W = PAGE_W - (MARGIN_X * 2);
 
-    if (pages.length === 0) {
-        return alert("Please generate the Room Stickers HTML report first.");
-    }
+            const TOP_Y = 10;
+            const BOT_Y = 10 + STICKER_H + 10;
 
-    const btn = document.getElementById('download-pdf-report-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Printing Stickers..."; }
+            // Cache Serial Maps
+            const sessionSerialMaps = {};
 
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const PAGE_W = 210;
-        const MARGIN_X = 10;
-        const STICKER_H = 135; 
-        const STICKER_W = PAGE_W - (MARGIN_X * 2);
-        
-        const TOP_Y = 10;
-        const BOT_Y = 10 + STICKER_H + 10; 
+            pages.forEach((pageEl, pageIndex) => {
+                if (pageIndex > 0) doc.addPage();
 
-        // Cache Serial Maps
-        const sessionSerialMaps = {};
+                const stickers = pageEl.querySelectorAll('.exam-sticker');
 
-        pages.forEach((pageEl, pageIndex) => {
-            if (pageIndex > 0) doc.addPage();
+                stickers.forEach((stickerEl, sIndex) => {
+                    const startY = (sIndex === 0) ? TOP_Y : BOT_Y;
 
-            const stickers = pageEl.querySelectorAll('.exam-sticker');
-            
-            stickers.forEach((stickerEl, sIndex) => {
-                const startY = (sIndex === 0) ? TOP_Y : BOT_Y;
-                
-                // --- 1. STICKER BORDER ---
-                doc.setDrawColor(0); doc.setLineWidth(0.4); doc.setLineDash([2, 2], 0);
-                doc.rect(MARGIN_X, startY, STICKER_W, STICKER_H);
-                doc.setLineDash([]); 
-                doc.setLineWidth(0.1);
+                    // --- 1. STICKER BORDER ---
+                    doc.setDrawColor(0); doc.setLineWidth(0.4); doc.setLineDash([2, 2], 0);
+                    doc.rect(MARGIN_X, startY, STICKER_W, STICKER_H);
+                    doc.setLineDash([]);
+                    doc.setLineWidth(0.1);
 
-                // --- 2. HEADER ---
-                const headerDiv = stickerEl.firstElementChild;
-                const collegeName = headerDiv.querySelector('h1')?.innerText.trim() || "";
-                
-                // Date/Time
-                const dateDiv = headerDiv.children[1]; 
-                const dateText = dateDiv ? dateDiv.innerText.trim() : "";
-                
-                // Room info from HTML
-                const roomSpan = headerDiv.querySelector('span')?.innerText.trim() || "";
+                    // --- 2. HEADER ---
+                    const headerDiv = stickerEl.firstElementChild;
+                    const collegeName = headerDiv.querySelector('h1')?.innerText.trim() || "";
 
-                // --- STREAM LOOKUP (NEW) ---
-                let streamText = "";
-                // Look into the first course block to find a course name
-                const firstCourseBlock = stickerEl.querySelector('div[style*="border: 1px solid"]');
-                if (firstCourseBlock) {
-                    const blockHeader = firstCourseBlock.firstElementChild;
-                    // Course name is the first text node
-                    const cNameNode = blockHeader.childNodes[0];
-                    const cName = cNameNode ? cNameNode.textContent.trim() : "";
-                    
-                    if (cName && typeof allStudentData !== 'undefined') {
-                        // Find a student with this course to get the stream
-                        const student = allStudentData.find(s => s.Course === cName);
-                        if (student && student.Stream) {
-                            streamText = student.Stream;
+                    // Date/Time
+                    const dateDiv = headerDiv.children[1];
+                    const dateText = dateDiv ? dateDiv.innerText.trim() : "";
+
+                    // Room info from HTML
+                    const roomSpan = headerDiv.querySelector('span')?.innerText.trim() || "";
+
+                    // --- STREAM LOOKUP (NEW) ---
+                    let streamText = "";
+                    // Look into the first course block to find a course name
+                    const firstCourseBlock = stickerEl.querySelector('div[style*="border: 1px solid"]');
+                    if (firstCourseBlock) {
+                        const blockHeader = firstCourseBlock.firstElementChild;
+                        // Course name is the first text node
+                        const cNameNode = blockHeader.childNodes[0];
+                        const cName = cNameNode ? cNameNode.textContent.trim() : "";
+
+                        if (cName && typeof allStudentData !== 'undefined') {
+                            // Find a student with this course to get the stream
+                            const student = allStudentData.find(s => s.Course === cName);
+                            if (student && student.Stream) {
+                                streamText = student.Stream;
+                            }
                         }
                     }
-                }
 
-                // --- SERIAL & LOCATION LOGIC ---
-                let roomName = roomSpan;
-                const parenMatch = roomSpan.match(/\((.*?)\)/);
-                if (parenMatch) roomName = parenMatch[1]; 
+                    // --- SERIAL & LOCATION LOGIC ---
+                    let roomName = roomSpan;
+                    const parenMatch = roomSpan.match(/\((.*?)\)/);
+                    if (parenMatch) roomName = parenMatch[1];
 
-                let serialNo = "";
-                if (typeof getRoomSerialMap === 'function') {
-                    if (!sessionSerialMaps[dateText]) {
-                        sessionSerialMaps[dateText] = getRoomSerialMap(dateText);
-                    }
-                    if (sessionSerialMaps[dateText]) {
-                        const val = sessionSerialMaps[dateText][roomName];
-                        if (val !== undefined && val !== null) serialNo = val;
-                    }
-                }
-
-                const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
-                const location = roomInfo.location || "";
-
-                // Format: Location (Serial) or Room (Serial)
-                const mainLabel = location ? location : roomName;
-                const displayTitle = serialNo ? `${mainLabel} (${serialNo})` : mainLabel;
-
-                // Session Suffix
-                let sessionSuffix = "";
-                const t = dateText.toUpperCase();
-                if(t.includes("AM")) sessionSuffix = " (FN)";
-                else if(t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:") || t.includes("15:") || t.includes("16:")) sessionSuffix = " (AN)";
-
-                let y = startY + 8;
-                
-                // College
-                doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(collegeName, PAGE_W / 2, y, { align: 'center' });
-                
-                // Stream (Top Right)
-                if (streamText) {
-                    doc.setFontSize(10);
-                    doc.text(streamText, MARGIN_X + STICKER_W - 5, y, { align: 'right' });
-                }
-                
-                y += 5;
-
-                // Date + Session
-                doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(dateText + sessionSuffix, PAGE_W / 2, y, { align: 'center' });
-                y += 8;
-
-                // Room Title (NO BOX)
-                doc.setFontSize(14); doc.setFont("helvetica", "bold");
-                doc.text(displayTitle, PAGE_W / 2, y, { align: 'center' });
-                y += 8;
-
-                // --- 3. COURSE BLOCKS ---
-                const bodyDiv = stickerEl.children[1]; 
-                const courseBlocks = bodyDiv ? bodyDiv.querySelectorAll('div[style*="border: 1px solid"]') : [];
-
-                let currentBlockY = y;
-
-                courseBlocks.forEach(block => {
-                    const blockHeader = block.firstElementChild; 
-                    const cNameNode = blockHeader.childNodes[0];
-                    const cName = cNameNode ? cNameNode.textContent.trim() : "";
-                    const countSpan = blockHeader.querySelector('span');
-                    const count = countSpan ? countSpan.innerText.trim() : "";
-
-                    // Block Header
-                    doc.setFillColor(240); 
-                    doc.setDrawColor(0); doc.setLineWidth(0.1);
-                    doc.rect(MARGIN_X + 2, currentBlockY, STICKER_W - 4, 6, 'F');
-                    doc.rect(MARGIN_X + 2, currentBlockY, STICKER_W - 4, 6, 'S'); 
-
-                    doc.setFontSize(9); doc.setFont("helvetica", "bold");
-                    doc.text(cName, MARGIN_X + 4, currentBlockY + 4);
-                    
-                    // Count Badge
-                    doc.setFillColor(255);
-                    doc.rect(MARGIN_X + STICKER_W - 12, currentBlockY + 1, 8, 4, 'F');
-                    doc.rect(MARGIN_X + STICKER_W - 12, currentBlockY + 1, 8, 4, 'S');
-                    doc.setFontSize(8);
-                    doc.text(count, MARGIN_X + STICKER_W - 8, currentBlockY + 3.5, { align: 'center' });
-
-                    currentBlockY += 6;
-
-                    // --- STUDENT GRID (BOXED) ---
-                    const gridDiv = block.children[1];
-                    const studentRows = gridDiv ? gridDiv.querySelectorAll('div[style*="display: grid"]') : [];
-                    
-                    const cellW = (STICKER_W - 6) / 3; 
-                    let colIndex = 0;
-                    let rowY = currentBlockY;
-
-                    doc.setFontSize(8);
-
-                    studentRows.forEach(rowEl => {
-                        const divs = rowEl.children;
-                        const seat = divs[0].innerText.trim();
-                        const reg = divs[1].innerText.trim();
-                        const name = divs[2].innerText.trim();
-
-                        const xBase = MARGIN_X + 2 + (colIndex * cellW);
-                        
-                        // DRAW BLACK BOX
-                        doc.setDrawColor(0); 
-                        doc.setLineWidth(0.15); 
-                        doc.rect(xBase, rowY, cellW - 1, 6); 
-
-                        // Text
-                        doc.setFont("helvetica", "bold");
-                        doc.text(seat, xBase + 2, rowY + 4); 
-                        
-                        doc.setFont("helvetica", "normal");
-                        doc.text(reg, xBase + 10, rowY + 4); 
-                        
-                        // Name
-                        let dName = name;
-                        if(doc.getTextWidth(dName) > (cellW - 35)) dName = dName.substring(0, 12) + "..";
-                        doc.text(dName, xBase + 35, rowY + 4);
-
-                        colIndex++;
-                        if (colIndex >= 3) {
-                            colIndex = 0;
-                            rowY += 6;
+                    let serialNo = "";
+                    if (typeof getRoomSerialMap === 'function') {
+                        if (!sessionSerialMaps[dateText]) {
+                            sessionSerialMaps[dateText] = getRoomSerialMap(dateText);
                         }
+                        if (sessionSerialMaps[dateText]) {
+                            const val = sessionSerialMaps[dateText][roomName];
+                            if (val !== undefined && val !== null) serialNo = val;
+                        }
+                    }
+
+                    const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
+                    const location = roomInfo.location || "";
+
+                    // Format: Location (Serial) or Room (Serial)
+                    const mainLabel = location ? location : roomName;
+                    const displayTitle = serialNo ? `${mainLabel} (${serialNo})` : mainLabel;
+
+                    // Session Suffix
+                    let sessionSuffix = "";
+                    const t = dateText.toUpperCase();
+                    if (t.includes("AM")) sessionSuffix = " (FN)";
+                    else if (t.includes("PM") || t.includes("12:") || t.includes("13:") || t.includes("14:") || t.includes("15:") || t.includes("16:")) sessionSuffix = " (AN)";
+
+                    let y = startY + 8;
+
+                    // College
+                    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                    doc.text(collegeName, PAGE_W / 2, y, { align: 'center' });
+
+                    // Stream (Top Right)
+                    if (streamText) {
+                        doc.setFontSize(10);
+                        doc.text(streamText, MARGIN_X + STICKER_W - 5, y, { align: 'right' });
+                    }
+
+                    y += 5;
+
+                    // Date + Session
+                    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                    doc.text(dateText + sessionSuffix, PAGE_W / 2, y, { align: 'center' });
+                    y += 8;
+
+                    // Room Title (NO BOX)
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                    doc.text(displayTitle, PAGE_W / 2, y, { align: 'center' });
+                    y += 8;
+
+                    // --- 3. COURSE BLOCKS ---
+                    const bodyDiv = stickerEl.children[1];
+                    const courseBlocks = bodyDiv ? bodyDiv.querySelectorAll('div[style*="border: 1px solid"]') : [];
+
+                    let currentBlockY = y;
+
+                    courseBlocks.forEach(block => {
+                        const blockHeader = block.firstElementChild;
+                        const cNameNode = blockHeader.childNodes[0];
+                        const cName = cNameNode ? cNameNode.textContent.trim() : "";
+                        const countSpan = blockHeader.querySelector('span');
+                        const count = countSpan ? countSpan.innerText.trim() : "";
+
+                        // Block Header
+                        doc.setFillColor(240);
+                        doc.setDrawColor(0); doc.setLineWidth(0.1);
+                        doc.rect(MARGIN_X + 2, currentBlockY, STICKER_W - 4, 6, 'F');
+                        doc.rect(MARGIN_X + 2, currentBlockY, STICKER_W - 4, 6, 'S');
+
+                        doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                        doc.text(cName, MARGIN_X + 4, currentBlockY + 4);
+
+                        // Count Badge
+                        doc.setFillColor(255);
+                        doc.rect(MARGIN_X + STICKER_W - 12, currentBlockY + 1, 8, 4, 'F');
+                        doc.rect(MARGIN_X + STICKER_W - 12, currentBlockY + 1, 8, 4, 'S');
+                        doc.setFontSize(8);
+                        doc.text(count, MARGIN_X + STICKER_W - 8, currentBlockY + 3.5, { align: 'center' });
+
+                        currentBlockY += 6;
+
+                        // --- STUDENT GRID (BOXED) ---
+                        const gridDiv = block.children[1];
+                        const studentRows = gridDiv ? gridDiv.querySelectorAll('div[style*="display: grid"]') : [];
+
+                        const cellW = (STICKER_W - 6) / 3;
+                        let colIndex = 0;
+                        let rowY = currentBlockY;
+
+                        doc.setFontSize(8);
+
+                        studentRows.forEach(rowEl => {
+                            const divs = rowEl.children;
+                            const seat = divs[0].innerText.trim();
+                            const reg = divs[1].innerText.trim();
+                            const name = divs[2].innerText.trim();
+
+                            const xBase = MARGIN_X + 2 + (colIndex * cellW);
+
+                            // DRAW BLACK BOX
+                            doc.setDrawColor(0);
+                            doc.setLineWidth(0.15);
+                            doc.rect(xBase, rowY, cellW - 1, 6);
+
+                            // Text
+                            doc.setFont("helvetica", "bold");
+                            doc.text(seat, xBase + 2, rowY + 4);
+
+                            doc.setFont("helvetica", "normal");
+                            doc.text(reg, xBase + 10, rowY + 4);
+
+                            // Name
+                            let dName = name;
+                            if (doc.getTextWidth(dName) > (cellW - 35)) dName = dName.substring(0, 12) + "..";
+                            doc.text(dName, xBase + 35, rowY + 4);
+
+                            colIndex++;
+                            if (colIndex >= 3) {
+                                colIndex = 0;
+                                rowY += 6;
+                            }
+                        });
+
+                        if (colIndex > 0) rowY += 6;
+                        currentBlockY = rowY + 2; // Gap
                     });
 
-                    if (colIndex > 0) rowY += 6; 
-                    currentBlockY = rowY + 2; // Gap
+                    // --- 4. FOOTER ---
+                    const footerDiv = stickerEl.lastElementChild;
+                    const footerText = footerDiv ? footerDiv.innerText.trim() : "Total: 0";
+
+                    const footerY = startY + STICKER_H - 8;
+                    doc.setFillColor(240); doc.setDrawColor(0); doc.setLineWidth(0.1);
+                    doc.rect(MARGIN_X, footerY, STICKER_W, 8, 'F');
+                    doc.rect(MARGIN_X, footerY, STICKER_W, 8, 'S');
+
+                    doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                    doc.text(footerText, PAGE_W / 2, footerY + 5.5, { align: 'center' });
                 });
-
-                // --- 4. FOOTER ---
-                const footerDiv = stickerEl.lastElementChild;
-                const footerText = footerDiv ? footerDiv.innerText.trim() : "Total: 0";
-
-                const footerY = startY + STICKER_H - 8;
-                doc.setFillColor(240); doc.setDrawColor(0); doc.setLineWidth(0.1);
-                doc.rect(MARGIN_X, footerY, STICKER_W, 8, 'F');
-                doc.rect(MARGIN_X, footerY, STICKER_W, 8, 'S');
-
-                doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                doc.text(footerText, PAGE_W / 2, footerY + 5.5, { align: 'center' });
             });
-        });
 
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`Room_Stickers_${dateStr}.pdf`);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`Room_Stickers_${dateStr}.pdf`);
 
-    } catch (e) {
-        console.error("Sticker PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-    }
-}
-
-
-    
-
-
-    
-//------------------SCRIBE REPORT-----------------------------
-
-// --- SCRIBE PROFORMA PDF (One Page Per Scribe - HTML Scraper) ---
-function generateScribeProformaPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    const reportContainer = document.getElementById('report-output-area');
-    const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
-
-    if (pages.length === 0) {
-        return alert("Please generate the Scribe Proforma HTML report first.");
+        } catch (e) {
+            console.error("Sticker PDF Error:", e);
+            alert("Error creating PDF: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
     }
 
-    const btn = document.getElementById('download-pdf-report-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generatng Proforma..."; }
 
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const PAGE_W = 210;
-        const PAGE_H = 297;
-        const MARGIN = 15;
-        const CONTENT_W = PAGE_W - (MARGIN * 2);
 
-        // --- RENDER LOOP ---
-        pages.forEach((page, index) => {
-            if (index > 0) doc.addPage();
 
-            let currentY = 20;
 
-            // 1. HEADER (Scrape from HTML)
-            const headerGroup = page.querySelector('.print-header-group');
-            if (headerGroup) {
-                const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "COLLEGE NAME";
-                const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "Scribe Proforma";
-                const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
 
-                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(h1, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 8;
-                
-                doc.setFontSize(14); doc.text(h2, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 8;
-                
+    //------------------SCRIBE REPORT-----------------------------
+
+    // --- SCRIBE PROFORMA PDF (One Page Per Scribe - HTML Scraper) ---
+    function generateScribeProformaPDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Validation
+        const reportContainer = document.getElementById('report-output-area');
+        const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
+
+        if (pages.length === 0) {
+            return alert("Please generate the Scribe Proforma HTML report first.");
+        }
+
+        const btn = document.getElementById('download-pdf-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Generatng Proforma..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const PAGE_W = 210;
+            const PAGE_H = 297;
+            const MARGIN = 15;
+            const CONTENT_W = PAGE_W - (MARGIN * 2);
+
+            // --- RENDER LOOP ---
+            pages.forEach((page, index) => {
+                if (index > 0) doc.addPage();
+
+                let currentY = 20;
+
+                // 1. HEADER (Scrape from HTML)
+                const headerGroup = page.querySelector('.print-header-group');
+                if (headerGroup) {
+                    const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "COLLEGE NAME";
+                    const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "Scribe Proforma";
+                    const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                    doc.text(h1, PAGE_W / 2, currentY, { align: 'center' });
+                    currentY += 8;
+
+                    doc.setFontSize(14); doc.text(h2, PAGE_W / 2, currentY, { align: 'center' });
+                    currentY += 8;
+
+                    doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                    doc.text(h3, PAGE_W / 2, currentY, { align: 'center' });
+                    currentY += 15;
+                }
+
+                // 2. TABLE (Scrape Rows)
+                const table = page.querySelector('table');
+                if (table) {
+                    const rows = table.querySelectorAll('tr');
+
+                    // Column Widths
+                    const colLabelW = 80;
+                    const colDataW = CONTENT_W - colLabelW;
+
+                    doc.setDrawColor(0); doc.setLineWidth(0.1);
+
+                    rows.forEach(row => {
+                        const cells = row.querySelectorAll('td');
+                        if (cells.length === 2) {
+                            const label = cells[0].innerText.trim();
+                            const data = cells[1].innerText.trim();
+
+                            // Height Calculation
+                            // Give more space for signatures/fillable fields
+                            const isSignature = label.toLowerCase().includes("sign") || label.toLowerCase().includes("thumb");
+                            let rowHeight = isSignature ? 20 : 10;
+
+                            // Check Text Wrapping for Data
+                            doc.setFontSize(11); doc.setFont("helvetica", "normal");
+                            const dataLines = doc.splitTextToSize(data, colDataW - 4);
+                            if (dataLines.length > 1) {
+                                rowHeight = Math.max(rowHeight, (dataLines.length * 5) + 4);
+                            }
+
+                            // Page Break Check (Unlikely for single page, but safe to have)
+                            if (currentY + rowHeight > PAGE_H - MARGIN) {
+                                doc.addPage();
+                                currentY = MARGIN;
+                            }
+
+                            // --- DRAW ROW ---
+                            // 1. Label Box
+                            doc.setFillColor(250); // Very light grey for label bg
+                            doc.rect(MARGIN, currentY, colLabelW, rowHeight, 'FD');
+
+                            // 2. Data Box
+                            doc.setFillColor(255);
+                            doc.rect(MARGIN + colLabelW, currentY, colDataW, rowHeight, 'FD');
+
+                            // 3. Label Text (Vertically Centered)
+                            doc.setFont("helvetica", "bold");
+                            doc.text(label, MARGIN + 2, currentY + (rowHeight / 2) + 1);
+
+                            // 4. Data Text (Vertically Centered)
+                            doc.setFont("helvetica", "normal");
+                            // Highlight Scribe Room if present
+                            if (label.includes("Scribe Allotted Room")) {
+                                doc.setFontSize(12); doc.setFont("helvetica", "bold");
+                            }
+
+                            // Draw Data Lines
+                            const textY = currentY + (rowHeight / 2) + 1 - ((dataLines.length - 1) * 2);
+                            doc.text(dataLines, MARGIN + colLabelW + 2, textY);
+
+                            // Reset Font
+                            doc.setFontSize(11); doc.setFont("helvetica", "normal");
+
+                            currentY += rowHeight;
+                        }
+                    });
+                }
+
+                // Footer text
+                doc.setFontSize(8); doc.setTextColor(100);
+                doc.text("Generated by ExamFlow", PAGE_W - MARGIN, PAGE_H - 10, { align: 'right' });
+            });
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`Scribe_Proforma_${dateStr}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Error:", e);
+            alert("Error creating PDF: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
+    }
+
+
+
+
+
+
+
+    //--------------QP Report to Print -------------------------------
+
+    // --- QUESTION PAPER SUMMARY (Stream -> Course Count) ---
+    function generateQuestionPaperSummaryPDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Validation
+        if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+            return alert("No data loaded.");
+        }
+
+        const btn = document.getElementById('download-qp-summary-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Summary..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            // --- 2. CONFIGURATION ---
+            const PAGE_H = 297;
+            const MARGIN = 15;
+            const ROW_H = 8;
+            const HEADER_H = 8;
+
+            const USABLE_W = 210 - (MARGIN * 2);
+
+            // Column Dimensions
+            const W_SL = 15;
+            const W_COUNT = 20;
+            const W_COURSE = USABLE_W - W_SL - W_COUNT;
+
+            // Offsets
+            const OFF_SL = 0;
+            const OFF_COURSE = W_SL;
+            const OFF_COUNT = W_SL + W_COURSE;
+
+            // --- 3. HELPER: SMART TEXT ---
+            const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
+                if (!text) return;
+                doc.setFont("helvetica", isBold ? "bold" : "normal");
+
+                let fontSize = 10;
+                // Shrink to fit
+                if (doc.getTextWidth(text) > w - 2) {
+                    fontSize = fontSize * ((w - 2) / doc.getTextWidth(text));
+                    if (fontSize < 6) fontSize = 6;
+                }
+                doc.setFontSize(fontSize);
+
+                const typeOffset = (fontSize * 0.3527) / 2.5;
+                const y = centerY + typeOffset;
+
+                if (align === "center") {
+                    doc.text(text, x + (w / 2), y, { align: "center" });
+                } else {
+                    doc.text(text, x + 2, y); // Left padding
+                }
+            };
+
+            const drawHeader = () => {
+                let y = 15;
+                const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
+                const dateStr = new Date().toISOString().slice(0, 10);
+
+                doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                doc.text(collegeName, 105, y, { align: 'center' });
+                y += 7;
+                doc.setFontSize(12);
+                doc.text("Question Paper Summary", 105, y, { align: 'center' });
+                y += 6;
+
+                // Attempt to get time from first record
+                const rawData = getFilteredReportData('day-wise');
+                const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
+
                 doc.setFontSize(11); doc.setFont("helvetica", "normal");
-                doc.text(h3, PAGE_W/2, currentY, { align: 'center' });
-                currentY += 15;
-            }
+                doc.text(`${dateStr} | ${sessionTime}`, 105, y, { align: 'center' });
+                return y + 10;
+            };
 
-            // 2. TABLE (Scrape Rows)
-            const table = page.querySelector('table');
-            if (table) {
-                const rows = table.querySelectorAll('tr');
-                
-                // Column Widths
-                const colLabelW = 80; 
-                const colDataW = CONTENT_W - colLabelW;
-                
-                doc.setDrawColor(0); doc.setLineWidth(0.1);
-
-                rows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length === 2) {
-                        const label = cells[0].innerText.trim();
-                        const data = cells[1].innerText.trim();
-                        
-                        // Height Calculation
-                        // Give more space for signatures/fillable fields
-                        const isSignature = label.toLowerCase().includes("sign") || label.toLowerCase().includes("thumb");
-                        let rowHeight = isSignature ? 20 : 10;
-
-                        // Check Text Wrapping for Data
-                        doc.setFontSize(11); doc.setFont("helvetica", "normal");
-                        const dataLines = doc.splitTextToSize(data, colDataW - 4);
-                        if (dataLines.length > 1) {
-                            rowHeight = Math.max(rowHeight, (dataLines.length * 5) + 4);
-                        }
-
-                        // Page Break Check (Unlikely for single page, but safe to have)
-                        if (currentY + rowHeight > PAGE_H - MARGIN) {
-                            doc.addPage();
-                            currentY = MARGIN;
-                        }
-
-                        // --- DRAW ROW ---
-                        // 1. Label Box
-                        doc.setFillColor(250); // Very light grey for label bg
-                        doc.rect(MARGIN, currentY, colLabelW, rowHeight, 'FD');
-                        
-                        // 2. Data Box
-                        doc.setFillColor(255);
-                        doc.rect(MARGIN + colLabelW, currentY, colDataW, rowHeight, 'FD');
-
-                        // 3. Label Text (Vertically Centered)
-                        doc.setFont("helvetica", "bold");
-                        doc.text(label, MARGIN + 2, currentY + (rowHeight/2) + 1);
-
-                        // 4. Data Text (Vertically Centered)
-                        doc.setFont("helvetica", "normal");
-                        // Highlight Scribe Room if present
-                        if (label.includes("Scribe Allotted Room")) {
-                            doc.setFontSize(12); doc.setFont("helvetica", "bold");
-                        }
-                        
-                        // Draw Data Lines
-                        const textY = currentY + (rowHeight/2) + 1 - ((dataLines.length - 1) * 2);
-                        doc.text(dataLines, MARGIN + colLabelW + 2, textY);
-
-                        // Reset Font
-                        doc.setFontSize(11); doc.setFont("helvetica", "normal");
-
-                        currentY += rowHeight;
-                    }
-                });
-            }
-            
-            // Footer text
-            doc.setFontSize(8); doc.setTextColor(100);
-            doc.text("Generated by ExamFlow", PAGE_W - MARGIN, PAGE_H - 10, { align: 'right' });
-        });
-
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`Scribe_Proforma_${dateStr}.pdf`);
-
-    } catch (e) {
-        console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-    }
-}
-
-
-
-
-
-
-    
-//--------------QP Report to Print -------------------------------
-
-// --- QUESTION PAPER SUMMARY (Stream -> Course Count) ---
-function generateQuestionPaperSummaryPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded.");
-    }
-
-    const btn = document.getElementById('download-qp-summary-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Summary..."; }
-
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        
-        // --- 2. CONFIGURATION ---
-        const PAGE_H = 297;
-        const MARGIN = 15; 
-        const ROW_H = 8;
-        const HEADER_H = 8;
-        
-        const USABLE_W = 210 - (MARGIN * 2);
-        
-        // Column Dimensions
-        const W_SL = 15;
-        const W_COUNT = 20;
-        const W_COURSE = USABLE_W - W_SL - W_COUNT; 
-
-        // Offsets
-        const OFF_SL = 0;
-        const OFF_COURSE = W_SL;
-        const OFF_COUNT = W_SL + W_COURSE;
-
-        // --- 3. HELPER: SMART TEXT ---
-        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false) => {
-            if (!text) return;
-            doc.setFont("helvetica", isBold ? "bold" : "normal");
-            
-            let fontSize = 10;
-            // Shrink to fit
-            if (doc.getTextWidth(text) > w - 2) {
-                fontSize = fontSize * ((w - 2) / doc.getTextWidth(text));
-                if (fontSize < 6) fontSize = 6;
-            }
-            doc.setFontSize(fontSize);
-
-            const typeOffset = (fontSize * 0.3527) / 2.5; 
-            const y = centerY + typeOffset;
-
-            if (align === "center") {
-                doc.text(text, x + (w / 2), y, { align: "center" });
-            } else {
-                doc.text(text, x + 2, y); // Left padding
-            }
-        };
-
-        const drawHeader = () => {
-            let y = 15;
-            const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
-            const dateStr = new Date().toISOString().slice(0,10);
-            
-            doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text(collegeName, 105, y, { align: 'center' });
-            y += 7;
-            doc.setFontSize(12); 
-            doc.text("Question Paper Summary", 105, y, { align: 'center' });
-            y += 6;
-            
-            // Attempt to get time from first record
+            // --- 4. PREPARE DATA ---
             const rawData = getFilteredReportData('day-wise');
-            const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
-            
-            doc.setFontSize(11); doc.setFont("helvetica", "normal");
-            doc.text(`${dateStr} | ${sessionTime}`, 105, y, { align: 'center' });
-            return y + 10;
-        };
+            if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
-        // --- 4. PREPARE DATA ---
-        const rawData = getFilteredReportData('day-wise');
-        if (!rawData || rawData.length === 0) throw new Error("No data found.");
+            // Group by Stream -> Course Name
+            const streamMap = {};
 
-        // Group by Stream -> Course Name
-        const streamMap = {};
+            rawData.forEach(s => {
+                const stream = s.Stream || "Regular";
+                const courseName = s.Course || "Unknown Course";
 
-        rawData.forEach(s => {
-            const stream = s.Stream || "Regular";
-            const courseName = s.Course || "Unknown Course"; 
+                if (!streamMap[stream]) streamMap[stream] = {};
 
-            if (!streamMap[stream]) streamMap[stream] = {};
-            
-            if (!streamMap[stream][courseName]) {
-                streamMap[stream][courseName] = {
-                    name: courseName,
-                    count: 0
-                };
-            }
-            streamMap[stream][courseName].count++;
-        });
+                if (!streamMap[stream][courseName]) {
+                    streamMap[stream][courseName] = {
+                        name: courseName,
+                        count: 0
+                    };
+                }
+                streamMap[stream][courseName].count++;
+            });
 
-        // --- 5. RENDER LOOP ---
-        let currentY = drawHeader();
-        const sortedStreams = Object.keys(streamMap).sort((a, b) => {
-             // Force Regular to top
-             if(a === "Regular") return -1;
-             if(b === "Regular") return 1;
-             return a.localeCompare(b);
-        });
+            // --- 5. RENDER LOOP ---
+            let currentY = drawHeader();
+            const sortedStreams = Object.keys(streamMap).sort((a, b) => {
+                // Force Regular to top
+                if (a === "Regular") return -1;
+                if (b === "Regular") return 1;
+                return a.localeCompare(b);
+            });
 
-        sortedStreams.forEach(stream => {
-            // Check Space for Stream Header + Table Header + 1 Row
-            if (currentY + 30 > PAGE_H - MARGIN) {
-                doc.addPage();
-                currentY = drawHeader();
-            }
+            sortedStreams.forEach(stream => {
+                // Check Space for Stream Header + Table Header + 1 Row
+                if (currentY + 30 > PAGE_H - MARGIN) {
+                    doc.addPage();
+                    currentY = drawHeader();
+                }
 
-            // A. STREAM HEADER
-            doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text(`Stream: ${stream}`, MARGIN, currentY + 5);
-            currentY += 8;
+                // A. STREAM HEADER
+                doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                doc.text(`Stream: ${stream}`, MARGIN, currentY + 5);
+                currentY += 8;
 
-            // B. TABLE HEADER
-            doc.setFillColor(240); doc.setDrawColor(0);
-            doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
-            
-            doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-            doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
-            doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
-            doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 5.5, { align: 'center' });
-            currentY += ROW_H;
+                // B. TABLE HEADER
+                doc.setFillColor(240); doc.setDrawColor(0);
+                doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
 
-            // C. ROWS
-            const courses = streamMap[stream];
-            const sortedCourses = Object.keys(courses).sort();
-            let slNo = 1;
-            let streamTotal = 0;
+                doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
+                doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
+                doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT / 2), currentY + 5.5, { align: 'center' });
+                currentY += ROW_H;
 
-            sortedCourses.forEach(cKey => {
-                const row = courses[cKey];
-                streamTotal += row.count;
+                // C. ROWS
+                const courses = streamMap[stream];
+                const sortedCourses = Object.keys(courses).sort();
+                let slNo = 1;
+                let streamTotal = 0;
 
-                // Page Break Check
+                sortedCourses.forEach(cKey => {
+                    const row = courses[cKey];
+                    streamTotal += row.count;
+
+                    // Page Break Check
+                    if (currentY + ROW_H > PAGE_H - MARGIN) {
+                        doc.addPage();
+                        currentY = drawHeader();
+
+                        // Re-draw Table Header
+                        doc.setFillColor(240); doc.setDrawColor(0);
+                        doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
+                        doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                        doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
+                        doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
+                        doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT / 2), currentY + 5.5, { align: 'center' });
+                        currentY += ROW_H;
+                    }
+
+                    doc.setTextColor(0); doc.setDrawColor(0);
+                    const rowCenterY = currentY + (ROW_H / 2);
+
+                    // Sl No
+                    drawSmartText(String(slNo), MARGIN + OFF_SL, rowCenterY, W_SL, ROW_H, "center", false);
+
+                    // Course Name
+                    drawSmartText(row.name, MARGIN + OFF_COURSE, rowCenterY, W_COURSE, ROW_H, "left");
+
+                    // Count
+                    drawSmartText(String(row.count), MARGIN + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true);
+
+                    // Borders
+                    doc.rect(MARGIN, currentY, USABLE_W, ROW_H);
+                    doc.line(MARGIN + OFF_COURSE, currentY, MARGIN + OFF_COURSE, currentY + ROW_H);
+                    doc.line(MARGIN + OFF_COUNT, currentY, MARGIN + OFF_COUNT, currentY + ROW_H);
+
+                    currentY += ROW_H;
+                    slNo++;
+                });
+
+                // D. TOTAL ROW
                 if (currentY + ROW_H > PAGE_H - MARGIN) {
                     doc.addPage();
                     currentY = drawHeader();
-                    
-                    // Re-draw Table Header
-                    doc.setFillColor(240); doc.setDrawColor(0);
-                    doc.rect(MARGIN, currentY, USABLE_W, ROW_H, 'FD');
-                    doc.setTextColor(0); doc.setFont("helvetica", "bold");
-                    doc.text("Sl No", MARGIN + OFF_SL + 2, currentY + 5.5);
-                    doc.text("Course Name", MARGIN + OFF_COURSE + 2, currentY + 5.5);
-                    doc.text("Count", MARGIN + OFF_COUNT + (W_COUNT/2), currentY + 5.5, { align: 'center' });
-                    currentY += ROW_H;
                 }
 
-                doc.setTextColor(0); doc.setDrawColor(0);
-                const rowCenterY = currentY + (ROW_H/2);
+                doc.setFont("helvetica", "bold");
+                // Draw Box
+                doc.rect(MARGIN, currentY, USABLE_W, ROW_H);
+                // Label box line
+                const labelW = W_SL + W_COURSE;
+                doc.line(MARGIN + labelW, currentY, MARGIN + labelW, currentY + ROW_H);
 
-                // Sl No
-                drawSmartText(String(slNo), MARGIN + OFF_SL, rowCenterY, W_SL, ROW_H, "center", false);
-                
-                // Course Name
-                drawSmartText(row.name, MARGIN + OFF_COURSE, rowCenterY, W_COURSE, ROW_H, "left");
+                // Text
+                const totalCenterY = currentY + (ROW_H / 2) + 1.5;
+                doc.text(`Total (${stream})`, MARGIN + labelW - 2, totalCenterY, { align: 'right' });
+                doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT / 2), totalCenterY, { align: 'center' });
 
-                // Count
-                drawSmartText(String(row.count), MARGIN + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true);
-
-                // Borders
-                doc.rect(MARGIN, currentY, USABLE_W, ROW_H); 
-                doc.line(MARGIN + OFF_COURSE, currentY, MARGIN + OFF_COURSE, currentY + ROW_H);
-                doc.line(MARGIN + OFF_COUNT, currentY, MARGIN + OFF_COUNT, currentY + ROW_H);
-
-                currentY += ROW_H;
-                slNo++;
+                currentY += (ROW_H + 8);
             });
 
-            // D. TOTAL ROW
-            if (currentY + ROW_H > PAGE_H - MARGIN) {
-                 doc.addPage();
-                 currentY = drawHeader();
-            }
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`QP_Summary_${dateStr}.pdf`);
 
-            doc.setFont("helvetica", "bold");
-            // Draw Box
-            doc.rect(MARGIN, currentY, USABLE_W, ROW_H);
-            // Label box line
-            const labelW = W_SL + W_COURSE;
-            doc.line(MARGIN + labelW, currentY, MARGIN + labelW, currentY + ROW_H);
-
-            // Text
-            const totalCenterY = currentY + (ROW_H/2) + 1.5;
-            doc.text(`Total (${stream})`, MARGIN + labelW - 2, totalCenterY, { align: 'right' });
-            doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT/2), totalCenterY, { align: 'center' });
-
-            currentY += (ROW_H + 8); 
-        });
-
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Summary_${dateStr}.pdf`);
-
-    } catch (e) {
-        console.error("PDF Error:", e);
-        alert("Error: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-    }
-}
-
-
-// --- QUESTION PAPER REPORT (Room-Wise QP Count) ---
-function generateQuestionPaperReportPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded to generate Report.");
+        } catch (e) {
+            console.error("PDF Error:", e);
+            alert("Error: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
     }
 
-    const btn = document.getElementById('download-qp-report-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Report..."; }
 
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        
-        // --- 2. CONFIGURATION ---
-        const PAGE_H = 297;
-        const MARGIN = 10;
-        const COL_GAP = 5;
-        const ROW_H = 7; // Slightly taller for readability
-        const HEADER_H = 7;
-        
-        const USABLE_W = 210 - (MARGIN * 2);
-        const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm per column
-        
-        // Column Widths (Tuned for QP Data)
-        const OFF_ROOM  = 0;   const W_ROOM  = 18;
-        const OFF_CODE  = 18;  const W_CODE  = 22;
-        const OFF_COUNT = 40;  const W_COUNT = 10;
-        const OFF_SUBJ  = 50;  const W_SUBJ  = COL_W - 50; // Remainder (~42.5mm)
+    // --- QUESTION PAPER REPORT (Room-Wise QP Count) ---
+    function generateQuestionPaperReportPDF() {
+        const { jsPDF } = window.jspdf;
 
-        // Limits
-        const ROWS_PER_SIDE = 36; 
-        const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
+        // 1. Validation
+        if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+            return alert("No data loaded to generate Report.");
+        }
 
-        // --- 3. HELPER: SMART TEXT ---
-        const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 9) => {
-            if (!text) return;
-            doc.setFont("helvetica", isBold ? "bold" : "normal");
-            
-            let fontSize = maxFontSize;
-            let lines = [];
-            
-            // Shrink-to-Fit Logic
-            while (fontSize > 5) {
+        const btn = document.getElementById('download-qp-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing Report..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            // --- 2. CONFIGURATION ---
+            const PAGE_H = 297;
+            const MARGIN = 10;
+            const COL_GAP = 5;
+            const ROW_H = 7; // Slightly taller for readability
+            const HEADER_H = 7;
+
+            const USABLE_W = 210 - (MARGIN * 2);
+            const COL_W = (USABLE_W - COL_GAP) / 2; // ~92.5mm per column
+
+            // Column Widths (Tuned for QP Data)
+            const OFF_ROOM = 0; const W_ROOM = 18;
+            const OFF_CODE = 18; const W_CODE = 22;
+            const OFF_COUNT = 40; const W_COUNT = 10;
+            const OFF_SUBJ = 50; const W_SUBJ = COL_W - 50; // Remainder (~42.5mm)
+
+            // Limits
+            const ROWS_PER_SIDE = 36;
+            const ROWS_PER_PAGE = ROWS_PER_SIDE * 2;
+
+            // --- 3. HELPER: SMART TEXT ---
+            const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, maxFontSize = 9) => {
+                if (!text) return;
+                doc.setFont("helvetica", isBold ? "bold" : "normal");
+
+                let fontSize = maxFontSize;
+                let lines = [];
+
+                // Shrink-to-Fit Logic
+                while (fontSize > 5) {
+                    doc.setFontSize(fontSize);
+                    lines = doc.splitTextToSize(String(text), w - 2);
+                    const blockHeight = lines.length * (fontSize * 0.3527 * 1.2);
+                    if (blockHeight <= (h - 1)) break;
+                    fontSize -= 0.5;
+                }
+
                 doc.setFontSize(fontSize);
-                lines = doc.splitTextToSize(String(text), w - 2); 
-                const blockHeight = lines.length * (fontSize * 0.3527 * 1.2); 
-                if (blockHeight <= (h - 1)) break; 
-                fontSize -= 0.5;
-            }
-            
-            doc.setFontSize(fontSize);
-            
-            // Vertical Centering
-            const lineHeight = fontSize * 0.3527 * 1.2;
-            const totalH = lines.length * lineHeight;
-            let startY = centerY - (totalH / 2) + (lineHeight / 1.5); 
 
-            lines.forEach((line) => {
-                if (align === "center") {
-                    doc.text(line, x + (w / 2), startY, { align: "center" });
-                } else {
-                    doc.text(line, x + 1, startY);
-                }
-                startY += lineHeight;
-            });
-        };
+                // Vertical Centering
+                const lineHeight = fontSize * 0.3527 * 1.2;
+                const totalH = lines.length * lineHeight;
+                let startY = centerY - (totalH / 2) + (lineHeight / 1.5);
 
-        const drawHeader = () => {
-            let y = 10;
-            const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
-            const dateStr = new Date().toISOString().slice(0,10);
-            
-            doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            doc.text(collegeName, 105, y, { align: 'center' });
-            y += 6;
-            doc.setFontSize(12); 
-            doc.text("Question Paper Summary (Room-Wise)", 105, y, { align: 'center' });
-            y += 5;
-            doc.setFontSize(10); doc.setFont("helvetica", "normal");
-            doc.text(`Generated: ${dateStr}`, 105, y, { align: 'center' });
-            return y + 8;
-        };
-
-        const drawColumnHeader = (x, y) => {
-            doc.setFillColor(220); doc.setDrawColor(0);
-            doc.rect(x, y, COL_W, HEADER_H, 'FD');
-            doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-            
-            doc.text("Room", x + OFF_ROOM + 2, y + 4.5);
-            doc.text("QP Code", x + OFF_CODE + 2, y + 4.5);
-            doc.text("Qty", x + OFF_COUNT + (W_COUNT/2), y + 4.5, { align: 'center' });
-            doc.text("Subject", x + OFF_SUBJ + 2, y + 4.5);
-        };
-
-        // --- 4. PREPARE DATA ---
-        // Use 'day-wise' filter because this report is usually context-specific to the day loaded
-        const rawData = getFilteredReportData('day-wise'); 
-        
-        if (!rawData || rawData.length === 0) throw new Error("No data found.");
-
-        const dataWithRooms = performOriginalAllocation(rawData);
-
-        // Group by Room -> QP Code
-        const roomMap = {};
-        
-        dataWithRooms.forEach(s => {
-            const room = s['Room No'] || "Unallocated";
-            const qpCode = s.qpCode || s.Course || "Unknown"; // Priority: QP Code -> Course
-            const subject = s.Course || "";
-
-            if (!roomMap[room]) roomMap[room] = {};
-            
-            if (!roomMap[room][qpCode]) {
-                roomMap[room][qpCode] = {
-                    code: qpCode,
-                    subject: subject,
-                    count: 0
-                };
-            }
-            roomMap[room][qpCode].count++;
-        });
-
-        // Flatten to List & Sort
-        const flatRows = [];
-        const sortedRooms = Object.keys(roomMap).sort((a, b) => {
-            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-        });
-
-        sortedRooms.forEach(room => {
-            const qps = roomMap[room];
-            Object.keys(qps).sort().forEach(qpKey => {
-                const data = qps[qpKey];
-                flatRows.push({
-                    room: room,
-                    qp: data.code,
-                    subject: data.subject,
-                    count: data.count
+                lines.forEach((line) => {
+                    if (align === "center") {
+                        doc.text(line, x + (w / 2), startY, { align: "center" });
+                    } else {
+                        doc.text(line, x + 1, startY);
+                    }
+                    startY += lineHeight;
                 });
-            });
-        });
+            };
 
-        // --- 5. RENDER LOOP ---
-        let queue = [...flatRows];
-        let pageCount = 0;
+            const drawHeader = () => {
+                let y = 10;
+                const collegeName = (typeof currentCollegeName !== 'undefined') ? currentCollegeName : "College Name";
+                const dateStr = new Date().toISOString().slice(0, 10);
 
-        while(queue.length > 0) {
-            if (pageCount > 0) doc.addPage();
-            
-            let startY = drawHeader();
-            let currentY = startY + HEADER_H;
-            
-            const isTwoCol = queue.length > ROWS_PER_SIDE;
-            const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
-            const pageData = queue.splice(0, limit);
-
-            let leftRows = [], rightRows = [];
-            if (isTwoCol) {
-                const mid = Math.ceil(pageData.length / 2);
-                leftRows = pageData.slice(0, mid);
-                rightRows = pageData.slice(mid);
-            } else {
-                leftRows = pageData;
-            }
-
-            // Draw Left
-            drawColumnHeader(MARGIN, startY);
-            drawDataColumn(doc, leftRows, MARGIN, currentY);
-
-            // Draw Right
-            if (rightRows.length > 0) {
-                const rightX = MARGIN + COL_W + COL_GAP;
-                drawColumnHeader(rightX, startY);
-                drawDataColumn(doc, rightRows, rightX, currentY);
-                
-                // Divider
-                const midX = MARGIN + COL_W + (COL_GAP/2);
-                doc.setDrawColor(0); 
-                doc.line(midX, startY, midX, PAGE_H - 10);
-            }
-
-            pageCount++;
-        }
-
-        // --- INTERNAL HELPER: DRAW DATA COLUMN ---
-        function drawDataColumn(pdf, rows, xBase, yStart) {
-            let y = yStart;
-            
-            // Pre-calculate Merges for Room
-            const mergeMap = [];
-            for(let i=0; i<rows.length; i++) mergeMap[i] = { span: 1, skip: false };
-
-            for(let i=0; i<rows.length; i++) {
-                if (mergeMap[i].skip) continue;
-                let span = 1;
-                for(let j=i+1; j<rows.length; j++) {
-                    if (rows[j].room === rows[i].room) {
-                        span++;
-                        mergeMap[j].skip = true;
-                    } else break;
-                }
-                mergeMap[i].span = span;
-            }
-
-            for(let i=0; i<rows.length; i++) {
-                const row = rows[i];
-                const rowCenterY = y + (ROW_H/2);
-                
-                pdf.setDrawColor(0); pdf.setTextColor(0);
-
-                // ROOM (Merged)
-                if (!mergeMap[i].skip) {
-                    const span = mergeMap[i].span;
-                    const totalH = span * ROW_H;
-                    const mergeCenterY = y + (totalH / 2);
-                    
-                    drawSmartText(row.room, xBase + OFF_ROOM, mergeCenterY, W_ROOM, totalH, "center", true, 8);
-                    
-                    // Borders for Room Block
-                    const blockBottom = y + totalH;
-                    pdf.line(xBase, y, xBase, blockBottom); // Left
-                    pdf.line(xBase + W_ROOM, y, xBase + W_ROOM, blockBottom); // Right
-                    pdf.line(xBase, blockBottom, xBase + W_ROOM, blockBottom); // Bottom
-                }
-
-                // DATA FIELDS
-                drawSmartText(row.qp, xBase + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true, 8);
-                drawSmartText(String(row.count), xBase + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true, 9);
-                drawSmartText(row.subject, xBase + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left", false, 8);
-
-                // BORDERS
-                const lineY = y + ROW_H;
-                pdf.line(xBase + W_ROOM, lineY, xBase + COL_W, lineY); // Bottom (skips Room col)
-                
-                // Vertical Lines
-                pdf.line(xBase + OFF_COUNT, y, xBase + OFF_COUNT, lineY); 
-                pdf.line(xBase + OFF_SUBJ, y, xBase + OFF_SUBJ, lineY); 
-                pdf.line(xBase + COL_W, y, xBase + COL_W, lineY); 
-
-                y += ROW_H;
-            }
-            pdf.line(xBase, yStart, xBase + COL_W, yStart); // Top line
-        }
-
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Summary_RoomWise_${dateStr}.pdf`);
-
-    } catch (e) {
-        console.error("PDF Error:", e);
-        alert("Error: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
-    }
-}
-    
-//----------------QP Distribution Report (QP-Wise Count)---------
-// --- QP DISTRIBUTION PDF (FIXED: Loc Selector, QP Regex, Single Line) ---
-function generateQPDistributionPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Validation
-    const reportContainer = document.getElementById('report-output-area');
-    const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
-
-    if (pages.length === 0) {
-        return alert("Please generate the HTML report first.");
-    }
-
-    const btn = document.getElementById('download-qp-pdf-btn'); 
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
-
-    try {
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const PAGE_W = 210;
-        const PAGE_H = 297;
-        const MARGIN = 10; 
-        const CONTENT_W = PAGE_W - (MARGIN * 2);
-        const MAX_Y = PAGE_H - MARGIN;
-
-        let pageCount = 0;
-
-        const drawMainHeader = (pageEl) => {
-            let y = 15;
-            const headerGroup = pageEl.querySelector('.print-header-group');
-            if (headerGroup) {
-                const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "";
-                const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "";
-                const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
-
-                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(h1, PAGE_W/2, y, { align: 'center' });
+                doc.setFontSize(14); doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                doc.text(collegeName, 105, y, { align: 'center' });
                 y += 6;
-                doc.setFontSize(11);
-                doc.text(h2, PAGE_W/2, y, { align: 'center' });
+                doc.setFontSize(12);
+                doc.text("Question Paper Summary (Room-Wise)", 105, y, { align: 'center' });
                 y += 5;
                 doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(h3, PAGE_W/2, y, { align: 'center' });
-                y += 10;
-            }
-            return y;
-        };
+                doc.text(`Generated: ${dateStr}`, 105, y, { align: 'center' });
+                return y + 8;
+            };
 
-        pages.forEach((pageEl) => {
-            if (pageCount > 0) doc.addPage();
-            
-            let currentY = drawMainHeader(pageEl);
-            const children = Array.from(pageEl.children).filter(el => !el.classList.contains('print-header-group'));
+            const drawColumnHeader = (x, y) => {
+                doc.setFillColor(220); doc.setDrawColor(0);
+                doc.rect(x, y, COL_W, HEADER_H, 'FD');
+                doc.setFontSize(8); doc.setTextColor(0); doc.setFont("helvetica", "bold");
 
-            children.forEach(el => {
-                // A. STREAM HEADER
-                if (el.innerText.includes('STREAM') && el.classList.contains('font-bold')) {
-                    const hHeight = 10;
-                    if (currentY + hHeight > MAX_Y) {
-                        doc.addPage();
-                        currentY = MARGIN + 5; 
-                    }
-                    doc.setFillColor(230); doc.setDrawColor(0); doc.setLineWidth(0.1);
-                    doc.rect(MARGIN, currentY, CONTENT_W, 7, 'F');
-                    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    doc.text(el.innerText.trim(), MARGIN + 2, currentY + 5);
-                    currentY += 9;
+                doc.text("Room", x + OFF_ROOM + 2, y + 4.5);
+                doc.text("QP Code", x + OFF_CODE + 2, y + 4.5);
+                doc.text("Qty", x + OFF_COUNT + (W_COUNT / 2), y + 4.5, { align: 'center' });
+                doc.text("Subject", x + OFF_SUBJ + 2, y + 4.5);
+            };
+
+            // --- 4. PREPARE DATA ---
+            // Use 'day-wise' filter because this report is usually context-specific to the day loaded
+            const rawData = getFilteredReportData('day-wise');
+
+            if (!rawData || rawData.length === 0) throw new Error("No data found.");
+
+            const dataWithRooms = performOriginalAllocation(rawData);
+
+            // Group by Room -> QP Code
+            const roomMap = {};
+
+            dataWithRooms.forEach(s => {
+                const room = s['Room No'] || "Unallocated";
+                const qpCode = s.qpCode || s.Course || "Unknown"; // Priority: QP Code -> Course
+                const subject = s.Course || "";
+
+                if (!roomMap[room]) roomMap[room] = {};
+
+                if (!roomMap[room][qpCode]) {
+                    roomMap[room][qpCode] = {
+                        code: qpCode,
+                        subject: subject,
+                        count: 0
+                    };
                 }
-                
-                // B. QP CARD
-                else if (el.querySelector('.grid')) {
-                    const headerRow = el.children[0]; 
-                    const gridRow = el.children[1];   
-
-                    // --- 1. SCRAPE METADATA ---
-                    const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
-                    
-                    // QP Code: Try badge first, then regex text search
-                    let qpCode = "N/A";
-                    const qpBadge = headerRow.querySelector('span.border-black');
-                    if (qpBadge && !qpBadge.innerText.includes('Nos')) {
-                        qpCode = qpBadge.innerText.trim();
-                    } else {
-                        // Regex fallback: "QP: D12345"
-                        const match = headerRow.innerText.match(/QP:\s*([A-Za-z0-9]+)/);
-                        if (match && match[1]) qpCode = match[1];
-                    }
-
-                    let strmLabel = "";
-                    const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
-                    if (strmSpan) strmLabel = strmSpan.innerText.trim();
-
-                    const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
-                    const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
-                    
-                    // Style & Height
-                    let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
-                    const gridRowsCount = Math.ceil(roomDivs.length / 3);
-                    const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
-
-                    // Pagination Check
-                    if (currentY + cardHeight > MAX_Y) {
-                        doc.addPage();
-                        currentY = MARGIN + 5;
-                    }
-
-                    // --- 2. DRAW CARD BACKGROUND ---
-                    doc.setDrawColor(0); doc.setLineWidth(0.1);
-                    if (isOthers) {
-                        doc.setFillColor(255, 251, 235);
-                        doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'FD');
-                        doc.setLineDash([1, 1], 0); 
-                        doc.rect(MARGIN, currentY, CONTENT_W, cardHeight); 
-                        doc.setLineDash([]); 
-                    } else {
-                        doc.setFillColor(255, 255, 255);
-                        doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S'); 
-                    }
-
-                    // Header Info
-                    const headY = currentY + 5;
-                    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    let dispCourse = courseName;
-                    if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
-                    doc.text(dispCourse, MARGIN + 2, headY);
-
-                    doc.setFontSize(8); doc.setTextColor(50);
-                    doc.text("QP:", MARGIN + 130, headY);
-                    doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                    doc.text(qpCode, MARGIN + 136, headY);
-
-                    if (strmLabel && isOthers) {
-                        doc.setFontSize(7); doc.setTextColor(100);
-                        doc.text(`[${strmLabel}]`, MARGIN + 2, headY + 4);
-                        doc.setTextColor(0);
-                    }
-
-                    doc.setFontSize(11); doc.setFont("helvetica", "bold");
-                    doc.text(totalCount, PAGE_W - MARGIN - 4, headY + 2, { align: 'right' });
-
-                    doc.setDrawColor(200);
-                    doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
-
-                    // --- 3. DRAW ROOM GRID ---
-                    let roomY = headY + 7;
-                    let roomX = MARGIN + 2;
-                    const boxW = (CONTENT_W - 4) / 3; 
-
-                    roomDivs.forEach((rDiv, idx) => {
-                        if (idx > 0 && idx % 3 === 0) {
-                            roomX = MARGIN + 2;
-                            roomY += 8.5;
-                        }
-
-                        // --- SCRAPE ROOM DATA ---
-                        const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
-                        
-                        // Select Room # (e.g. "Room #1")
-                        const roomNameSpan = rDiv.querySelector('span.text-sm');
-                        const roomNameTxt = roomNameSpan ? roomNameSpan.innerText.trim() : ""; 
-                        
-                        // Select Location (e.g. "(G101)") - Use 'truncate' class to avoid 'Nos'
-                        const locSpan = rDiv.querySelector('span.truncate');
-                        const locTxt = locSpan ? locSpan.innerText.trim() : "";
-
-                        // Box
-                        doc.setDrawColor(180); doc.setFillColor(255);
-                        doc.rect(roomX, roomY, boxW - 2, 7, 'FD');
-
-                        // Count
-                        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                        doc.text(countTxt, roomX + 2, roomY + 5);
-                        doc.setFontSize(6); doc.setFont("helvetica", "normal");
-                        doc.text("Nos", roomX + 8, roomY + 5);
-
-                        // Vertical Separator
-                        doc.setDrawColor(220);
-                        doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
-
-                        // --- COMBINED TEXT LOGIC (Room # + Loc) ---
-                        let textToPrint = roomNameTxt;
-                        if (locTxt) {
-                            const cleanLoc = locTxt.replace(/[()]/g, '').trim();
-                            if(cleanLoc) textToPrint += ` (${cleanLoc})`;
-                        }
-
-                        doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                        
-                        // Truncate
-                        const maxW = boxW - 22; 
-                        if (doc.getTextWidth(textToPrint) > maxW) {
-                            doc.setFontSize(7);
-                            if (doc.getTextWidth(textToPrint) > maxW) {
-                                const chars = Math.floor(maxW / 1.4);
-                                textToPrint = textToPrint.substring(0, chars) + "..";
-                            }
-                        }
-
-                        doc.text(textToPrint, roomX + 16, roomY + 5);
-
-                        // Checkbox
-                        doc.setDrawColor(0);
-                        doc.rect(roomX + boxW - 7, roomY + 2, 3, 3);
-
-                        roomX += boxW;
-                    });
-
-                    currentY += cardHeight + 2; 
-                }
+                roomMap[room][qpCode].count++;
             });
 
-            pageCount++;
-        });
+            // Flatten to List & Sort
+            const flatRows = [];
+            const sortedRooms = Object.keys(roomMap).sort((a, b) => {
+                return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+            });
 
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`QP_Distribution_${dateStr}.pdf`);
+            sortedRooms.forEach(room => {
+                const qps = roomMap[room];
+                Object.keys(qps).sort().forEach(qpKey => {
+                    const data = qps[qpKey];
+                    flatRows.push({
+                        room: room,
+                        qp: data.code,
+                        subject: data.subject,
+                        count: data.count
+                    });
+                });
+            });
 
-    } catch (e) {
-        console.error("PDF Scraper Error:", e);
-        alert("Error creating PDF: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+            // --- 5. RENDER LOOP ---
+            let queue = [...flatRows];
+            let pageCount = 0;
+
+            while (queue.length > 0) {
+                if (pageCount > 0) doc.addPage();
+
+                let startY = drawHeader();
+                let currentY = startY + HEADER_H;
+
+                const isTwoCol = queue.length > ROWS_PER_SIDE;
+                const limit = isTwoCol ? ROWS_PER_PAGE : ROWS_PER_SIDE;
+                const pageData = queue.splice(0, limit);
+
+                let leftRows = [], rightRows = [];
+                if (isTwoCol) {
+                    const mid = Math.ceil(pageData.length / 2);
+                    leftRows = pageData.slice(0, mid);
+                    rightRows = pageData.slice(mid);
+                } else {
+                    leftRows = pageData;
+                }
+
+                // Draw Left
+                drawColumnHeader(MARGIN, startY);
+                drawDataColumn(doc, leftRows, MARGIN, currentY);
+
+                // Draw Right
+                if (rightRows.length > 0) {
+                    const rightX = MARGIN + COL_W + COL_GAP;
+                    drawColumnHeader(rightX, startY);
+                    drawDataColumn(doc, rightRows, rightX, currentY);
+
+                    // Divider
+                    const midX = MARGIN + COL_W + (COL_GAP / 2);
+                    doc.setDrawColor(0);
+                    doc.line(midX, startY, midX, PAGE_H - 10);
+                }
+
+                pageCount++;
+            }
+
+            // --- INTERNAL HELPER: DRAW DATA COLUMN ---
+            function drawDataColumn(pdf, rows, xBase, yStart) {
+                let y = yStart;
+
+                // Pre-calculate Merges for Room
+                const mergeMap = [];
+                for (let i = 0; i < rows.length; i++) mergeMap[i] = { span: 1, skip: false };
+
+                for (let i = 0; i < rows.length; i++) {
+                    if (mergeMap[i].skip) continue;
+                    let span = 1;
+                    for (let j = i + 1; j < rows.length; j++) {
+                        if (rows[j].room === rows[i].room) {
+                            span++;
+                            mergeMap[j].skip = true;
+                        } else break;
+                    }
+                    mergeMap[i].span = span;
+                }
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    const rowCenterY = y + (ROW_H / 2);
+
+                    pdf.setDrawColor(0); pdf.setTextColor(0);
+
+                    // ROOM (Merged)
+                    if (!mergeMap[i].skip) {
+                        const span = mergeMap[i].span;
+                        const totalH = span * ROW_H;
+                        const mergeCenterY = y + (totalH / 2);
+
+                        drawSmartText(row.room, xBase + OFF_ROOM, mergeCenterY, W_ROOM, totalH, "center", true, 8);
+
+                        // Borders for Room Block
+                        const blockBottom = y + totalH;
+                        pdf.line(xBase, y, xBase, blockBottom); // Left
+                        pdf.line(xBase + W_ROOM, y, xBase + W_ROOM, blockBottom); // Right
+                        pdf.line(xBase, blockBottom, xBase + W_ROOM, blockBottom); // Bottom
+                    }
+
+                    // DATA FIELDS
+                    drawSmartText(row.qp, xBase + OFF_CODE, rowCenterY, W_CODE, ROW_H, "left", true, 8);
+                    drawSmartText(String(row.count), xBase + OFF_COUNT, rowCenterY, W_COUNT, ROW_H, "center", true, 9);
+                    drawSmartText(row.subject, xBase + OFF_SUBJ, rowCenterY, W_SUBJ, ROW_H, "left", false, 8);
+
+                    // BORDERS
+                    const lineY = y + ROW_H;
+                    pdf.line(xBase + W_ROOM, lineY, xBase + COL_W, lineY); // Bottom (skips Room col)
+
+                    // Vertical Lines
+                    pdf.line(xBase + OFF_COUNT, y, xBase + OFF_COUNT, lineY);
+                    pdf.line(xBase + OFF_SUBJ, y, xBase + OFF_SUBJ, lineY);
+                    pdf.line(xBase + COL_W, y, xBase + COL_W, lineY);
+
+                    y += ROW_H;
+                }
+                pdf.line(xBase, yStart, xBase + COL_W, yStart); // Top line
+            }
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`QP_Summary_RoomWise_${dateStr}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Error:", e);
+            alert("Error: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
     }
-}
 
-    
+    //----------------QP Distribution Report (QP-Wise Count)---------
+    // --- QP DISTRIBUTION PDF (FIXED: Loc Selector, QP Regex, Single Line) ---
+    function generateQPDistributionPDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Validation
+        const reportContainer = document.getElementById('report-output-area');
+        const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
+
+        if (pages.length === 0) {
+            return alert("Please generate the HTML report first.");
+        }
+
+        const btn = document.getElementById('download-qp-pdf-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Drawing PDF..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const PAGE_W = 210;
+            const PAGE_H = 297;
+            const MARGIN = 10;
+            const CONTENT_W = PAGE_W - (MARGIN * 2);
+            const MAX_Y = PAGE_H - MARGIN;
+
+            let pageCount = 0;
+
+            const drawMainHeader = (pageEl) => {
+                let y = 15;
+                const headerGroup = pageEl.querySelector('.print-header-group');
+                if (headerGroup) {
+                    const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "";
+                    const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "";
+                    const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                    doc.text(h1, PAGE_W / 2, y, { align: 'center' });
+                    y += 6;
+                    doc.setFontSize(11);
+                    doc.text(h2, PAGE_W / 2, y, { align: 'center' });
+                    y += 5;
+                    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                    doc.text(h3, PAGE_W / 2, y, { align: 'center' });
+                    y += 10;
+                }
+                return y;
+            };
+
+            pages.forEach((pageEl) => {
+                if (pageCount > 0) doc.addPage();
+
+                let currentY = drawMainHeader(pageEl);
+                const children = Array.from(pageEl.children).filter(el => !el.classList.contains('print-header-group'));
+
+                children.forEach(el => {
+                    // A. STREAM HEADER
+                    if (el.innerText.includes('STREAM') && el.classList.contains('font-bold')) {
+                        const hHeight = 10;
+                        if (currentY + hHeight > MAX_Y) {
+                            doc.addPage();
+                            currentY = MARGIN + 5;
+                        }
+                        doc.setFillColor(230); doc.setDrawColor(0); doc.setLineWidth(0.1);
+                        doc.rect(MARGIN, currentY, CONTENT_W, 7, 'F');
+                        doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        doc.text(el.innerText.trim(), MARGIN + 2, currentY + 5);
+                        currentY += 9;
+                    }
+
+                    // B. QP CARD
+                    else if (el.querySelector('.grid')) {
+                        const headerRow = el.children[0];
+                        const gridRow = el.children[1];
+
+                        // --- 1. SCRAPE METADATA ---
+                        const courseName = headerRow.querySelector('.font-bold.text-xs')?.innerText.trim() || "Unknown";
+
+                        // QP Code: Try badge first, then regex text search
+                        let qpCode = "N/A";
+                        const qpBadge = headerRow.querySelector('span.border-black');
+                        if (qpBadge && !qpBadge.innerText.includes('Nos')) {
+                            qpCode = qpBadge.innerText.trim();
+                        } else {
+                            // Regex fallback: "QP: D12345"
+                            const match = headerRow.innerText.match(/QP:\s*([A-Za-z0-9]+)/);
+                            if (match && match[1]) qpCode = match[1];
+                        }
+
+                        let strmLabel = "";
+                        const strmSpan = headerRow.querySelector('span.text-\\[9px\\]');
+                        if (strmSpan) strmLabel = strmSpan.innerText.trim();
+
+                        const totalCount = headerRow.querySelector('.text-right span')?.innerText.trim() || "";
+                        const roomDivs = gridRow ? gridRow.querySelectorAll('.border.rounded') : [];
+
+                        // Style & Height
+                        let isOthers = el.outerHTML.includes('dashed') || el.outerHTML.includes('bg-[#fffbeb]');
+                        const gridRowsCount = Math.ceil(roomDivs.length / 3);
+                        const cardHeight = 12 + (gridRowsCount * 8.5) + 2;
+
+                        // Pagination Check
+                        if (currentY + cardHeight > MAX_Y) {
+                            doc.addPage();
+                            currentY = MARGIN + 5;
+                        }
+
+                        // --- 2. DRAW CARD BACKGROUND ---
+                        doc.setDrawColor(0); doc.setLineWidth(0.1);
+                        if (isOthers) {
+                            doc.setFillColor(255, 251, 235);
+                            doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'FD');
+                            doc.setLineDash([1, 1], 0);
+                            doc.rect(MARGIN, currentY, CONTENT_W, cardHeight);
+                            doc.setLineDash([]);
+                        } else {
+                            doc.setFillColor(255, 255, 255);
+                            doc.rect(MARGIN, currentY, CONTENT_W, cardHeight, 'S');
+                        }
+
+                        // Header Info
+                        const headY = currentY + 5;
+                        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        let dispCourse = courseName;
+                        if (doc.getTextWidth(dispCourse) > 130) dispCourse = dispCourse.substring(0, 70) + "...";
+                        doc.text(dispCourse, MARGIN + 2, headY);
+
+                        doc.setFontSize(8); doc.setTextColor(50);
+                        doc.text("QP:", MARGIN + 130, headY);
+                        doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                        doc.text(qpCode, MARGIN + 136, headY);
+
+                        if (strmLabel && isOthers) {
+                            doc.setFontSize(7); doc.setTextColor(100);
+                            doc.text(`[${strmLabel}]`, MARGIN + 2, headY + 4);
+                            doc.setTextColor(0);
+                        }
+
+                        doc.setFontSize(11); doc.setFont("helvetica", "bold");
+                        doc.text(totalCount, PAGE_W - MARGIN - 4, headY + 2, { align: 'right' });
+
+                        doc.setDrawColor(200);
+                        doc.line(MARGIN + 2, headY + 5, PAGE_W - MARGIN - 2, headY + 5);
+
+                        // --- 3. DRAW ROOM GRID ---
+                        let roomY = headY + 7;
+                        let roomX = MARGIN + 2;
+                        const boxW = (CONTENT_W - 4) / 3;
+
+                        roomDivs.forEach((rDiv, idx) => {
+                            if (idx > 0 && idx % 3 === 0) {
+                                roomX = MARGIN + 2;
+                                roomY += 8.5;
+                            }
+
+                            // --- SCRAPE ROOM DATA ---
+                            const countTxt = rDiv.querySelector('.text-lg')?.innerText.trim() || "0";
+
+                            // Select Room # (e.g. "Room #1")
+                            const roomNameSpan = rDiv.querySelector('span.text-sm');
+                            const roomNameTxt = roomNameSpan ? roomNameSpan.innerText.trim() : "";
+
+                            // Select Location (e.g. "(G101)") - Use 'truncate' class to avoid 'Nos'
+                            const locSpan = rDiv.querySelector('span.truncate');
+                            const locTxt = locSpan ? locSpan.innerText.trim() : "";
+
+                            // Box
+                            doc.setDrawColor(180); doc.setFillColor(255);
+                            doc.rect(roomX, roomY, boxW - 2, 7, 'FD');
+
+                            // Count
+                            doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                            doc.text(countTxt, roomX + 2, roomY + 5);
+                            doc.setFontSize(6); doc.setFont("helvetica", "normal");
+                            doc.text("Nos", roomX + 8, roomY + 5);
+
+                            // Vertical Separator
+                            doc.setDrawColor(220);
+                            doc.line(roomX + 14, roomY + 1, roomX + 14, roomY + 6);
+
+                            // --- COMBINED TEXT LOGIC (Room # + Loc) ---
+                            let textToPrint = roomNameTxt;
+                            if (locTxt) {
+                                const cleanLoc = locTxt.replace(/[()]/g, '').trim();
+                                if (cleanLoc) textToPrint += ` (${cleanLoc})`;
+                            }
+
+                            doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+
+                            // Truncate
+                            const maxW = boxW - 22;
+                            if (doc.getTextWidth(textToPrint) > maxW) {
+                                doc.setFontSize(7);
+                                if (doc.getTextWidth(textToPrint) > maxW) {
+                                    const chars = Math.floor(maxW / 1.4);
+                                    textToPrint = textToPrint.substring(0, chars) + "..";
+                                }
+                            }
+
+                            doc.text(textToPrint, roomX + 16, roomY + 5);
+
+                            // Checkbox
+                            doc.setDrawColor(0);
+                            doc.rect(roomX + boxW - 7, roomY + 2, 3, 3);
+
+                            roomX += boxW;
+                        });
+
+                        currentY += cardHeight + 2;
+                    }
+                });
+
+                pageCount++;
+            });
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`QP_Distribution_${dateStr}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Scraper Error:", e);
+            alert("Error creating PDF: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
+    }
 
 
-    
-
-    
-    
-
-
-    
 
 
 
-    
-//-----------------------------------------------------------
 
-if (toggleButton && sidebar) {
+
+
+
+
+
+
+
+
+
+    //-----------------------------------------------------------
+
+    if (toggleButton && sidebar) {
         toggleButton.addEventListener('click', () => {
             // Check if we are on Mobile (window width < 768px)
             const isMobile = window.innerWidth < 768;
@@ -3385,15 +3420,15 @@ if (toggleButton && sidebar) {
 
         return parseInt(`${y}${m}${d}${sessionBit}`, 10);
     }
-// --- CORE: Get Exam Name (Simplified) ---
+    // --- CORE: Get Exam Name (Simplified) ---
     // Previously used dates to guess name. Now strictly relies on Data Tagging.
     // This is kept for backward compatibility to prevent crashes.
     function getExamName(date, time, stream) {
         // Logic moved to "Data Tagging" during upload.
         // Returns empty string so reports fall back to the tag inside student data.
-        return ""; 
+        return "";
     }
-    
+
 
     // --- UI ELEMENTS ---
     const examSettingsModal = document.getElementById('exam-settings-modal');
@@ -3452,7 +3487,7 @@ if (toggleButton && sidebar) {
         });
     }
 
-// 3. RENDER MODAL CONTENT (Simplified: Name Only)
+    // 3. RENDER MODAL CONTENT (Simplified: Name Only)
     function renderExamRulesInModal() {
         if (!examModalBody) return;
         examModalBody.innerHTML = '';
@@ -3595,14 +3630,14 @@ if (toggleButton && sidebar) {
                 isAddingExamSchedule = false;
                 renderExamRulesInModal();
                 renderExamNameSettings();
-                
+
                 // Refresh the Upload Dropdown immediately if it exists
                 if (typeof populateUploadExamDropdown === 'function') populateUploadExamDropdown();
-                
+
                 if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
             });
         }
-    }    
+    }
 
     // 4. HELPER FUNCTIONS
     window.setExamScheduleMode = function (isAdding) {
@@ -3901,10 +3936,10 @@ if (toggleButton && sidebar) {
     // [In app.js - Replace the existing updateDashboard function]
 
 
-// --- Update Dashboard Function (Remaining / Past / Total) ---
+    // --- Update Dashboard Function (Remaining / Past / Total) ---
     function updateDashboard() {
         const dashContainer = document.getElementById('data-snapshot');
-        
+
         // Target Elements
         const dashStudent = document.getElementById('dash-student-count');
         const dashCourse = document.getElementById('dash-course-count');
@@ -3927,7 +3962,7 @@ if (toggleButton && sidebar) {
         }
 
         // --- 1. CALCULATE METRICS (REMAINING / PAST / TOTAL) ---
-        
+
         // A. Setup Dates
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Midnight today
@@ -3941,7 +3976,7 @@ if (toggleButton && sidebar) {
             // Parse DD.MM.YYYY
             const [d, m, y] = s.Date.trim().split('.').map(Number);
             const examDate = new Date(y, m - 1, d);
-            
+
             if (examDate >= today) {
                 upcomingData.push(s);
             } else {
@@ -3966,7 +4001,7 @@ if (toggleButton && sidebar) {
         const totDays = new Set(allStudentData.map(s => s.Date)).size;
 
         // --- 2. UPDATE UI (Format: Remaining / Past / Total) ---
-        
+
         if (dashContainer) dashContainer.classList.remove('hidden');
 
         // Helper: "455 / 100 / 555"
@@ -4077,7 +4112,7 @@ if (toggleButton && sidebar) {
         }
     }
 
-    
+
 
     // ==========================================
     // 📅 CALENDAR LOGIC
@@ -4806,9 +4841,9 @@ if (toggleButton && sidebar) {
                         // --- PASTE THE NEW LOGIC HERE ---
                         let regFontSize = "12pt";
                         if (/[a-zA-Z]/.test(displayRegNo)) {
-                        regFontSize = "9pt"; 
+                            regFontSize = "9pt";
                         } else if (displayRegNo.length > 5) {
-                        regFontSize = "11pt";
+                            regFontSize = "11pt";
                         }
 
                         const courseKey = getQpKey(student.Course, student.Stream);
@@ -6954,7 +6989,7 @@ if (toggleButton && sidebar) {
     // --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
     // downloadPdfButton.addEventListener('click', ... removed ...)
 
-       // --- Event listener for the "Clear" button ---
+    // --- Event listener for the "Clear" button ---
     clearReportButton.addEventListener('click', clearReport);
 
     // --- Centralized logic for clearing reports ---
@@ -7010,8 +7045,8 @@ if (toggleButton && sidebar) {
     // --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
     navHome.addEventListener('click', () => showView(viewHome, navHome));
     navExtractor.addEventListener('click', () => {
-    showView(viewExtractor, navExtractor);
-    populateUploadExamDropdown(); // <--- ADD THIS CALL
+        showView(viewExtractor, navExtractor);
+        populateUploadExamDropdown(); // <--- ADD THIS CALL
     });
     navEditData.addEventListener('click', () => showView(viewEditData, navEditData)); // <-- ADD THIS
     navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
@@ -7023,7 +7058,7 @@ if (toggleButton && sidebar) {
     navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
     // Add this line with your other navigation listeners
     if (navHelp) {
-    navHelp.addEventListener('click', () => showView(viewHelp, navHelp));
+        navHelp.addEventListener('click', () => showView(viewHelp, navHelp));
     }
 
     function showView(viewToShow, buttonToActivate) {
@@ -7359,153 +7394,153 @@ if (toggleButton && sidebar) {
     }
 
 
-// V34: INTERACTIVE DIFF MERGE (With Add/Delete Permissions)
-function parseCsvAndLoadData(csvText) {
-    try {
-        // --- 1. PARSE THE CSV ---
-        const lines = csvText.trim().split('\n');
-        const headersLine = lines.shift().trim();
-        const headers = headersLine.split(',');
+    // V34: INTERACTIVE DIFF MERGE (With Add/Delete Permissions)
+    function parseCsvAndLoadData(csvText) {
+        try {
+            // --- 1. PARSE THE CSV ---
+            const lines = csvText.trim().split('\n');
+            const headersLine = lines.shift().trim();
+            const headers = headersLine.split(',');
 
-        const dateIndex = headers.indexOf('Date');
-        const timeIndex = headers.indexOf('Time');
-        const courseIndex = headers.indexOf('Course');
-        const regNumIndex = headers.indexOf('Register Number');
-        const nameIndex = headers.indexOf('Name');
+            const dateIndex = headers.indexOf('Date');
+            const timeIndex = headers.indexOf('Time');
+            const courseIndex = headers.indexOf('Course');
+            const regNumIndex = headers.indexOf('Register Number');
+            const nameIndex = headers.indexOf('Name');
 
-        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-            csvLoadStatus.textContent = "Error: Missing required headers (Register Number, Name, Course).";
-            csvLoadStatus.classList.add('text-red-600');
-            return;
-        }
+            if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+                csvLoadStatus.textContent = "Error: Missing required headers (Register Number, Name, Course).";
+                csvLoadStatus.classList.add('text-red-600');
+                return;
+            }
 
-        const newJsonData = [];
-        for (const line of lines) {
-            if (!line.trim()) continue;
-            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-            if (values.length !== headers.length) continue;
+            const newJsonData = [];
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+                const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+                if (values.length !== headers.length) continue;
 
-            newJsonData.push({
-                'Date': values[dateIndex],
-                'Time': values[timeIndex],
-                'Course': values[courseIndex],
-                'Register Number': values[regNumIndex],
-                'Name': values[nameIndex]
+                newJsonData.push({
+                    'Date': values[dateIndex],
+                    'Time': values[timeIndex],
+                    'Course': values[courseIndex],
+                    'Register Number': values[regNumIndex],
+                    'Name': values[nameIndex]
+                });
+            }
+
+            if (newJsonData.length === 0) {
+                alert("No valid data found in file.");
+                return;
+            }
+
+            // --- 2. DEFINE SCOPE (Course + Date) ---
+            // We only care about matching existing data for the exams present in this file.
+            const scopesToUpdate = new Set();
+            newJsonData.forEach(s => {
+                if (s.Course && s.Date) {
+                    scopesToUpdate.add(`${s.Course}|${s.Date}`);
+                }
             });
-        }
 
-        if (newJsonData.length === 0) {
-            alert("No valid data found in file.");
-            return;
-        }
+            // Get current DB data
+            const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
 
-        // --- 2. DEFINE SCOPE (Course + Date) ---
-        // We only care about matching existing data for the exams present in this file.
-        const scopesToUpdate = new Set();
-        newJsonData.forEach(s => {
-            if (s.Course && s.Date) {
-                scopesToUpdate.add(`${s.Course}|${s.Date}`);
+            // Split DB into:
+            // A. IRRELEVANT DATA (Exams not in this file) -> We keep these 100%
+            const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
+
+            // B. RELEVANT DATA (Old version of exams in this file) -> We compare these
+            const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
+
+
+            // --- 3. CALCULATE DIFF ---
+            // Create Sets of Register Numbers for fast lookup
+            const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
+            const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+
+            // A. Students to UPDATE (Present in both) - We automatically take the NEW version (to fix times/names)
+            const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
+
+            // B. Students to ADD (In File, not in DB)
+            const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
+
+            // C. Students to DELETE (In DB, missing from File)
+            const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+
+
+            // --- 4. INTERACTIVE PROMPTS ---
+
+            let finalBatch = [...commonStudents]; // Start with the updates
+
+            // PROMPT 1: ADDITIONS
+            if (potentialAdds.length > 0) {
+                const userWantsToAdd = confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`);
+                if (userWantsToAdd) {
+                    finalBatch = finalBatch.concat(potentialAdds);
+                }
             }
-        });
 
-        // Get current DB data
-        const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
+            // PROMPT 2: DELETIONS
+            if (potentialDeletes.length > 0) {
+                const userWantsToDelete = confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
 
-        // Split DB into:
-        // A. IRRELEVANT DATA (Exams not in this file) -> We keep these 100%
-        const ignoredData = currentDB.filter(s => !scopesToUpdate.has(`${s.Course}|${s.Date}`));
-        
-        // B. RELEVANT DATA (Old version of exams in this file) -> We compare these
-        const relevantOldData = currentDB.filter(s => scopesToUpdate.has(`${s.Course}|${s.Date}`));
-
-
-        // --- 3. CALCULATE DIFF ---
-        // Create Sets of Register Numbers for fast lookup
-        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
-        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
-
-        // A. Students to UPDATE (Present in both) - We automatically take the NEW version (to fix times/names)
-        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
-
-        // B. Students to ADD (In File, not in DB)
-        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
-
-        // C. Students to DELETE (In DB, missing from File)
-        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
-
-
-        // --- 4. INTERACTIVE PROMPTS ---
-        
-        let finalBatch = [...commonStudents]; // Start with the updates
-
-        // PROMPT 1: ADDITIONS
-        if (potentialAdds.length > 0) {
-            const userWantsToAdd = confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`);
-            if (userWantsToAdd) {
-                finalBatch = finalBatch.concat(potentialAdds);
+                if (!userWantsToDelete) {
+                    // User said "Cancel" (Don't delete), so we put the old records back into the batch
+                    finalBatch = finalBatch.concat(potentialDeletes);
+                }
+                // If User said "OK", we simply do nothing (they are left out of finalBatch, effectively deleted)
             }
+
+
+            // --- 5. FINAL MERGE & SAVE ---
+            allStudentData = [...ignoredData, ...finalBatch];
+
+            // Sort
+            allStudentData.sort((a, b) => {
+                const keyA = getJsSortKey(a);
+                const keyB = getJsSortKey(b);
+                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+                return keyA.courseName.localeCompare(keyB.courseName);
+            });
+
+            // Save
+            jsonDataStore.innerHTML = JSON.stringify(allStudentData);
+            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+
+            // Update UI
+            csvLoadStatus.textContent = `Processed. Total Students: ${allStudentData.length}`;
+            csvLoadStatus.classList.remove('text-red-600');
+            csvLoadStatus.classList.add('text-green-600');
+
+            // Refresh Everything
+            disable_absentee_tab(false);
+            populate_session_dropdown();
+            disable_qpcode_tab(false);
+            populate_qp_code_session_dropdown();
+            disable_room_allotment_tab(false);
+            populate_room_allotment_session_dropdown();
+            disable_scribe_settings_tab(false);
+            loadGlobalScribeList();
+            disable_edit_data_tab(false);
+
+            // Re-enable Report Buttons
+            document.querySelectorAll('#view-reports button').forEach(btn => btn.disabled = false);
+
+            updateDashboard();
+
+            alert("✅ Data Processing Complete!");
+
+        } catch (e) {
+            console.error("Error parsing CSV:", e);
+            csvLoadStatus.textContent = "Error parsing file.";
+            csvLoadStatus.classList.add('text-red-600');
         }
-
-        // PROMPT 2: DELETIONS
-        if (potentialDeletes.length > 0) {
-            const userWantsToDelete = confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
-            
-            if (!userWantsToDelete) {
-                // User said "Cancel" (Don't delete), so we put the old records back into the batch
-                finalBatch = finalBatch.concat(potentialDeletes);
-            }
-            // If User said "OK", we simply do nothing (they are left out of finalBatch, effectively deleted)
-        }
-
-
-        // --- 5. FINAL MERGE & SAVE ---
-        allStudentData = [...ignoredData, ...finalBatch];
-
-        // Sort
-        allStudentData.sort((a, b) => {
-            const keyA = getJsSortKey(a);
-            const keyB = getJsSortKey(b);
-            if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
-            return keyA.courseName.localeCompare(keyB.courseName);
-        });
-
-        // Save
-        jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-
-        // Update UI
-        csvLoadStatus.textContent = `Processed. Total Students: ${allStudentData.length}`;
-        csvLoadStatus.classList.remove('text-red-600');
-        csvLoadStatus.classList.add('text-green-600');
-        
-        // Refresh Everything
-        disable_absentee_tab(false);
-        populate_session_dropdown();
-        disable_qpcode_tab(false);
-        populate_qp_code_session_dropdown();
-        disable_room_allotment_tab(false);
-        populate_room_allotment_session_dropdown();
-        disable_scribe_settings_tab(false);
-        loadGlobalScribeList();
-        disable_edit_data_tab(false);
-        
-        // Re-enable Report Buttons
-        document.querySelectorAll('#view-reports button').forEach(btn => btn.disabled = false);
-
-        updateDashboard();
-        
-        alert("✅ Data Processing Complete!");
-
-    } catch (e) {
-        console.error("Error parsing CSV:", e);
-        csvLoadStatus.textContent = "Error parsing file.";
-        csvLoadStatus.classList.add('text-red-600');
     }
-}
-    
 
-window.real_populate_session_dropdown = function () {
+
+    window.real_populate_session_dropdown = function () {
         try {
             allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
             if (allStudentData.length === 0) {
@@ -7516,7 +7551,7 @@ window.real_populate_session_dropdown = function () {
             const previousSelection = sessionSelect.value;
             const seenKeys = new Set();
             const uniqueStudentEntries = [];
-            
+
             allStudentData.forEach(row => {
                 const key = `${row.Date}|${row.Time}|${row['Register Number']}`;
                 if (!seenKeys.has(key)) {
@@ -7533,11 +7568,11 @@ window.real_populate_session_dropdown = function () {
 
             // Clear Options
             [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
-                if(el) el.innerHTML = '<option value="">-- Select a Session --</option>';
+                if (el) el.innerHTML = '<option value="">-- Select a Session --</option>';
             });
-            if(reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
+            if (reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
 
-           // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
+            // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
             const now = new Date();
             const todayStr = now.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
             const nowTime = now.getTime(); // Current timestamp
@@ -7548,9 +7583,9 @@ window.real_populate_session_dropdown = function () {
                 // Populate Options
                 const opt = `<option value="${session}">${session}</option>`;
                 sessionSelect.innerHTML += opt;
-                if(reportsSessionSelect) reportsSessionSelect.innerHTML += opt;
-                if(editSessionSelect) editSessionSelect.innerHTML += opt;
-                if(searchSessionSelect) searchSessionSelect.innerHTML += opt;
+                if (reportsSessionSelect) reportsSessionSelect.innerHTML += opt;
+                if (editSessionSelect) editSessionSelect.innerHTML += opt;
+                if (searchSessionSelect) searchSessionSelect.innerHTML += opt;
                 // 1. Parse Session Date & Time
                 const [datePart, timePart] = session.split('|').map(s => s.trim());
                 if (!datePart || !timePart) return;
@@ -7564,11 +7599,11 @@ window.real_populate_session_dropdown = function () {
                 const sessionEndWindow = new Date(sessionStart.getTime() + (60 * 60 * 1000)); // Start + 1 Hr
                 // 2. Logic: Is this "Today's Active Session"? (Now < Start + 1 Hr)
                 if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
-                     if (!activeTodaySession) activeTodaySession = session; 
+                    if (!activeTodaySession) activeTodaySession = session;
                 }
                 // 3. Logic: Find "Next Upcoming Session" (Earliest Future Session)
                 const diff = sessionStart.getTime() - nowTime;
-                if (diff > 0 && diff < minDiff) { 
+                if (diff > 0 && diff < minDiff) {
                     minDiff = diff;
                     nextUpcomingSession = session;
                 }
@@ -7576,16 +7611,16 @@ window.real_populate_session_dropdown = function () {
             // PRIORITY: 1. Active Today -> 2. Next Upcoming -> 3. First in List
             let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
 
-            
+
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             // Set Value & Initialize Trigger UI
             [sessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
-                if(el && targetVal) el.value = targetVal;
+                if (el && targetVal) el.value = targetVal;
                 // Dispatch change to run logic, but UI might not be ready yet
-                if(el) el.dispatchEvent(new Event('change'));
+                if (el) el.dispatchEvent(new Event('change'));
             });
-            if(reportsSessionSelect) reportsSessionSelect.value = targetVal || "all";
+            if (reportsSessionSelect) reportsSessionSelect.value = targetVal || "all";
 
             reportFilterSection.classList.remove('hidden');
             filterSessionRadio.checked = true;
@@ -7602,8 +7637,8 @@ window.real_populate_session_dropdown = function () {
             disable_absentee_tab(true);
         }
     }
-  
-   
+
+
 
     sessionSelect.addEventListener('change', () => {
         const sessionKey = sessionSelect.value;
@@ -7945,7 +7980,7 @@ window.real_populate_session_dropdown = function () {
         qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
     }
 
-window.real_populate_qp_code_session_dropdown = function () {
+    window.real_populate_qp_code_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -7993,7 +8028,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 
-            
+
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             if (targetVal) {
@@ -8009,7 +8044,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             disable_qpcode_tab(true);
         }
     }
-    
+
 
     // V61: Event listener for the QP Code session dropdown
     sessionSelectQP.addEventListener('change', () => {
@@ -8161,7 +8196,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         qpCodeStatus.classList.add('text-green-600');
         qpCodeStatus.textContent = `QP Codes saved successfully!`;
         setTimeout(() => { qpCodeStatus.textContent = ""; }, 2000);
-           syncSessionToCloud(sessionKey); // <--- ADD THIS
+        syncSessionToCloud(sessionKey); // <--- ADD THIS
     });
 
     // V89: NEW INPUT STRATEGY
@@ -8194,7 +8229,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 
-   // 1. Reset Student Data Only (Safe Wrapper + Cloud Wipe)
+    // 1. Reset Student Data Only (Safe Wrapper + Cloud Wipe)
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
@@ -8202,17 +8237,17 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // Trigger Downloads
                 const csvBtn = document.getElementById('master-download-csv-btn');
                 const jsonBtn = document.getElementById('backup-data-button');
-                
+
                 if (csvBtn) csvBtn.click();
                 await new Promise(r => setTimeout(r, 1500));
-                
+
                 if (jsonBtn) jsonBtn.click();
                 await new Promise(r => setTimeout(r, 1000));
             }
             // ---------------------
 
             const confirmReset = confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
-            
+
             if (confirmReset) {
                 // 1. Clear Local Storage
                 const keysToRemove = [
@@ -8227,7 +8262,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const originalText = resetStudentDataButton.innerHTML;
                         resetStudentDataButton.innerHTML = "☁️ Wiping V2 Data...";
                         resetStudentDataButton.disabled = true;
-                        
+
                         const { db, doc, writeBatch, collection, getDocs } = window.firebase;
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
@@ -8262,7 +8297,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         alert("⚠️ Warning: Cloud wipe failed.\nError: " + e.message);
                     }
                 }
-                
+
                 alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 window.location.reload();
             }
@@ -8328,7 +8363,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
 
             const reader = new FileReader();
-               reader.onload = async (event) => { //
+            reader.onload = async (event) => { //
                 try {
                     const jsonString = event.target.result;
                     const restoredData = JSON.parse(jsonString);
@@ -8344,7 +8379,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     }
 
                     alert('Restore successful! Syncing all sessions to V2 Cloud...');
-                    
+
                     // MODULAR SYNC (V2) - Loop through ALL restored sessions
                     if (typeof syncSessionToCloud === 'function') {
                         // 1. Identify all sessions in the restored file
@@ -8361,10 +8396,10 @@ window.real_populate_qp_code_session_dropdown = function () {
                             updateSyncStatus(`Restoring ${count}/${sessionsToSync.size}...`, "neutral");
                             await syncSessionToCloud(sessionKey);
                         }
-                        
+
                         updateSyncStatus("Restore Complete", "success");
                     }
-                    
+
                     window.location.reload();
 
                 } catch (e) {
@@ -8629,7 +8664,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 
-  // ==========================================
+    // ==========================================
     // 💍 MASTER CSV DOWNLOAD (Updated with Invigilator Info)
     // ==========================================
     const masterDownloadBtn = document.getElementById('master-download-csv-btn');
@@ -8734,7 +8769,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         // --- NEW: Resolve Invigilator ---
                         // Determine actual room (Scribe Room vs Regular Room)
                         const actualRoom = (isScribe === "YES" && scribeRoom !== "Not Allotted") ? scribeRoom : roomNo;
-                        
+
                         // Look up invigilator for that room in this session
                         const invigName = sessionInvigilators[actualRoom] || "Not Assigned";
                         let invigDept = "-";
@@ -8784,7 +8819,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     "Register Number", "Name", "Status",
                     "Allotted Hall", "Hall Location", "Seat No",
                     "Scribe Required", "Scribe Room", "Scribe Location",
-                    "Invigilator Name", "Invigilator Dept" 
+                    "Invigilator Name", "Invigilator Dept"
                 ];
 
                 let csvContent = headers.join(",") + "\n";
@@ -8828,8 +8863,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
     // --- ROOM ALLOTMENT FUNCTIONALITY ---
-// *** FIX: This is the REAL implementation of the function Python calls ***
-  window.real_populate_room_allotment_session_dropdown = function () {
+    // *** FIX: This is the REAL implementation of the function Python calls ***
+    window.real_populate_room_allotment_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
@@ -8873,7 +8908,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 }
             });
             let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
-            
+
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             if (targetVal) {
@@ -8891,7 +8926,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             disable_room_allotment_tab(true);
         }
     }
-   
+
 
     // Load Room Allotment for a session
     function loadRoomAllotment(sessionKey) {
@@ -8910,7 +8945,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 
-// Update display (Auto-Save Version + Button Disable Logic)
+    // Update display (Auto-Save Version + Button Disable Logic)
     function updateAllotmentDisplay() {
         const [date, time] = currentSessionKey.split(' | ');
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -8977,7 +9012,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
 
         // --- AUTO-SAVE WHEN ALL STREAMS COMPLETE ---
-        const allStreamsComplete = Object.values(streamStats).every(s => 
+        const allStreamsComplete = Object.values(streamStats).every(s =>
             s.total === 0 || (s.total - s.allotted <= 0)
         );
 
@@ -9034,7 +9069,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Save Section: Show if rooms exist OR if we have pending changes (like deleting all rooms)
         const saveSection = document.getElementById('save-allotment-section');
-        
+
         if (currentSessionAllotment.length > 0 || hasUnsavedAllotment) {
             saveSection.classList.remove('hidden');
 
@@ -9067,7 +9102,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 
-    
+
 
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
     function renderAllottedRooms() {
@@ -9151,7 +9186,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
     }
 
-  // Delete a room from allotment (Fixed: Actually removes the room now)
+    // Delete a room from allotment (Fixed: Actually removes the room now)
     window.deleteRoom = async function (index) {
         if (!confirm('Are you sure you want to remove this room allotment?')) return;
 
@@ -9179,12 +9214,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         // --- CRITICAL FIX: REMOVE THE ROOM FROM THE ARRAY ---
-        currentSessionAllotment.splice(index, 1); 
+        currentSessionAllotment.splice(index, 1);
         // ---------------------------------------------------
 
         // 3. Save Changes (Manual Save Mode)
         saveRoomAllotment(); // Update Local Storage
-        
+
         hasUnsavedAllotment = true; // Flag for "Save" button
         updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
         // 4. Update UI
@@ -9358,7 +9393,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         let limit = capacity;
         if (candidates.length <= 33) {
             limit = candidates.length;
-            }
+        }
         const newStudents = candidates.slice(0, limit);
 
         if (newStudents.length === 0) {
@@ -9373,7 +9408,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             stream: targetStream
         });
 
-       
+
 
         // --- AUTO SAVE & SYNC ---
         saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
@@ -9386,7 +9421,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         roomSelectionModal.classList.add('hidden');
         updateAllotmentDisplay(); // Now reads the saved data and shows Serial #
-        if (window.renderInvigilationPanel) window.renderInvigilationPanel(); 
+        if (window.renderInvigilationPanel) window.renderInvigilationPanel();
 
     }
 
@@ -9427,40 +9462,40 @@ window.real_populate_qp_code_session_dropdown = function () {
     });
 
 
-// --- NEW LISTENER: Scribe Save Button ---
-const saveScribeBtn = document.getElementById('save-scribe-allotment-button');
-if (saveScribeBtn) {
-    saveScribeBtn.addEventListener('click', async () => {
-        if (!currentSessionKey) return;
-        
-        saveScribeBtn.disabled = true;
-        saveScribeBtn.textContent = "Saving...";
+    // --- NEW LISTENER: Scribe Save Button ---
+    const saveScribeBtn = document.getElementById('save-scribe-allotment-button');
+    if (saveScribeBtn) {
+        saveScribeBtn.addEventListener('click', async () => {
+            if (!currentSessionKey) return;
 
-        // Force Sync
-        if (typeof syncSessionToCloud === 'function') {
-            await syncSessionToCloud(currentSessionKey);
-        }
+            saveScribeBtn.disabled = true;
+            saveScribeBtn.textContent = "Saving...";
 
-        hasUnsavedScribes = false;
-        
-        // UI Feedback
-        const status = document.getElementById('scribe-save-status');
-        if(status) {
-            status.textContent = "✅ Scribe allotment saved!";
-            setTimeout(() => status.textContent = "", 3000);
-        }
-        
-        // Refresh to update button state
-        renderScribeAllotmentList(currentSessionKey);
-    });
-}
+            // Force Sync
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(currentSessionKey);
+            }
 
+            hasUnsavedScribes = false;
 
+            // UI Feedback
+            const status = document.getElementById('scribe-save-status');
+            if (status) {
+                status.textContent = "✅ Scribe allotment saved!";
+                setTimeout(() => status.textContent = "", 3000);
+            }
+
+            // Refresh to update button state
+            renderScribeAllotmentList(currentSessionKey);
+        });
+    }
 
 
 
 
-    
+
+
+
     // --- NEW: Room Search Filter Listener ---
     const roomSearchInput = document.getElementById('room-selection-search');
     if (roomSearchInput) {
@@ -9852,81 +9887,81 @@ if (saveScribeBtn) {
     }
 
 
-// Render the list of scribe students for the selected session (Lock-Aware + Auto-Save)
-function renderScribeAllotmentList(sessionKey) {
-    const [date, time] = sessionKey.split(' | ');
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+    // Render the list of scribe students for the selected session (Lock-Aware + Auto-Save)
+    function renderScribeAllotmentList(sessionKey) {
+        const [date, time] = sessionKey.split(' | ');
+        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-    // Filter to get only scribe students *in this session*
-    const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-    const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
+        // Filter to get only scribe students *in this session*
+        const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+        const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
 
-    const scribeAllotmentList = document.getElementById('scribe-allotment-list');
-    if (!scribeAllotmentList) return;
+        const scribeAllotmentList = document.getElementById('scribe-allotment-list');
+        if (!scribeAllotmentList) return;
 
-    scribeAllotmentList.innerHTML = '';
-    
-    // UI: No Scribes
-    if (sessionScribeStudents.length === 0) {
-        scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
-        const saveSection = document.getElementById('save-scribe-section');
-        if (saveSection) saveSection.classList.add('hidden');
-        return;
-    }
+        scribeAllotmentList.innerHTML = '';
 
-    const uniqueSessionScribeStudents = [];
-    const seenRegNos = new Set();
-    for (const student of sessionScribeStudents) {
-        if (!seenRegNos.has(student['Register Number'])) {
-            seenRegNos.add(student['Register Number']);
-            uniqueSessionScribeStudents.push(student);
+        // UI: No Scribes
+        if (sessionScribeStudents.length === 0) {
+            scribeAllotmentList.innerHTML = '<p class="text-gray-500 text-sm text-center py-4 italic">No students from the global scribe list are in this session.</p>';
+            const saveSection = document.getElementById('save-scribe-section');
+            if (saveSection) saveSection.classList.add('hidden');
+            return;
         }
-    }
 
-    uniqueSessionScribeStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
+        const uniqueSessionScribeStudents = [];
+        const seenRegNos = new Set();
+        for (const student of sessionScribeStudents) {
+            if (!seenRegNos.has(student['Register Number'])) {
+                seenRegNos.add(student['Register Number']);
+                uniqueSessionScribeStudents.push(student);
+            }
+        }
 
-    // Update Count Header with Badge
-    const headerEl = document.getElementById('scribe-session-header');
-    if (headerEl) {
-        headerEl.innerHTML = `Scribe Students: <span class="ml-2 bg-orange-100 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
-    }
+        uniqueSessionScribeStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
 
-    const roomSerialMap = getRoomSerialMap(sessionKey);
+        // Update Count Header with Badge
+        const headerEl = document.getElementById('scribe-session-header');
+        if (headerEl) {
+            headerEl.innerHTML = `Scribe Students: <span class="ml-2 bg-orange-100 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full border border-orange-200">${uniqueSessionScribeStudents.length}</span>`;
+        }
 
-    uniqueSessionScribeStudents.forEach(student => {
-        const regNo = student['Register Number'];
-        const allottedRoom = currentScribeAllotment[regNo];
+        const roomSerialMap = getRoomSerialMap(sessionKey);
 
-        const item = document.createElement('div');
-        item.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:shadow-md transition';
+        uniqueSessionScribeStudents.forEach(student => {
+            const regNo = student['Register Number'];
+            const allottedRoom = currentScribeAllotment[regNo];
 
-        let actionContent = '';
+            const item = document.createElement('div');
+            item.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm mb-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:shadow-md transition';
 
-        // Check Lock State for Buttons
-        if (typeof isScribeAllotmentLocked !== 'undefined' && isScribeAllotmentLocked) {
-            // LOCKED STATE
-            if (allottedRoom) {
-                const serialNo = roomSerialMap[allottedRoom] || '-';
-                const roomInfo = currentRoomConfig[allottedRoom];
-                const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
-                const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
+            let actionContent = '';
 
-                actionContent = `
+            // Check Lock State for Buttons
+            if (typeof isScribeAllotmentLocked !== 'undefined' && isScribeAllotmentLocked) {
+                // LOCKED STATE
+                if (allottedRoom) {
+                    const serialNo = roomSerialMap[allottedRoom] || '-';
+                    const roomInfo = currentRoomConfig[allottedRoom];
+                    const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
+                    const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
+
+                    actionContent = `
                 <div class="bg-gray-50 border border-gray-200 rounded p-2 text-sm font-bold text-gray-600 flex items-center gap-2">
                     <span>🔒</span> ${displayRoom}
                 </div>`;
+                } else {
+                    actionContent = `<span class="text-xs text-gray-400 italic bg-gray-50 px-2 py-1 rounded border border-gray-100">Not Assigned (Locked)</span>`;
+                }
             } else {
-                actionContent = `<span class="text-xs text-gray-400 italic bg-gray-50 px-2 py-1 rounded border border-gray-100">Not Assigned (Locked)</span>`;
-            }
-        } else {
-            // UNLOCKED STATE (Editable)
-            if (allottedRoom) {
-                const serialNo = roomSerialMap[allottedRoom] || '-';
-                const roomInfo = currentRoomConfig[allottedRoom];
-                const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
-                const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
+                // UNLOCKED STATE (Editable)
+                if (allottedRoom) {
+                    const serialNo = roomSerialMap[allottedRoom] || '-';
+                    const roomInfo = currentRoomConfig[allottedRoom];
+                    const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 font-normal text-xs">(${roomInfo.location})</span>` : '';
+                    const displayRoom = `<span class="font-mono font-bold text-gray-500 mr-1">#${serialNo}</span> ${allottedRoom}${location}`;
 
-                actionContent = `
+                    actionContent = `
                 <div class="w-full md:w-auto bg-green-50 border border-green-100 rounded p-2 md:bg-transparent md:border-0 md:p-0 flex flex-col md:flex-row md:items-center gap-2">
                     <div class="text-xs text-gray-500 uppercase font-bold md:hidden">Allotted Room</div>
                     <div class="text-sm font-bold text-green-700 md:text-gray-800 md:mr-4">${displayRoom}</div>
@@ -9943,17 +9978,17 @@ function renderScribeAllotmentList(sessionKey) {
                     </div>
                 </div>
             `;
-            } else {
-                actionContent = `
+                } else {
+                    actionContent = `
                 <button class="w-full md:w-auto inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         onclick="openScribeRoomModal('${regNo}', '${student.Name}')">
                     Assign Room
                 </button>
             `;
+                }
             }
-        }
 
-        item.innerHTML = `
+            item.innerHTML = `
         <div class="flex items-center gap-3 w-full md:w-auto">
             <div class="h-10 w-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0 border border-orange-200">
                 Scr
@@ -9968,55 +10003,55 @@ function renderScribeAllotmentList(sessionKey) {
             ${actionContent}
         </div>
     `;
-        scribeAllotmentList.appendChild(item);
-    });
+            scribeAllotmentList.appendChild(item);
+        });
 
-    // --- NEW: AUTO-SAVE WHEN ALL SCRIBES COMPLETED ---
-    // Check if every student in the list has an assigned room
-    const allScribesAllotted = uniqueSessionScribeStudents.every(student => 
-        currentScribeAllotment[student['Register Number']]
-    );
+        // --- NEW: AUTO-SAVE WHEN ALL SCRIBES COMPLETED ---
+        // Check if every student in the list has an assigned room
+        const allScribesAllotted = uniqueSessionScribeStudents.every(student =>
+            currentScribeAllotment[student['Register Number']]
+        );
 
-    if (allScribesAllotted && hasUnsavedScribes) {
-        setTimeout(() => {
-            const saveBtn = document.getElementById('save-scribe-allotment-button');
-            if (saveBtn) saveBtn.click();
-        }, 800); // 0.8s delay for UX
-    }
-    // ------------------------------------------------
+        if (allScribesAllotted && hasUnsavedScribes) {
+            setTimeout(() => {
+                const saveBtn = document.getElementById('save-scribe-allotment-button');
+                if (saveBtn) saveBtn.click();
+            }, 800); // 0.8s delay for UX
+        }
+        // ------------------------------------------------
 
-    // --- MANAGE SAVE BUTTON VISIBILITY ---
-    const saveSection = document.getElementById('save-scribe-section');
-    const saveBtn = document.getElementById('save-scribe-allotment-button');
-    
-    if (saveSection && saveBtn) {
-        saveSection.classList.remove('hidden');
-        
-        if (hasUnsavedScribes) {
-            // DIRTY STATE: Needs Saving
-            saveBtn.innerHTML = "Save Scribe Allotment";
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-green-800');
-            saveBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
-            saveBtn.disabled = false;
-        } else {
-            // CLEAN STATE: Already Saved
-            saveBtn.innerHTML = `
+        // --- MANAGE SAVE BUTTON VISIBILITY ---
+        const saveSection = document.getElementById('save-scribe-section');
+        const saveBtn = document.getElementById('save-scribe-allotment-button');
+
+        if (saveSection && saveBtn) {
+            saveSection.classList.remove('hidden');
+
+            if (hasUnsavedScribes) {
+                // DIRTY STATE: Needs Saving
+                saveBtn.innerHTML = "Save Scribe Allotment";
+                saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-green-800');
+                saveBtn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
+                saveBtn.disabled = false;
+            } else {
+                // CLEAN STATE: Already Saved
+                saveBtn.innerHTML = `
                 <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 Synced to Cloud
             `;
-            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-green-800');
-            saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
-            saveBtn.disabled = true;
+                saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-green-800');
+                saveBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                saveBtn.disabled = true;
+            }
         }
     }
-}
 
 
-    
 
 
-    
-    
+
+
+
 
     // Find available rooms for scribes
     async function findAvailableRooms(sessionKey) {
@@ -10342,7 +10377,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Find the renderStudentEditTable function (around line 1330) and replace it with this:
 
-// 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
+    // 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
     function renderStudentEditTable() {
         editDataContainer.innerHTML = '';
 
@@ -10474,7 +10509,7 @@ function renderScribeAllotmentList(sessionKey) {
         editDataContainer.innerHTML = tableHtml;
         renderEditPagination(currentCourseStudents.length);
     }
-    
+
 
 
 
@@ -10578,28 +10613,28 @@ function renderScribeAllotmentList(sessionKey) {
             modalTime.value = toInputTime(student.Time);
             modalCourse.value = student.Course;
             // Inside openStudentEditModal...
-    
+
             const existingExam = student['Exam Name'] || '';
-    
-    // Check if the student's exam exists in our dropdown
+
+            // Check if the student's exam exists in our dropdown
             const examOptionExists = [...modalExamName.options].some(o => o.value === existingExam);
-    
+
             if (existingExam && !examOptionExists) {
-        // If the student has a weird/old exam name not in the list, add it temporarily so we don't lose it
-            const tempOpt = document.createElement('option');
-            tempOpt.value = existingExam;
-            tempOpt.textContent = `${existingExam} (Not in Master List)`;
-            modalExamName.appendChild(tempOpt);
+                // If the student has a weird/old exam name not in the list, add it temporarily so we don't lose it
+                const tempOpt = document.createElement('option');
+                tempOpt.value = existingExam;
+                tempOpt.textContent = `${existingExam} (Not in Master List)`;
+                modalExamName.appendChild(tempOpt);
             }
-    
+
             modalExamName.value = existingExam;
             modalRegNo.value = student['Register Number'];
             modalName.value = student.Name;
             streamSelect.value = student.Stream || currentStreamConfig[0];
-            }
+        }
 
-            studentEditModal.classList.remove('hidden');
-            }
+        studentEditModal.classList.remove('hidden');
+    }
 
     // 8. NEW Function: Close the modal
     function closeStudentEditModal() {
@@ -10928,7 +10963,7 @@ function renderScribeAllotmentList(sessionKey) {
     // 4. Handle Bulk Apply Click
     // [In app.js]
 
-  if (btnBulkApply) {
+    if (btnBulkApply) {
         btnBulkApply.addEventListener('click', async () => {
             // 1. Capture All Inputs (Including Exam Name)
             const rawDate = document.getElementById('bulk-new-date').value;
@@ -11005,23 +11040,23 @@ Are you sure you want to update these records?
                 // 6. Apply Updates
                 allStudentData.forEach(student => {
                     if (student.Date === oldDate && student.Time === oldTime && student.Course === targetCourse) {
-                        
+
                         // Update fields only if provided
                         if (newExamName) student['Exam Name'] = newExamName; // <--- THE FIX
                         if (newCourseName) student.Course = newCourseName;
                         if (newStream) student.Stream = newStream;
                         if (newDate) student.Date = newDate;
                         if (newTime) student.Time = newTime;
-                        
+
                         updateCount++;
                     }
                 });
 
                 // 7. Save & Sync
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-                
+
                 alert(`✅ Updated ${updateCount} students! Syncing changes...`);
-                
+
                 // Trigger Sync
                 if (typeof syncSessionToCloud === 'function') {
                     // Sync the OLD session (to remove moved students) AND the NEW session (if date changed)
@@ -11039,11 +11074,11 @@ Are you sure you want to update these records?
     }
 
 
-// --- Event listener for Invigilator Report (Stream-Wise V2 + Upcoming Filter) ---
+    // --- Event listener for Invigilator Report (Stream-Wise V2 + Upcoming Filter) ---
     generateInvigilatorReportButton.addEventListener('click', async () => {
         generateInvigilatorReportButton.disabled = true;
         generateInvigilatorReportButton.textContent = "Calculating...";
-        
+
         reportOutputArea.innerHTML = "";
         reportControls.classList.add('hidden');
         roomCsvDownloadContainer.innerHTML = "";
@@ -11103,12 +11138,12 @@ Are you sure you want to update these records?
                 sortedSessionKeys = sortedSessionKeys.filter(key => {
                     // key format: "DD.MM.YYYY | HH:MM AM"
                     const [dStr, tStr] = key.split('|');
-                    if(!dStr) return false;
-                    
+                    if (!dStr) return false;
+
                     // Robust Date Parsing
                     const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
                     const sessionDate = new Date(yyyy, mm - 1, dd);
-                    
+
                     // Keep if Date is Today or Future
                     return sessionDate >= today;
                 });
@@ -11142,7 +11177,7 @@ Are you sure you want to update these records?
                     const count = stats.streams[strm];
                     const requiredInvigs = Math.ceil(count / 30); // 1 per 30 rule PER STREAM
                     streamInvigTotal += requiredInvigs;
-                    
+
                     streamHtmlParts.push(`
                         <div class="flex justify-between items-center text-sm mb-1 border-b border-gray-200 pb-1 last:border-0">
                             <span class="font-medium text-gray-700">${strm}:</span>
@@ -11230,8 +11265,8 @@ Are you sure you want to update these records?
     });
 
 
-    
-   
+
+
     // --- Event listener for the "Print" button ---
     if (finalPrintButton) {
         finalPrintButton.addEventListener('click', () => {
@@ -11239,8 +11274,8 @@ Are you sure you want to update these records?
             window.print();
         });
     }
-    
-    
+
+
     // --- Event listener for "Generate Room Stickers" (V10: Dynamic RegNo Width) ---
     const generateStickerButton = document.getElementById('generate-sticker-button');
 
@@ -11598,109 +11633,109 @@ Are you sure you want to update these records?
         }, 250);
     });
 
-// 3A. Show Single Session Details (Stream-Aware + Invigilator Info)
-function showStudentDetailsModal(regNo, sessionKey) {
-    const singleView = document.getElementById('search-result-single-view');
-    const globalView = document.getElementById('search-result-global-view');
-    
-    // --- FIX: Use the correct ID from index.html ---
-    const modal = document.getElementById('student-search-result-modal'); 
-    // -----------------------------------------------
+    // 3A. Show Single Session Details (Stream-Aware + Invigilator Info)
+    function showStudentDetailsModal(regNo, sessionKey) {
+        const singleView = document.getElementById('search-result-single-view');
+        const globalView = document.getElementById('search-result-global-view');
 
-    if(singleView) singleView.classList.remove('hidden');
-    if(globalView) globalView.classList.add('hidden');
+        // --- FIX: Use the correct ID from index.html ---
+        const modal = document.getElementById('student-search-result-modal');
+        // -----------------------------------------------
 
-    const [date, time] = sessionKey.split(' | ');
-    const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
+        if (singleView) singleView.classList.remove('hidden');
+        if (globalView) globalView.classList.add('hidden');
 
-    if (!student) {
-        alert("Student not found in this session.");
-        return;
-    }
+        const [date, time] = sessionKey.split(' | ');
+        const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
 
-    // 1. Calculate Allocation Logic
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const allocatedSessionData = performOriginalAllocation(sessionStudents);
-    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+        if (!student) {
+            alert("Student not found in this session.");
+            return;
+        }
 
-    // 2. Scribe Info
-    const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-    const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
-    const scribeRoom = sessionScribeAllotment[regNo];
+        // 1. Calculate Allocation Logic
+        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const allocatedSessionData = performOriginalAllocation(sessionStudents);
+        const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
 
-    // 3. QP Code Info
-    loadQPCodes();
-    const sessionQPCodes = qpCodeMap[sessionKey] || {};
-    const streamName = student.Stream || "Regular";
-    const courseKey = getQpKey(student.Course, streamName);
-    const qpCode = sessionQPCodes[courseKey] || "N/A";
+        // 2. Scribe Info
+        const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const sessionScribeAllotment = allScribeAllotments[sessionKey] || {};
+        const scribeRoom = sessionScribeAllotment[regNo];
 
-    // 4. Update Basic UI
-    document.getElementById('search-result-name').textContent = student.Name;
-    document.getElementById('search-result-regno').textContent = student['Register Number'];
-    document.getElementById('search-result-stream').textContent = streamName;
-    document.getElementById('search-result-course').textContent = student.Course;
-    document.getElementById('search-result-qpcode').textContent = qpCode;
+        // 3. QP Code Info
+        loadQPCodes();
+        const sessionQPCodes = qpCodeMap[sessionKey] || {};
+        const streamName = student.Stream || "Regular";
+        const courseKey = getQpKey(student.Course, streamName);
+        const qpCode = sessionQPCodes[courseKey] || "N/A";
 
-    let targetRoom = null; // Track which room the student is physically in
+        // 4. Update Basic UI
+        document.getElementById('search-result-name').textContent = student.Name;
+        document.getElementById('search-result-regno').textContent = student['Register Number'];
+        document.getElementById('search-result-stream').textContent = streamName;
+        document.getElementById('search-result-course').textContent = student.Course;
+        document.getElementById('search-result-qpcode').textContent = qpCode;
 
-    // 5. Update Room UI
-    const roomLocBlock = document.getElementById('search-result-room-location-block');
-    if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
-        const roomName = allocatedStudent['Room No'];
-        const roomInfo = currentRoomConfig[roomName] || {};
-        document.getElementById('search-result-room').textContent = roomName;
-        document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
-        document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
-        
-        if(roomLocBlock) roomLocBlock.classList.remove('hidden');
-        targetRoom = roomName; // Student is in this room
-    } else {
-        document.getElementById('search-result-room').textContent = "Not Allotted";
-        document.getElementById('search-result-seat').textContent = "-";
-        if(roomLocBlock) roomLocBlock.classList.add('hidden');
-    }
+        let targetRoom = null; // Track which room the student is physically in
 
-    // 6. Update Scribe UI
-    const scribeBlock = document.getElementById('search-result-scribe-block');
-    if (scribeRoom) {
-        const scribeInfo = currentRoomConfig[scribeRoom] || {};
-        document.getElementById('search-result-scribe-room').textContent = scribeRoom;
-        document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
-        
-        if(scribeBlock) scribeBlock.classList.remove('hidden');
-        
-        // OVERRIDE: If student has a scribe room, they are physically THERE, not in the regular hall.
-        targetRoom = scribeRoom; 
-    } else {
-        if(scribeBlock) scribeBlock.classList.add('hidden');
-    }
+        // 5. Update Room UI
+        const roomLocBlock = document.getElementById('search-result-room-location-block');
+        if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
+            const roomName = allocatedStudent['Room No'];
+            const roomInfo = currentRoomConfig[roomName] || {};
+            document.getElementById('search-result-room').textContent = roomName;
+            document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
+            document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
 
-    // ==========================================
-    // 👮 NEW: Invigilator Details Logic
-    // ==========================================
-    const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
-    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    const sessionInvigs = allInvigMappings[sessionKey] || {};
+            if (roomLocBlock) roomLocBlock.classList.remove('hidden');
+            targetRoom = roomName; // Student is in this room
+        } else {
+            document.getElementById('search-result-room').textContent = "Not Allotted";
+            document.getElementById('search-result-seat').textContent = "-";
+            if (roomLocBlock) roomLocBlock.classList.add('hidden');
+        }
 
-    // Get or Create Container for Invigilator Info in the Modal
-    let invigContainer = document.getElementById('search-result-invigilator-block');
-    if (!invigContainer && singleView) {
-        invigContainer = document.createElement('div');
-        invigContainer.id = 'search-result-invigilator-block';
-        invigContainer.className = "mt-4 pt-3 border-t border-gray-100 animate-fade-in";
-        singleView.appendChild(invigContainer);
-    }
+        // 6. Update Scribe UI
+        const scribeBlock = document.getElementById('search-result-scribe-block');
+        if (scribeRoom) {
+            const scribeInfo = currentRoomConfig[scribeRoom] || {};
+            document.getElementById('search-result-scribe-room').textContent = scribeRoom;
+            document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
 
-    if (invigContainer) {
-        if (targetRoom && sessionInvigs[targetRoom]) {
-            const invigName = sessionInvigs[targetRoom];
-            // Lookup staff details for Department/Phone
-            const staff = staffData.find(s => s.name === invigName || s.email === invigName);
-            const dept = staff ? staff.dept : "Unknown Dept";
-            const phone = staff ? staff.phone : ""; 
+            if (scribeBlock) scribeBlock.classList.remove('hidden');
 
-            invigContainer.innerHTML = `
+            // OVERRIDE: If student has a scribe room, they are physically THERE, not in the regular hall.
+            targetRoom = scribeRoom;
+        } else {
+            if (scribeBlock) scribeBlock.classList.add('hidden');
+        }
+
+        // ==========================================
+        // 👮 NEW: Invigilator Details Logic
+        // ==========================================
+        const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+        const sessionInvigs = allInvigMappings[sessionKey] || {};
+
+        // Get or Create Container for Invigilator Info in the Modal
+        let invigContainer = document.getElementById('search-result-invigilator-block');
+        if (!invigContainer && singleView) {
+            invigContainer = document.createElement('div');
+            invigContainer.id = 'search-result-invigilator-block';
+            invigContainer.className = "mt-4 pt-3 border-t border-gray-100 animate-fade-in";
+            singleView.appendChild(invigContainer);
+        }
+
+        if (invigContainer) {
+            if (targetRoom && sessionInvigs[targetRoom]) {
+                const invigName = sessionInvigs[targetRoom];
+                // Lookup staff details for Department/Phone
+                const staff = staffData.find(s => s.name === invigName || s.email === invigName);
+                const dept = staff ? staff.dept : "Unknown Dept";
+                const phone = staff ? staff.phone : "";
+
+                invigContainer.innerHTML = `
                 <div class="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
                     <div class="bg-indigo-200 text-indigo-700 h-10 w-10 flex items-center justify-center rounded-full font-bold text-lg">
                         👮
@@ -11712,15 +11747,15 @@ function showStudentDetailsModal(regNo, sessionKey) {
                     </div>
                 </div>
             `;
-            invigContainer.classList.remove('hidden');
-        } else {
-            invigContainer.classList.add('hidden'); // Hide if no invigilator assigned
+                invigContainer.classList.remove('hidden');
+            } else {
+                invigContainer.classList.add('hidden'); // Hide if no invigilator assigned
+            }
         }
-    }
-    // ==========================================
+        // ==========================================
 
-    if(modal) modal.classList.remove('hidden');
-}
+        if (modal) modal.classList.remove('hidden');
+    }
 
     // 3B. Show Global Details (Updated with Location)
     function showGlobalStudentDetails(regNo) {
@@ -11874,7 +11909,7 @@ Are you sure?
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
 
-               // MODULAR SYNC (V2)
+                // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionVal);
                 }
@@ -11896,8 +11931,8 @@ Are you sure?
     // 1. CHECK IF USER IS SUPER ADMIN
     function checkSuperAdminAccess(user) {
         // FIX: Get element directly to avoid initialization errors
-        const btn = document.getElementById('super-admin-btn'); 
-        
+        const btn = document.getElementById('super-admin-btn');
+
         if (user.email === SUPER_ADMIN_EMAIL) {
             if (btn) btn.classList.remove('hidden');
         } else {
@@ -12202,76 +12237,76 @@ Are you sure?
     const mainCsvInput = document.getElementById('main-csv-upload');
     const mainCsvStatus = document.getElementById('main-csv-status');
 
-if (mainLoadCsvBtn) {
-    mainLoadCsvBtn.addEventListener('click', () => {
-        const file = mainCsvInput.files[0];
-        // 1. GET GLOBAL SETTINGS
-        const examSelect = document.getElementById('upload-exam-select');
-        const streamSelect = document.getElementById('global-stream-select');
-        
-        const selectedExamName = examSelect ? examSelect.value : "";
-        const selectedStream = streamSelect ? streamSelect.value : "Regular";
+    if (mainLoadCsvBtn) {
+        mainLoadCsvBtn.addEventListener('click', () => {
+            const file = mainCsvInput.files[0];
+            // 1. GET GLOBAL SETTINGS
+            const examSelect = document.getElementById('upload-exam-select');
+            const streamSelect = document.getElementById('global-stream-select');
 
-        // 2. VALIDATION
-        if (!file) {
-            mainCsvStatus.textContent = "Please select a CSV file first.";
-            mainCsvStatus.className = "text-sm font-medium text-red-600";
-            return;
-        }
-        if (!selectedExamName) {
-            alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
-            return;
-        }
+            const selectedExamName = examSelect ? examSelect.value : "";
+            const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
-        mainCsvStatus.textContent = "Analyzing file...";
-        mainCsvStatus.className = "text-sm font-medium text-blue-600";
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const csvText = event.target.result;
-            try {
-                // 3. PARSE (Pass selected stream)
-                tempNewData = parseCsvRaw(csvText, selectedStream);
-                
-                if (tempNewData.length === 0) throw new Error("No valid data found in CSV.");
-
-                // 4. INJECT EXAM NAME TAG
-                tempNewData = tempNewData.map(student => ({
-                    ...student,
-                    "Exam Name": selectedExamName // <--- INJECTION HAPPENS HERE
-                }));
-
-                // ... (Rest of existing merge/conflict logic remains the same) ...
-                
-                // [Keep the existing conflict check logic here]
-                // For brevity, just ensuring the start of the logic flow matches your needs.
-                if (!allStudentData || allStudentData.length === 0) {
-                    loadStudentData(tempNewData);
-                } else {
-                    // ... conflict logic ...
-                    const existingKeys = new Set(allStudentData.map(getRecordKey));
-                    tempUniqueData = tempNewData.filter(s => !existingKeys.has(getRecordKey(s)));
-                    
-                    // Update Modal Counts
-                    if(conflictExistingCount) conflictExistingCount.textContent = allStudentData.length;
-                    if(conflictTotalNew) conflictTotalNew.textContent = tempNewData.length;
-                    if(conflictUniqueCount) conflictUniqueCount.textContent = tempUniqueData.length;
-                    
-                    const conflictModal = document.getElementById('csv-conflict-modal');
-                    if(conflictModal) conflictModal.classList.remove('hidden');
-                }
-
-            } catch (e) {
-                console.error(e);
-                mainCsvStatus.textContent = "Error parsing CSV: " + e.message;
+            // 2. VALIDATION
+            if (!file) {
+                mainCsvStatus.textContent = "Please select a CSV file first.";
                 mainCsvStatus.className = "text-sm font-medium text-red-600";
+                return;
             }
-        };
-        reader.readAsText(file);
-    });
-}
+            if (!selectedExamName) {
+                alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
+                return;
+            }
 
-    
+            mainCsvStatus.textContent = "Analyzing file...";
+            mainCsvStatus.className = "text-sm font-medium text-blue-600";
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const csvText = event.target.result;
+                try {
+                    // 3. PARSE (Pass selected stream)
+                    tempNewData = parseCsvRaw(csvText, selectedStream);
+
+                    if (tempNewData.length === 0) throw new Error("No valid data found in CSV.");
+
+                    // 4. INJECT EXAM NAME TAG
+                    tempNewData = tempNewData.map(student => ({
+                        ...student,
+                        "Exam Name": selectedExamName // <--- INJECTION HAPPENS HERE
+                    }));
+
+                    // ... (Rest of existing merge/conflict logic remains the same) ...
+
+                    // [Keep the existing conflict check logic here]
+                    // For brevity, just ensuring the start of the logic flow matches your needs.
+                    if (!allStudentData || allStudentData.length === 0) {
+                        loadStudentData(tempNewData);
+                    } else {
+                        // ... conflict logic ...
+                        const existingKeys = new Set(allStudentData.map(getRecordKey));
+                        tempUniqueData = tempNewData.filter(s => !existingKeys.has(getRecordKey(s)));
+
+                        // Update Modal Counts
+                        if (conflictExistingCount) conflictExistingCount.textContent = allStudentData.length;
+                        if (conflictTotalNew) conflictTotalNew.textContent = tempNewData.length;
+                        if (conflictUniqueCount) conflictUniqueCount.textContent = tempUniqueData.length;
+
+                        const conflictModal = document.getElementById('csv-conflict-modal');
+                        if (conflictModal) conflictModal.classList.remove('hidden');
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    mainCsvStatus.textContent = "Error parsing CSV: " + e.message;
+                    mainCsvStatus.className = "text-sm font-medium text-red-600";
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
+
+
 
     // --- Modal Button Handlers ---
 
@@ -12302,86 +12337,86 @@ if (mainLoadCsvBtn) {
     }
 
 
-// --- Helper: Parse CSV String to JSON (Smart Stream & Source) ---
-function parseCsvRaw(csvText, streamName = "Regular") {
-    const lines = csvText.trim().split('\n');
-    const headersLine = lines.shift().trim();
-    const headers = headersLine.split(',');
+    // --- Helper: Parse CSV String to JSON (Smart Stream & Source) ---
+    function parseCsvRaw(csvText, streamName = "Regular") {
+        const lines = csvText.trim().split('\n');
+        const headersLine = lines.shift().trim();
+        const headers = headersLine.split(',');
 
-    const dateIndex = headers.indexOf('Date');
-    const timeIndex = headers.indexOf('Time');
-    const courseIndex = headers.indexOf('Course');
-    const regNumIndex = headers.indexOf('Register Number');
-    const nameIndex = headers.indexOf('Name');
-    const streamIndex = headers.indexOf('Stream');
-    const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
+        const dateIndex = headers.indexOf('Date');
+        const timeIndex = headers.indexOf('Time');
+        const courseIndex = headers.indexOf('Course');
+        const regNumIndex = headers.indexOf('Register Number');
+        const nameIndex = headers.indexOf('Name');
+        const streamIndex = headers.indexOf('Stream');
+        const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
 
-    if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
-        throw new Error("Missing required headers (Register Number, Name, Course)");
-    }
-
-    const parsedData = [];
-
-    for (const line of lines) {
-        if (!line.trim()) continue;
-        const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-        const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
-
-        if (values.length === headers.length) {
-            // 1. Stream Priority
-            let rowStream = streamName;
-            if (streamIndex !== -1) {
-                const csvValue = values[streamIndex];
-                if (csvValue && csvValue.trim() !== "") {
-                    rowStream = csvValue.trim();
-                }
-            }
-
-            // 2. Source File Priority (Capture or Default)
-            let rowSource = "Manual Upload";
-            if (sourceIndex !== -1) {
-                const sourceVal = values[sourceIndex];
-                if (sourceVal && sourceVal.trim() !== "") {
-                    rowSource = sourceVal.trim();
-                }
-            }
-
-            // 🟢 FIX: Define cleanTime using the helper function
-            const rawTime = values[timeIndex];
-            const cleanTime = (typeof normalizeTime === 'function') ? normalizeTime(rawTime) : rawTime;
-
-            parsedData.push({
-                'Date': values[dateIndex],
-                'Time': cleanTime, // <--- Now this variable exists!
-                'Course': values[courseIndex],
-                'Register Number': values[regNumIndex],
-                'Name': values[nameIndex],
-                'Stream': rowStream,
-                'Source File': rowSource
-            });
+        if (regNumIndex === -1 || nameIndex === -1 || courseIndex === -1) {
+            throw new Error("Missing required headers (Register Number, Name, Course)");
         }
+
+        const parsedData = [];
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+            const values = line.split(regex).map(val => val.trim().replace(/^"|"$/g, ''));
+
+            if (values.length === headers.length) {
+                // 1. Stream Priority
+                let rowStream = streamName;
+                if (streamIndex !== -1) {
+                    const csvValue = values[streamIndex];
+                    if (csvValue && csvValue.trim() !== "") {
+                        rowStream = csvValue.trim();
+                    }
+                }
+
+                // 2. Source File Priority (Capture or Default)
+                let rowSource = "Manual Upload";
+                if (sourceIndex !== -1) {
+                    const sourceVal = values[sourceIndex];
+                    if (sourceVal && sourceVal.trim() !== "") {
+                        rowSource = sourceVal.trim();
+                    }
+                }
+
+                // 🟢 FIX: Define cleanTime using the helper function
+                const rawTime = values[timeIndex];
+                const cleanTime = (typeof normalizeTime === 'function') ? normalizeTime(rawTime) : rawTime;
+
+                parsedData.push({
+                    'Date': values[dateIndex],
+                    'Time': cleanTime, // <--- Now this variable exists!
+                    'Course': values[courseIndex],
+                    'Register Number': values[regNumIndex],
+                    'Name': values[nameIndex],
+                    'Stream': rowStream,
+                    'Source File': rowSource
+                });
+            }
+        }
+
+        // Sort the new data
+        try {
+            parsedData.sort((a, b) => {
+                const keyA = getJsSortKey(a);
+                const keyB = getJsSortKey(b);
+                if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
+                if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
+                return keyA.courseName.localeCompare(keyB.courseName);
+            });
+        } catch (e) {
+            console.warn("Sort failed", e);
+        }
+
+        return parsedData;
     }
 
-    // Sort the new data
-    try {
-        parsedData.sort((a, b) => {
-            const keyA = getJsSortKey(a);
-            const keyB = getJsSortKey(b);
-            if (keyA.dateObj.getTime() !== keyB.dateObj.getTime()) return keyA.dateObj - keyB.dateObj;
-            if (keyA.timeObj.getTime() !== keyB.timeObj.getTime()) return keyA.timeObj - keyB.timeObj;
-            return keyA.courseName.localeCompare(keyB.courseName);
-        });
-    } catch (e) {
-        console.warn("Sort failed", e);
-    }
-
-    return parsedData;
-}
-    
 
 
 
-    
+
     // --- Helper: Convert JSON Data to CSV String (With Source File) ---
     function convertToCSV(objArray) {
         const array = typeof objArray != 'object' ? JSON.parse(objArray) : objArray;
@@ -12408,196 +12443,196 @@ function parseCsvRaw(csvText, streamName = "Regular") {
     }
 
 
-// ==========================================
-// 🚀 SMART LOADER (Targeted Cloud Sync)
-// ==========================================
-window.loadStudentData = function(dataArray, sessionsToSync = null) {
-    // 1. Update Global Var
-    allStudentData = dataArray;
+    // ==========================================
+    // 🚀 SMART LOADER (Targeted Cloud Sync)
+    // ==========================================
+    window.loadStudentData = function (dataArray, sessionsToSync = null) {
+        // 1. Update Global Var
+        allStudentData = dataArray;
 
-    // 2. Update Data Stores
-    const jsonStr = JSON.stringify(dataArray);
-    if(typeof jsonDataStore !== 'undefined') jsonDataStore.innerHTML = jsonStr;
-    localStorage.setItem(BASE_DATA_KEY, jsonStr);
+        // 2. Update Data Stores
+        const jsonStr = JSON.stringify(dataArray);
+        if (typeof jsonDataStore !== 'undefined') jsonDataStore.innerHTML = jsonStr;
+        localStorage.setItem(BASE_DATA_KEY, jsonStr);
 
-    // 3. Update UI
-    if(typeof updateUniqueStudentList === 'function') updateUniqueStudentList();
-    if(typeof populate_session_dropdown === 'function') populate_session_dropdown();
-    if(typeof populate_qp_code_session_dropdown === 'function') populate_qp_code_session_dropdown();
-    if(typeof populate_room_allotment_session_dropdown === 'function') populate_room_allotment_session_dropdown();
-    if(typeof updateDashboard === 'function') updateDashboard();
+        // 3. Update UI
+        if (typeof updateUniqueStudentList === 'function') updateUniqueStudentList();
+        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+        if (typeof populate_qp_code_session_dropdown === 'function') populate_qp_code_session_dropdown();
+        if (typeof populate_room_allotment_session_dropdown === 'function') populate_room_allotment_session_dropdown();
+        if (typeof updateDashboard === 'function') updateDashboard();
 
-    // 4. ENABLE ALL TABS AND BUTTONS
-    if(typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
-    if(typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
-    if(typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
-    if(typeof disable_scribe_settings_tab === 'function') disable_scribe_settings_tab(false);
-    if(typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
-    if(typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+        // 4. ENABLE ALL TABS AND BUTTONS
+        if (typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
+        if (typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
+        if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
+        if (typeof disable_scribe_settings_tab === 'function') disable_scribe_settings_tab(false);
+        if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
+        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
 
-    // Enable Report Buttons
-    const reportBtns = [
-        'generate-report-button',
-        'generate-daywise-report-button',
-        'generate-qpaper-report-button',
-        'generate-qp-distribution-report-button',
-        'generate-scribe-report-button',
-        'generate-scribe-proforma-button',
-        'generate-invigilator-report-button',
-        'generate-absentee-report-button'
-    ];
-    reportBtns.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.disabled = false;
-    });
+        // Enable Report Buttons
+        const reportBtns = [
+            'generate-report-button',
+            'generate-daywise-report-button',
+            'generate-qpaper-report-button',
+            'generate-qp-distribution-report-button',
+            'generate-scribe-report-button',
+            'generate-scribe-proforma-button',
+            'generate-invigilator-report-button',
+            'generate-absentee-report-button'
+        ];
+        reportBtns.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = false;
+        });
 
-    // 5. SMART SYNC LOGIC (The Fix)
-    // If we provided a specific set of sessions (from PDF/CSV), ONLY sync those.
-    if (sessionsToSync && sessionsToSync.size > 0) {
-        if (typeof syncSessionToCloud === 'function') {
-            console.log(`☁️ Smart Sync: Uploading only ${sessionsToSync.size} modified session(s)...`);
-            
-            (async () => {
-                let count = 0;
-                for (const sessionKey of sessionsToSync) {
-                    count++;
-                    updateSyncStatus(`Syncing ${count}/${sessionsToSync.size}: ${sessionKey}`, "neutral");
-                    await syncSessionToCloud(sessionKey);
-                    // Small delay to prevent network congestion
-                    await new Promise(r => setTimeout(r, 200));
-                }
-                // Ensure global slots/counts are updated
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots');
-                
-                updateSyncStatus("Smart Sync Complete", "success");
-            })();
+        // 5. SMART SYNC LOGIC (The Fix)
+        // If we provided a specific set of sessions (from PDF/CSV), ONLY sync those.
+        if (sessionsToSync && sessionsToSync.size > 0) {
+            if (typeof syncSessionToCloud === 'function') {
+                console.log(`☁️ Smart Sync: Uploading only ${sessionsToSync.size} modified session(s)...`);
+
+                (async () => {
+                    let count = 0;
+                    for (const sessionKey of sessionsToSync) {
+                        count++;
+                        updateSyncStatus(`Syncing ${count}/${sessionsToSync.size}: ${sessionKey}`, "neutral");
+                        await syncSessionToCloud(sessionKey);
+                        // Small delay to prevent network congestion
+                        await new Promise(r => setTimeout(r, 200));
+                    }
+                    // Ensure global slots/counts are updated
+                    if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots');
+
+                    updateSyncStatus("Smart Sync Complete", "success");
+                })();
+            }
+        } else {
+            console.log("☁️ Local Load Complete. No automatic cloud sync triggered.");
         }
-    } else {
-        console.log("☁️ Local Load Complete. No automatic cloud sync triggered.");
-    }
 
-    // 6. Feedback
-    const mainCsvStatus = document.getElementById('main-csv-status'); // Ensure ID matches your HTML
-    if (mainCsvStatus) {
-        mainCsvStatus.textContent = `Success! Loaded ${allStudentData.length} records.`;
-        mainCsvStatus.className = "text-sm font-medium text-green-600";
-    }
-};
+        // 6. Feedback
+        const mainCsvStatus = document.getElementById('main-csv-status'); // Ensure ID matches your HTML
+        if (mainCsvStatus) {
+            mainCsvStatus.textContent = `Success! Loaded ${allStudentData.length} records.`;
+            mainCsvStatus.className = "text-sm font-medium text-green-600";
+        }
+    };
 
-    
-// ==========================================
-// 🐍 PYTHON INTEGRATION (With Stream-Aware Merge)
-// ==========================================
-window.handlePythonExtraction = function (jsonString) {
-    console.log("Received data from Python...");
-    
-    // 1. Get Configuration
-    const examSelect = document.getElementById('upload-exam-select');
-    const streamSelect = document.getElementById('global-stream-select');
-    
-    const selectedExamName = examSelect ? examSelect.value : "";
-    const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
-    if (!selectedExamName) {
-        alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
-        return;
-    }
+    // ==========================================
+    // 🐍 PYTHON INTEGRATION (With Stream-Aware Merge)
+    // ==========================================
+    window.handlePythonExtraction = function (jsonString) {
+        console.log("Received data from Python...");
 
-    try {
-        let newJsonData = JSON.parse(jsonString);
+        // 1. Get Configuration
+        const examSelect = document.getElementById('upload-exam-select');
+        const streamSelect = document.getElementById('global-stream-select');
 
-        if (newJsonData.length === 0) {
-            alert("No student data found in PDF.");
+        const selectedExamName = examSelect ? examSelect.value : "";
+        const selectedStream = streamSelect ? streamSelect.value : "Regular";
+
+        if (!selectedExamName) {
+            alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
             return;
         }
 
-        // 2. Normalize & Tag Data (Apply selected Stream/Exam to new data)
-        newJsonData = newJsonData.map(item => ({
-            ...item,
-            "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
-            "Stream": selectedStream, // <--- TAGGING WITH STREAM
-            "Exam Name": selectedExamName
-        }));
+        try {
+            let newJsonData = JSON.parse(jsonString);
 
-        // 3. Identify Affected Sessions & Scopes
-        const affectedSessions = new Set();
-        const scopesToUpdate = new Set();
-
-        newJsonData.forEach(s => {
-            if (s.Course && s.Date && s.Time) {
-                // FIX: Scope now includes STREAM. 
-                // "English|Monday|Regular" is NOT the same as "English|Monday|EDE"
-                scopesToUpdate.add(`${s.Course}|${s.Date}|${s.Stream}`); 
-                
-                // For Cloud Sync, we still just need Date|Time
-                affectedSessions.add(`${s.Date} | ${s.Time}`);
+            if (newJsonData.length === 0) {
+                alert("No student data found in PDF.");
+                return;
             }
-        });
 
-        // 4. Merge Logic (Interactive Diff)
-        const currentDB = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+            // 2. Normalize & Tag Data (Apply selected Stream/Exam to new data)
+            newJsonData = newJsonData.map(item => ({
+                ...item,
+                "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
+                "Stream": selectedStream, // <--- TAGGING WITH STREAM
+                "Exam Name": selectedExamName
+            }));
 
-        // A. IGNORED DATA: Keep everything that doesn't match our specific Course+Date+Stream
-        // (This protects Regular students when uploading EDE, and vice versa)
-        const ignoredData = currentDB.filter(s => {
-            const sStream = s.Stream || "Regular";
-            return !scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
-        });
+            // 3. Identify Affected Sessions & Scopes
+            const affectedSessions = new Set();
+            const scopesToUpdate = new Set();
 
-        // B. RELEVANT DATA: Only data that matches the exact Course+Date+Stream we are uploading
-        const relevantOldData = currentDB.filter(s => {
-            const sStream = s.Stream || "Regular";
-            return scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
-        });
+            newJsonData.forEach(s => {
+                if (s.Course && s.Date && s.Time) {
+                    // FIX: Scope now includes STREAM. 
+                    // "English|Monday|Regular" is NOT the same as "English|Monday|EDE"
+                    scopesToUpdate.add(`${s.Course}|${s.Date}|${s.Stream}`);
 
-        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
-        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+                    // For Cloud Sync, we still just need Date|Time
+                    affectedSessions.add(`${s.Date} | ${s.Time}`);
+                }
+            });
 
-        // C. Calculate Diff
-        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
-        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
-        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+            // 4. Merge Logic (Interactive Diff)
+            const currentDB = JSON.parse(localStorage.getItem('examBaseData') || '[]');
 
-        let finalBatch = [...commonStudents];
+            // A. IGNORED DATA: Keep everything that doesn't match our specific Course+Date+Stream
+            // (This protects Regular students when uploading EDE, and vice versa)
+            const ignoredData = currentDB.filter(s => {
+                const sStream = s.Stream || "Regular";
+                return !scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
+            });
 
-        // 5. User Prompts
-        if (potentialAdds.length > 0) {
-            // New students found for this specific stream
-            if (confirm(`Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
-                finalBatch = finalBatch.concat(potentialAdds);
+            // B. RELEVANT DATA: Only data that matches the exact Course+Date+Stream we are uploading
+            const relevantOldData = currentDB.filter(s => {
+                const sStream = s.Stream || "Regular";
+                return scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
+            });
+
+            const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
+            const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+
+            // C. Calculate Diff
+            const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
+            const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
+            const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+
+            let finalBatch = [...commonStudents];
+
+            // 5. User Prompts
+            if (potentialAdds.length > 0) {
+                // New students found for this specific stream
+                if (confirm(`Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
+                    finalBatch = finalBatch.concat(potentialAdds);
+                }
             }
+
+            if (potentialDeletes.length > 0) {
+                // Missing students IN THIS STREAM only
+                if (confirm(`Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
+                    // User said YES: They are removed (excluded from finalBatch)
+                } else {
+                    // User said NO: Keep them
+                    finalBatch = finalBatch.concat(potentialDeletes);
+                }
+            }
+
+            // 6. Construct Final DB
+            // (Ignored Data + Updated Data for this Stream)
+            const finalData = [...ignoredData, ...finalBatch];
+
+            // 7. Save & Sync
+            window.loadStudentData(finalData, affectedSessions);
+
+            alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
+
+        } catch (e) {
+            console.error("Bridge Error:", e);
+            alert("Error processing data: " + e.message);
         }
-
-        if (potentialDeletes.length > 0) {
-            // Missing students IN THIS STREAM only
-            if (confirm(`Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
-                // User said YES: They are removed (excluded from finalBatch)
-            } else {
-                // User said NO: Keep them
-                finalBatch = finalBatch.concat(potentialDeletes);
-            }
-        }
-
-        // 6. Construct Final DB
-        // (Ignored Data + Updated Data for this Stream)
-        const finalData = [...ignoredData, ...finalBatch];
-
-        // 7. Save & Sync
-        window.loadStudentData(finalData, affectedSessions);
-        
-        alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
-
-    } catch (e) {
-        console.error("Bridge Error:", e);
-        alert("Error processing data: " + e.message);
-    }
-};
+    };
 
 
 
 
 
-    
+
 
 
     // ==========================================
@@ -13004,7 +13039,7 @@ window.handlePythonExtraction = function (jsonString) {
 
             try {
                 const { db, doc, writeBatch, updateDoc, collection, getDocs } = window.firebase;
-                
+
                 // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
                 // List 1: Student Data & Operations (Target of DATA mode)
                 const dataKeys = [
@@ -13042,7 +13077,7 @@ window.handlePythonExtraction = function (jsonString) {
 
                     // 1. Delete Sub-Collections based on Mode
                     const collectionsToDelete = ['operations', 'allocation', 'slots']; // Always wipe these
-                    
+
                     if (mode === 'FULL') {
                         collectionsToDelete.push('settings'); // Wipe settings too
                         collectionsToDelete.push('staff');    // Wipe staff too (optional, usually kept safe, but FULL implies deep clean)
@@ -13166,9 +13201,9 @@ window.handlePythonExtraction = function (jsonString) {
                         // Sync (THE FIX: Force sync settings & allocation)
                         // REPLACE line 8591 with:
                         if (typeof syncDataToCloud === 'function') {
-                        await syncDataToCloud('settings');
-                        await syncDataToCloud('allocation'); // In case scribe list is in backup
-                        await syncDataToCloud('ops');        // In case QP codes are in backup
+                            await syncDataToCloud('settings');
+                            await syncDataToCloud('allocation'); // In case scribe list is in backup
+                            await syncDataToCloud('ops');        // In case QP codes are in backup
                         }
 
                         alert("Settings updated and synced!");
@@ -13386,17 +13421,17 @@ window.handlePythonExtraction = function (jsonString) {
                 const sessionKey = `${s.Date} | ${s.Time}`;
                 let groupKey = "Consolidated Bill";
 
-               if (mode === 'exam') {
-                        // Get the Exam Name
-                        // FIX: Check the student record ('s') for the updated name first!
-                        const foundName = s['Exam Name'] || getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
+                if (mode === 'exam') {
+                    // Get the Exam Name
+                    // FIX: Check the student record ('s') for the updated name first!
+                    const foundName = s['Exam Name'] || getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
 
-                        // *** FILTER LOGIC ***
-                        if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
-                            return; // Skip if it doesn't match selected exam
-                        }
-                        groupKey = foundName;
-                    } else {
+                    // *** FILTER LOGIC ***
+                    if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
+                        return; // Skip if it doesn't match selected exam
+                    }
+                    groupKey = foundName;
+                } else {
                     const sStr = document.getElementById('bill-start-date').value || "Start";
                     const eStr = document.getElementById('bill-end-date').value || "End";
                     groupKey = `Period: ${sStr} to ${eStr}`;
@@ -13448,14 +13483,14 @@ window.handlePythonExtraction = function (jsonString) {
             if (btnPrintBill) btnPrintBill.classList.remove('hidden');
             // --- ADD THESE LINES HERE ---
             const pdfBtn = document.getElementById('btn-download-bill-pdf');
-            if(pdfBtn) {
-            pdfBtn.classList.remove('hidden');
-            // Remove old listener to avoid duplicates if clicked multiple times
-            const newBtn = pdfBtn.cloneNode(true);
-            pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
-            newBtn.addEventListener('click', generateRemunerationBillPDF);
+            if (pdfBtn) {
+                pdfBtn.classList.remove('hidden');
+                // Remove old listener to avoid duplicates if clicked multiple times
+                const newBtn = pdfBtn.cloneNode(true);
+                pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
+                newBtn.addEventListener('click', generateRemunerationBillPDF);
             }
-        // ----------------------------
+            // ----------------------------
         });
     }
 
@@ -13972,9 +14007,9 @@ window.handlePythonExtraction = function (jsonString) {
         });
     }
 
-function updateSessionOpsLockUI() {
+    function updateSessionOpsLockUI() {
         if (!btnSessionLock || !sessionOpsControls) return;
-        
+
         // Include the new input in the list
         const controls = [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete, sessionExamNameInput];
 
@@ -13983,20 +14018,20 @@ function updateSessionOpsLockUI() {
             btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Locked</span>`;
             btnSessionLock.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-200 transition shadow-sm";
             sessionOpsControls.classList.add('opacity-50', 'pointer-events-none');
-            
-            controls.forEach(el => { if(el) el.disabled = true; }); // Disable all
+
+            controls.forEach(el => { if (el) el.disabled = true; }); // Disable all
 
         } else {
             // UNLOCKED STATE
             btnSessionLock.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg><span>Unlocked</span>`;
             btnSessionLock.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 transition shadow-sm font-bold";
             sessionOpsControls.classList.remove('opacity-50', 'pointer-events-none');
-            
-            controls.forEach(el => { if(el) el.disabled = false; }); // Enable all
+
+            controls.forEach(el => { if (el) el.disabled = false; }); // Enable all
         }
     }
 
-if (btnSessionReschedule) {
+    if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
@@ -14018,7 +14053,7 @@ if (btnSessionReschedule) {
             if (rawDate && rawTime) {
                 const [y, m, d] = rawDate.split('-');
                 newDate = `${d}.${m}.${y}`;
-                
+
                 if (typeof normalizeTime === 'function') {
                     newTime = normalizeTime(rawTime);
                 } else {
@@ -14029,7 +14064,7 @@ if (btnSessionReschedule) {
                     hours = hours ? hours : 12;
                     newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
                 }
-                
+
                 const newSessionKey = `${newDate} | ${newTime}`;
                 if (newSessionKey !== currentSession) isMove = true;
             } else {
@@ -14049,7 +14084,7 @@ if (btnSessionReschedule) {
             const msg = `⚠️ CONFIRM SESSION UPDATE ⚠️\n\nTarget: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
             if (!confirm(msg)) return;
-            
+
             // Safety check for moves
             if (isMove) {
                 const check = prompt("Type 'CHANGE' to confirm moving this session:");
@@ -14112,7 +14147,7 @@ if (btnSessionReschedule) {
                 // 3. Cloud Sync
                 // Sync the OLD session (to clear it if moved, or update it if just renamed)
                 await syncSessionToCloud(currentSession);
-                
+
                 // If moved, also sync the NEW session
                 if (isMove) {
                     await syncSessionToCloud(newSessionKey);
@@ -14125,9 +14160,9 @@ if (btnSessionReschedule) {
                 alert("Error during update: " + e.message);
             }
         });
-}
+    }
 
-// 3. Delete Logic (Wipes Students + Associated Data)
+    // 3. Delete Logic (Wipes Students + Associated Data)
     if (btnSessionDelete) {
         btnSessionDelete.addEventListener('click', async () => {
             const currentSession = editSessionSelect.value;
@@ -14177,7 +14212,7 @@ if (btnSessionReschedule) {
                 // MODULAR SYNC (V2)
                 // This pushes an empty update to the old ID, effectively clearing it in the cloud
                 await syncSessionToCloud(currentSession);
-                
+
                 window.location.reload();
 
             } catch (e) {
@@ -14187,7 +14222,7 @@ if (btnSessionReschedule) {
         });
     }
 
-     
+
 
     // ==========================================
     // 📄 GLOBAL PDF PREVIEW (FIXED COLUMNS & PRINTING)
@@ -14343,8 +14378,8 @@ if (btnSessionReschedule) {
     }
 
 
-    
-    
+
+
     // --- NEW: Clear Scribe Room Assignment ---
     window.removeScribeRoom = function (regNo) {
         if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
@@ -14359,462 +14394,33 @@ if (btnSessionReschedule) {
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
-        if (typeof syncDataToCloud === 'function') 
+        if (typeof syncDataToCloud === 'function')
             hasUnsavedScribes = true; // ADD THIS FLAG
-            updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
+        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
         renderScribeAllotmentList(currentSessionKey);
     };
 
 
-  // ==========================================
-    // 👮 INVIGILATOR ASSIGNMENT MODULE (WITH SWAP)
     // ==========================================
+    // [MODULARIZED] Invigilation Panel Logic moved to js/features/invigilation-panel.js
 
-    let swapSourceRoom = null; // Track which room is selected for swapping
-
-    // 1. Render the Main Assignment Panel (Vertical Buttons on PC)
-    window.renderInvigilationPanel = function () {
-        const section = document.getElementById('invigilator-assignment-section');
-        const list = document.getElementById('invigilator-list-container');
-        const sessionKey = allotmentSessionSelect.value; 
-
-        if (!sessionKey) {
-            if (section) section.classList.add('hidden');
-            return;
-        }
-
-        // A. Consolidate Rooms
-        const roomDataMap = {};
-        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment && currentSessionAllotment.length > 0) {
-            currentSessionAllotment.forEach(room => {
-                if (!roomDataMap[room.roomName]) roomDataMap[room.roomName] = { name: room.roomName, count: 0, streams: new Set(), isScribe: false };
-                roomDataMap[room.roomName].count += room.students.length;
-                roomDataMap[room.roomName].streams.add(room.stream || "Regular");
-            });
-        }
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-        Object.values(sessionScribeMap).forEach(roomName => {
-            if (!roomDataMap[roomName]) roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
-            roomDataMap[roomName].count += 1;
-            roomDataMap[roomName].streams.add("Scribe");
-        });
-
-        const allRooms = Object.values(roomDataMap);
-        if (allRooms.length === 0) {
-            section.classList.add('hidden');
-            return;
-        }
-
-        section.classList.remove('hidden');
-        list.innerHTML = '';
-
-        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-        currentInvigMapping = allMappings[sessionKey] || {};
-        const serialMap = getRoomSerialMap(sessionKey);
-        allRooms.sort((a, b) => (serialMap[a.name] || 999) - (serialMap[b.name] || 999));
-
-        // --- SWAP MODE BANNER ---
-        if (swapSourceRoom) {
-             list.innerHTML += `
-            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-xs font-bold p-3 rounded-lg mb-3 flex justify-between items-center shadow-sm sticky top-0 z-10 animate-fade-in-down">
-                <div class="flex items-center gap-2">
-                    <span class="animate-pulse text-xl">🔄</span> 
-                    <div>
-                        <div class="uppercase text-[10px] opacity-70 tracking-wider">Swap Mode Active</div>
-                        <div>Select a target room for <strong>${swapSourceRoom}</strong></div>
-                    </div>
-                </div>
-                <button onclick="window.handleSwapClick('${swapSourceRoom.replace(/'/g, "\\'")}')" class="bg-white border border-orange-200 text-orange-700 px-3 py-1.5 rounded-md hover:bg-orange-100 transition text-xs font-bold shadow-sm">Cancel</button>
-            </div>
-        `;
-        }
-
-        // C. Render Rows
-        allRooms.forEach(room => {
-            const roomName = room.name;
-            const assignedName = currentInvigMapping[roomName];
-            const serial = serialMap[roomName] || '-';
-
-            const roomInfo = currentRoomConfig[room.name] || {};
-            const location = roomInfo.location || "";
-            const safeRoomName = roomName.replace(/'/g, "\\'");
-
-            const streamBadges = Array.from(room.streams).map(s => {
-                let color = "bg-blue-50 text-blue-700 border-blue-100";
-                if (s === "Scribe") color = "bg-orange-50 text-orange-700 border-orange-100";
-                else if (s !== "Regular") color = "bg-purple-50 text-purple-700 border-purple-100";
-                return `<span class="text-[9px] px-1.5 py-0.5 rounded border ${color} font-bold uppercase tracking-wide whitespace-nowrap">${s}</span>`;
-            }).join(' ');
-
-            let cardBorder = assignedName ? "border-l-4 border-l-green-500 border-y border-r border-gray-200 bg-white" : "border-l-4 border-l-gray-300 border-y border-r border-gray-200 bg-gray-50/50";
-            if (swapSourceRoom === roomName) cardBorder = "border-l-4 border-l-orange-500 border-y border-r border-orange-200 bg-orange-50 ring-2 ring-orange-100";
-
-            // --- SMART NAME DISPLAY ---
-            const getNameHtml = (name) => `
-            <div class="flex items-center gap-2.5 mb-3 sm:mb-0 bg-green-50/80 p-2 sm:p-0 rounded-lg sm:bg-transparent border sm:border-0 border-green-100 w-full sm:w-auto h-full">
-                 <div class="bg-green-100 text-green-700 p-1.5 rounded-full shrink-0">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                 </div>
-                 <div class="min-w-0 flex-1">
-                     <div class="text-[10px] text-green-600 uppercase font-bold tracking-wider leading-none mb-0.5 sm:hidden">Invigilator</div>
-                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate" title="${name}">${name}</div>
-                 </div>
-            </div>`;
-
-            let actionHtml = "";
-
-            if (swapSourceRoom) {
-                // === SWAP MODE ===
-                if (swapSourceRoom === roomName) {
-                    actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full h-full gap-2">
-                        <div class="flex-1">${getNameHtml(assignedName)}</div>
-                        <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full sm:w-auto bg-gray-500 text-white border border-transparent px-4 py-2 rounded text-xs font-bold hover:bg-gray-600 transition shadow-sm h-full">
-                            Cancel Swap
-                        </button>
-                    </div>`;
-                } else {
-                    const btnLabel = assignedName ? "Swap Here" : "Move Here";
-                    const btnColor = assignedName ? "bg-indigo-600 hover:bg-indigo-700" : "bg-green-600 hover:bg-green-700";
-                    
-                    const btnHtml = `
-                    <button onclick="window.handleSwapClick('${safeRoomName}')" class="w-full h-full ${btnColor} text-white border border-transparent px-4 py-2 rounded text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                        ${btnLabel}
-                    </button>`;
-
-                    actionHtml = assignedName ? 
-                        `<div class="flex flex-col sm:flex-row items-stretch w-full h-full gap-2">
-                            <div class="flex-1">${getNameHtml(assignedName)}</div>
-                            <div class="sm:w-32">${btnHtml}</div>
-                        </div>` : btnHtml;
-                }
-            } else {
-                // === NORMAL MODE ===
-                if (assignedName) {
-                    // STACKED BUTTONS: Grid on Mobile (1 row), Flex-Col on PC (Vertical Stack)
-                    actionHtml = `
-                    <div class="flex flex-col sm:flex-row items-stretch w-full h-full gap-3">
-                        
-                        <!-- Name Area (Middle) -->
-                        <div class="flex-1 flex items-center">
-                            ${getNameHtml(assignedName)}
-                        </div>
-
-                        <!-- Button Stack (Right - Fixed Width on PC) -->
-                        <div class="sm:border-l border-gray-100 sm:pl-3 w-full sm:w-28 flex flex-col justify-center">
-                           <div class="grid grid-cols-3 sm:flex sm:flex-col gap-1.5 w-full">     
-                               <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-1.5 rounded hover:bg-indigo-100 transition border border-indigo-200" title="Change Staff">
-                                    Change
-                               </button>
-                               
-                               <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-1.5 rounded hover:bg-teal-100 transition border border-teal-200" title="Replace Staff">
-                                    Replace
-                               </button>
-                               
-                               ${allRooms.length > 1 ? `
-                               <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex-1 sm:flex-none flex items-center justify-center gap-1 text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-1.5 rounded hover:bg-orange-100 transition border border-orange-200" title="Swap">
-                                    Swap
-                               </button>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                } else {
-                    actionHtml = `
-                    <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="w-full h-full sm:h-auto mt-2 sm:mt-0 bg-white border-2 border-dashed border-indigo-300 text-indigo-600 px-4 py-3 rounded-lg text-xs font-bold hover:bg-indigo-50 hover:border-indigo-400 transition shadow-sm flex items-center justify-center gap-2 group">
-                        <span class="bg-indigo-100 text-indigo-600 rounded-full w-5 h-5 flex items-center justify-center group-hover:bg-indigo-200 transition">+</span>
-                        Assign Invigilator
-                    </button>
-                `;
-                }
-            }
-
-            // PC LAYOUT: 3 Columns [Room Info | Separator | Actions]
-            list.innerHTML += `
-            <div class="bg-white rounded-xl shadow-sm ${cardBorder} transition-all duration-200 hover:shadow-md mb-3 overflow-hidden">
-                <div class="flex flex-col sm:flex-row sm:items-stretch min-h-[85px]">
-                    
-                    <!-- LEFT PANEL: Room Info (Fixed 40% on PC) -->
-                    <div class="p-3 sm:p-4 flex items-start gap-3 sm:w-[40%] min-w-0 border-b sm:border-b-0 sm:border-r border-gray-100">
-                        <div class="flex flex-col items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-100 shadow-sm shrink-0">
-                            <span class="text-[9px] text-gray-400 uppercase leading-none mb-0.5 font-bold">Hall</span>
-                            <span>${serial}</span>
-                        </div>
-                        <div class="min-w-0 flex-1 pt-0.5">
-                            <div class="font-bold text-gray-800 text-base leading-tight break-words">
-                                ${roomName}
-                            </div>
-                             ${location ? `<div class="text-xs text-gray-500 font-medium mt-0.5 truncate flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>${location}</div>` : ''}
-                            
-                            <div class="flex flex-wrap items-center gap-2 mt-2">
-                                <span class="text-[10px] text-gray-600 font-bold bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 whitespace-nowrap flex items-center gap-1">
-                                    <span>👥</span> ${room.count}
-                                </span>
-                                ${streamBadges}
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- RIGHT PANEL: Actions (Flex-1) -->
-                    <div class="p-3 sm:px-4 sm:py-2 flex-1 bg-gray-50/20 sm:bg-white flex flex-col justify-center">
-                        ${actionHtml}
-                    </div>
-                </div>
-            </div>
-        `;
-        });
-    };
-    
-    
-
-    // 2. Handle Swap Interaction
-    window.handleSwapClick = function (roomName) {
-        if (swapSourceRoom === roomName) {
-            // Clicked same room -> Cancel Swap
-            swapSourceRoom = null;
-        } else if (swapSourceRoom) {
-            // Clicked different room -> Perform Swap
-            performSwap(swapSourceRoom, roomName);
-            return; // performSwap calls render
-        } else {
-            // Start Swap Mode
-            swapSourceRoom = roomName;
-        }
-        renderInvigilationPanel();
-    }
-
-    // 3. Execute Swap Logic
-    window.performSwap = function (roomA, roomB) {
-        const sessionKey = allotmentSessionSelect.value;
-        const invigNameA = currentInvigMapping[roomA];
-        const invigNameB = currentInvigMapping[roomB];
-
-        // Update Mapping (Swap logic handles empty/unassigned too)
-        if (invigNameB) {
-            currentInvigMapping[roomA] = invigNameB;
-        } else {
-            delete currentInvigMapping[roomA];
-        }
-
-        if (invigNameA) {
-            currentInvigMapping[roomB] = invigNameA;
-        } else {
-            delete currentInvigMapping[roomB];
-        }
-
-        // Save & Sync
-        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-        allMappings[sessionKey] = currentInvigMapping;
-        localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
-
-        // Reset UI
-        swapSourceRoom = null;
-        renderInvigilationPanel();
-
-        // Optional Feedback
-        // alert("Swapped successfully!"); 
-    }
-
-    // 4. Open Modal (Populates List)
-    window.openInvigModal = function (roomName) {
-        const modal = document.getElementById('invigilator-select-modal');
-        const list = document.getElementById('invig-options-list');
-        const input = document.getElementById('invig-search-input');
-        const sessionKey = allotmentSessionSelect.value;
-
-        if (document.getElementById('invig-modal-subtitle')) {
-            document.getElementById('invig-modal-subtitle').textContent = `Assigning to: ${roomName}`;
-        }
-
-        input.value = "";
-        modal.classList.remove('hidden');
-        setTimeout(() => input.focus(), 100);
-
-        // Get Data
-        const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        const slot = invigSlots[sessionKey];
-
-        if (!slot || !slot.assigned || slot.assigned.length === 0) {
-            list.innerHTML = '<p class="text-xs text-red-500 text-center py-4 bg-red-50 rounded border border-red-100">No staff assigned to this session in Invigilation Portal.</p>';
-            return;
-        }
-
-        const assignedSet = new Set(Object.values(currentInvigMapping));
-
-        // Render Function
-        const renderList = (filter = "") => {
-            let html = "";
-            const q = filter.toLowerCase();
-            let hasResults = false;
-
-            slot.assigned.forEach(email => {
-                const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: 'Unknown' };
-
-                if (staff.name.toLowerCase().includes(q)) {
-                    hasResults = true;
-                    // Check if assigned to another room
-                    const isTaken = assignedSet.has(staff.name) && currentInvigMapping[roomName] !== staff.name;
-
-                    const bgClass = isTaken ? "bg-gray-50 opacity-60 cursor-not-allowed" : "hover:bg-indigo-50 cursor-pointer bg-white";
-                    const status = isTaken
-                        ? '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Busy</span>'
-                        : '<span class="text-[9px] text-green-600 font-bold bg-green-50 px-1 rounded border border-green-100">Select</span>';
-
-                    // Escape strings for safety
-                    const safeRoom = roomName.replace(/'/g, "\\'");
-                    const safeName = staff.name.replace(/'/g, "\\'");
-
-                    // DIRECT ONCLICK (Fixes the click issue)
-                    const clickAction = isTaken ? "" : `onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')"`;
-
-                    html += `
-                    <div ${clickAction} class="p-2 rounded border-b border-gray-100 last:border-0 flex justify-between items-center transition ${bgClass}">
-                        <div>
-                            <div class="text-sm font-bold text-gray-800">${staff.name}</div>
-                            <div class="text-[10px] text-gray-500">${staff.dept}</div>
-                        </div>
-                        ${status}
-                    </div>
-                `;
-                }
-            });
-
-            if (!hasResults) {
-                html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
-            }
-            list.innerHTML = html;
-        };
-
-        renderList();
-        input.oninput = (e) => renderList(e.target.value);
-    }
-
-    // 5. Save Assignment (And Close Modal)
-    window.saveInvigAssignment = function (room, name) {
-        const sessionKey = allotmentSessionSelect.value;
-        if (!sessionKey) return;
-
-        currentInvigMapping[room] = name;
-
-        // Save Global
-        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-        allMappings[sessionKey] = currentInvigMapping;
-        localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-
-        // Sync
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
-
-        // Hide Modal
-        document.getElementById('invigilator-select-modal').classList.add('hidden');
-
-        // Refresh UI
-        window.renderInvigilationPanel();
-    }
-
-    // 6. Auto-Assign
-    window.autoAssignInvigilators = function () {
-        const sessionKey = allotmentSessionSelect.value;
-        if (!sessionKey) return;
-
-        const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        const slot = invigSlots[sessionKey];
-
-        if (!slot || !slot.assigned) return alert("No staff available in portal.");
-
-        const availableStaff = [...slot.assigned];
-        const usedNames = new Set(Object.values(currentInvigMapping));
-
-        let changeCount = 0;
-
-        // 1. Build Full Room List
-        const allRoomNames = new Set();
-        if (currentSessionAllotment) currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-        Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
-
-        // 2. Sort by Serial
-        const serialMap = getRoomSerialMap(sessionKey);
-        const sortedRooms = Array.from(allRoomNames).sort((a, b) => (serialMap[a] || 999) - (serialMap[b] || 999));
-
-        // 3. Assign
-        sortedRooms.forEach(roomName => {
-            if (!currentInvigMapping[roomName]) {
-                // Find a free staff
-                const freeEmail = availableStaff.find(e => {
-                    const name = (staffData.find(s => s.email === e) || {}).name || e;
-                    return !usedNames.has(name);
-                });
-
-                if (freeEmail) {
-                    const name = (staffData.find(s => s.email === freeEmail) || {}).name || freeEmail;
-                    currentInvigMapping[roomName] = name;
-                    usedNames.add(name);
-                    changeCount++;
-                }
-            }
-        });
-
-        if (changeCount > 0) {
-            const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-            allMappings[sessionKey] = currentInvigMapping;
-            localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
-            renderInvigilationPanel();
-            alert(`Auto-assigned ${changeCount} invigilators.`);
-        } else {
-            alert("No additional free staff found to assign.");
-        }
-    }
-
-    // 7. Unassign All Invigilators
-    window.unassignAllInvigilators = function () {
-        const sessionKey = allotmentSessionSelect.value;
-        if (!sessionKey) return;
-
-        // Count current assignments to show in confirmation
-        const currentCount = Object.keys(currentInvigMapping).length;
-        if (currentCount === 0) return alert("No invigilators assigned to clear.");
-
-        if (confirm(`Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
-            // Clear current session mapping
-            currentInvigMapping = {};
-
-            // Update Global Storage
-            const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-            allMappings[sessionKey] = currentInvigMapping;
-            localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-
-            // Sync to Cloud
-            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
-
-            // Refresh UI
-            renderInvigilationPanel();
-            alert("All invigilator assignments cleared for this session.");
-        }
-    }
 
     // --- Helper: Fetch Active Official for Date ---
     function getOfficialForDate(roleName, dateObj) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         // Normalize Target Date
         const target = new Date(dateObj);
-        target.setHours(12, 0, 0, 0); 
+        target.setHours(12, 0, 0, 0);
 
         const found = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
-            const start = new Date(r.start); start.setHours(0,0,0,0);
-            const end = new Date(r.end); end.setHours(23,59,59,999);
+            const start = new Date(r.start); start.setHours(0, 0, 0, 0);
+            const end = new Date(r.end); end.setHours(23, 59, 59, 999);
             // Flexible Role Check
             return (r.role === roleName) && (target >= start && target <= end);
         }));
-        return found ? found.name : ""; 
+        return found ? found.name : "";
     }
-    
+
 
     // 5. Print List (Final: Stream-Wise Empty Rows + Invig Names + Dept + Mobile)
     window.printInvigilatorList = function () {
@@ -14949,13 +14555,13 @@ if (btnSessionReschedule) {
 
                 const roomInfo = currentRoomConfig[room.name] || {};
                 let displayLoc = (roomInfo.location && roomInfo.location.trim()) ? roomInfo.location : room.name;// --- 1. TRUNCATE LOGIC (Max 5 Words) ---
-if (displayLoc) {
-    const words = displayLoc.split(' ');
-    if (words.length > 5) {
-        displayLoc = words.slice(0, 5).join(' ') + '...';
-    }
-}
-                
+                if (displayLoc) {
+                    const words = displayLoc.split(' ');
+                    if (words.length > 5) {
+                        displayLoc = words.slice(0, 5).join(' ') + '...';
+                    }
+                }
+
                 const scribeBadge = room.isScribe ? `<span style="font-size:8pt; font-weight:bold; margin-left:5px;">(Scribe)</span>` : "";
 
                 // --- FORMAT INFO: Name + Dept | Phone ---
@@ -15003,37 +14609,37 @@ if (displayLoc) {
 
 
 
-// --- 6. Append Reserve List (New Logic) ---
-    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-    const slot = invigSlots[sessionKey];
-    
-    if (slot && slot.assigned && slot.assigned.length > 0) {
-        // Get all assigned names for this session
-        const assignedNames = new Set(Object.values(currentSessionInvigs));
-        
-        // Find staff who are in the slot ("available") but NOT in the assigned list
-        const reserves = [];
-        slot.assigned.forEach(email => {
-            const staff = staffData.find(s => s.email === email);
-            // We match by NAME because that's what we store in the mapping
-            if (staff && !assignedNames.has(staff.name)) {
-                reserves.push(staff);
-            }
-        });
-        
-        if (reserves.length > 0) {
-            // Header for Reserves
-             rowsHtml += `
+        // --- 6. Append Reserve List (New Logic) ---
+        const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        const slot = invigSlots[sessionKey];
+
+        if (slot && slot.assigned && slot.assigned.length > 0) {
+            // Get all assigned names for this session
+            const assignedNames = new Set(Object.values(currentSessionInvigs));
+
+            // Find staff who are in the slot ("available") but NOT in the assigned list
+            const reserves = [];
+            slot.assigned.forEach(email => {
+                const staff = staffData.find(s => s.email === email);
+                // We match by NAME because that's what we store in the mapping
+                if (staff && !assignedNames.has(staff.name)) {
+                    reserves.push(staff);
+                }
+            });
+
+            if (reserves.length > 0) {
+                // Header for Reserves
+                rowsHtml += `
                 <tr style="background-color:#fff7ed;">
                     <td colspan="9" style="border:1px solid #d97706; padding:6px; font-weight:bold; text-transform:uppercase; font-size:11pt; color:#9a3412; text-align:center;">
                         RESERVES / RELIEVERS
                     </td>
                 </tr>
             `;
-            
-            // List each reserve invigilator
-            reserves.forEach((staff, idx) => {
-                 rowsHtml += `
+
+                // List each reserve invigilator
+                reserves.forEach((staff, idx) => {
+                    rowsHtml += `
                  <tr>
                     <td style="border:1px solid #000; padding:4px; text-align:center;">${idx + 1}</td>
                     <td colspan="3" style="border:1px solid #000; padding:4px; font-weight:bold;">${staff.name}</td>
@@ -15041,39 +14647,39 @@ if (displayLoc) {
                     <td colspan="2" style="border:1px solid #000; padding:4px;">${staff.phone || ""}</td>
                  </tr>
                  `;
-            });
+                });
+            }
         }
-    }
 
 
-        
-        
-           // 6. Generate Print Window
-    
-    // FETCH OFFICIALS
-    let dateObj = new Date();
-    try {
-        const [d, m, y] = date.split('.');
-        dateObj = new Date(y, m - 1, d);
-    } catch(e) {}
-    
-    // Helper to get official (ensure this helper exists or use internal logic)
-    const getOfficial = (role) => {
-         // Fallback logic if helper is missing
-         const staff = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
-            const start = new Date(r.start); start.setHours(0,0,0,0);
-            const end = new Date(r.end); end.setHours(23,59,59,999);
-            // Flexible Role Check
-            return (r.role === role) && (dateObj >= start && dateObj <= end);
-        }));
-        return staff ? staff.name : "";
-    };
 
-    const seniorName = getOfficial("Senior Asst. Superintendent");
-    const chiefName = getOfficial("Chief Superintendent");
 
-    const w = window.open('', '_blank');
-    w.document.write(`
+        // 6. Generate Print Window
+
+        // FETCH OFFICIALS
+        let dateObj = new Date();
+        try {
+            const [d, m, y] = date.split('.');
+            dateObj = new Date(y, m - 1, d);
+        } catch (e) { }
+
+        // Helper to get official (ensure this helper exists or use internal logic)
+        const getOfficial = (role) => {
+            // Fallback logic if helper is missing
+            const staff = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
+                const start = new Date(r.start); start.setHours(0, 0, 0, 0);
+                const end = new Date(r.end); end.setHours(23, 59, 59, 999);
+                // Flexible Role Check
+                return (r.role === role) && (dateObj >= start && dateObj <= end);
+            }));
+            return staff ? staff.name : "";
+        };
+
+        const seniorName = getOfficial("Senior Asst. Superintendent");
+        const chiefName = getOfficial("Chief Superintendent");
+
+        const w = window.open('', '_blank');
+        w.document.write(`
         <html>
         <head>
             <title>Invigilation List - ${date}</title>
@@ -15151,14 +14757,14 @@ if (displayLoc) {
         </body>
         </html>
     `);
-    w.document.close();
-}; // END FUNCTION
+        w.document.close();
+    }; // END FUNCTION
 
-// ==========================================
+    // ==========================================
     // 🔧 DATA NORMALIZATION TOOL (Fixes Time Formats)
     // ==========================================
     const btnNormalizeTime = document.getElementById('btn-normalize-time');
-    
+
     if (btnNormalizeTime) {
         btnNormalizeTime.addEventListener('click', async () => {
             if (!confirm("⚠️ MAINTENANCE: Fix Time Formats?\n\nThis will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
@@ -15174,16 +14780,16 @@ if (displayLoc) {
                     // Parse 12h or 24h
                     const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/);
                     if (!match) return tStr;
-                    
+
                     let h = parseInt(match[1]);
                     const m = match[2];
                     const ap = match[3] || (h >= 12 ? "PM" : "AM");
-                    
+
                     // Logic to handle 24h input conversion if needed
-                    if (!match[3] && h > 12) { 
-                        h -= 12; 
-                    } 
-                    
+                    if (!match[3] && h > 12) {
+                        h -= 12;
+                    }
+
                     // Format
                     const hh = String(h).padStart(2, '0');
                     return `${hh}:${m} ${ap}`;
@@ -15208,9 +14814,9 @@ if (displayLoc) {
                 const fixStorageKeys = (keyName, type) => {
                     const raw = localStorage.getItem(keyName);
                     if (!raw) return;
-                    
+
                     let data = {};
-                    try { data = JSON.parse(raw); } catch(e){ return; }
+                    try { data = JSON.parse(raw); } catch (e) { return; }
 
                     let changed = false;
                     const newData = {};
@@ -15221,7 +14827,7 @@ if (displayLoc) {
                             if (d && t) {
                                 const newT = normTime(t);
                                 const newKey = `${d.trim()} | ${newT}`;
-                                
+
                                 if (newKey !== oldKey) {
                                     changed = true;
                                     console.log(`Migrating: ${oldKey} -> ${newKey}`);
@@ -15279,12 +14885,12 @@ if (displayLoc) {
                     updateSyncStatus("Syncing all sessions...", "neutral");
                     // 1. Identify all unique sessions
                     const allSessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-                    
+
                     // 2. Sync each one individually (This updates the V2 docs)
                     for (const sessionKey of allSessions) {
                         await syncSessionToCloud(sessionKey);
                     }
-                    
+
                     // 3. Sync Settings/Staff/Slots (Global Data)
                     await syncDataToCloud('settings');
                     await syncDataToCloud('staff');
@@ -15449,17 +15055,17 @@ if (displayLoc) {
         }
     }
 
-// ==========================================
+    // ==========================================
     // ☢️ CINEMATIC DANGER ZONE LOGIC
     // ==========================================
-    
+
     const btnEnterDanger = document.getElementById('btn-enter-danger-zone');
-    
+
     if (btnEnterDanger) {
         btnEnterDanger.addEventListener('click', async () => {
             // 🎬 Cinematic Alert 1: The Gatekeeper
             // Using standard confirm/alert for now, but phrasing it dramatically
-            
+
             const step1 = confirm(
                 "⚠️ HOLD IT RIGHT THERE! ⚠️\n\n" +
                 "You are approaching the DANGER ZONE.\n" +
@@ -15472,7 +15078,7 @@ if (displayLoc) {
             // 🎬 Cinematic Alert 2: The Final Warning
             // We use a small timeout to make it feel like a "system check"
             await new Promise(r => setTimeout(r, 300));
-            
+
             alert(
                 "☢️ ACCESS GRANTED... WITH A WARNING ☢️\n\n" +
                 "Some actions inside CANNOT be undone.\n" +
@@ -15486,7 +15092,7 @@ if (displayLoc) {
     }
 
 
-// ==========================================
+    // ==========================================
     // 🛡️ THE BUNKER: FULL BACKUP & RESTORE (FIXED)
     // ==========================================
 
@@ -15507,7 +15113,7 @@ if (displayLoc) {
             } else {
                 // Fallback if constant missing
                 Object.keys(localStorage).forEach(key => {
-                    if(key.startsWith('exam')) backup[key] = localStorage.getItem(key);
+                    if (key.startsWith('exam')) backup[key] = localStorage.getItem(key);
                 });
             }
 
@@ -15526,7 +15132,7 @@ if (displayLoc) {
     // 2. FULL RESTORE (Upload JSON)
     // We attach the listener directly to the file input that the button clicks
     const fullRestoreInput = document.getElementById('restore-file-input');
-    
+
     if (fullRestoreInput) {
         // Remove old listeners
         const newInput = fullRestoreInput.cloneNode(true);
@@ -15540,7 +15146,7 @@ if (displayLoc) {
             reader.onload = async (event) => {
                 try {
                     const data = JSON.parse(event.target.result);
-                    
+
                     if (!data || Object.keys(data).length === 0) {
                         throw new Error("Invalid or empty backup file.");
                     }
@@ -15574,7 +15180,7 @@ if (displayLoc) {
                 }
             };
             reader.readAsText(file);
-            
+
             // Reset input so same file can be selected again
             newInput.value = '';
         });
@@ -15583,23 +15189,23 @@ if (displayLoc) {
 
 
 
-    
-// ==========================================
+
+    // ==========================================
     // 🛠️ MODAL HELPERS (Fixes the "not a function" error)
     // ==========================================
-    window.openModal = function(modalId) {
+    window.openModal = function (modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.classList.remove('hidden');
             // Animation handling (optional, matches your CSS)
-            modal.classList.remove('opacity-0'); 
+            modal.classList.remove('opacity-0');
             modal.classList.add('opacity-100');
         } else {
             console.error("Modal not found:", modalId);
         }
     };
 
-    window.closeModal = function(modalId) {
+    window.closeModal = function (modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.classList.add('hidden');
@@ -15607,7 +15213,7 @@ if (displayLoc) {
             modal.classList.add('opacity-0');
         }
     };
-    
+
     // --- ROOM SETTINGS MODAL LOGIC ---
     const roomSettingsModal = document.getElementById('room-settings-modal');
 
@@ -15621,15 +15227,15 @@ if (displayLoc) {
     }
 
 
-// ==========================================
-// 🎡 MODAL-BASED SESSION SELECTOR UI
-// ==========================================
+    // ==========================================
+    // 🎡 MODAL-BASED SESSION SELECTOR UI
+    // ==========================================
 
-function initSessionStyles() {
-    if (document.getElementById('session-ui-css')) return;
-    const style = document.createElement('style');
-    style.id = 'session-ui-css';
-    style.innerHTML = `
+    function initSessionStyles() {
+        if (document.getElementById('session-ui-css')) return;
+        const style = document.createElement('style');
+        style.id = 'session-ui-css';
+        style.innerHTML = `
         /* Trigger Button */
         .session-trigger {
             display: flex; align-items: center; justify-content: space-between;
@@ -15694,17 +15300,17 @@ function initSessionStyles() {
             background: rgba(224, 231, 255, 0.3); pointer-events: none; 
         }
     `;
-    document.head.appendChild(style);
-}
+        document.head.appendChild(style);
+    }
 
-// Global state for the active selector
-let activeSelectId = null;
-let tempSelectedValue = null;
+    // Global state for the active selector
+    let activeSelectId = null;
+    let tempSelectedValue = null;
 
-function injectDialModal() {
-    if (document.getElementById('global-dial-modal')) return;
+    function injectDialModal() {
+        if (document.getElementById('global-dial-modal')) return;
 
-    const modalHTML = `
+        const modalHTML = `
     <div id="global-dial-modal" class="dial-modal-overlay">
         <div class="dial-modal">
             <div class="flex justify-between items-center p-4 border-b border-gray-100 bg-white">
@@ -15719,618 +15325,618 @@ function injectDialModal() {
             </div>
         </div>
     </div>`;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
-    const list = document.getElementById('dial-list-content');
 
-    // --- 1. MOUSE WHEEL CONTROL (THE FIX) ---
-    // Intercepts wheel events to scroll exactly one item (40px) at a time.
-    list.addEventListener('wheel', (e) => {
-        e.preventDefault(); // Stop the native "fast" scroll
-        
-        const itemHeight = 40;
-        const direction = e.deltaY > 0 ? 1 : -1;
-        
-        list.scrollBy({
-            top: direction * itemHeight,
-            behavior: 'smooth'
-        });
-    }, { passive: false });
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
 
-    // --- 2. HIGHLIGHT UPDATER (Instant) ---
-    let ticking = false;
-    list.addEventListener('scroll', () => {
-        if (!ticking) {
-            window.requestAnimationFrame(() => {
-                updateActiveItem(list);
-                ticking = false;
+        const list = document.getElementById('dial-list-content');
+
+        // --- 1. MOUSE WHEEL CONTROL (THE FIX) ---
+        // Intercepts wheel events to scroll exactly one item (40px) at a time.
+        list.addEventListener('wheel', (e) => {
+            e.preventDefault(); // Stop the native "fast" scroll
+
+            const itemHeight = 40;
+            const direction = e.deltaY > 0 ? 1 : -1;
+
+            list.scrollBy({
+                top: direction * itemHeight,
+                behavior: 'smooth'
             });
-            ticking = true;
-        }
-    });
-}
+        }, { passive: false });
 
-function updateActiveItem(list) {
-    const center = list.scrollTop + (list.clientHeight / 2);
-    const items = list.querySelectorAll('.dial-item');
-    
-    items.forEach(item => {
-        const itemCenter = item.offsetTop + (item.clientHeight / 2);
-        if (Math.abs(center - itemCenter) < 20) {
-            item.classList.add('active');
-            tempSelectedValue = item.dataset.value;
-        } else {
-            item.classList.remove('active');
-        }
-    });
-}
-
-function setupSessionSelector(selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-
-    initSessionStyles();
-    injectDialModal();
-
-    // 1. Hide Original Select
-    select.classList.add('hidden'); // Use Tailwind's hidden or style.display = none
-
-    // 2. Create Trigger Button (if not exists)
-    let trigger = document.getElementById(selectId + '-trigger');
-    if (!trigger) {
-        trigger = document.createElement('div');
-        trigger.id = selectId + '-trigger';
-        trigger.className = 'session-trigger';
-        select.parentNode.insertBefore(trigger, select.nextSibling);
-        
-        trigger.onclick = () => openDialModal(selectId);
+        // --- 2. HIGHLIGHT UPDATER (Instant) ---
+        let ticking = false;
+        list.addEventListener('scroll', () => {
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    updateActiveItem(list);
+                    ticking = false;
+                });
+                ticking = true;
+            }
+        });
     }
 
-    // 3. Sync Initial Text
-    updateTriggerText(select, trigger);
+    function updateActiveItem(list) {
+        const center = list.scrollTop + (list.clientHeight / 2);
+        const items = list.querySelectorAll('.dial-item');
 
-    // 4. Listen for External Changes (e.g. Reset Logic)
-    select.addEventListener('change', () => updateTriggerText(select, trigger));
-}
+        items.forEach(item => {
+            const itemCenter = item.offsetTop + (item.clientHeight / 2);
+            if (Math.abs(center - itemCenter) < 20) {
+                item.classList.add('active');
+                tempSelectedValue = item.dataset.value;
+            } else {
+                item.classList.remove('active');
+            }
+        });
+    }
 
-function updateTriggerText(select, trigger) {
-    const text = select.options[select.selectedIndex]?.text || "Select Session";
-    trigger.innerHTML = `
+    function setupSessionSelector(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+
+        initSessionStyles();
+        injectDialModal();
+
+        // 1. Hide Original Select
+        select.classList.add('hidden'); // Use Tailwind's hidden or style.display = none
+
+        // 2. Create Trigger Button (if not exists)
+        let trigger = document.getElementById(selectId + '-trigger');
+        if (!trigger) {
+            trigger = document.createElement('div');
+            trigger.id = selectId + '-trigger';
+            trigger.className = 'session-trigger';
+            select.parentNode.insertBefore(trigger, select.nextSibling);
+
+            trigger.onclick = () => openDialModal(selectId);
+        }
+
+        // 3. Sync Initial Text
+        updateTriggerText(select, trigger);
+
+        // 4. Listen for External Changes (e.g. Reset Logic)
+        select.addEventListener('change', () => updateTriggerText(select, trigger));
+    }
+
+    function updateTriggerText(select, trigger) {
+        const text = select.options[select.selectedIndex]?.text || "Select Session";
+        trigger.innerHTML = `
         <span>${text}</span>
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
         </svg>
     `;
-}
-
-function openDialModal(selectId) {
-    activeSelectId = selectId;
-    const select = document.getElementById(selectId);
-    const list = document.getElementById('dial-list-content');
-    list.innerHTML = '';
-    
-    // Populate List
-    Array.from(select.options).forEach(opt => {
-        if (opt.value === "") return;
-        const item = document.createElement('div');
-        item.className = 'dial-item';
-        item.textContent = opt.text;
-        item.dataset.value = opt.value;
-        
-        item.onclick = (e) => {
-            // 1. Visual: Smooth Scroll to Clicked Item
-            const itemCenter = e.target.offsetTop;
-            const listCenter = list.clientHeight / 2;
-            const itemHalf = e.target.clientHeight / 2;
-            list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'smooth' });
-
-            // 2. Logic: Desktop Auto-Confirm
-            if (window.innerWidth >= 768) {
-                // Force update the selected value immediately
-                tempSelectedValue = opt.value;
-                
-                // Add a tiny delay so the user sees the click/scroll visual before it closes
-                setTimeout(() => {
-                    confirmDialSelection();
-                }, 150);
-            }
-        };
-        list.appendChild(item);
-    });
-
-    document.getElementById('global-dial-modal').classList.add('open');
-
-    // Scroll to Current Value
-    setTimeout(() => {
-        const currentVal = select.value;
-        const target = Array.from(list.children).find(el => el.dataset.value === currentVal) || list.lastElementChild;
-        if (target) {
-            // Trigger the scroll but bypass the auto-confirm for the initial open
-            const itemCenter = target.offsetTop;
-            const listCenter = list.clientHeight / 2;
-            const itemHalf = target.clientHeight / 2;
-            list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'auto' });
-        }
-    }, 100);
-}
-
-function closeDialModal() {
-    document.getElementById('global-dial-modal').classList.remove('open');
-}
-
-function confirmDialSelection() {
-    if (activeSelectId && tempSelectedValue) {
-        const select = document.getElementById(activeSelectId);
-        select.value = tempSelectedValue;
-        select.dispatchEvent(new Event('change')); // Trigger app logic
     }
-    closeDialModal();
-}
 
-// Make functions global for inline onclick handlers
-window.closeDialModal = closeDialModal;
-window.confirmDialSelection = confirmDialSelection;
+    function openDialModal(selectId) {
+        activeSelectId = selectId;
+        const select = document.getElementById(selectId);
+        const list = document.getElementById('dial-list-content');
+        list.innerHTML = '';
 
+        // Populate List
+        Array.from(select.options).forEach(opt => {
+            if (opt.value === "") return;
+            const item = document.createElement('div');
+            item.className = 'dial-item';
+            item.textContent = opt.text;
+            item.dataset.value = opt.value;
 
-// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
-function generateInvigilatorSummaryPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    
-    // Feedback Button State
-    const btn = document.getElementById('download-pdf-report-btn');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+            item.onclick = (e) => {
+                // 1. Visual: Smooth Scroll to Clicked Item
+                const itemCenter = e.target.offsetTop;
+                const listCenter = list.clientHeight / 2;
+                const itemHalf = e.target.clientHeight / 2;
+                list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'smooth' });
 
-    try {
-        // 1. Header Information
-        const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
-        
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
-        
-        doc.setFontSize(11);
-        doc.text("Invigilator Requirement Summary", 105, 22, { align: "center" });
-        
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+                // 2. Logic: Desktop Auto-Confirm
+                if (window.innerWidth >= 768) {
+                    // Force update the selected value immediately
+                    tempSelectedValue = opt.value;
 
-        // Check for "Upcoming Only" Filter Badge (matches HTML visual)
-        const filterBadge = document.querySelector('.print-header-group span.bg-teal-100');
-        if (filterBadge) {
-            doc.setTextColor(13, 148, 136); // Teal Color to match HTML
-            doc.setFont("helvetica", "bold");
-            doc.text("Filtered: Upcoming Exams Only", 105, 34, { align: "center" });
-            doc.setTextColor(0, 0, 0); // Reset color
-        }
-
-        // 2. Generate Table from HTML
-        const tableEl = document.querySelector('#report-output-area table');
-        if (!tableEl) throw new Error("Table not found in report area.");
-
-        doc.autoTable({
-            html: tableEl,
-            startY: 40,
-            theme: 'grid',
-            styles: {
-                font: 'helvetica',
-                fontSize: 9,
-                cellPadding: 3,
-                valign: 'middle',
-                lineColor: [200, 200, 200],
-                lineWidth: 0.1
-            },
-            headStyles: {
-                fillColor: [243, 244, 246], // Gray-100 background
-                textColor: 20,              // Dark Gray text
-                fontStyle: 'bold',
-                halign: 'left',
-                lineWidth: 0.1,
-                lineColor: [200, 200, 200]
-            },
-            columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 40 }, // Date | Time column
-                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] } // Total Column (Teal)
-            },
-            didParseCell: function(data) {
-                // Formatting Hacks: Clean up HTML content inside cells
-                if (data.section === 'body' && data.column.index === 1) {
-                    // Safety check for cell raw data
-                    if (data.cell && data.cell.raw && data.cell.raw.innerText) {
-                        let text = data.cell.raw.innerText;
-                        // Replace double newlines with single to save vertical space
-                        data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
-                    }
+                    // Add a tiny delay so the user sees the click/scroll visual before it closes
+                    setTimeout(() => {
+                        confirmDialSelection();
+                    }, 150);
                 }
-                
-                // Style the Grand Total Row (Green Background)
-                // 🟢 FIX: Added robust safety check for row.raw and innerText
-                if (data.row && data.row.raw && typeof data.row.raw.innerText === 'string') {
-                    if (data.row.raw.innerText.toUpperCase().includes("GRAND TOTAL")) {
-                        data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
-                        data.cell.styles.textColor = [13, 148, 136];  // Teal Text
-                        data.cell.styles.fontStyle = 'bold';
-                    }
-                }
-            }
+            };
+            list.appendChild(item);
         });
 
-        // 3. Footer Note
-        const finalY = doc.lastAutoTable.finalY || 40;
-        doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text("Note: Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.", 14, finalY + 10);
+        document.getElementById('global-dial-modal').classList.add('open');
 
-        // 4. Save File
-        doc.save(`Invigilator_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
-
-    } catch (e) {
-        console.error("PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        // Scroll to Current Value
+        setTimeout(() => {
+            const currentVal = select.value;
+            const target = Array.from(list.children).find(el => el.dataset.value === currentVal) || list.lastElementChild;
+            if (target) {
+                // Trigger the scroll but bypass the auto-confirm for the initial open
+                const itemCenter = target.offsetTop;
+                const listCenter = list.clientHeight / 2;
+                const itemHalf = target.clientHeight / 2;
+                list.scrollTo({ top: itemCenter - listCenter + itemHalf, behavior: 'auto' });
+            }
+        }, 100);
     }
-}
+
+    function closeDialModal() {
+        document.getElementById('global-dial-modal').classList.remove('open');
+    }
+
+    function confirmDialSelection() {
+        if (activeSelectId && tempSelectedValue) {
+            const select = document.getElementById(activeSelectId);
+            select.value = tempSelectedValue;
+            select.dispatchEvent(new Event('change')); // Trigger app logic
+        }
+        closeDialModal();
+    }
+
+    // Make functions global for inline onclick handlers
+    window.closeDialModal = closeDialModal;
+    window.confirmDialSelection = confirmDialSelection;
 
 
-
-    
-//----------------Remunereation Bill PDF---------------------
-// --- REMUNERATION BILL PDF (Multi-Bill Support + Layout Fixes) ---
-function generateRemunerationBillPDF() {
-    const { jsPDF } = window.jspdf;
-    
-    // 1. Target the output container
-    const container = document.getElementById('remuneration-output');
-    // SELECT ALL GENERATED BILLS (Not just the first one)
-    const billPages = container ? container.querySelectorAll('.print-page') : [];
-
-    if (billPages.length === 0) return alert("No bill generated. Please click 'Generate Bill' first.");
-
-    const btn = document.getElementById('btn-download-bill-pdf');
-    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
-
-    try {
+    // --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
+    function generateInvigilatorSummaryPDF() {
+        const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const PAGE_W = 210;
-        const PAGE_H = 297;
-        const MARGIN = 10;
-        const CONTENT_W = PAGE_W - (MARGIN * 2);
-        
-        // --- HELPER: CLEAN TEXT ---
-        const clean = (text) => {
-            if (!text) return "";
-            // Replace Rupee, Newlines->Space, Trim
-            return text.replace(/₹/g, "Rs. ").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
-        };
 
-        // --- MASTER LOOP: Iterate through each bill in the HTML ---
-        billPages.forEach((billDiv, billIndex) => {
-            
-            // --- A. SCRAPE DATA FOR THIS BILL ---
-            const h2 = clean(billDiv.querySelector('h2')?.innerText);
-            const h3 = clean(billDiv.querySelector('h3')?.innerText);
-            const pStream = clean(billDiv.querySelector('p')?.innerText); 
+        // Feedback Button State
+        const btn = document.getElementById('download-pdf-report-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
-            const table = billDiv.querySelector('table');
-            const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
-            
-            const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-                return Array.from(tr.querySelectorAll('td')).map(td => {
-                    // Keep text raw-ish for table cells (preserve some formatting if needed)
-                    return td.innerText.replace(/₹/g, "Rs. ").trim(); 
-                });
-            });
+        try {
+            // 1. Header Information
+            const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
 
-            const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
-            const footerValues = tfootCells.map(td => clean(td.innerText));
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
 
-            // Scrape Summary Boxes
-            const summaryBoxes = billDiv.querySelectorAll('.summary-box');
-            let supBreakdown = "";
-            let allowances = [];
-            let grandTotal = "";
-            let amountWords = "";
-            let signatureTitle = "Chief Superintendent";
+            doc.setFontSize(11);
+            doc.text("Invigilator Requirement Summary", 105, 22, { align: "center" });
 
-            if(summaryBoxes.length > 0) {
-                const box1 = summaryBoxes[0];
-                const breakdownDiv = box1.querySelector('div.border-b'); 
-                if(breakdownDiv && breakdownDiv.nextElementSibling) {
-                    supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n"); 
-                }
-                const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
-                allowanceDivs.forEach(div => {
-                    const txt = clean(div.innerText);
-                    if (!txt.toLowerCase().includes("other allowances")) {
-                        allowances.push(txt);
-                    }
-                });
-            }
-            if(summaryBoxes.length > 1) {
-                const totalBox = summaryBoxes[1];
-                grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
-                amountWords = clean(totalBox.querySelector('.italic')?.innerText);
-            }
-            if(summaryBoxes.length > 2) {
-                signatureTitle = clean(summaryBoxes[2].innerText);
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+
+            // Check for "Upcoming Only" Filter Badge (matches HTML visual)
+            const filterBadge = document.querySelector('.print-header-group span.bg-teal-100');
+            if (filterBadge) {
+                doc.setTextColor(13, 148, 136); // Teal Color to match HTML
+                doc.setFont("helvetica", "bold");
+                doc.text("Filtered: Upcoming Exams Only", 105, 34, { align: "center" });
+                doc.setTextColor(0, 0, 0); // Reset color
             }
 
-            // --- B. LAYOUT CONFIG ---
-            const ROWS_PER_PAGE = 18;
-            const totalBillPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
+            // 2. Generate Table from HTML
+            const tableEl = document.querySelector('#report-output-area table');
+            if (!tableEl) throw new Error("Table not found in report area.");
 
-            // Determine Columns
-            const count = headers.length;
-            let colWidths = [];
-            if (count === 9) { // Regular
-                colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25]; 
-            } else { // SDE
-                colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22]; 
-            }
-            
-            const totalDefined = colWidths.reduce((a,b)=>a+b, 0);
-            const scale = CONTENT_W / totalDefined;
-            colWidths = colWidths.map(w => w * scale);
-            const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a,b)=>a+b, 0);
-
-            // --- C. RENDER PAGES FOR THIS BILL ---
-            for (let p = 0; p < totalBillPages; p++) {
-                
-                // Add new page if:
-                // 1. We are on the 2nd+ page of the current bill
-                // 2. OR we are on the 1st page of the 2nd+ bill
-                if (billIndex > 0 || p > 0) {
-                    doc.addPage();
-                }
-
-                let y = 15;
-
-                // Header
-                doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-                doc.text(h2, PAGE_W/2, y, { align: 'center' });
-                y += 6;
-                doc.setFontSize(11);
-                doc.text(h3, PAGE_W/2, y, { align: 'center' });
-                y += 6;
-                doc.setFontSize(10); doc.setFont("helvetica", "normal");
-                doc.text(pStream, PAGE_W/2, y, { align: 'center' });
-                y += 10;
-
-                // Table Header
-                doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
-                doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
-                doc.setFontSize(8); doc.setFont("helvetica", "bold");
-                headers.forEach((h, i) => {
-                    const cx = getX(i) + (colWidths[i]/2);
-                    doc.text(h, cx, y + 5, { align: 'center' });
-                    if (i < headers.length - 1) doc.line(getX(i+1), y, getX(i+1), y + 8);
-                });
-                doc.rect(MARGIN, y, CONTENT_W, 8); 
-                y += 8;
-
-                // Rows
-                const startIdx = p * ROWS_PER_PAGE;
-                const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
-                const pageRows = rows.slice(startIdx, endIdx);
-
-                doc.setFont("helvetica", "normal");
-                pageRows.forEach(row => {
-                    let maxLines = 1;
-                    row.forEach((cell, i) => {
-                        const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                        if (lines.length > maxLines) maxLines = lines.length;
-                    });
-                    
-                    const rowH = 6 + ((maxLines - 1) * 3.5);
-
-                    // Page break safety (rare within fixed chunking, but safe)
-                    if (y + rowH > PAGE_H - MARGIN) {
-                        doc.addPage();
-                        y = MARGIN; 
-                    }
-
-                    row.forEach((cell, i) => {
-                        const cx = getX(i) + (colWidths[i]/2);
-                        let ty = y + 4; 
-                        
-                        doc.setFontSize(8);
-                        if (i === row.length - 1) doc.setFont("helvetica", "bold");
-                        else doc.setFont("helvetica", "normal");
-
-                        const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
-                        if (lines.length > 1) ty = y + (rowH / 2) - ((lines.length * 2.8) / 2) + 2; 
-                        
-                        doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
-                        if (i < row.length - 1) doc.line(getX(i+1), y, getX(i+1), y + rowH);
-                    });
-                    doc.rect(MARGIN, y, CONTENT_W, rowH);
-                    y += rowH;
-                });
-
-                // Footer (Only on last page of this bill)
-                if (p === totalBillPages - 1) {
-                    doc.setFont("helvetica", "bold");
-                    doc.rect(MARGIN, y, CONTENT_W, 8);
-                    
-                    const valsReversed = [...footerValues].reverse();
-                    const totalColIdx = colWidths.length - 1;
-                    
-                    doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx]/2), y+5, {align:'center'});
-                    doc.line(getX(totalColIdx), y, getX(totalColIdx), y+8); 
-
-                    for(let k=1; k < valsReversed.length; k++) {
-                        const colIdx = totalColIdx - k;
-                        if(colIdx > 1) { 
-                            doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx]/2), y+5, {align:'center'});
-                            doc.line(getX(colIdx), y, getX(colIdx), y+8);
+            doc.autoTable({
+                html: tableEl,
+                startY: 40,
+                theme: 'grid',
+                styles: {
+                    font: 'helvetica',
+                    fontSize: 9,
+                    cellPadding: 3,
+                    valign: 'middle',
+                    lineColor: [200, 200, 200],
+                    lineWidth: 0.1
+                },
+                headStyles: {
+                    fillColor: [243, 244, 246], // Gray-100 background
+                    textColor: 20,              // Dark Gray text
+                    fontStyle: 'bold',
+                    halign: 'left',
+                    lineWidth: 0.1,
+                    lineColor: [200, 200, 200]
+                },
+                columnStyles: {
+                    0: { fontStyle: 'bold', cellWidth: 40 }, // Date | Time column
+                    3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] } // Total Column (Teal)
+                },
+                didParseCell: function (data) {
+                    // Formatting Hacks: Clean up HTML content inside cells
+                    if (data.section === 'body' && data.column.index === 1) {
+                        // Safety check for cell raw data
+                        if (data.cell && data.cell.raw && data.cell.raw.innerText) {
+                            let text = data.cell.raw.innerText;
+                            // Replace double newlines with single to save vertical space
+                            data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
                         }
                     }
-                    doc.text("Subtotals:", getX(1) + 15, y+5, { align: 'right' });
-                    y += 12;
 
-                    // Breakdown Boxes
-                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                    const boxW = (CONTENT_W / 2) - 3;
-                    const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
-                    let allowTotalH = 0;
-                    const allowItems = [];
-                    allowances.forEach(l => {
-                        const itemLines = doc.splitTextToSize(l, boxW - 6);
-                        allowItems.push(itemLines);
-                        allowTotalH += (itemLines.length * 4) + 2;
+                    // Style the Grand Total Row (Green Background)
+                    // 🟢 FIX: Added robust safety check for row.raw and innerText
+                    if (data.row && data.row.raw && typeof data.row.raw.innerText === 'string') {
+                        if (data.row.raw.innerText.toUpperCase().includes("GRAND TOTAL")) {
+                            data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
+                            data.cell.styles.textColor = [13, 148, 136];  // Teal Text
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
+                }
+            });
+
+            // 3. Footer Note
+            const finalY = doc.lastAutoTable.finalY || 40;
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            doc.text("Note: Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.", 14, finalY + 10);
+
+            // 4. Save File
+            doc.save(`Invigilator_Summary_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Gen Error:", e);
+            alert("Error generating PDF: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+        }
+    }
+
+
+
+
+    //----------------Remunereation Bill PDF---------------------
+    // --- REMUNERATION BILL PDF (Multi-Bill Support + Layout Fixes) ---
+    function generateRemunerationBillPDF() {
+        const { jsPDF } = window.jspdf;
+
+        // 1. Target the output container
+        const container = document.getElementById('remuneration-output');
+        // SELECT ALL GENERATED BILLS (Not just the first one)
+        const billPages = container ? container.querySelectorAll('.print-page') : [];
+
+        if (billPages.length === 0) return alert("No bill generated. Please click 'Generate Bill' first.");
+
+        const btn = document.getElementById('btn-download-bill-pdf');
+        if (btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const PAGE_W = 210;
+            const PAGE_H = 297;
+            const MARGIN = 10;
+            const CONTENT_W = PAGE_W - (MARGIN * 2);
+
+            // --- HELPER: CLEAN TEXT ---
+            const clean = (text) => {
+                if (!text) return "";
+                // Replace Rupee, Newlines->Space, Trim
+                return text.replace(/₹/g, "Rs. ").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+            };
+
+            // --- MASTER LOOP: Iterate through each bill in the HTML ---
+            billPages.forEach((billDiv, billIndex) => {
+
+                // --- A. SCRAPE DATA FOR THIS BILL ---
+                const h2 = clean(billDiv.querySelector('h2')?.innerText);
+                const h3 = clean(billDiv.querySelector('h3')?.innerText);
+                const pStream = clean(billDiv.querySelector('p')?.innerText);
+
+                const table = billDiv.querySelector('table');
+                const headers = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.innerText));
+
+                const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+                    return Array.from(tr.querySelectorAll('td')).map(td => {
+                        // Keep text raw-ish for table cells (preserve some formatting if needed)
+                        return td.innerText.replace(/₹/g, "Rs. ").trim();
                     });
+                });
 
-                    const h1 = (supLines.length * 4) + 15;
-                    const h2 = allowTotalH + 15;
-                    const boxH = Math.max(h1, h2, 35); 
+                const tfootCells = table.querySelector('tfoot') ? Array.from(table.querySelectorAll('tfoot td')) : [];
+                const footerValues = tfootCells.map(td => clean(td.innerText));
 
-                    // Box 1
-                    doc.setDrawColor(0);
-                    doc.rect(MARGIN, y, boxW, boxH);
-                    doc.setFontSize(9); doc.setFont("helvetica", "bold");
-                    doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
-                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                    doc.text(supLines, MARGIN + 3, y + 10);
+                // Scrape Summary Boxes
+                const summaryBoxes = billDiv.querySelectorAll('.summary-box');
+                let supBreakdown = "";
+                let allowances = [];
+                let grandTotal = "";
+                let amountWords = "";
+                let signatureTitle = "Chief Superintendent";
 
-                    // Box 2
-                    const box2X = MARGIN + boxW + 6;
-                    doc.rect(box2X, y, boxW, boxH);
-                    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-                    doc.text("2. Other Allowances", box2X + 3, y + 5);
-                    doc.setFontSize(8); doc.setFont("helvetica", "normal");
-                    let ay = y + 10;
-                    allowItems.forEach(lines => {
-                        doc.text(lines, box2X + 3, ay);
-                        ay += (lines.length * 4) + 2; 
+                if (summaryBoxes.length > 0) {
+                    const box1 = summaryBoxes[0];
+                    const breakdownDiv = box1.querySelector('div.border-b');
+                    if (breakdownDiv && breakdownDiv.nextElementSibling) {
+                        supBreakdown = clean(breakdownDiv.nextElementSibling.innerText).replace(/,/g, "\n");
+                    }
+                    const allowanceDivs = box1.querySelectorAll('.flex.justify-between');
+                    allowanceDivs.forEach(div => {
+                        const txt = clean(div.innerText);
+                        if (!txt.toLowerCase().includes("other allowances")) {
+                            allowances.push(txt);
+                        }
                     });
-                    y += boxH + 8;
-
-                    // Grand Total
-                    doc.setFontSize(14); doc.setFont("helvetica", "bold");
-                    doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
-                    y += 6;
-                    doc.setFontSize(10); doc.setFont("helvetica", "italic");
-                    doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
-                    y += 20;
-                    doc.setLineWidth(0.2);
-                    doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
-                    doc.setFontSize(10); doc.setFont("helvetica", "bold");
-                    doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
+                }
+                if (summaryBoxes.length > 1) {
+                    const totalBox = summaryBoxes[1];
+                    grandTotal = clean(totalBox.querySelector('.text-2xl')?.innerText);
+                    amountWords = clean(totalBox.querySelector('.italic')?.innerText);
+                }
+                if (summaryBoxes.length > 2) {
+                    signatureTitle = clean(summaryBoxes[2].innerText);
                 }
 
-                // Page Number (Per Bill)
-                doc.setFontSize(8); doc.setFont("helvetica", "italic");
-                doc.text(`Page ${p+1} of ${totalBillPages}`, PAGE_W/2, PAGE_H - 10, { align: 'center' });
-            }
-        });
+                // --- B. LAYOUT CONFIG ---
+                const ROWS_PER_PAGE = 18;
+                const totalBillPages = Math.ceil(rows.length / ROWS_PER_PAGE) || 1;
 
-        const dateStr = new Date().toISOString().slice(0,10);
-        doc.save(`Remuneration_Bill_${dateStr}.pdf`);
+                // Determine Columns
+                const count = headers.length;
+                let colWidths = [];
+                if (count === 9) { // Regular
+                    colWidths = [28, 22, 20, 15, 15, 15, 15, 15, 25];
+                } else { // SDE
+                    colWidths = [26, 20, 18, 14, 14, 14, 14, 14, 14, 22];
+                }
 
-    } catch (e) {
-        console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
-    } finally {
-        if(btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
-    }
-}
+                const totalDefined = colWidths.reduce((a, b) => a + b, 0);
+                const scale = CONTENT_W / totalDefined;
+                colWidths = colWidths.map(w => w * scale);
+                const getX = (i) => MARGIN + colWidths.slice(0, i).reduce((a, b) => a + b, 0);
 
-// --- Helper: Trigger Safety Backup (Used by Reset & Nuke) ---
-async function triggerSafetyBackup() {
-    const csvBtn = document.getElementById('master-download-csv-btn');
-    const jsonBtn = document.getElementById('backup-data-button');
-    
-    // Trigger CSV
-    if (csvBtn) {
-        console.log("Triggering Safety CSV Backup...");
-        csvBtn.click();
-    }
-    // Wait for CSV download initiation
-    await new Promise(r => setTimeout(r, 1500));
-    
-    // Trigger JSON
-    if (jsonBtn) {
-        console.log("Triggering Safety JSON Backup...");
-        jsonBtn.click();
-    }
-    // Wait for JSON download initiation
-    await new Promise(r => setTimeout(r, 1000));
-}
-    
-// --- NEW: Populate Exam Name Dropdown for Data Loading (With Empty Check) ---
-function populateUploadExamDropdown() {
-    const select = document.getElementById('upload-exam-select');
-    const streamSelect = document.getElementById('global-stream-select');
-    
-    // 1. Populate Stream (Global)
-    if (streamSelect && typeof currentStreamConfig !== 'undefined') {
-        streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
-    }
+                // --- C. RENDER PAGES FOR THIS BILL ---
+                for (let p = 0; p < totalBillPages; p++) {
 
-    if (!select) return;
-    
-    // 2. Load Rules from Local Storage
-    select.innerHTML = '<option value="">-- Select Exam Name --</option>';
-    const rulesRaw = localStorage.getItem('examRulesConfig'); 
-    const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
-    
-    // Extract unique Exam Names
-    const uniqueNames = [...new Set(rules.map(r => r.examName))].sort();
-    
-    // --- ALERT LOGIC: If no exams defined ---
-    if (uniqueNames.length === 0) {
-        // A. Show warning in dropdown
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.textContent = "⚠️ No Exams Configured (Check Settings)";
-        opt.disabled = true;
-        opt.selected = true;
-        select.appendChild(opt);
-        select.classList.add('bg-red-50', 'text-red-600', 'border-red-300');
+                    // Add new page if:
+                    // 1. We are on the 2nd+ page of the current bill
+                    // 2. OR we are on the 1st page of the 2nd+ bill
+                    if (billIndex > 0 || p > 0) {
+                        doc.addPage();
+                    }
 
-        // B. Trigger Alert (Only if user is on this tab)
-        const extractorView = document.getElementById('view-extractor');
-        if (extractorView && !extractorView.classList.contains('hidden')) {
-            alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
+                    let y = 15;
+
+                    // Header
+                    doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+                    doc.text(h2, PAGE_W / 2, y, { align: 'center' });
+                    y += 6;
+                    doc.setFontSize(11);
+                    doc.text(h3, PAGE_W / 2, y, { align: 'center' });
+                    y += 6;
+                    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                    doc.text(pStream, PAGE_W / 2, y, { align: 'center' });
+                    y += 10;
+
+                    // Table Header
+                    doc.setFillColor(245); doc.setDrawColor(0); doc.setLineWidth(0.2);
+                    doc.rect(MARGIN, y, CONTENT_W, 8, 'FD');
+                    doc.setFontSize(8); doc.setFont("helvetica", "bold");
+                    headers.forEach((h, i) => {
+                        const cx = getX(i) + (colWidths[i] / 2);
+                        doc.text(h, cx, y + 5, { align: 'center' });
+                        if (i < headers.length - 1) doc.line(getX(i + 1), y, getX(i + 1), y + 8);
+                    });
+                    doc.rect(MARGIN, y, CONTENT_W, 8);
+                    y += 8;
+
+                    // Rows
+                    const startIdx = p * ROWS_PER_PAGE;
+                    const endIdx = Math.min(startIdx + ROWS_PER_PAGE, rows.length);
+                    const pageRows = rows.slice(startIdx, endIdx);
+
+                    doc.setFont("helvetica", "normal");
+                    pageRows.forEach(row => {
+                        let maxLines = 1;
+                        row.forEach((cell, i) => {
+                            const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
+                            if (lines.length > maxLines) maxLines = lines.length;
+                        });
+
+                        const rowH = 6 + ((maxLines - 1) * 3.5);
+
+                        // Page break safety (rare within fixed chunking, but safe)
+                        if (y + rowH > PAGE_H - MARGIN) {
+                            doc.addPage();
+                            y = MARGIN;
+                        }
+
+                        row.forEach((cell, i) => {
+                            const cx = getX(i) + (colWidths[i] / 2);
+                            let ty = y + 4;
+
+                            doc.setFontSize(8);
+                            if (i === row.length - 1) doc.setFont("helvetica", "bold");
+                            else doc.setFont("helvetica", "normal");
+
+                            const lines = doc.splitTextToSize(cell, colWidths[i] - 2);
+                            if (lines.length > 1) ty = y + (rowH / 2) - ((lines.length * 2.8) / 2) + 2;
+
+                            doc.text(lines, cx, ty, { align: 'center', lineHeightFactor: 1.1 });
+                            if (i < row.length - 1) doc.line(getX(i + 1), y, getX(i + 1), y + rowH);
+                        });
+                        doc.rect(MARGIN, y, CONTENT_W, rowH);
+                        y += rowH;
+                    });
+
+                    // Footer (Only on last page of this bill)
+                    if (p === totalBillPages - 1) {
+                        doc.setFont("helvetica", "bold");
+                        doc.rect(MARGIN, y, CONTENT_W, 8);
+
+                        const valsReversed = [...footerValues].reverse();
+                        const totalColIdx = colWidths.length - 1;
+
+                        doc.text(valsReversed[0], getX(totalColIdx) + (colWidths[totalColIdx] / 2), y + 5, { align: 'center' });
+                        doc.line(getX(totalColIdx), y, getX(totalColIdx), y + 8);
+
+                        for (let k = 1; k < valsReversed.length; k++) {
+                            const colIdx = totalColIdx - k;
+                            if (colIdx > 1) {
+                                doc.text(valsReversed[k], getX(colIdx) + (colWidths[colIdx] / 2), y + 5, { align: 'center' });
+                                doc.line(getX(colIdx), y, getX(colIdx), y + 8);
+                            }
+                        }
+                        doc.text("Subtotals:", getX(1) + 15, y + 5, { align: 'right' });
+                        y += 12;
+
+                        // Breakdown Boxes
+                        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                        const boxW = (CONTENT_W / 2) - 3;
+                        const supLines = doc.splitTextToSize(supBreakdown, boxW - 6);
+                        let allowTotalH = 0;
+                        const allowItems = [];
+                        allowances.forEach(l => {
+                            const itemLines = doc.splitTextToSize(l, boxW - 6);
+                            allowItems.push(itemLines);
+                            allowTotalH += (itemLines.length * 4) + 2;
+                        });
+
+                        const h1 = (supLines.length * 4) + 15;
+                        const h2 = allowTotalH + 15;
+                        const boxH = Math.max(h1, h2, 35);
+
+                        // Box 1
+                        doc.setDrawColor(0);
+                        doc.rect(MARGIN, y, boxW, boxH);
+                        doc.setFontSize(9); doc.setFont("helvetica", "bold");
+                        doc.text("1. Supervision Breakdown", MARGIN + 3, y + 5);
+                        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                        doc.text(supLines, MARGIN + 3, y + 10);
+
+                        // Box 2
+                        const box2X = MARGIN + boxW + 6;
+                        doc.rect(box2X, y, boxW, boxH);
+                        doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+                        doc.text("2. Other Allowances", box2X + 3, y + 5);
+                        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+                        let ay = y + 10;
+                        allowItems.forEach(lines => {
+                            doc.text(lines, box2X + 3, ay);
+                            ay += (lines.length * 4) + 2;
+                        });
+                        y += boxH + 8;
+
+                        // Grand Total
+                        doc.setFontSize(14); doc.setFont("helvetica", "bold");
+                        doc.text(`Grand Total Claim: ${grandTotal}`, PAGE_W - MARGIN, y, { align: 'right' });
+                        y += 6;
+                        doc.setFontSize(10); doc.setFont("helvetica", "italic");
+                        doc.text(amountWords, PAGE_W - MARGIN, y, { align: 'right' });
+                        y += 20;
+                        doc.setLineWidth(0.2);
+                        doc.line(PAGE_W - 75, y, PAGE_W - MARGIN, y);
+                        doc.setFontSize(10); doc.setFont("helvetica", "bold");
+                        doc.text(signatureTitle, PAGE_W - 40, y + 5, { align: 'center' });
+                    }
+
+                    // Page Number (Per Bill)
+                    doc.setFontSize(8); doc.setFont("helvetica", "italic");
+                    doc.text(`Page ${p + 1} of ${totalBillPages}`, PAGE_W / 2, PAGE_H - 10, { align: 'center' });
+                }
+            });
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            doc.save(`Remuneration_Bill_${dateStr}.pdf`);
+
+        } catch (e) {
+            console.error("PDF Error:", e);
+            alert("Error creating PDF: " + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
         }
-    } else {
-        // Reset style
-        select.classList.remove('bg-red-50', 'text-red-600', 'border-red-300');
-        
-        // Populate valid options
-        uniqueNames.forEach(name => {
-            const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
-            select.appendChild(opt);
-        });
     }
-}    
-// ==========================================
-// USER MANUAL FUNCTION (New Tab)
-// ==========================================
-window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
-    // 1. Get the template content from the HTML
-    const template = document.getElementById('manual-template');
-    
-    // Safety check: if template is missing, stop
-    if (!template) { 
-        console.error("Manual Template not found!"); 
-        alert("Error: Manual content is missing.");
-        return; 
-    }
-    
-    const content = template.innerHTML;
 
-    // 2. Open a new browser tab/window
-    const win = window.open('', '_blank');
-    
-    // 3. Write the HTML structure into the new tab
-    if (win) {
-        win.document.write(`
+    // --- Helper: Trigger Safety Backup (Used by Reset & Nuke) ---
+    async function triggerSafetyBackup() {
+        const csvBtn = document.getElementById('master-download-csv-btn');
+        const jsonBtn = document.getElementById('backup-data-button');
+
+        // Trigger CSV
+        if (csvBtn) {
+            console.log("Triggering Safety CSV Backup...");
+            csvBtn.click();
+        }
+        // Wait for CSV download initiation
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Trigger JSON
+        if (jsonBtn) {
+            console.log("Triggering Safety JSON Backup...");
+            jsonBtn.click();
+        }
+        // Wait for JSON download initiation
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    // --- NEW: Populate Exam Name Dropdown for Data Loading (With Empty Check) ---
+    function populateUploadExamDropdown() {
+        const select = document.getElementById('upload-exam-select');
+        const streamSelect = document.getElementById('global-stream-select');
+
+        // 1. Populate Stream (Global)
+        if (streamSelect && typeof currentStreamConfig !== 'undefined') {
+            streamSelect.innerHTML = currentStreamConfig.map(s => `<option value="${s}">${s}</option>`).join('');
+        }
+
+        if (!select) return;
+
+        // 2. Load Rules from Local Storage
+        select.innerHTML = '<option value="">-- Select Exam Name --</option>';
+        const rulesRaw = localStorage.getItem('examRulesConfig');
+        const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
+
+        // Extract unique Exam Names
+        const uniqueNames = [...new Set(rules.map(r => r.examName))].sort();
+
+        // --- ALERT LOGIC: If no exams defined ---
+        if (uniqueNames.length === 0) {
+            // A. Show warning in dropdown
+            const opt = document.createElement('option');
+            opt.value = "";
+            opt.textContent = "⚠️ No Exams Configured (Check Settings)";
+            opt.disabled = true;
+            opt.selected = true;
+            select.appendChild(opt);
+            select.classList.add('bg-red-50', 'text-red-600', 'border-red-300');
+
+            // B. Trigger Alert (Only if user is on this tab)
+            const extractorView = document.getElementById('view-extractor');
+            if (extractorView && !extractorView.classList.contains('hidden')) {
+                alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
+            }
+        } else {
+            // Reset style
+            select.classList.remove('bg-red-50', 'text-red-600', 'border-red-300');
+
+            // Populate valid options
+            uniqueNames.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+        }
+    }
+    // ==========================================
+    // USER MANUAL FUNCTION (New Tab)
+    // ==========================================
+    window.openManualNewTab = function () {   // <--- CHANGE THIS LINE ONLY
+        // 1. Get the template content from the HTML
+        const template = document.getElementById('manual-template');
+
+        // Safety check: if template is missing, stop
+        if (!template) {
+            console.error("Manual Template not found!");
+            alert("Error: Manual content is missing.");
+            return;
+        }
+
+        const content = template.innerHTML;
+
+        // 2. Open a new browser tab/window
+        const win = window.open('', '_blank');
+
+        // 3. Write the HTML structure into the new tab
+        if (win) {
+            win.document.write(`
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -16351,35 +15957,35 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
             </body>
             </html>
         `);
-        win.document.close(); // Essential for the browser to stop loading and render
-    } else {
-        alert("Please allow pop-ups for this site to view the manual.");
-    }
-}
-
-// ==========================================
-// 🩺 EXAMFLOW PRE-FLIGHT CHECK (FINAL FIX)
-// ==========================================
-
-async function runSystemHealthCheck() {
-    // 1. Show Loading State
-    const btn = document.getElementById('btn-run-self-check');
-    const originalText = btn ? btn.innerHTML : 'Run Check';
-    if(btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
+            win.document.close(); // Essential for the browser to stop loading and render
+        } else {
+            alert("Please allow pop-ups for this site to view the manual.");
+        }
     }
 
-    let score = 100;
-    let report = [];
-    let criticalErrors = 0;
+    // ==========================================
+    // 🩺 EXAMFLOW PRE-FLIGHT CHECK (FINAL FIX)
+    // ==========================================
 
-    const log = (status, title, message) => {
-        let icon = status === 'ok' ? '✅' : (status === 'warn' ? '⚠️' : '🛑');
-        let color = status === 'ok' ? 'text-green-600' : (status === 'warn' ? 'text-orange-600' : 'text-red-600');
-        if (status === 'warn') score -= 10;
-        if (status === 'fail') { score -= 25; criticalErrors++; }
-        report.push(`
+    async function runSystemHealthCheck() {
+        // 1. Show Loading State
+        const btn = document.getElementById('btn-run-self-check');
+        const originalText = btn ? btn.innerHTML : 'Run Check';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
+        }
+
+        let score = 100;
+        let report = [];
+        let criticalErrors = 0;
+
+        const log = (status, title, message) => {
+            let icon = status === 'ok' ? '✅' : (status === 'warn' ? '⚠️' : '🛑');
+            let color = status === 'ok' ? 'text-green-600' : (status === 'warn' ? 'text-orange-600' : 'text-red-600');
+            if (status === 'warn') score -= 10;
+            if (status === 'fail') { score -= 25; criticalErrors++; }
+            report.push(`
             <div class="flex items-start gap-3 p-3 border-b border-gray-100 last:border-0">
                 <span class="text-xl shrink-0">${icon}</span>
                 <div>
@@ -16388,178 +15994,178 @@ async function runSystemHealthCheck() {
                 </div>
             </div>
         `);
-    };
+        };
 
-    // --- Helper: Bulletproof Date Parser ---
-    const parseDate = (dateStr) => {
-        if (!dateStr) return null;
+        // --- Helper: Bulletproof Date Parser ---
+        const parseDate = (dateStr) => {
+            if (!dateStr) return null;
+            try {
+                // Handle DD.MM.YYYY (29.12.2025)
+                if (dateStr.includes('.')) {
+                    const [d, m, y] = dateStr.trim().split('.');
+                    return new Date(`${y}-${m}-${d}T00:00:00`);
+                }
+                // Handle DD/MM/YYYY (29/12/2025)
+                if (dateStr.includes('/')) {
+                    const [d, m, y] = dateStr.trim().split('/');
+                    return new Date(`${y}-${m}-${d}T00:00:00`);
+                }
+                // Handle YYYY-MM-DD (2025-12-29)
+                return new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+            } catch (e) { return null; }
+        };
+
         try {
-            // Handle DD.MM.YYYY (29.12.2025)
-            if (dateStr.includes('.')) {
-                const [d, m, y] = dateStr.trim().split('.');
-                return new Date(`${y}-${m}-${d}T00:00:00`);
+            // LAYER 1: INFRASTRUCTURE
+            const collegeName = localStorage.getItem('examCollegeName');
+            if (!collegeName || collegeName === "University of Calicut") {
+                log('warn', 'Settings', 'Default College Name detected.');
             }
-            // Handle DD/MM/YYYY (29/12/2025)
-            if (dateStr.includes('/')) {
-                const [d, m, y] = dateStr.trim().split('/');
-                return new Date(`${y}-${m}-${d}T00:00:00`);
+
+            const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+            if (Object.keys(rooms).length === 0) {
+                log('fail', 'Infrastructure', 'No rooms configured.');
             }
-            // Handle YYYY-MM-DD (2025-12-29)
-            return new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-        } catch (e) { return null; }
-    };
 
-    try {
-        // LAYER 1: INFRASTRUCTURE
-        const collegeName = localStorage.getItem('examCollegeName');
-        if (!collegeName || collegeName === "University of Calicut") {
-            log('warn', 'Settings', 'Default College Name detected.');
-        }
+            const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
+            if (!streams || streams.length === 0) log('fail', 'Settings', 'No Exam Streams defined.');
 
-        const rooms = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
-        if (Object.keys(rooms).length === 0) {
-            log('fail', 'Infrastructure', 'No rooms configured.');
-        }
+            // LAYER 2: SESSION SCOPE & DATA
+            const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+            const scribesList = JSON.parse(localStorage.getItem('examScribes') || '[]');
 
-        const streams = JSON.parse(localStorage.getItem('examStreamsConfig') || '["Regular"]');
-        if (!streams || streams.length === 0) log('fail', 'Settings', 'No Exam Streams defined.');
+            if (allStudents.length === 0) {
+                log('warn', 'Database', 'No student data loaded.');
+            } else {
+                const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
 
-        // LAYER 2: SESSION SCOPE & DATA
-        const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
-        const scribesList = JSON.parse(localStorage.getItem('examScribes') || '[]');
-        
-        if (allStudents.length === 0) {
-            log('warn', 'Database', 'No student data loaded.');
-        } else {
-            const uniqueDateStrings = [...new Set(allStudents.map(s => s.Date))];
-            
-            // Get "Today" at Midnight (Local Time)
-            const now = new Date();
-            now.setHours(0, 0, 0, 0);
+                // Get "Today" at Midnight (Local Time)
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
 
-            // Filter for Today & Future
-            const activeDates = uniqueDateStrings
-                .filter(dateStr => {
-                    const d = parseDate(dateStr);
-                    // Compare timestamps to be safe
-                    return d && d.getTime() >= now.getTime();
-                })
-                .sort((a, b) => parseDate(a) - parseDate(b));
+                // Filter for Today & Future
+                const activeDates = uniqueDateStrings
+                    .filter(dateStr => {
+                        const d = parseDate(dateStr);
+                        // Compare timestamps to be safe
+                        return d && d.getTime() >= now.getTime();
+                    })
+                    .sort((a, b) => parseDate(a) - parseDate(b));
 
-            const targetDates = [];
-            if (activeDates.length > 0) {
-                // Add the very first upcoming date (Could be Today or Future)
-                targetDates.push(activeDates[0]);
-                
-                // If the first date is Today, also grab the next one (Tomorrow/Next Exam)
-                const firstDate = parseDate(activeDates[0]);
-                if (firstDate.getTime() === now.getTime() && activeDates.length > 1) {
-                    targetDates.push(activeDates[1]);
+                const targetDates = [];
+                if (activeDates.length > 0) {
+                    // Add the very first upcoming date (Could be Today or Future)
+                    targetDates.push(activeDates[0]);
+
+                    // If the first date is Today, also grab the next one (Tomorrow/Next Exam)
+                    const firstDate = parseDate(activeDates[0]);
+                    if (firstDate.getTime() === now.getTime() && activeDates.length > 1) {
+                        targetDates.push(activeDates[1]);
+                    }
+                }
+
+                if (targetDates.length === 0) {
+                    log('ok', 'Schedule', 'No upcoming exams found.');
+                } else {
+                    log('ok', 'Target Scope', `Checking: <strong>${targetDates.join(', ')}</strong>`);
+
+                    const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
+                    const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
+
+                    const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                    const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+                    const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+
+                    targetSessions.forEach(sessionKey => {
+                        const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
+
+                        // CHECK 1: ALLOTMENT
+                        if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
+                            log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
+                        }
+
+                        // CHECK 2: SCRIBES
+                        const sessionScribes = scribesList.filter(scribeReg =>
+                            targetStudents.find(s => s.RegNo === scribeReg)
+                        );
+
+                        if (sessionScribes.length > 0) {
+                            let allottedScribesCount = 0;
+                            if (allotments[sessionKey]) {
+                                Object.values(allotments[sessionKey]).forEach(room => {
+                                    if (room.students) {
+                                        room.students.forEach(s => {
+                                            if (sessionScribes.includes(s.RegNo)) allottedScribesCount++;
+                                        });
+                                    }
+                                });
+                            }
+                            if (allottedScribesCount < sessionScribes.length) {
+                                log('warn', 'Scribe Issue', `Pending scribe allotment in ${sessionName}`);
+                            }
+                        }
+
+                        // CHECK 3: QP CODES
+                        if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
+                            log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
+                        }
+
+                        // CHECK 4: INVIGILATORS (Only if logged in)
+                        const currentUser = window.firebase?.auth?.currentUser;
+                        if (currentUser) {
+                            const sessionInvigilation = invigilators[sessionKey] || [];
+                            if (sessionInvigilation.length === 0 && allotments[sessionKey]) {
+                                log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
+                            } else if (allotments[sessionKey]) {
+                                log('ok', 'Staffing', `Invigilators assigned.`);
+                            }
+                        }
+                    });
                 }
             }
 
-            if (targetDates.length === 0) {
-                log('ok', 'Schedule', 'No upcoming exams found.');
+            // LAYER 3: SYNC CHECK (ROBUST SCOPE)
+            const currentUser = window.firebase?.auth?.currentUser;
+            if (currentUser) {
+                // STRATEGY: Try finding the ID in variable scope OR storage
+                let activeId = null;
+
+                // 1. Try Variable Scope (Handle ReferenceError if not defined)
+                try { if (typeof currentCollegeId !== 'undefined') activeId = currentCollegeId; } catch (e) { }
+
+                // 2. Try Window Scope
+                if (!activeId && window.currentCollegeId) activeId = window.currentCollegeId;
+
+                // 3. Try Storage (Backup)
+                if (!activeId) activeId = localStorage.getItem('adminCollegeId') || localStorage.getItem('collegeId');
+
+                if (activeId) {
+                    // AUTO-REPAIR: Save it to localStorage so we don't lose it next time
+                    localStorage.setItem('adminCollegeId', activeId);
+
+                    // Real Ping
+                    const docRef = window.firebase.doc(window.firebase.db, "colleges", activeId);
+                    await window.firebase.getDoc(docRef);
+                    log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeId.slice(-4)})`);
+                } else {
+                    log('fail', 'Account', 'Logged in, but College ID missing. Reload Page.');
+                }
             } else {
-                log('ok', 'Target Scope', `Checking: <strong>${targetDates.join(', ')}</strong>`);
+                log('ok', 'Mode', 'Local Offline Mode (Guest).');
+            }
 
-                const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
-                const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
-
-                const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-                const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
-
-                targetSessions.forEach(sessionKey => {
-                    const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
-                    
-                    // CHECK 1: ALLOTMENT
-                    if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
-                        log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
-                    }
-
-                    // CHECK 2: SCRIBES
-                    const sessionScribes = scribesList.filter(scribeReg => 
-                        targetStudents.find(s => s.RegNo === scribeReg)
-                    );
-                    
-                    if (sessionScribes.length > 0) {
-                        let allottedScribesCount = 0;
-                        if (allotments[sessionKey]) {
-                             Object.values(allotments[sessionKey]).forEach(room => {
-                                 if (room.students) {
-                                     room.students.forEach(s => { 
-                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; 
-                                     });
-                                 }
-                             });
-                        }
-                        if (allottedScribesCount < sessionScribes.length) {
-                             log('warn', 'Scribe Issue', `Pending scribe allotment in ${sessionName}`);
-                        }
-                    }
-
-                    // CHECK 3: QP CODES
-                    if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
-                        log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
-                    }
-
-                    // CHECK 4: INVIGILATORS (Only if logged in)
-                    const currentUser = window.firebase?.auth?.currentUser;
-                    if (currentUser) {
-                        const sessionInvigilation = invigilators[sessionKey] || [];
-                        if (sessionInvigilation.length === 0 && allotments[sessionKey]) {
-                            log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
-                        } else if (allotments[sessionKey]) {
-                            log('ok', 'Staffing', `Invigilators assigned.`);
-                        }
-                    }
-                });
+        } catch (e) {
+            if (e.code === 'unavailable' || e.message.includes('offline')) {
+                log('fail', 'Sync Error', 'Internet connection lost or Firewall blocking Firebase.');
+            } else {
+                log('fail', 'System Error', `Check failed: ${e.message}`);
             }
         }
 
-        // LAYER 3: SYNC CHECK (ROBUST SCOPE)
-        const currentUser = window.firebase?.auth?.currentUser;
-        if (currentUser) {
-            // STRATEGY: Try finding the ID in variable scope OR storage
-            let activeId = null;
+        if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
 
-            // 1. Try Variable Scope (Handle ReferenceError if not defined)
-            try { if(typeof currentCollegeId !== 'undefined') activeId = currentCollegeId; } catch(e){}
-            
-            // 2. Try Window Scope
-            if(!activeId && window.currentCollegeId) activeId = window.currentCollegeId;
-
-            // 3. Try Storage (Backup)
-            if (!activeId) activeId = localStorage.getItem('adminCollegeId') || localStorage.getItem('collegeId');
-
-            if (activeId) {
-                // AUTO-REPAIR: Save it to localStorage so we don't lose it next time
-                localStorage.setItem('adminCollegeId', activeId);
-                
-                // Real Ping
-                const docRef = window.firebase.doc(window.firebase.db, "colleges", activeId);
-                await window.firebase.getDoc(docRef); 
-                log('ok', 'Cloud Sync', `Database Connected (ID: ...${activeId.slice(-4)})`);
-            } else {
-                log('fail', 'Account', 'Logged in, but College ID missing. Reload Page.');
-            }
-        } else {
-            log('ok', 'Mode', 'Local Offline Mode (Guest).');
-        }
-
-    } catch (e) {
-        if(e.code === 'unavailable' || e.message.includes('offline')) {
-             log('fail', 'Sync Error', 'Internet connection lost or Firewall blocking Firebase.');
-        } else {
-             log('fail', 'System Error', `Check failed: ${e.message}`);
-        }
-    }
-
-    if(btn) { btn.disabled = false; btn.innerHTML = originalText; }
-
-    const scoreColor = score > 85 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
-    const finalHtml = `
+        const scoreColor = score > 85 ? 'text-green-600' : (score > 50 ? 'text-orange-500' : 'text-red-600');
+        const finalHtml = `
         <div class="space-y-4">
             <div class="text-center p-4 bg-gray-50 rounded-xl border border-gray-200">
                 <div class="text-4xl font-black ${scoreColor} mb-1">${score}%</div>
@@ -16571,30 +16177,30 @@ async function runSystemHealthCheck() {
         </div>
     `;
 
-    UiModal.alert("Pre-Flight Check Report", finalHtml);
-}
+        UiModal.alert("Pre-Flight Check Report", finalHtml);
+    }
 
-// --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
-(function injectSelfCheckButton() {
-    setTimeout(() => {
-        // 1. Target the Home/Dashboard View
-        const homeTab = document.getElementById('view-home');
-        if (!homeTab) return;
+    // --- AUTO-INJECT BUTTON INTO DASHBOARD (HOME) ---
+    (function injectSelfCheckButton() {
+        setTimeout(() => {
+            // 1. Target the Home/Dashboard View
+            const homeTab = document.getElementById('view-home');
+            if (!homeTab) return;
 
-        // 2. Find the main white card container inside Home
-        const dashboardCard = homeTab.querySelector('.bg-white.shadow-xl');
-        
-        if (dashboardCard) {
-            let checkContainer = document.getElementById('system-check-container');
-            
-            // Create if it doesn't exist
-            if (!checkContainer) {
-                checkContainer = document.createElement('div');
-                checkContainer.id = 'system-check-container';
-                // Added 'mt-8' for spacing from the calendar/other content
-                checkContainer.className = "mt-8 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center justify-between shadow-sm gap-4";
-                
-                checkContainer.innerHTML = `
+            // 2. Find the main white card container inside Home
+            const dashboardCard = homeTab.querySelector('.bg-white.shadow-xl');
+
+            if (dashboardCard) {
+                let checkContainer = document.getElementById('system-check-container');
+
+                // Create if it doesn't exist
+                if (!checkContainer) {
+                    checkContainer = document.createElement('div');
+                    checkContainer.id = 'system-check-container';
+                    // Added 'mt-8' for spacing from the calendar/other content
+                    checkContainer.className = "mt-8 p-5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center justify-between shadow-sm gap-4";
+
+                    checkContainer.innerHTML = `
                     <div class="text-center sm:text-left">
                         <h3 class="font-bold text-indigo-900 text-lg flex items-center justify-center sm:justify-start gap-2">
                             <span>🚀</span> System Pre-Flight Check
@@ -16609,530 +16215,224 @@ async function runSystemHealthCheck() {
                     </button>
                 `;
 
-                // 3. Append to the bottom of the dashboard card
-                dashboardCard.appendChild(checkContainer);
+                    // 3. Append to the bottom of the dashboard card
+                    dashboardCard.appendChild(checkContainer);
+                }
+
+                // Re-attach event listener (safe to do multiple times)
+                const btn = document.getElementById('btn-run-self-check');
+                if (btn) btn.onclick = runSystemHealthCheck;
             }
 
-            // Re-attach event listener (safe to do multiple times)
-            const btn = document.getElementById('btn-run-self-check');
-            if(btn) btn.onclick = runSystemHealthCheck;
-        }
+        }, 1000); // 1s delay to ensure Dashboard HTML is ready
+    })();
 
-    }, 1000); // 1s delay to ensure Dashboard HTML is ready
-})();
+    // ==========================================
+    // BULK DELETE FUNCTIONS (Global Scope & Corrected Data Source)
+    // ==========================================
 
-// ==========================================
-// BULK DELETE FUNCTIONS (Global Scope & Corrected Data Source)
-// ==========================================
+    // 1. Toggle Lock Function
+    window.toggleBulkLock = function () {
+        const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
+        const startSelect = document.getElementById('edit-bulk-start-session');
+        const endSelect = document.getElementById('edit-bulk-end-session');
+        const deleteBtn = document.getElementById('btn-edit-bulk-delete');
+        const controlsDiv = document.getElementById('bulk-delete-controls');
 
-// 1. Toggle Lock Function
-window.toggleBulkLock = function() {
-    const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
-    const startSelect = document.getElementById('edit-bulk-start-session');
-    const endSelect = document.getElementById('edit-bulk-end-session');
-    const deleteBtn = document.getElementById('btn-edit-bulk-delete');
-    const controlsDiv = document.getElementById('bulk-delete-controls');
+        // Check if currently locked (disabled)
+        const isLocked = startSelect.disabled;
 
-    // Check if currently locked (disabled)
-    const isLocked = startSelect.disabled;
+        if (isLocked) {
+            // --- UNLOCKING ---
 
-    if (isLocked) {
-        // --- UNLOCKING ---
-        
-        // 1. Populate Dropdowns (Using CORRECT Global Variable)
-        // ensure sessions are loaded
-        if (typeof populate_session_dropdown === 'function') populate_session_dropdown(); 
+            // 1. Populate Dropdowns (Using CORRECT Global Variable)
+            // ensure sessions are loaded
+            if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
 
-        if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
-            
-            // Clear and Add Default
-            startSelect.innerHTML = '<option value="">-- Select Start --</option>';
-            endSelect.innerHTML = '<option value="">-- Select End --</option>';
+            if (typeof allStudentSessions !== 'undefined' && allStudentSessions.length > 0) {
 
-            allStudentSessions.forEach(session => {
-                const opt1 = new Option(session, session);
-                startSelect.add(opt1);
-                
-                const opt2 = new Option(session, session);
-                endSelect.add(opt2);
-            });
-        } else {
-            alert("No exam sessions found to delete! (List empty)");
-            return;
-        }
+                // Clear and Add Default
+                startSelect.innerHTML = '<option value="">-- Select Start --</option>';
+                endSelect.innerHTML = '<option value="">-- Select End --</option>';
 
-        // 2. Enable Inputs
-        startSelect.disabled = false;
-        endSelect.disabled = false;
-        deleteBtn.disabled = false;
+                allStudentSessions.forEach(session => {
+                    const opt1 = new Option(session, session);
+                    startSelect.add(opt1);
 
-        // 3. Visual Updates
-        startSelect.classList.remove('bg-gray-100');
-        startSelect.classList.add('bg-white');
-        endSelect.classList.remove('bg-gray-100');
-        endSelect.classList.add('bg-white');
-        controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
+                    const opt2 = new Option(session, session);
+                    endSelect.add(opt2);
+                });
+            } else {
+                alert("No exam sessions found to delete! (List empty)");
+                return;
+            }
 
-        // 4. Update Button State
-        bulkLockBtn.innerHTML = `
+            // 2. Enable Inputs
+            startSelect.disabled = false;
+            endSelect.disabled = false;
+            deleteBtn.disabled = false;
+
+            // 3. Visual Updates
+            startSelect.classList.remove('bg-gray-100');
+            startSelect.classList.add('bg-white');
+            endSelect.classList.remove('bg-gray-100');
+            endSelect.classList.add('bg-white');
+            controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
+
+            // 4. Update Button State
+            bulkLockBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             </svg>
             <span class="text-rose-600 font-bold">Unlocked</span>
         `;
-        bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
+            bulkLockBtn.classList.add('border-rose-300', 'bg-rose-50');
 
-    } else {
-        // --- LOCKING ---
-        startSelect.disabled = true;
-        endSelect.disabled = true;
-        deleteBtn.disabled = true;
+        } else {
+            // --- LOCKING ---
+            startSelect.disabled = true;
+            endSelect.disabled = true;
+            deleteBtn.disabled = true;
 
-        startSelect.classList.add('bg-gray-100');
-        endSelect.classList.add('bg-gray-100');
-        controlsDiv.classList.add('opacity-50', 'pointer-events-none');
+            startSelect.classList.add('bg-gray-100');
+            endSelect.classList.add('bg-gray-100');
+            controlsDiv.classList.add('opacity-50', 'pointer-events-none');
 
-        // Update Button State
-        bulkLockBtn.innerHTML = `
+            // Update Button State
+            bulkLockBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
             <span>Locked</span>
         `;
-        bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
-    }
-};
-
-
-
-// 2. Execute Delete Function (Preserves Invigilation Data)
-window.executeBulkDelete = async function() {
-    const startSession = document.getElementById('edit-bulk-start-session').value;
-    const endSession = document.getElementById('edit-bulk-end-session').value;
-    const deleteBtn = document.getElementById('btn-edit-bulk-delete');
-
-    // Validation
-    if (!startSession || !endSession) {
-        alert("Please select both Start and End sessions.");
-        return;
-    }
-
-    const startIndex = allStudentSessions.indexOf(startSession);
-    const endIndex = allStudentSessions.indexOf(endSession);
-
-    if (startIndex === -1 || endIndex === -1) {
-        alert("Selected sessions not found in database.");
-        return;
-    }
-
-    if (startIndex > endIndex) {
-        alert("Start Session cannot be after End Session.");
-        return;
-    }
-
-    // Identify Range
-    const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
-
-    // Confirmation
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\n✅ NOTE: Invigilation Volunteers & Unavailability will be SAVED/PRESERVED.\n\nType 'DELETE' to confirm:`;
-    const userInput = prompt(confirmMsg);
-
-    if (userInput !== 'DELETE') return;
-
-    // Execution
-    try {
-        deleteBtn.innerHTML = "Deleting...";
-        deleteBtn.disabled = true;
-
-        const sessionSet = new Set(sessionsToDelete);
-
-        // 1. Remove Students (Filter Global Array)
-        allStudentData = allStudentData.filter(s => {
-            const key = `${s.Date} | ${s.Time}`;
-            return !sessionSet.has(key);
-        });
-        localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
-
-        // 2. Remove Aux Data (Assignments, Rooms, etc.)
-        // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
-        const auxKeys = [
-            'examRoomAllotment', 
-            'examScribeAllotment', 
-            'examAbsenteeList', 
-            'examQPCodes' 
-        ];
-        
-        auxKeys.forEach(key => {
-            const raw = localStorage.getItem(key);
-            if(raw) {
-                const data = JSON.parse(raw);
-                let changed = false;
-                sessionsToDelete.forEach(s => {
-                    if(data[s]) { delete data[s]; changed = true; }
-                });
-                if(changed) localStorage.setItem(key, JSON.stringify(data));
-            }
-        });
-
-        // 3. Sync to Cloud
-        // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
-        if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('ops');
-            await syncDataToCloud('allocation'); 
+            bulkLockBtn.classList.remove('border-rose-300', 'bg-rose-50');
         }
-        
-        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
-        window.location.reload();
-
-    } catch (error) {
-        console.error("Delete Error:", error);
-        alert("An error occurred: " + error.message);
-    } finally {
-        deleteBtn.innerHTML = "Delete Range";
-    }
-};
-
-
-window.downloadInvigilationListPDF = function () {
-    const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
-        ? allotmentSessionSelect.value 
-        : document.getElementById('allotment-session-select')?.value;
-    if (!sessionKey) return alert("Please select a session first.");
-    const [date, time] = sessionKey.split(' | ');
-
-    // 1. Data Sources
-    const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
-    const currentSessionInvigs = invigMap[sessionKey] || {};
-    const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
-    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]');
-    
-    // Scribe Data
-    const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
-    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-
-    // 2. Room List Builder
-    const roomList = [];
-    if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
-        currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-    } else {
-         const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
-         const sessionAllotment = allAllotments[sessionKey];
-         if (sessionAllotment && Array.isArray(sessionAllotment)) {
-             sessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-         } else {
-             const mappedRooms = Object.keys(currentSessionInvigs);
-             if (mappedRooms.length > 0) {
-                 mappedRooms.forEach(rName => roomList.push({ name: rName, stream: "Regular", isScribe: false }));
-             }
-         }
-    }
-    // Always add Scribe Rooms
-    Object.values(sessionScribeMap).forEach(rName => {
-        if(!roomList.find(r=>r.name === rName)) {
-            roomList.push({ name: rName, stream: "Regular", isScribe: true });
-        }
-    });
-
-    if(roomList.length === 0) {
-        console.warn("PDF: No regular rooms found. Check if session has allotment.");
-    }
-
-    // 3. Preparation & Sorting
-    const streamCounts = {};
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    let scribeRegNos = new Set();
-    const globalScribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
-    if(Array.isArray(globalScribeList)) scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-    
-    sessionStudents.forEach(s => {
-        const sStream = s.Stream || "Regular";
-        if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
-        scribeRegNos.has(s['Register Number']) ? streamCounts[sStream].scribes++ : streamCounts[sStream].candidates++;
-    });
-
-    const streams = {};
-    roomList.forEach(r => {
-        const s = r.stream || "Regular";
-        if (!streams[s]) streams[s] = [];
-        streams[s].push(r);
-    });
-
-    // 4. Generate Rows
-    const bodyRows = [];
-    let srNo = 1;
-    const truncate = (str, n) => {
-        if (!str) return "";
-        const w = str.split(' ');
-        return (w.length > n) ? w.slice(0, n).join(' ') + '...' : str;
     };
 
-    const sortedStreamNames = Object.keys(streams).sort();
-    if(sortedStreamNames.includes("Regular")) {
-        sortedStreamNames.splice(sortedStreamNames.indexOf("Regular"), 1);
-        sortedStreamNames.unshift("Regular");
-    }
 
-    sortedStreamNames.forEach(streamName => {
-        const list = streams[streamName];
-        list.sort((a,b) => a.name.localeCompare(b.name));
-        
-        // STREAM HEADER ROW (Fill Removed)
-        bodyRows.push([{ 
-            content: (streamName === "Regular" ? "REGULAR STREAM" : streamName.toUpperCase()), 
-            colSpan: 9, 
-            styles: { fontStyle: 'bold', halign: 'left', textColor: 0 } // Removed fillColor
-        }]);
 
-        list.forEach(room => {
-            const invigName = currentSessionInvigs[room.name] || "-";
-            const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {}; 
-            
-            let invigCell = invigName;
-            if (invigName !== "-") {
-                const meta = [];
-                if(staff.dept) meta.push(staff.dept);
-                if(staff.phone) meta.push(staff.phone);
-                if(meta.length > 0) invigCell += `\n${meta.join(' | ')}`; 
-            }
-            let loc = roomConfig[room.name]?.location || room.name;
-            loc = truncate(loc, 5);
-            if(room.isScribe) loc += " (Scribe)";
-            
-            bodyRows.push([
-                srNo++,
-                loc,
-                { content: invigCell, styles: { fontStyle: 'bold' } }, 
-                "", "", "", "", "", "", ""
-            ]);
-        });
-        
-        // Empty Rows logic
-        const stats = streamCounts[streamName] || { candidates: 0, scribes: 0 };
-        const totalReq = Math.ceil(stats.candidates / 30) + stats.scribes;
-        const emptyRowsNeeded = Math.max(2, totalReq - list.length);
-        for(let i=0; i<emptyRowsNeeded; i++) {
-            bodyRows.push([{ content: "-", styles: { halign: 'center', textColor: [200,200,200] } }, "","","","","","","",""]);
+    // 2. Execute Delete Function (Preserves Invigilation Data)
+    window.executeBulkDelete = async function () {
+        const startSession = document.getElementById('edit-bulk-start-session').value;
+        const endSession = document.getElementById('edit-bulk-end-session').value;
+        const deleteBtn = document.getElementById('btn-edit-bulk-delete');
+
+        // Validation
+        if (!startSession || !endSession) {
+            alert("Please select both Start and End sessions.");
+            return;
         }
-    });
 
-    // 5. Reserves
-    const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
-    const slot = invigSlots[sessionKey];
-    if (slot && slot.assigned && slot.assigned.length > 0) {
-        const assignedNames = new Set(Object.values(currentSessionInvigs));
-        const reserves = [];
-        slot.assigned.forEach(email => {
-            const staff = staffData.find(s => s.email === email);
-            if (staff && !assignedNames.has(staff.name)) reserves.push(staff);
-        });
-        if (reserves.length > 0) {
-            bodyRows.push([{ 
-                content: "RESERVES / RELIEVERS", colSpan: 9, 
-                styles: { textColor: [154, 52, 18], fontStyle: 'bold', halign: 'center' } // Removed Fill
-            }]);
-            reserves.forEach((staff, idx) => {
-                bodyRows.push([
-                    { content: idx + 1, halign: 'center' },
-                    { content: staff.name, colSpan: 3, styles: { fontStyle: 'bold' } },
-                    { content: staff.dept || "", colSpan: 3 },
-                    { content: staff.phone || "", colSpan: 2 }
-                ]);
+        const startIndex = allStudentSessions.indexOf(startSession);
+        const endIndex = allStudentSessions.indexOf(endSession);
+
+        if (startIndex === -1 || endIndex === -1) {
+            alert("Selected sessions not found in database.");
+            return;
+        }
+
+        if (startIndex > endIndex) {
+            alert("Start Session cannot be after End Session.");
+            return;
+        }
+
+        // Identify Range
+        const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
+
+        // Confirmation
+        const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\n✅ NOTE: Invigilation Volunteers & Unavailability will be SAVED/PRESERVED.\n\nType 'DELETE' to confirm:`;
+        const userInput = prompt(confirmMsg);
+
+        if (userInput !== 'DELETE') return;
+
+        // Execution
+        try {
+            deleteBtn.innerHTML = "Deleting...";
+            deleteBtn.disabled = true;
+
+            const sessionSet = new Set(sessionsToDelete);
+
+            // 1. Remove Students (Filter Global Array)
+            allStudentData = allStudentData.filter(s => {
+                const key = `${s.Date} | ${s.Time}`;
+                return !sessionSet.has(key);
             });
-        }
-    }
+            localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
 
-    // 6. Final PDF
-    if (!window.jspdf) return alert("PDF Library not loaded.");
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    
-    doc.setFontSize(14);
-    doc.text(localStorage.getItem('examCollegeName') || "GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
-    doc.setFontSize(11);
-    doc.text("Invigilation Duty List", 105, 22, { align: "center" });
-    doc.setFontSize(10);
-    doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
+            // 2. Remove Aux Data (Assignments, Rooms, etc.)
+            // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
+            const auxKeys = [
+                'examRoomAllotment',
+                'examScribeAllotment',
+                'examAbsenteeList',
+                'examQPCodes'
+            ];
 
-    doc.autoTable({
-        head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
-        body: bodyRows,
-        startY: 32,
-        theme: 'grid',
-        // Forced White Header
-        headStyles: { fillColor: [255, 255, 255], textColor: 0, lineWidth: 0.1, lineColor: 0, fontStyle: 'bold' },
-        styles: { fontSize: 9, lineColor: 0, lineWidth: 0.1, cellPadding: 2, textColor: 0, valign: 'middle' },
-        columnStyles: {
-            0: { cellWidth: 10, halign: 'center' },
-            1: { cellWidth: 47 }, 
-            2: { cellWidth: 38 }, 
-            3: { cellWidth: 15 }, 
-            4: { cellWidth: 11 }, 
-            5: { cellWidth: 11 }, 
-            6: { cellWidth: 11 }, 
-            7: { cellWidth: 19 },
-            8: { cellWidth: 'auto' }
-        }
-    });
-
-    // --- Footer with Signatories ---
-    let finalY = doc.lastAutoTable.finalY || 40;
-    if (finalY > 250) { doc.addPage(); finalY = 20; }
-    
-    // 1. Fetch Names Logic
-    const getOfficialName = (role) => {
-        const q = role.toLowerCase().replace('.', '').replace('assistant', 'asst');
-        const staff = staffData.find(s => {
-             if (s.roleHistory && s.roleHistory.some(r => {
-                 const rName = r.role.toLowerCase().replace('.', '').replace('assistant', 'asst');
-                 const [d, m, y] = date.split('.');
-                 const target = new Date(y, m-1, d); target.setHours(12,0,0,0);
-                 const start = new Date(r.start); start.setHours(0,0,0,0);
-                 const end = new Date(r.end); end.setHours(23,59,59,999);
-                 return rName.includes(q) && target >= start && target <= end;
-             })) return true;
-             return ((s.role && s.role.toLowerCase().includes(q)) || (s.Designation && s.Designation.toLowerCase().includes(q)));
-        });
-        return staff ? staff.name : "";
-    };
-
-    const seniorName = getOfficialName("Senior Assistant");
-    const chiefName = getOfficialName("Chief Superintendent");
-
-    const yPos = finalY + 30;
-    
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    
-    // Left Sign
-    if(seniorName) doc.text(seniorName.toUpperCase(), 40, yPos, { align: "center" }); 
-    else doc.line(20, yPos, 60, yPos);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("Senior Assistant Superintendent", 40, yPos + 5, { align: "center" });
-
-    // Right Sign
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    
-    if(chiefName) doc.text(chiefName.toUpperCase(), 170, yPos, { align: "center" });
-    else doc.line(150, yPos, 190, yPos);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text("Chief Superintendent", 170, yPos + 5, { align: "center" });
-
-    doc.save(`Invigilation_List_${date}.pdf`);
-};
-    
-
-
-
-
-
-
-
-    // --- Global Replace Modal ---
-    window.openReplaceInvigModal = function (roomName) {
-        const modal = document.getElementById('invigilator-select-modal');
-        const list = document.getElementById('invig-options-list');
-        const input = document.getElementById('invig-search-input');
-        const subtitle = document.getElementById('invig-modal-subtitle');
-        
-        if (subtitle) {
-            subtitle.textContent = `Global Replace for: ${roomName}`;
-            subtitle.classList.add('text-teal-600'); 
-        }
-
-        input.value = "";
-        modal.classList.remove('hidden');
-        setTimeout(() => input.focus(), 100);
-
-        // Load GLOBAL Staff Data
-        const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-        const assignedSet = new Set(Object.values(currentInvigMapping)); // Current Room Assignments
-
-        const renderList = (filter = "") => {
-            let html = "";
-            const q = filter.toLowerCase();
-            let hasResults = false;
-
-            // Simple Sort: Alphabetical
-            staffData.sort((a, b) => a.name.localeCompare(b.name));
-
-            staffData.forEach(staff => {
-                if (currentInvigMapping[roomName] === staff.name) return; // Skip self
-
-                if (staff.name.toLowerCase().includes(q)) {
-                    hasResults = true;
-                    // Check if they are busy in THIS session (just a hint, allow override)
-                    const isTaken = assignedSet.has(staff.name);
-                    
-                    let statusBadge = "";
-                    let rowClass = "bg-white";
-                    
-                    if (isTaken) {
-                        statusBadge = '<span class="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100">Busy</span>';
-                        rowClass = "bg-gray-50 opacity-75";
-                    } else {
-                        statusBadge = '<span class="text-[9px] text-teal-600 font-bold bg-teal-50 px-1 rounded border border-teal-100">Global</span>';
-                    }
-
-                    const clickAction = `onclick="window.replaceInvigilator('${roomName.replace(/'/g, "\\'")}', '${staff.name.replace(/'/g, "\\'")}')"`;
-
-                    html += `
-                    <div ${clickAction} class="p-2 rounded border-b border-gray-100 flex justify-between items-center transition ${rowClass} cursor-pointer hover:bg-teal-50">
-                        <div>
-                            <div class="text-sm font-bold text-gray-800">${staff.name}</div>
-                            <div class="text-[10px] text-gray-500">${staff.dept || ""}</div>
-                        </div>
-                        ${statusBadge}
-                    </div>`;
+            auxKeys.forEach(key => {
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                    const data = JSON.parse(raw);
+                    let changed = false;
+                    sessionsToDelete.forEach(s => {
+                        if (data[s]) { delete data[s]; changed = true; }
+                    });
+                    if (changed) localStorage.setItem(key, JSON.stringify(data));
                 }
             });
-            list.innerHTML = hasResults ? html : '<p class="text-center text-gray-400 text-xs py-2">No staff found.</p>';
-        };
-        renderList();
-        input.oninput = (e) => renderList(e.target.value);
-    };
 
-    // --- NEW: Execute Replace ---
-    window.replaceInvigilator = function(room, name) {
-        if(!confirm(`Confirm replace with ${name}?`)) return;
-        window.saveInvigAssignment(room, name); // Reuse existing save logic
-        
-        // Reset Modal Title
-        const subtitle = document.getElementById('invig-modal-subtitle');
-        if(subtitle) {
-             subtitle.classList.remove('text-orange-600');
-             subtitle.textContent = "";
+            // 3. Sync to Cloud
+            // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
+            if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('ops');
+                await syncDataToCloud('allocation');
+            }
+
+            alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
+            window.location.reload();
+
+        } catch (error) {
+            console.error("Delete Error:", error);
+            alert("An error occurred: " + error.message);
+        } finally {
+            deleteBtn.innerHTML = "Delete Range";
         }
     };
-    
 
 
-    
+    // [MODULARIZED] downloadInvigilationListPDF moved to js/features/pdf-generator.js
 
-    
 
-    
-// Helper to switch language inside the new tab
-// Note: This function string is already embedded in the template HTML, 
-// so you don't strictly need it here, but the openManualNewTab logic handles the rest.
-    
-// ==========================================
+
+
+
+
+
+
+    // [MODULARIZED] Replace Logic moved to js/features/invigilation-panel.js
+
+
+
+
+
+
+
+
+    // Helper to switch language inside the new tab
+    // Note: This function string is already embedded in the template HTML, 
+    // so you don't strictly need it here, but the openManualNewTab logic handles the rest.
+
+    // ==========================================
     // ☁️ FORCE CLOUD SYNC (Header Button)
     // ==========================================
     const headerSyncStatus = document.getElementById('sync-status');
-    
+
     if (headerSyncStatus) {
         // 1. Visual Cues
         headerSyncStatus.style.cursor = "pointer";
         headerSyncStatus.title = "Click to Force Save to Cloud";
         headerSyncStatus.classList.add("hover:underline"); // Add underline on hover
 
-       // 2. Click Handler
+        // 2. Click Handler
         headerSyncStatus.addEventListener('click', async () => {
             const currentText = headerSyncStatus.textContent;
             if (currentText === "Saving..." || currentText === "Connecting...") return;
@@ -17140,7 +16440,7 @@ window.downloadInvigilationListPDF = function () {
             if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
                     updateSyncStatus("Saving...", "neutral");
-        
+
                     // MODULAR FORCE SYNC (V2)
                     updateSyncStatus("Syncing Global Config...", "neutral");
                     await syncDataToCloud('settings');
@@ -17158,7 +16458,7 @@ window.downloadInvigilationListPDF = function () {
                         updateSyncStatus(`Syncing Session ${count}/${allSessions.size}...`, "neutral");
                         await syncSessionToCloud(sessionKey);
                     }
-                    
+
                     updateSyncStatus("All Synced!", "success");
                 } else {
                     alert("Sync function is not ready yet.");
