@@ -7253,7 +7253,9 @@ if (toggleButton && sidebar) {
                   const allRemainingRows = roomConfigContainer.querySelectorAll('.room-row');
                 if (allRemainingRows.length > 0) {
                     const newLastRow = allRemainingRows[allRemainingRows.length - 1];
-                    const actionCell = newLastRow.querySelector('.flex.gap-2');
+                    const editBtn = newLastRow.querySelector('.edit-room-btn');
+                    const actionCell = editBtn ? editBtn.parentElement : null;
+                    
                     if (actionCell) {
                         // Remove placeholder if exists
                         const placeholder = actionCell.querySelector('.w-\\[70px\\]');
