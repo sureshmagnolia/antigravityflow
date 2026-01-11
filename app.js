@@ -98,11 +98,7 @@ function disable_room_allotment_tab(disabled) {
 }
 window.disable_room_allotment_tab = disable_room_allotment_tab;
 
-function populate_room_allotment_session_dropdown() {
-    if (window.real_populate_room_allotment_session_dropdown) {
-        window.real_populate_room_allotment_session_dropdown();
-    }
-}
+
 window.populate_room_allotment_session_dropdown = populate_room_allotment_session_dropdown;
 
 function disable_scribe_settings_tab(disabled) {
