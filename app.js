@@ -14365,7 +14365,8 @@ if (btnSessionReschedule) {
         renderScribeAllotmentList(currentSessionKey);
     };
 
-    // ==========================================
+
+  // ==========================================
     // 👮 INVIGILATOR ASSIGNMENT MODULE (WITH SWAP)
     // ==========================================
 
@@ -14549,6 +14550,8 @@ if (btnSessionReschedule) {
         `;
         });
     }
+
+    
 
     // 2. Handle Swap Interaction
     window.handleSwapClick = function (roomName) {
