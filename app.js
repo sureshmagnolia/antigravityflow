@@ -15029,18 +15029,32 @@ if (displayLoc) {
 
         
         
-        // 6. Generate Print Window
-       let dateObj = new Date();
-        try {
-            const [d, m, y] = date.split('.');
-            dateObj = new Date(y, m - 1, d);
-        } catch(e) {}
-        
-        const seniorName = getOfficialForDate("Senior Asst. Superintendent", dateObj);
-        const chiefName = getOfficialForDate("Chief Superintendent", dateObj);
-        
-        const w = window.open('', '_blank');
-        w.document.write(`
+           // 6. Generate Print Window
+    
+    // FETCH OFFICIALS
+    let dateObj = new Date();
+    try {
+        const [d, m, y] = date.split('.');
+        dateObj = new Date(y, m - 1, d);
+    } catch(e) {}
+    
+    // Helper to get official (ensure this helper exists or use internal logic)
+    const getOfficial = (role) => {
+         // Fallback logic if helper is missing
+         const staff = staffData.find(s => s.roleHistory && s.roleHistory.some(r => {
+            const start = new Date(r.start); start.setHours(0,0,0,0);
+            const end = new Date(r.end); end.setHours(23,59,59,999);
+            // Flexible Role Check
+            return (r.role === role) && (dateObj >= start && dateObj <= end);
+        }));
+        return staff ? staff.name : "";
+    };
+
+    const seniorName = getOfficial("Senior Asst. Superintendent");
+    const chiefName = getOfficial("Chief Superintendent");
+
+    const w = window.open('', '_blank');
+    w.document.write(`
         <html>
         <head>
             <title>Invigilation List - ${date}</title>
@@ -15055,36 +15069,36 @@ if (displayLoc) {
                 th { background: #eee; border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; }
                 td { vertical-align: middle; border: 1px solid #000; padding: 5px;}
                 
-                /* Footer Layout Fix */
                 .footer { 
-                    margin-top: 80px; /* Space for signature */
+                    margin-top: 80px; 
                     display: flex; 
                     justify-content: space-between; 
                     padding: 0 40px;
                 }
                 .sign-box { 
                     text-align: center; 
-                    min-width: 300px; /* Prevent squashing */
+                    min-width: 300px;
                 }
                 .official-name {
                     font-weight: bold;
                     font-size: 11pt;
-                    margin-bottom: 4px;
-                    white-space: nowrap; /* Forces single line */
+                    margin-bottom: 5px;
+                    white-space: nowrap; 
                     text-transform: uppercase;
                 }
                 .official-role {
                     font-size: 10pt;
-                    white-space: nowrap; /* Forces single line */
+                    white-space: nowrap;
                 }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>${collegeName || "Government Victoria College"}</h1>
+                <h1>${localStorage.getItem('examCollegeName') || "Government Victoria College"}</h1>
                 <h2>${examName}</h2>
                 <h3>${date} &nbsp;|&nbsp; ${time}</h3>
             </div>
+
             <table>
                 <thead>
                     <tr>
@@ -15101,25 +15115,25 @@ if (displayLoc) {
                 </thead>
                 <tbody>${rowsHtml}</tbody>
             </table>
+
             <div class="footer">
                 <div class="sign-box">
-                   <!-- Show Name if exists, otherwise display a signature line -->
-                   ${seniorName ? `<div class="official-name">${seniorName}</div>` : '<div style="border-top:1px solid #000; margin-bottom:8px;"></div>'}
-                   <div class="official-role">Senior Assistant Superintendent</div>
+                   ${seniorName ? `<div class="official-name">${seniorName}</div>` : '<div style="height:20px;"></div>'}
+                   <div class="official-role" style="${seniorName ? '' : 'border-top:1px solid #000; padding-top:5px;'}">Senior Assistant Superintendent</div>
                 </div>
                 
                 <div class="sign-box">
-                   ${chiefName ? `<div class="official-name">${chiefName}</div>` : '<div style="border-top:1px solid #000; margin-bottom:8px;"></div>'}
-                   <div class="official-role">Chief Superintendent</div>
+                   ${chiefName ? `<div class="official-name">${chiefName}</div>` : '<div style="height:20px;"></div>'}
+                   <div class="official-role" style="${chiefName ? '' : 'border-top:1px solid #000; padding-top:5px;'}">Chief Superintendent</div>
                 </div>
             </div>
+
             <script>window.onload = () => window.print();<\/script>
         </body>
         </html>
     `);
-
-        w.document.close();
-    }
+    w.document.close();
+}; // END FUNCTION
 
 // ==========================================
     // 🔧 DATA NORMALIZATION TOOL (Fixes Time Formats)
