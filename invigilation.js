@@ -2610,7 +2610,7 @@ window.generateWelcomeText = function(name, dept) {
 Hi, ${displayName}, Welcome to ${cName}. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
 https://examflow-de08f.web.app/invigilation.html
  Any changes may be reported in advance to SAS @ ${sasPhone} or to CS @ ${csPhone}. 
-🟢 *Kindly check the General instructions to invigilators here: https://bit.ly/gvc-exam*
+🟢 *Kindly check the General instructions to invigilators here: https://examflow-de08f.web.app/instructions.html*
 Please join the examination whatsapp group for latest updates using the following link
  https://chat.whatsapp.com/LvfrheUDh4d4T63r7Bg1cv
 Also join IQAC GVC Whatsapp group Here
@@ -4741,7 +4741,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
-    msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
+    msg += `3️⃣ View detailed guidelines: https://examflow-de08f.web.app/instructions.html\n\n`;
     
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
     msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
@@ -4850,7 +4850,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                 <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
                     <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
                     <li>Mobile phones must be kept in <strong>silent mode</strong> inside the hall.</li>
-                    <li><a href="https://bit.ly/gvc-exam" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                    <li><a href="https://examflow-de08f.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
                 </ul>
             </div>
 
@@ -5338,7 +5338,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                 <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
                     <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
                     <li>Mobile phones should be in <strong>silent mode</strong> inside the hall.</li>
-                    <li><a href="https://bit.ly/gvc-exam" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                    <li><a href="https://examflow-de08f.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
                 </ul>
             </div>
 
@@ -8765,7 +8765,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
-    msg += `3️⃣ View detailed guidelines: https://bit.ly/gvc-exam\n\n`;
+    msg += `3️⃣ View detailed guidelines: https://examflow-de08f.web.app/instructions.html\n\n`;
     
     // 6. Exchange Instructions & Link
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
