@@ -16774,17 +16774,13 @@ window.executeBulkDelete = async function() {
 };
 
 
-
-    
-
-
-
 window.downloadInvigilationListPDF = function () {
     const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
         ? allotmentSessionSelect.value 
         : document.getElementById('allotment-session-select')?.value;
     if (!sessionKey) return alert("Please select a session first.");
     const [date, time] = sessionKey.split(' | ');
+
     // 1. Data Sources
     const invigMap = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
     const currentSessionInvigs = invigMap[sessionKey] || {};
@@ -16795,60 +16791,54 @@ window.downloadInvigilationListPDF = function () {
     // Scribe Data
     const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
     const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-    // 2. ROBUST Room List Builder (Triple Fallback)
+
+    // 2. Room List Builder
     const roomList = [];
-    let sourceUsed = "none";
-    
-    // Method A: Global Variable (Screen State)
     if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
         currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-        sourceUsed = "global";
-    } 
-    // Method B: Storage Allotment Data
-    else {
+    } else {
          const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
          const sessionAllotment = allAllotments[sessionKey];
          if (sessionAllotment && Array.isArray(sessionAllotment)) {
              sessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-             sourceUsed = "storage";
-         }
-         // Method C: Inference from Invigilator Mapping (Last Resort)
-         else {
+         } else {
              const mappedRooms = Object.keys(currentSessionInvigs);
              if (mappedRooms.length > 0) {
                  mappedRooms.forEach(rName => roomList.push({ name: rName, stream: "Regular", isScribe: false }));
-                 sourceUsed = "inference";
              }
          }
     }
-    // Always add Scribe Rooms (deduplicated)
+    // Always add Scribe Rooms
     Object.values(sessionScribeMap).forEach(rName => {
         if(!roomList.find(r=>r.name === rName)) {
             roomList.push({ name: rName, stream: "Regular", isScribe: true });
         }
     });
+
     if(roomList.length === 0) {
-        // Only Reserves will print if this happens
         console.warn("PDF: No regular rooms found. Check if session has allotment.");
     }
+
     // 3. Preparation & Sorting
     const streamCounts = {};
     const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    // Scribe RegNo List
     let scribeRegNos = new Set();
     const globalScribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
     if(Array.isArray(globalScribeList)) scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
+    
     sessionStudents.forEach(s => {
         const sStream = s.Stream || "Regular";
         if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
         scribeRegNos.has(s['Register Number']) ? streamCounts[sStream].scribes++ : streamCounts[sStream].candidates++;
     });
+
     const streams = {};
     roomList.forEach(r => {
         const s = r.stream || "Regular";
         if (!streams[s]) streams[s] = [];
         streams[s].push(r);
     });
+
     // 4. Generate Rows
     const bodyRows = [];
     let srNo = 1;
@@ -16857,19 +16847,24 @@ window.downloadInvigilationListPDF = function () {
         const w = str.split(' ');
         return (w.length > n) ? w.slice(0, n).join(' ') + '...' : str;
     };
+
     const sortedStreamNames = Object.keys(streams).sort();
     if(sortedStreamNames.includes("Regular")) {
         sortedStreamNames.splice(sortedStreamNames.indexOf("Regular"), 1);
         sortedStreamNames.unshift("Regular");
     }
+
     sortedStreamNames.forEach(streamName => {
         const list = streams[streamName];
         list.sort((a,b) => a.name.localeCompare(b.name));
+        
+        // STREAM HEADER ROW (Fill Removed)
         bodyRows.push([{ 
             content: (streamName === "Regular" ? "REGULAR STREAM" : streamName.toUpperCase()), 
             colSpan: 9, 
-            styles: { fillColor: [243, 244, 246], fontStyle: 'bold', halign: 'left', textColor: 0 } 
+            styles: { fontStyle: 'bold', halign: 'left', textColor: 0 } // Removed fillColor
         }]);
+
         list.forEach(room => {
             const invigName = currentSessionInvigs[room.name] || "-";
             const staff = staffData.find(s => s.name === invigName || s.email === invigName) || {}; 
@@ -16884,6 +16879,7 @@ window.downloadInvigilationListPDF = function () {
             let loc = roomConfig[room.name]?.location || room.name;
             loc = truncate(loc, 5);
             if(room.isScribe) loc += " (Scribe)";
+            
             bodyRows.push([
                 srNo++,
                 loc,
@@ -16891,17 +16887,16 @@ window.downloadInvigilationListPDF = function () {
                 "", "", "", "", "", "", ""
             ]);
         });
-        // Exact Empty Rows Logic
+        
+        // Empty Rows logic
         const stats = streamCounts[streamName] || { candidates: 0, scribes: 0 };
         const totalReq = Math.ceil(stats.candidates / 30) + stats.scribes;
         const emptyRowsNeeded = Math.max(2, totalReq - list.length);
         for(let i=0; i<emptyRowsNeeded; i++) {
-            bodyRows.push([
-                { content: "-", styles: { halign: 'center', textColor: [200,200,200] } },
-                "", "", "", "", "", "", "", ""
-            ]);
+            bodyRows.push([{ content: "-", styles: { halign: 'center', textColor: [200,200,200] } }, "","","","","","","",""]);
         }
     });
+
     // 5. Reserves
     const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     const slot = invigSlots[sessionKey];
@@ -16914,9 +16909,8 @@ window.downloadInvigilationListPDF = function () {
         });
         if (reserves.length > 0) {
             bodyRows.push([{ 
-                content: "RESERVES / RELIEVERS", 
-                colSpan: 9, 
-                styles: { fillColor: [255, 247, 237], textColor: [154, 52, 18], fontStyle: 'bold', halign: 'center' } 
+                content: "RESERVES / RELIEVERS", colSpan: 9, 
+                styles: { textColor: [154, 52, 18], fontStyle: 'bold', halign: 'center' } // Removed Fill
             }]);
             reserves.forEach((staff, idx) => {
                 bodyRows.push([
@@ -16929,14 +16923,11 @@ window.downloadInvigilationListPDF = function () {
         }
     }
 
-
-
     // 6. Final PDF
     if (!window.jspdf) return alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
-    // --- Header ---
     doc.setFontSize(14);
     doc.text(localStorage.getItem('examCollegeName') || "GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
     doc.setFontSize(11);
@@ -16944,12 +16935,13 @@ window.downloadInvigilationListPDF = function () {
     doc.setFontSize(10);
     doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
 
-    // --- Table ---
     doc.autoTable({
         head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
         body: bodyRows,
         startY: 32,
         theme: 'grid',
+        // Forced White Header
+        headStyles: { fillColor: [255, 255, 255], textColor: 0, lineWidth: 0.1, lineColor: 0, fontStyle: 'bold' },
         styles: { fontSize: 9, lineColor: 0, lineWidth: 0.1, cellPadding: 2, textColor: 0, valign: 'middle' },
         columnStyles: {
             0: { cellWidth: 10, halign: 'center' },
@@ -16968,11 +16960,10 @@ window.downloadInvigilationListPDF = function () {
     let finalY = doc.lastAutoTable.finalY || 40;
     if (finalY > 250) { doc.addPage(); finalY = 20; }
     
-    // 1. Fetch Names Logic (Same as HTML)
+    // 1. Fetch Names Logic
     const getOfficialName = (role) => {
         const q = role.toLowerCase().replace('.', '').replace('assistant', 'asst');
         const staff = staffData.find(s => {
-             // Check History
              if (s.roleHistory && s.roleHistory.some(r => {
                  const rName = r.role.toLowerCase().replace('.', '').replace('assistant', 'asst');
                  const [d, m, y] = date.split('.');
@@ -16981,9 +16972,7 @@ window.downloadInvigilationListPDF = function () {
                  const end = new Date(r.end); end.setHours(23,59,59,999);
                  return rName.includes(q) && target >= start && target <= end;
              })) return true;
-             
-             // Check Current
-             return (s.role && s.role.toLowerCase().includes(q));
+             return ((s.role && s.role.toLowerCase().includes(q)) || (s.Designation && s.Designation.toLowerCase().includes(q)));
         });
         return staff ? staff.name : "";
     };
@@ -16991,37 +16980,37 @@ window.downloadInvigilationListPDF = function () {
     const seniorName = getOfficialName("Senior Assistant");
     const chiefName = getOfficialName("Chief Superintendent");
 
-    // 2. Draw Text (Names + Roles)
     const yPos = finalY + 30;
     
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     
-    // Senior Asst (Left)
-    if(seniorName) {
-        doc.text(seniorName.toUpperCase(), 40, yPos, { align: "center" }); // Name
-    } else {
-        doc.line(20, yPos, 60, yPos); // Line if no name
-    }
+    // Left Sign
+    if(seniorName) doc.text(seniorName.toUpperCase(), 40, yPos, { align: "center" }); 
+    else doc.line(20, yPos, 60, yPos);
+    
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Senior Assistant Superintendent", 40, yPos + 5, { align: "center" });
 
-    // Chief Sup (Right)
+    // Right Sign
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    if(chiefName) {
-        doc.text(chiefName.toUpperCase(), 170, yPos, { align: "center" }); // Name
-    } else {
-        doc.line(150, yPos, 190, yPos); // Line if no name
-    }
+    
+    if(chiefName) doc.text(chiefName.toUpperCase(), 170, yPos, { align: "center" });
+    else doc.line(150, yPos, 190, yPos);
+    
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.text("Chief Superintendent", 170, yPos + 5, { align: "center" });
 
     doc.save(`Invigilation_List_${date}.pdf`);
+};
+    
 
-    };
+
+
+
 
 
 
