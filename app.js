@@ -17021,7 +17021,8 @@ window.downloadInvigilationListPDF = function () {
 
     doc.save(`Invigilation_List_${date}.pdf`);
 
-    
+    };
+
 
 
     // --- Global Replace Modal ---
