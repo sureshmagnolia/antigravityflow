@@ -99,6 +99,11 @@ export function populate_room_allotment_session_dropdown() {
 
         disable_room_allotment_tab(false);
 
+        // Apply modern modal-based session selector (same as QP Codes and Search)
+        if (window.setupSessionSelector) {
+            window.setupSessionSelector('allotment-session-select');
+        }
+
     } catch (e) {
         console.error("Failed to populate room allotment sessions:", e);
         disable_room_allotment_tab(true);

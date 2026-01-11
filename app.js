@@ -15483,6 +15483,7 @@ Are you sure?
     // Make functions global for inline onclick handlers
     window.closeDialModal = closeDialModal;
     window.confirmDialSelection = confirmDialSelection;
+    window.setupSessionSelector = setupSessionSelector; // Expose for room-allotment.js
 
 
     // --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
