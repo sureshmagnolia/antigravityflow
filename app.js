@@ -16928,16 +16928,23 @@ window.downloadInvigilationListPDF = function () {
             });
         }
     }
+
+
+
     // 6. Final PDF
     if (!window.jspdf) return alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
+    
+    // --- Header ---
     doc.setFontSize(14);
-    doc.text("GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
+    doc.text(localStorage.getItem('examCollegeName') || "GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
     doc.setFontSize(11);
     doc.text("Invigilation Duty List", 105, 22, { align: "center" });
     doc.setFontSize(10);
     doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
+
+    // --- Table ---
     doc.autoTable({
         head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
         body: bodyRows,
@@ -16956,14 +16963,65 @@ window.downloadInvigilationListPDF = function () {
             8: { cellWidth: 'auto' }
         }
     });
+
+    // --- Footer with Signatories ---
     let finalY = doc.lastAutoTable.finalY || 40;
     if (finalY > 250) { doc.addPage(); finalY = 20; }
+    
+    // 1. Fetch Names Logic (Same as HTML)
+    const getOfficialName = (role) => {
+        const q = role.toLowerCase().replace('.', '').replace('assistant', 'asst');
+        const staff = staffData.find(s => {
+             // Check History
+             if (s.roleHistory && s.roleHistory.some(r => {
+                 const rName = r.role.toLowerCase().replace('.', '').replace('assistant', 'asst');
+                 const [d, m, y] = date.split('.');
+                 const target = new Date(y, m-1, d); target.setHours(12,0,0,0);
+                 const start = new Date(r.start); start.setHours(0,0,0,0);
+                 const end = new Date(r.end); end.setHours(23,59,59,999);
+                 return rName.includes(q) && target >= start && target <= end;
+             })) return true;
+             
+             // Check Current
+             return (s.role && s.role.toLowerCase().includes(q));
+        });
+        return staff ? staff.name : "";
+    };
+
+    const seniorName = getOfficialName("Senior Assistant");
+    const chiefName = getOfficialName("Chief Superintendent");
+
+    // 2. Draw Text (Names + Roles)
+    const yPos = finalY + 30;
+    
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    doc.text("Senior Assistant Superintendent", 40, finalY + 25, { align: "center" });
-    doc.text("Chief Superintendent", 170, finalY + 25, { align: "center" });
+    
+    // Senior Asst (Left)
+    if(seniorName) {
+        doc.text(seniorName.toUpperCase(), 40, yPos, { align: "center" }); // Name
+    } else {
+        doc.line(20, yPos, 60, yPos); // Line if no name
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Senior Assistant Superintendent", 40, yPos + 5, { align: "center" });
+
+    // Chief Sup (Right)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    if(chiefName) {
+        doc.text(chiefName.toUpperCase(), 170, yPos, { align: "center" }); // Name
+    } else {
+        doc.line(150, yPos, 190, yPos); // Line if no name
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Chief Superintendent", 170, yPos + 5, { align: "center" });
+
     doc.save(`Invigilation_List_${date}.pdf`);
-};
+
+    
 
 
     // --- Global Replace Modal ---
