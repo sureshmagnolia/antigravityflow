@@ -14372,12 +14372,11 @@ if (btnSessionReschedule) {
 
     let swapSourceRoom = null; // Track which room is selected for swapping
 
-    // 1. Render the Main Assignment Panel (Fixed: Keeps Names Visible in Swap Mode)
-     // 1. Render the Main Assignment Panel (Smart Mobile Layout)
+     // 1. Render the Main Assignment Panel (Refined PC & Mobile Layout)
     window.renderInvigilationPanel = function () {
         const section = document.getElementById('invigilator-assignment-section');
         const list = document.getElementById('invigilator-list-container');
-        const sessionKey = allotmentSessionSelect.value; // Access global variable
+        const sessionKey = allotmentSessionSelect.value; 
 
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
@@ -14455,11 +14454,11 @@ if (btnSessionReschedule) {
             const getNameHtml = (name) => `
             <div class="flex items-center gap-2.5 mb-3 sm:mb-0 bg-green-50/80 p-2 sm:p-0 rounded-lg sm:bg-transparent border sm:border-0 border-green-100 w-full sm:w-auto">
                  <div class="bg-green-100 text-green-700 p-1.5 rounded-full shrink-0">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                  </div>
                  <div class="min-w-0 flex-1">
                      <div class="text-[10px] text-green-600 uppercase font-bold tracking-wider leading-none mb-0.5 sm:hidden">Invigilator</div>
-                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate sm:max-w-[180px]" title="${name}">${name}</div>
+                     <div class="text-sm font-bold text-gray-800 sm:text-green-800 break-words sm:truncate sm:max-w-[200px]" title="${name}">${name}</div>
                  </div>
             </div>`;
 
@@ -14498,17 +14497,17 @@ if (btnSessionReschedule) {
                     <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full sm:w-auto gap-3">
                         ${getNameHtml(assignedName)}
 
-                       <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">     
-                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-2 rounded-md hover:bg-indigo-100 transition border border-indigo-200" title="Change Staff">
+                       <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto sm:justify-end">     
+                           <button type="button" onclick="window.openInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-md hover:bg-indigo-100 transition border border-indigo-200 shadow-sm" title="Change Staff">
                                 Change
                            </button>
                            
-                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 px-2 py-2 rounded-md hover:bg-teal-100 transition border border-teal-200" title="Replace Staff">
+                           <button type="button" onclick="window.openReplaceInvigModal('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 px-3 py-2 rounded-md hover:bg-teal-100 transition border border-teal-200 shadow-sm" title="Replace Staff">
                                 Replace
                            </button>
                            
                            ${allRooms.length > 1 ? `
-                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-orange-700 bg-orange-50 px-2 py-2 rounded-md hover:bg-orange-100 transition border border-orange-200" title="Swap">
+                           <button type="button" onclick="window.handleSwapClick('${safeRoomName}')" class="flex items-center justify-center gap-1 text-xs font-bold text-orange-700 bg-orange-50 px-3 py-2 rounded-md hover:bg-orange-100 transition border border-orange-200 shadow-sm" title="Swap">
                                 Swap
                            </button>` : ''}
                         </div>
@@ -14524,18 +14523,19 @@ if (btnSessionReschedule) {
                 }
             }
 
+            // PC LAYOUT: Flex container with clearly defined widths
             list.innerHTML += `
             <div class="bg-white rounded-xl shadow-sm ${cardBorder} transition-all duration-200 hover:shadow-md mb-3 overflow-hidden">
-                <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                <div class="flex flex-col sm:flex-row sm:items-stretch">
                     
-                    <!-- Left: Room Info -->
-                    <div class="flex items-start gap-3 min-w-0">
+                    <!-- LEFT PANEL: Room Info (Fixed width on PC: 40%) -->
+                    <div class="p-3 sm:p-4 flex items-start gap-4 sm:w-[50%] min-w-0">
                         <div class="flex flex-col items-center justify-center w-12 h-12 bg-white text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-100 shadow-sm shrink-0">
                             <span class="text-[9px] text-gray-400 uppercase leading-none mb-0.5 font-bold">Hall</span>
                             <span>${serial}</span>
                         </div>
                         <div class="min-w-0 flex-1 pt-0.5">
-                            <div class="font-bold text-gray-800 text-base leading-tight break-words pr-2">
+                            <div class="font-bold text-gray-800 text-base leading-tight break-words">
                                 ${roomName}
                             </div>
                              ${location ? `<div class="text-xs text-gray-500 font-medium mt-0.5 truncate flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>${location}</div>` : ''}
@@ -14549,8 +14549,9 @@ if (btnSessionReschedule) {
                         </div>
                     </div>
 
-                    <!-- Right: Actions -->
-                    <div class="w-full sm:w-auto sm:text-right min-w-[240px] pt-2 sm:pt-0 sm:pl-4 border-t sm:border-t-0 border-gray-100 sm:border-l sm:border-gray-50 mt-1 sm:mt-0">
+                    <!-- RIGHT PANEL: Actions (Flex-1 on PC) -->
+                    <!-- Added border-l for separation on PC -->
+                    <div class="p-3 sm:p-4 w-full sm:w-auto sm:flex-1 bg-gray-50/30 sm:bg-white border-t sm:border-t-0 sm:border-l border-gray-100 flex flex-col justify-center">
                         ${actionHtml}
                     </div>
                 </div>
