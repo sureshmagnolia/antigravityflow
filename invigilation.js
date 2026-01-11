@@ -3289,13 +3289,175 @@ function filterDisplayedLogs(query) {
     }).join('');
 }
 
-// --- LISTENER FOR EXCHANGE SEARCH ---
-const exchangeSearch = document.getElementById('exchange-search-input');
-if (exchangeSearch) {
-    exchangeSearch.addEventListener('input', () => {
-        if (currentUser) renderExchangeMarket(currentUser.email);
+// ==========================================
+// 📧 NOTIFICATION HELPER FUNCTIONS
+// ==========================================
+
+// Helper: Extract first name from full name
+window.getFirstName = function (fullName) {
+    if (!fullName) return "";
+    const parts = fullName.trim().split(' ');
+    return parts[0];
+};
+
+// Helper: Send individual email via mailto
+window.sendSingleEmail = function (btn, email, name, subject, body) {
+    if (!email) return alert("No email address available.");
+
+    // Create mailto link with HTML body
+    const mailtoLink = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoLink, '_blank');
+
+    // Update button state
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.remove('bg-gray-700', 'hover:bg-gray-800');
+        btn.classList.add('bg-green-600', 'cursor-not-allowed');
+        btn.innerHTML = '✓ Sent';
+    }
+};
+
+// Helper: Send all queued emails
+window.sendBulkEmails = function (btnId) {
+    if (!window.currentEmailQueue || window.currentEmailQueue.length === 0) {
+        return alert("No emails in queue.");
+    }
+
+    const btn = document.getElementById(btnId);
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Sending...';
+    }
+
+    let sent = 0;
+    window.currentEmailQueue.forEach((item, index) => {
+        setTimeout(() => {
+            const mailtoLink = `mailto:${item.email}?subject=${encodeURIComponent(item.subject)}&body=${encodeURIComponent(item.body)}`;
+            window.open(mailtoLink, '_blank');
+
+            // Update individual button
+            const itemBtn = document.getElementById(item.btnId);
+            if (itemBtn) {
+                itemBtn.disabled = true;
+                itemBtn.classList.remove('bg-gray-700', 'hover:bg-gray-800');
+                itemBtn.classList.add('bg-green-600', 'cursor-not-allowed');
+                itemBtn.innerHTML = '✓ Sent';
+            }
+
+            sent++;
+            if (sent === window.currentEmailQueue.length && btn) {
+                btn.innerHTML = `✓ Sent ${sent} Emails`;
+            }
+        }, index * 500); // Stagger emails by 500ms
     });
-}
+};
+
+// Helper: Cancel bulk sending
+window.cancelBulkSending = function () {
+    window.currentEmailQueue = [];
+    if (window.closeModal) window.closeModal('notification-modal');
+};
+
+// Trigger: Weekly staff notifications
+window.triggerBulkStaffEmail = function (monthStr, weekNum) {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+
+    title.textContent = `📧 Weekly Staff Notifications - Week ${weekNum}`;
+    subtitle.textContent = `Sending individual reminders to all invigilators for ${monthStr}, Week ${weekNum}`;
+    list.innerHTML = '<div class="text-center py-12 text-gray-400">Generating staff list...</div>';
+
+    // Collect all duties for this week
+    const weeklyDuties = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        if (invigilationSlots[key].isHidden) return;
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+
+        if (mStr === monthStr && wNum === weekNum) {
+            const [dateStr, timeStr] = key.split(' | ');
+            const dateObj = parseDate(key);
+            const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' });
+            const isAN = (timeStr.includes("PM") || timeStr.startsWith("12"));
+            const sessionCode = isAN ? "AN" : "FN";
+
+            invigilationSlots[key].assigned.forEach(email => {
+                if (!weeklyDuties[email]) weeklyDuties[email] = [];
+                weeklyDuties[email].push({ date: dateStr, day: dayName, time: timeStr, session: sessionCode });
+            });
+        }
+    });
+
+    if (Object.keys(weeklyDuties).length === 0) {
+        list.innerHTML = '<div class="text-center py-12 text-gray-400">No duties found for this week.</div>';
+        return;
+    }
+
+    // Generate UI
+    window.currentEmailQueue = [];
+    list.innerHTML = `
+        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(weeklyDuties).length}</b> faculty.</div>
+            <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" 
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition">
+                📧 Send Bulk Emails
+            </button>
+        </div>
+    `;
+
+    Object.keys(weeklyDuties).sort().forEach((email, index) => {
+        const duties = weeklyDuties[email];
+        duties.sort((a, b) => a.date.localeCompare(b.date));
+
+        const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+        const fullName = staff ? staff.name : email;
+        const firstName = getFirstName(fullName);
+
+        const emailSubject = `Invigilation Duties - ${monthStr} Week ${weekNum}`;
+        const emailBody = generateProfessionalEmail(fullName, duties, "Weekly Invigilation Schedule");
+        const btnId = `email-btn-week-${index}`;
+
+        window.currentEmailQueue.push({ email, name: fullName, subject: emailSubject, body: emailBody, btnId });
+
+        const waMsg = generateWeeklyWhatsApp(fullName, duties);
+        const smsMsg = generateWeeklySMS(firstName, duties);
+
+        let phone = staff ? (staff.phone || "") : "";
+        phone = phone.replace(/\D/g, '');
+        if (phone.length === 10) phone = "91" + phone;
+
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
+        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+        const phoneDisabled = phone ? "" : "disabled";
+
+        const safeName = fullName.replace(/'/g, "\\'");
+        const safeSubject = emailSubject.replace(/'/g, "\\'");
+        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
+                <div class="flex-1">
+                    <div class="font-bold text-gray-800">${fullName}</div>
+                    <div class="text-xs text-gray-500 mt-1">${duties.length} duties this week</div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="${btnId}" onclick="sendSingleEmail(this, '${email}', '${safeName}', '${safeSubject}', '${safeBody}')" 
+                        class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition">Mail</button>
+                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA</a>
+                </div>
+            </div>
+        `;
+    });
+};
+
+// Trigger: Department-wise notifications
+window.triggerBulkDeptEmail = function (monthStr, weekNum) {
+    alert("Department-wise notifications feature coming soon!");
+    // TODO: Implement department consolidation logic
+};
 
 // ==========================================
 // 📢 MESSAGING MENU (Selection Screen)
