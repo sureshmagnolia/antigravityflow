@@ -15043,26 +15043,45 @@ if (displayLoc) {
         w.document.write(`
         <html>
         <head>
-            <!-- ... (keep existing head/style) ... -->
             <title>Invigilation List - ${date}</title>
             <style>
                 body { font-family: 'Arial', sans-serif; padding: 20px; }
-                .header { text-align: center; margin-bottom: 15px; }
-                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; font-weight: bold; }
                 .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
                 .header h3 { margin: 5px 0 0; font-size: 12pt; }
                 
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
-                th { background: #eee; border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold; }
-                td { vertical-align: middle; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10pt; }
+                th { background: #eee; border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; }
+                td { vertical-align: middle; border: 1px solid #000; padding: 5px;}
                 
-                .footer { margin-top: 40px; display: flex; justify-content: space-between; font-size: 11pt; font-weight: bold; }
-                .footer div { text-align: center; width: 30%; border-top: 1px solid #000; padding-top: 5px; }
+                /* Footer Layout Fix */
+                .footer { 
+                    margin-top: 80px; /* Space for signature */
+                    display: flex; 
+                    justify-content: space-between; 
+                    padding: 0 40px;
+                }
+                .sign-box { 
+                    text-align: center; 
+                    min-width: 300px; /* Prevent squashing */
+                }
+                .official-name {
+                    font-weight: bold;
+                    font-size: 11pt;
+                    margin-bottom: 4px;
+                    white-space: nowrap; /* Forces single line */
+                    text-transform: uppercase;
+                }
+                .official-role {
+                    font-size: 10pt;
+                    white-space: nowrap; /* Forces single line */
+                }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>${currentCollegeName}</h1>
+                <h1>${collegeName || "Government Victoria College"}</h1>
                 <h2>${examName}</h2>
                 <h3>${date} &nbsp;|&nbsp; ${time}</h3>
             </div>
@@ -15083,19 +15102,22 @@ if (displayLoc) {
                 <tbody>${rowsHtml}</tbody>
             </table>
             <div class="footer">
-                <div>
-                   ${seniorName ? `<div style="margin-bottom:5px; font-weight:normal;">${seniorName}</div>` : '<br>'}
-                   Senior Assistant Superintendent
+                <div class="sign-box">
+                   <!-- Show Name if exists, otherwise display a signature line -->
+                   ${seniorName ? `<div class="official-name">${seniorName}</div>` : '<div style="border-top:1px solid #000; margin-bottom:8px;"></div>'}
+                   <div class="official-role">Senior Assistant Superintendent</div>
                 </div>
-                <div>
-                   ${chiefName ? `<div style="margin-bottom:5px; font-weight:normal;">${chiefName}</div>` : '<br>'}
-                   Chief Superintendent
+                
+                <div class="sign-box">
+                   ${chiefName ? `<div class="official-name">${chiefName}</div>` : '<div style="border-top:1px solid #000; margin-bottom:8px;"></div>'}
+                   <div class="official-role">Chief Superintendent</div>
                 </div>
             </div>
             <script>window.onload = () => window.print();<\/script>
         </body>
         </html>
     `);
+
         w.document.close();
     }
 
