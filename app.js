@@ -7249,6 +7249,26 @@ if (toggleButton && sidebar) {
                     const countDisplay = document.getElementById('room-count-display');
                     if (countDisplay) countDisplay.textContent = Object.keys(currentRoomConfig).length;
                 }
+
+                  const allRemainingRows = roomConfigContainer.querySelectorAll('.room-row');
+                if (allRemainingRows.length > 0) {
+                    const newLastRow = allRemainingRows[allRemainingRows.length - 1];
+                    const actionCell = newLastRow.querySelector('.flex.gap-2.shrink-0');
+                    if (actionCell) {
+                        // Remove placeholder if exists
+                        const placeholder = actionCell.querySelector('.w-\\[70px\\]');
+                        if (placeholder) placeholder.remove();
+                        
+                        // Add Remove button if not already there
+                        if (!actionCell.querySelector('.remove-room-button')) {
+                            const removeBtn = document.createElement('button');
+                            removeBtn.className = 'remove-room-button text-xs font-bold text-red-600 hover:text-red-800 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded transition';
+                            removeBtn.textContent = 'Remove';
+                            actionCell.appendChild(removeBtn);
+                        }
+                    }
+                }
+                
                 return;
             }
 
