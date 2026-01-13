@@ -6457,8 +6457,17 @@ if (toggleButton && sidebar) {
                 currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
                 const [date, time] = sessionKey.split(' | ');
 
-                // 1. Get Data for Session
-                const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+                // 1. Get Data for Session with Time Normalization
+                const sessionStudents = allStudentData.filter(s => 
+                    s.Date === date && normalizeTime(s.Time) === normalizeTime(time)
+                );
+                // Guard Clause: Alert if no students found (Fixes unresponsive button)
+                if (!sessionStudents || sessionStudents.length === 0) {
+                    alert(`No students found for session: ${date} | ${time}.\n\nPossible Cause:\n- Normalized Time Mismatch (e.g. '9:30' vs '09:30')\n- No data loaded for this specific slot.`);
+                    generateAbsenteeReportButton.disabled = false;
+                    generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
+                    return; 
+                }
                 const allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
                 const absenteeRegNos = new Set(allAbsentees[sessionKey] || []);
                 loadQPCodes();
