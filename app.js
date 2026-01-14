@@ -6536,8 +6536,18 @@ if (toggleButton && sidebar) {
             `;
                 let totalPages = 0;
 
-                const sortedKeys = Object.keys(qpStreamGroups).sort();
-                const selectedFilterQP = absenteeQpFilter ? absenteeQpFilter.value : "all";
+                // SORT: "Regular" First, then Alphabetical
+                const sortedKeys = Object.keys(qpStreamGroups).sort((a, b) => {
+                    const streamA = qpStreamGroups[a].stream;
+                    const streamB = qpStreamGroups[b].stream;
+
+                    // Logic: If A is Regular, it wins (-1). If B is Regular, it wins (1).
+                    if (streamA === 'Regular' && streamB !== 'Regular') return -1;
+                    if (streamA !== 'Regular' && streamB === 'Regular') return 1;
+                    
+                    // Otherwise sort normally (alphabetically)
+                    return a.localeCompare(b);
+                });                const selectedFilterQP = absenteeQpFilter ? absenteeQpFilter.value : "all";
                 for (const key of sortedKeys) {
                     totalPages++;
                     const data = qpStreamGroups[key];
