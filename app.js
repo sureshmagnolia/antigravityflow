@@ -6653,7 +6653,43 @@ if (toggleButton && sidebar) {
                 generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
             }
         });
+
+    // --- NEW: Print Button Listener (Opens New Tab) ---
+    const btnPrintReport = document.getElementById('btn-print-report');
+    if (btnPrintReport) {
+        btnPrintReport.addEventListener('click', () => {
+            const reportContent = document.getElementById('absentee-report-output').innerHTML;
+            if (!reportContent) { alert("Please generate a report first."); return; }
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Absentee Report</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 20px; }
+                        table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+                        th, td { border: 1px solid black; padding: 5px; text-align: left; }
+                        th { background-color: #eee; font-weight: bold; }
+                        h1, h2, h3 { text-align: center; margin: 5px 0; }
+                        .absentee-footer { margin-top: 50px; display: flex; justify-content: space-between; }
+                        .print-page { page-break-after: always; margin-bottom: 20px; }
+                        @media print { .no-print { display: none; } }
+                    </style>
+                </head>
+                <body>
+                    ${reportContent}
+                    <script>
+                        window.onload = function() { window.print(); };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        });
     }
+        
+}
 
     // *** UPDATED: Event listener for "Generate Scribe Report" (Stream Label Added) ***
     generateScribeReportButton.addEventListener('click', async () => {
