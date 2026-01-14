@@ -6443,8 +6443,17 @@ if (toggleButton && sidebar) {
 
     // --- Event listener for "Generate Absentee Statement" (Clean B&W Style) ---
     if (generateAbsenteeReportButton) {
+
         generateAbsenteeReportButton.addEventListener('click', async () => {
+            // FIX: Use Unique IDs for this button only
+            const reportOutputArea = document.getElementById('absentee-report-output');
+            const reportControls = document.getElementById('absentee-report-controls');
+            const reportStatus = document.getElementById('absentee-report-status');
+            const roomCsvDownloadContainer = document.getElementById('absentee-room-csv-container');
+
             const sessionKey = sessionSelect.value;
+
+        
             if (!sessionKey) { alert("Please select a session first."); return; }
 
             generateAbsenteeReportButton.disabled = true;
