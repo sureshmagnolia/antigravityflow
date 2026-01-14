@@ -14789,6 +14789,33 @@ if (btnSessionReschedule) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
+        // --- START FIX: Remove Old Invigilator from Pool ---
+        const oldName = currentInvigMapping[room];
+        if (oldName && oldName !== name) { // If we are replacing someone
+            // 1. Find the Email of the Old Staff (Pool uses Emails)
+            const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+            const oldStaff = staffData.find(s => s.name === oldName);
+            
+            if (oldStaff && oldStaff.email) {
+                // 2. Remove them from the Session Slot "Assigned" List (The Pool)
+                const allSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+                const slot = allSlots[sessionKey];
+                
+                if (slot && slot.assigned) {
+                    const idx = slot.assigned.indexOf(oldStaff.email);
+                    if (idx > -1) {
+                        slot.assigned.splice(idx, 1); // Remove from pool
+                        localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
+                        
+                        // Force Sync 'slots' explicitly (since we modified it)
+                        if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
+                    }
+                }
+            }
+        }
+        // --- END FIX ---
+
+        
         currentInvigMapping[room] = name;
 
         // Save Global
