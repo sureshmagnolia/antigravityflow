@@ -6605,7 +6605,7 @@ if (toggleButton && sidebar) {
 
                     allPagesHtml += `
                     <div class="print-page">
-                        <div class="print-header-group" style="position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                        <div class="print-header-group" style="position: relative; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; padding-top: 40px;">
                             
                             <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 12pt; border: 2px solid #000; padding: 4px 10px;">
                                 ${data.stream}
