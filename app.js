@@ -1296,6 +1296,8 @@ function updateLocalSlotsFromStudents() {
 
     // --- (V58) Global var for QP Code data ---
     let qpCodeMap = {};
+    // --- NEW GLOBAL VARIABLE ---
+    let qpSessionUnsubscribe = null;
 
     // --- Room Allotment Data ---
     let currentSessionAllotment = [];
@@ -8036,6 +8038,46 @@ window.real_populate_session_dropdown = function () {
         qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
     }
 
+    // --- NEW: Real-time Cloud Listener ---
+    function subscribeToQPSession(sessionKey) {
+        // 1. Unsubscribe from previous session if any
+        if (qpSessionUnsubscribe) {
+            qpSessionUnsubscribe();
+            qpSessionUnsubscribe = null;
+        }
+
+        if (!sessionKey || !window.firebase) return;
+
+        const { db, doc, onSnapshot } = window.firebase;
+        if (!currentCollegeId) return;
+
+        // 2. Generate ID and Ref
+        const sessionId = generateSessionId(sessionKey);
+        const docRef = doc(db, 'colleges', currentCollegeId, 'sessions', sessionId);
+
+        console.log(`📡 Listening for QP Updates on ${sessionId}...`);
+
+        // 3. Start Listening
+        qpSessionUnsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const cloudQPs = data.qpCodes || {};
+
+                // 4. Update Local Storage with Cloud Data
+                if (typeof qpCodeMap === 'undefined') qpCodeMap = {};
+                
+                qpCodeMap[sessionKey] = cloudQPs;
+                localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
+                
+                // 5. Refresh UI (Only if user is still looking at this session)
+                if (sessionSelectQP.value === sessionKey) {
+                     render_qp_code_list(sessionKey);
+                }
+            }
+        });
+    }
+
+    
 window.real_populate_qp_code_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
@@ -8102,17 +8144,28 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
     
 
-    // V61: Event listener for the QP Code session dropdown
+    // Event listener for the QP Code session dropdown
     sessionSelectQP.addEventListener('change', () => {
         const sessionKey = sessionSelectQP.value;
         if (sessionKey) {
             qpEntrySection.classList.remove('hidden');
             render_qp_code_list(sessionKey);
+            
+            // --- ADD THIS LINE ---
+            subscribeToQPSession(sessionKey); 
+            // --------------------
+
         } else {
             qpEntrySection.classList.add('hidden');
             qpCodeContainer.innerHTML = '';
             qpCodeStatus.textContent = '';
-            saveQpCodesButton.disabled = true; // V62: Disable save button
+            saveQpCodesButton.disabled = true;
+
+            // --- OPTIONAL: Stop listening if cleared ---
+            if (qpSessionUnsubscribe) {
+                qpSessionUnsubscribe();
+                qpSessionUnsubscribe = null;
+            }
         }
     });
 
