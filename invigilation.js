@@ -6384,6 +6384,8 @@ window.cancelBulkSending = function () {
     }
 }
 
+
+
 // --- UNIFIED SEARCH HANDLER (CS, SAS, SUBSTITUTE) ---
 function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
     const input = document.getElementById(inputId);
@@ -6430,17 +6432,48 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
                     <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
                 `;
 
+                // --- CHANGED: ONCLICK LOGIC WITH AUTO-SWAP ---
                 div.onclick = () => {
+                    // 1. Capture Old Supervisor Email (Before Change)
+                    let oldEmail = null;
+                    if (hidden && (inputId === 'att-cs-search' || inputId === 'att-sas-search')) {
+                        oldEmail = hidden.value;
+                    }
+
+                    // 2. Set New Values
                     input.value = s.name;
                     if (hidden) hidden.value = s.email;
 
-                    // Special case for Substitute (Global Var)
+                    // Special case for Substitute
                     if (inputId === 'att-substitute-search') {
                         currentSubstituteCandidate = s;
                     }
 
+                    // 3. AUTO-SWAP: Remove Old & Add New
+                    if (inputId === 'att-cs-search' || inputId === 'att-sas-search') {
+                        // A. Remove Previous Supervisor
+                        if (oldEmail && oldEmail !== s.email) {
+                            const oldCheckbox = document.querySelector(`.att-chk[value="${oldEmail}"]`);
+                            if (oldCheckbox) {
+                                oldCheckbox.closest('.group').remove();
+                            }
+                        }
+
+                        // B. Add New Supervisor (Check duplicates)
+                        const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
+                        if (!existing.includes(s.email)) {
+                            if (typeof addAttendanceRow === 'function') {
+                                addAttendanceRow(s.email);
+                            }
+                        }
+                        
+                        // C. Update Counts
+                        if (window.updateAttCount) window.updateAttCount();
+                    }
+
                     results.classList.add('hidden');
                 };
+                // ---------------------------------------------
                 results.appendChild(div);
             });
         }
@@ -6454,6 +6487,10 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
         }
     });
 }
+
+
+
+
 window.viewSlotHistory = function (key) {
     const slot = invigilationSlots[key];
     if (!slot || !slot.allocationLog) return alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
