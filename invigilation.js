@@ -6394,6 +6394,14 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
 
     if (!input || !results) return;
 
+    // --- NEW: Capture "Old" Email on Focus (Before it gets cleared by typing) ---
+    input.addEventListener('focus', function() {
+        if (hidden && hidden.value) {
+            input.dataset.oldValue = hidden.value;
+        }
+    });
+    // --------------------------------------------------------------------------
+
     input.addEventListener('input', function () {
         const query = this.value.toLowerCase();
 
@@ -6434,15 +6442,15 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
 
                 // --- CHANGED: ONCLICK LOGIC WITH AUTO-SWAP ---
                 div.onclick = () => {
-                    // 1. Capture Old Supervisor Email (Before Change)
-                    let oldEmail = null;
-                    if (hidden && (inputId === 'att-cs-search' || inputId === 'att-sas-search')) {
-                        oldEmail = hidden.value;
-                    }
-
+                    // 1. Retrieve the Old Email we saved during 'focus'
+                    let oldEmail = input.dataset.oldValue || null;
+                    
                     // 2. Set New Values
                     input.value = s.name;
                     if (hidden) hidden.value = s.email;
+                    
+                    // Update dataset for next time (So if they swap again immediately, it works)
+                    input.dataset.oldValue = s.email; 
 
                     // Special case for Substitute
                     if (inputId === 'att-substitute-search') {
@@ -6451,7 +6459,7 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
 
                     // 3. AUTO-SWAP: Remove Old & Add New
                     if (inputId === 'att-cs-search' || inputId === 'att-sas-search') {
-                        // A. Remove Previous Supervisor
+                        // A. Remove Previous Supervisor (Using the captured oldEmail)
                         if (oldEmail && oldEmail !== s.email) {
                             const oldCheckbox = document.querySelector(`.att-chk[value="${oldEmail}"]`);
                             if (oldCheckbox) {
@@ -6487,6 +6495,8 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
         }
     });
 }
+
+
 
 
 
