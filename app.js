@@ -7876,6 +7876,17 @@ window.real_populate_session_dropdown = function () {
             countBadge.textContent = currentAbsenteeList.length;
         }
 
+        if (generateAbsenteeReportButton) {
+            const hasData = currentAbsenteeList.length > 0;
+            generateAbsenteeReportButton.disabled = !hasData;
+            if (hasData) {
+                generateAbsenteeReportButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                generateAbsenteeReportButton.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        
+
         currentAbsenteeListDiv.innerHTML = "";
 
         if (currentAbsenteeList.length === 0) {
