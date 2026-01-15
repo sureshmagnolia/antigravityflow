@@ -577,3 +577,54 @@ This annexure exhaustively lists every function found in the codebase. (Auto-Gen
 | **`updateTriggerText(select, trigger)`** | Utility / Helper function. |
 | **`updateUniqueStudentList()`** | Utility / Helper function. |
 | **`verifyPermission(fileHandle, withWrite)`** | Utility / Helper function. |
++
++## 6. Data Models & Schemas (AI Context)
++**Strict Type Definitions for Global Objects**
++
++### **A. Staff Object (`staffData[i]`)**
++Global Array: `window.staffData`
++```javascript
++{
++  name: "John Doe",          // string
++  email: "john@college.edu", // string (Unique ID)
++  phone: "9876543210",       // string
++  dept: "CSE",               // string (Matches Departments List)
++  designation: "Professor",  // string
++  joiningDate: "2023-01-01", // string (YYYY-MM-DD)
++  preferredDays: [1, 2, 3]   // array<int> (0=Sun, 1=Mon... 6=Sat)
++}
++```
++
++### **B. Invigilation Slot (`invigilationSlots[key]`)**
++Global Object: `window.invigilationSlots`
++Key Format: `YYYY-MM-DD_FN` or `YYYY-MM-DD_AN`
++```javascript
++{
++  date: "2024-05-10",        // string
++  session: "FN",             // string ("FN" | "AN")
++  assigned: ["email1", ...], // array<string> (List of Staff Emails)
++  attendance: ["email1"],    // array<string> (Checked-in Staff)
++  supervision: {             // object
++    cs: "chief@college.edu", // string | null
++    sas: "asst@college.edu"  // string | null
++  },
++  unavailable: [             // array<string | object>
++    "email@busy.com",        // Simple string = Busy
++    { email: "x@y.com", reason: "OD" } // Object = Detailed Reason
++  ],
++  isLocked: boolean          // Admin Lock
++}
++```
++
++### **C. Room Allotment (`currentSessionAllotment`)**
++Storage Key: `invig_room_allotment`
++Structure: Map of `RoomName` -> `StudentList`
++```javascript
++{
++  "A-203": [
++    { regNo: "123", name: "Student A", course: "Math" },
++    { regNo: "124", name: "Student B", course: "Physics" }
++  ],
++  "B-101": [...]
++}
++```
