@@ -11082,7 +11082,9 @@ function renderScribeAllotmentList(sessionKey) {
             const newExamName = document.getElementById('bulk-new-exam-name').value.trim(); // <--- NEW
 
             // Get Targets
-            const targetCourse = document.getElementById('edit-course-select').value;
+            // FIX: Use currentEditCourse global because the dropdown value is 'Course|Stream'
+            const targetCourse = currentEditCourse;
+            const targetStream = currentEditStream; 
             const [oldDate, oldTime] = document.getElementById('edit-session-select').value.split(' | ');
 
             // 2. Validation: Ensure at least one field is being updated
@@ -11118,7 +11120,8 @@ function renderScribeAllotmentList(sessionKey) {
             const recordsToUpdate = allStudentData.filter(s =>
                 s.Date === oldDate &&
                 s.Time === oldTime &&
-                s.Course === targetCourse
+                s.Course === targetCourse &&
+                (s.Stream || "Regular") === targetStream // FIX: Added Stream Check
             );
 
             if (recordsToUpdate.length === 0) {
@@ -11146,9 +11149,13 @@ Are you sure you want to update these records?
             if (confirm(confirmMsg)) {
                 let updateCount = 0;
 
-                // 6. Apply Updates
+            // 6. Apply Updates
                 allStudentData.forEach(student => {
-                    if (student.Date === oldDate && student.Time === oldTime && student.Course === targetCourse) {
+                    // FIX: Added Stream check to ensure we target the correct group
+                    if (student.Date === oldDate && 
+                        student.Time === oldTime && 
+                        student.Course === targetCourse && 
+                        (student.Stream || "Regular") === targetStream) {
                         
                         // Update fields only if provided
                         if (newExamName) student['Exam Name'] = newExamName; // <--- THE FIX
