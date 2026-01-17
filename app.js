@@ -14856,13 +14856,28 @@ if (btnSessionReschedule) {
                 
                 if (slot && slot.assigned) {
                     const idx = slot.assigned.indexOf(oldStaff.email);
-                    if (idx > -1) {
-                        slot.assigned.splice(idx, 1); // Remove from pool
-                        localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
-                        
-                        // Force Sync 'slots' explicitly (since we modified it)
-                        if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
-                    }
+
+                    // [NEW CODE] - Paste this instead
+if (idx > -1) {
+    // 1. Remove from active pool (so they don't show as Reserve)
+    slot.assigned.splice(idx, 1); 
+
+    // 2. Add to 'replaced' history (So they are NOT deleted from system)
+    if (!slot.replaced) slot.replaced = [];
+    slot.replaced.push({
+        original: oldStaff.email,
+        replacement: name,
+        room: room,
+        timestamp: new Date().toISOString()
+    });
+
+    localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
+    
+    // Force Sync 'slots'
+    if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
+}
+
+                    
                 }
             }
         }
