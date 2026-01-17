@@ -4171,7 +4171,7 @@ if (toggleButton && sidebar) {
             const cellIndex = firstDayIndex + day - 1;
             const rowIndex = Math.floor(cellIndex / 7);
             const colIndex = cellIndex % 7; // 0=Sun, 6=Sat
-            const isTopRow = rowIndex === 0;
+            const isTopRow = rowIndex < 3;
 
             // 1. Tooltip Positioning Logic (Smart Anchoring)
             // Mobile: Anchor Left for first 2 cols, Right for last 2 cols, Center for middle
