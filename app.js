@@ -4314,7 +4314,7 @@ if (toggleButton && sidebar) {
             const arrowVerticalClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
 
             const tooltip = tooltipHtml ? `
-            <div class="absolute ${posClass} ${tooltipPosClass} w-32 md:w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-[100] hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
+            <div class="absolute ${posClass} ${tooltipPosClass} w-32 md:w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-[1000] hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
                 <div class="absolute ${arrowVerticalClass} ${arrowPosClass} border-4 border-transparent"></div>
             </div>
