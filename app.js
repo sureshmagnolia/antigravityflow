@@ -4234,7 +4234,7 @@ if (toggleButton && sidebar) {
                     }
                 }
 
-                // Tooltip Content Generation
+                // Tooltip Content Generation (Mobile Optimized)
                 if (hasFN) {
                     const regReq = Math.ceil(data.am.regCount / 30);
                     const othReq = Math.ceil(data.am.othCount / 30);
@@ -4247,15 +4247,18 @@ if (toggleButton && sidebar) {
                     tooltipHtml += `
                     <div class='mb-2 pb-2 border-b border-gray-200'>
                         <div class="flex justify-between items-center">
-                            <strong class='text-red-600 uppercase text-[10px]'>Morning (FN)</strong>
-                            <span class='text-gray-900 font-bold text-[10px]'>${data.am.students}</span>
+                            <!-- UPDATED: text-[10px] -> text-xs -->
+                            <strong class='text-red-600 uppercase text-xs'>Morning (FN)</strong>
+                            <span class='text-gray-900 font-bold text-xs'>${data.am.students}</span>
                         </div>
-                        <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
-                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                        <!-- UPDATED: p-1 -> p-2 for touch targets -->
+                        <div class="mt-1 bg-gray-50 p-2 rounded border border-gray-100">
+                            <div class="flex justify-between text-xs font-bold text-gray-700">
                                 <span>Invigs:</span>
-                                <span class="text-blue-700 text-[11px]">${totalReq}</span>
+                                <span class="text-blue-700">${totalReq}</span>
                             </div>
-                            <div class="text-[9px] text-gray-400 text-right font-normal leading-tight">${details}</div>
+                            <!-- UPDATED: text-[9px] -> text-[11px] -->
+                            <div class="text-[11px] text-gray-500 text-right leading-snug mt-1">${details}</div>
                         </div>
                     </div>`;
                 }
@@ -4271,15 +4274,17 @@ if (toggleButton && sidebar) {
                     tooltipHtml += `
                     <div>
                         <div class="flex justify-between items-center">
-                            <strong class='text-red-600 uppercase text-[10px]'>Afternoon (AN)</strong>
-                            <span class='text-gray-900 font-bold text-[10px]'>${data.pm.students}</span>
+                            <!-- UPDATED: text-[10px] -> text-xs -->
+                            <strong class='text-red-600 uppercase text-xs'>Afternoon (AN)</strong>
+                            <span class='text-gray-900 font-bold text-xs'>${data.pm.students}</span>
                         </div>
-                        <div class="mt-1 bg-gray-50 p-1 rounded border border-gray-100">
-                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                        <div class="mt-1 bg-gray-50 p-2 rounded border border-gray-100">
+                            <div class="flex justify-between text-xs font-bold text-gray-700">
                                 <span>Invigs:</span>
-                                <span class="text-blue-700 text-[11px]">${totalReq}</span>
+                                <span class="text-blue-700">${totalReq}</span>
                             </div>
-                            <div class="text-[9px] text-gray-400 text-right font-normal leading-tight">${details}</div>
+                            <!-- UPDATED: text-[9px] -> text-[11px] -->
+                            <div class="text-[11px] text-gray-500 text-right leading-snug mt-1">${details}</div>
                         </div>
                     </div>`;
                 }
@@ -4293,7 +4298,7 @@ if (toggleButton && sidebar) {
             const arrowVerticalClass = isTopRow ? "bottom-full border-b-white" : "top-full border-t-white";
 
             const tooltip = tooltipHtml ? `
-            <div class="absolute ${posClass} ${tooltipPosClass} w-48 md:w-56 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-[100] hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
+            <div class="absolute ${posClass} ${tooltipPosClass} w-64 bg-white text-gray-800 text-xs rounded-lg p-3 shadow-xl z-[100] hidden group-hover:block pointer-events-none border border-red-200 ring-1 ring-red-100">
                 ${tooltipHtml}
                 <div class="absolute ${arrowVerticalClass} ${arrowPosClass} border-4 border-transparent"></div>
             </div>
