@@ -13446,11 +13446,12 @@ window.handlePythonExtraction = function (jsonString) {
 
                 const sessionKey = `${s.Date} | ${s.Time}`;
                 if (!sessions.has(sessionKey)) {
-                    sessions.add(sessionKey);
-                    // Lookup Exam Name
-                    const name = getExamName(s.Date, s.Time, sStream);
-                    if (name) examNames.add(name);
-                }
+                sessions.add(sessionKey);
+                // Lookup Exam Name
+                // FIX: Use the tag from student data first
+                const name = s['Exam Name'] || getExamName(s.Date, s.Time, sStream);
+                if (name) examNames.add(name);
+            }
             });
         }
 
