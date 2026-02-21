@@ -94,6 +94,7 @@ let allocUnsubscribe = null; // For invigilation mapping
 let advanceUnavailability = {}; // Stores { "DD.MM.YYYY": { FN: [], AN: [] } }
 let globalDutyTarget = 2; // Default
 let guestGlobalTarget = 2; // Default (Guest Lecturer Base)
+let vacationDutyTarget = 0; // Default (Vacation Target)
 let googleScriptUrl = "";
 let isEmailConfigLocked = true; // <--- NEW
 let isRoleLocked = true;
@@ -369,6 +370,8 @@ function applyCollegeConfig(data, mode, triggerRender) {
     
     if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
     if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
+    if (collegeData.invigVacationTarget !== undefined) vacationDutyTarget = parseInt(collegeData.invigVacationTarget);
+
 
     if (triggerRender && mode === 'admin') {
         if (document.getElementById('view-admin').classList.contains('hidden') &&
@@ -2994,6 +2997,14 @@ window.openRoleConfigModal = function () {
         guestInput.disabled = true;
     }
 
+
+    const vacationInput = document.getElementById('vacation-duty-target');
+    if (vacationInput) {
+        vacationInput.value = vacationDutyTarget;
+        vacationInput.disabled = true; // Will be toggled by the lock button
+    }
+
+    
     // 4. Render Lists
     renderRolesList();
     if (typeof renderDepartmentsList === "function") renderDepartmentsList();
@@ -3090,12 +3101,15 @@ window.deleteRoleConfig = function (role) {
 window.saveRoleConfig = async function () {
     const newGlobal = parseInt(document.getElementById('global-duty-target').value);
     const newGuest = parseInt(document.getElementById('guest-duty-target').value);
+    const newVacation = parseInt(document.getElementById('vacation-duty-target').value) || 0;
 
     if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
     if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
 
     globalDutyTarget = newGlobal;
     guestGlobalTarget = newGuest;
+    vacationDutyTarget = newVacation;
+
 
     // CAPTURE URL
     const newUrl = document.getElementById('google-script-url').value.trim();
@@ -3108,6 +3122,8 @@ window.saveRoleConfig = async function () {
         invigDepartments: JSON.stringify(departmentsConfig),
         invigGlobalTarget: globalDutyTarget,
         invigGuestTarget: guestGlobalTarget, // <--- SAVED HERE
+        invigVacationTarget: vacationDutyTarget,
+
         invigGoogleScriptUrl: googleScriptUrl
     });
 
@@ -5600,6 +5616,8 @@ window.toggleGlobalTargetLock = function () {
     const input = document.getElementById('global-duty-target');
     const guestInput = document.getElementById('guest-duty-target');
     const btn = document.getElementById('global-target-lock-btn');
+    const vacInput = document.getElementById('vacation-duty-target');
+
 
     if (input) {
         input.disabled = isGlobalTargetLocked;
@@ -5624,6 +5642,18 @@ window.toggleGlobalTargetLock = function () {
         }
     }
 
+    if (vacInput) {
+        vacInput.disabled = isGlobalTargetLocked;
+        if (!isGlobalTargetLocked) {
+            vacInput.classList.remove('text-gray-600');
+            vacInput.classList.add('text-black', 'bg-white');
+        } else {
+            vacInput.classList.add('text-gray-600');
+            vacInput.classList.remove('text-black', 'bg-white');
+        }
+    }
+
+    
     if (btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
     if (!isGlobalTargetLocked && input) input.focus();
 }
