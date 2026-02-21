@@ -397,6 +397,18 @@ function initAdminDashboard() {
 
     showView('admin');
 }
+
+
+function isDateInVacation(dateObj) {
+    if (!vacationStart || !vacationEnd) return false;
+    const start = new Date(vacationStart);
+    const end = new Date(vacationEnd);
+    return dateObj >= start && dateObj <= end;
+}
+
+
+
+
 // Updated: Calculate Duties Done based on actual attendance (Filtered by Current AY)
 function getDutiesDoneCount(email) {
     let count = 0;
@@ -409,6 +421,8 @@ function getDutiesDoneCount(email) {
 
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
+        
+        if (isDateInVacation(dateObj)) return;
 
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
@@ -416,6 +430,41 @@ function getDutiesDoneCount(email) {
     });
     return count;
 }
+
+function getVacationDutiesDoneCount(email) {
+    let count = 0;
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        
+        // Only count if it's actually in the vacation period
+        if (isDateInVacation(dateObj)) {
+            // Check if attended (or assigned if no attendance data yet)
+            if (slot.attendance && slot.attendance.length > 0) {
+                if (slot.attendance.includes(email)) count++;
+            } else if (slot.assigned.includes(email)) {
+                count++;
+            }
+        }
+    });
+    return count;
+}
+
+
+// Centralized way to get the pending count based on the specific session date
+function getPendingCountForSession(staffEmail, sessionKey) {
+    const s = staffData.find(st => st.email === staffEmail);
+    if (!s) return 0;
+
+    const dateObj = sessionKey ? parseDate(sessionKey) : new Date();
+
+    if (isDateInVacation(dateObj)) {
+        return Math.max(0, vacationDutyTarget - getVacationDutiesDoneCount(staffEmail));
+    } else {
+        return Math.max(0, calculateStaffTarget(s) - getDutiesDoneCount(staffEmail));
+    }
+}
+
 
 
 function calculateStaffTarget(staff) {
