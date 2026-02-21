@@ -2592,7 +2592,8 @@ window.runAutoAllocation = async function () {
                 if (dAssigned >= Math.ceil(dTotal * 0.5)) return null;
             }
 
-            let score = s.pending * 100;
+            const dynamicPending = getPendingCountForSession(s.email, key);
+            let score = dynamicPending * 100;
             let warnings = [];
 
             // Weekly Soft Limit
@@ -4274,7 +4275,8 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 if (slot.assigned.includes(s.email)) return null;
                 if (isUserUnavailable(slot, s.email, key)) return null;
 
-                let score = s.pending * 100;
+                const dynamicPending = getPendingCountForSession(s.email, key);
+                let score = dynamicPending * 100;
                 let warnings = [];
 
                 // --- 1. Adjacent Day Rule ---
@@ -6513,10 +6515,15 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
         } else {
             matches.forEach(s => {
                 const div = document.createElement('div');
+                
+                const currentSessionKey = document.getElementById('manual-session-key').value;
+                const dynamicPending = getPendingCountForSession(s.email, currentSessionKey);
+                
                 div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
                 div.innerHTML = `
                     <span class="font-bold text-gray-800 text-xs">${s.name}</span>
                     <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
+                    <span class="text-[10px] font-bold ${dynamicPending > 0 ? 'text-red-500' : 'text-green-500'} ml-2">P: ${dynamicPending}</span>
                 `;
 
                 // --- CHANGED: ONCLICK LOGIC WITH AUTO-SWAP ---
