@@ -6516,9 +6516,7 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
             matches.forEach(s => {
                 const div = document.createElement('div');
                 
-                const currentSessionKey = document.getElementById('manual-session-key').value;
-                const dynamicPending = getPendingCountForSession(s.email, currentSessionKey);
-                
+               
                 div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
                                 // Start NEW code
                 const currentSessionKey = document.getElementById('manual-session-key').value;
