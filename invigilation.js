@@ -6520,11 +6520,19 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
                 const dynamicPending = getPendingCountForSession(s.email, currentSessionKey);
                 
                 div.className = "p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 transition flex justify-between items-center";
+                                // Start NEW code
+                const currentSessionKey = document.getElementById('manual-session-key').value;
+                const dynamicPending = getPendingCountForSession(s.email, currentSessionKey);
+                
                 div.innerHTML = `
                     <span class="font-bold text-gray-800 text-xs">${s.name}</span>
-                    <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
-                    <span class="text-[10px] font-bold ${dynamicPending > 0 ? 'text-red-500' : 'text-green-500'} ml-2">P: ${dynamicPending}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] text-gray-500 uppercase bg-gray-50 px-1 rounded">${s.dept}</span>
+                        <span class="text-[10px] font-bold ${dynamicPending > 0 ? 'text-red-500' : 'text-green-500'}">P: ${dynamicPending}</span>
+                    </div>
                 `;
+                // End NEW code
+
 
                 // --- CHANGED: ONCLICK LOGIC WITH AUTO-SWAP ---
                 div.onclick = () => {
