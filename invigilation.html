@@ -961,14 +961,14 @@
 
             <div class="flex-1 overflow-y-auto custom-scroll min-h-0 pr-1">
 
-                <div class="mb-4 flex flex-col sm:flex-row gap-4">
+                
+                <div class="mb-4 flex flex-col md:flex-row gap-4">
                     <!-- Global Default -->
                     <div class="flex-1 bg-blue-50 p-3 rounded border border-blue-100">
                         <div class="flex justify-between items-center mb-1">
                             <label class="block text-xs font-bold text-blue-800">Global Default Duty</label>
                             <button id="global-target-lock-btn" onclick="toggleGlobalTargetLock()"
-                                class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒
-                                Locked</button>
+                                class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒 Locked</button>
                         </div>
                         <div class="flex items-center gap-2">
                             <input type="number" id="global-duty-target"
@@ -982,7 +982,6 @@
                     <div class="flex-1 bg-yellow-50 p-3 rounded border border-yellow-100">
                         <div class="flex justify-between items-center mb-1">
                             <label class="block text-xs font-bold text-yellow-800">Guest Lecturer Base</label>
-                            <!-- Shares lock with Global for simplicity, or could add separate lock -->
                         </div>
                         <div class="flex items-center gap-2">
                             <input type="number" id="guest-duty-target"
@@ -991,7 +990,22 @@
                             <span class="text-xs text-yellow-700 leading-tight">Base Target<br>(Scaled by Days)</span>
                         </div>
                     </div>
+
+                    <!-- NEW: Vacation Default -->
+                    <div class="flex-1 bg-orange-50 p-3 rounded border border-orange-100">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-xs font-bold text-orange-800">Vacation Default</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="vacation-duty-target"
+                                class="w-16 p-1.5 border border-orange-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition"
+                                min="0" disabled>
+                            <span class="text-xs text-orange-700 leading-tight">During<br>Vacation</span>
+                        </div>
+                    </div>
                 </div>
+
+                
 
 
 
