@@ -8523,12 +8523,16 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (backupDataButton) {
         backupDataButton.addEventListener('click', () => {
             const backupData = {};
-            ALL_DATA_KEYS.forEach(key => {
+            for (const key of ALL_DATA_KEYS) {
+            if (key === BASE_DATA_KEY) {
+                const idbData = await loadExamDataIDB();
+                if (idbData && idbData.length > 0) backupData[key] = JSON.stringify(idbData);
+            } else {
                 const data = localStorage.getItem(key);
-                if (data) {
-                    backupData[key] = data;
-                }
-            });
+                if (data) backupData[key] = data;
+            }
+        }
+
 
             if (Object.keys(backupData).length === 0) {
                 alert("No data found in local storage to back up.");
@@ -8856,8 +8860,13 @@ window.real_populate_qp_code_session_dropdown = function () {
         const restoredData = JSON.parse(text);
 
         for (const key in restoredData) {
-            localStorage.setItem(key, restoredData[key]);
+            if (key === BASE_DATA_KEY) {
+                await saveExamDataIDB(JSON.parse(restoredData[key]));
+            } else {
+                localStorage.setItem(key, restoredData[key]);
+            }
         }
+
 
         alert(`✅ Restored from ${file.name}.\nPage will reload.`);
         window.location.reload();
