@@ -13477,36 +13477,50 @@ async function loadInitialData() {
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
             // 2. Check for base student data persistence
             const savedData = await loadExamDataIDB();
-            if (savedDataJson) {
-                try {
-                    const savedData = JSON.parse(savedDataJson);
-                    if (savedData && savedData.length > 0) {
-                        jsonDataStore.innerHTML = JSON.stringify(savedData);
 
-                        // Enable UI
-                        if (typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
-                        if (typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
-                        if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
-                        if (typeof disable_scribe_settings_tab === 'function') disable_scribe_settings_tab(false);
-                        if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
-                        if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
-
-                        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
-                        if (typeof populate_qp_code_session_dropdown === 'function') populate_qp_code_session_dropdown();
-                        if (typeof populate_room_allotment_session_dropdown === 'function') populate_room_allotment_session_dropdown();
-                        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                        if (typeof updateDashboard === 'function') updateDashboard();
-
-                        // NOTE: renderExamNameSettings was removed from here because it's now in Step 1
-
-                        console.log(`Successfully loaded ${savedData.length} records.`);
-                        const statusLog = document.getElementById("status-log");
-                        if (statusLog) statusLog.innerHTML = `<p class="mb-1 text-green-700">&gt; Data loaded from memory.</p>`;
-                    }
-                } catch (e) {
-                    console.error("Failed to parse saved student data:", e);
+    // 2. Check for base student data persistence in IndexedDB
+    const savedData = await loadExamDataIDB(); 
+    if (savedData && savedData.length > 0) {
+        try {
+            // No need to parse JSON, IDB returns the object directly
+            // We create dummy data stores to allow reports to run
+            const qPaperSummary = {};
+            
+            savedData.forEach(student => {
+                const key = `${student.Date}_${student.Time}_${student.Course}`;
+                if (!qPaperSummary[key]) {
+                    qPaperSummary[key] = { 
+                        Date: student.Date, 
+                        Time: student.Time, 
+                        Course: student.Course, 
+                        'Student Count': 0 
+                    };
                 }
-            }
+                qPaperSummary[key]['Student Count']++;
+            });
+            
+            // Update UI Stores
+            jsonDataStore.innerHTML = JSON.stringify(savedData);
+            qPaperDataStore.innerHTML = JSON.stringify(Object.values(qPaperSummary));
+            
+            // Enable UI
+            generateReportButton.disabled = false;
+            generateQPaperReportButton.disabled = false;
+            generateDaywiseReportButton.disabled = false;
+            generateScribeReportButton.disabled = false;
+            disable_absentee_tab(false);
+            disable_qpcode_tab(false);
+            disable_room_allotment_tab(false);
+            disable_scribe_settings_tab(false);
+            
+            populate_session_dropdown();
+            populate_qp_code_session_dropdown();
+            populate_room_allotment_session_dropdown();
+            loadGlobalScribeList();
+            
+            console.log(`Successfully loaded ${savedData.length} records from IndexedDB.`);
+
+            
         } catch (criticalError) {
             console.error("CRITICAL APP STARTUP ERROR:", criticalError);
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
