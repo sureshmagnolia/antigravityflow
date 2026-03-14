@@ -269,7 +269,8 @@ function dismissLoader() {
 }
 
 // Single function called when data is local, from cloud, or auth fails
-function finalizeAppLoad() {
+async function finalizeAppLoad() {
+    await migrateFromLocalStorage(); // Add this line!
     if (typeof updateDashboard === 'function') updateDashboard();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
     if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
@@ -8834,10 +8835,16 @@ window.real_populate_qp_code_session_dropdown = function () {
         const now = new Date().toISOString();
         localStorage.setItem('lastUpdated', now);
 
-        ALL_DATA_KEYS.forEach(key => {
-            const data = localStorage.getItem(key);
-            if (data) backupData[key] = data;
-        });
+        for (const key of ALL_DATA_KEYS) {
+            if (key === BASE_DATA_KEY) {
+                const idbData = await loadExamDataIDB();
+                if (idbData && idbData.length > 0) backupData[key] = JSON.stringify(idbData);
+            } else {
+                const data = localStorage.getItem(key);
+                if (data) backupData[key] = data;
+            }
+        }
+
         backupData['lastUpdated'] = now;
 
         const jsonString = JSON.stringify(backupData, null, 2);
