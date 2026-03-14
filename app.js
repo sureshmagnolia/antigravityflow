@@ -344,6 +344,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const ABSENTEE_LIST_KEY = 'examAbsenteeList';
     const QP_CODE_LIST_KEY = 'examQPCodes';
     const BASE_DATA_KEY = 'examBaseData';
+
+
+// ==========================================
+// 💾 INDEXEDDB HELPER (replaces localStorage for examBaseData)
+// ==========================================
+const IDB_NAME = 'AntigravityDB';
+const IDB_STORE = 'examStore';
+const IDB_KEY = 'examBaseData';
+
+function openExamDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = e => {
+            e.target.result.createObjectStore(IDB_STORE);
+        };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject(e.target.error);
+    });
+}
+
+function saveExamDataIDB(dataArray) {
+    openExamDB().then(db => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
+        tx.oncomplete = () => db.close();
+    }).catch(err => console.error('IDB Write Error:', err));
+}
+
+function loadExamDataIDB() {
+    return openExamDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readonly');
+            const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+            req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
+            req.onerror = e => { db.close(); reject(e.target.error); };
+        });
+    });
+}
+// ==========================================
+
+
+
+
+
+
+    
     const ROOM_ALLOTMENT_KEY = 'examRoomAllotment';
     const INVIG_MAPPING_KEY = 'examInvigilatorMapping';
     let currentInvigMapping = {}; // { "SessionKey": { "RoomName": "StaffName" } }
@@ -12590,7 +12636,7 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
     // 2. Update Data Stores
     const jsonStr = JSON.stringify(dataArray);
     if(typeof jsonDataStore !== 'undefined') jsonDataStore.innerHTML = jsonStr;
-    localStorage.setItem(BASE_DATA_KEY, jsonStr);
+    saveExamDataIDB(dataArray);
 
     // 3. Update UI
     if(typeof updateUniqueStudentList === 'function') updateUniqueStudentList();
@@ -12660,7 +12706,7 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
 // ==========================================
 // 🐍 PYTHON INTEGRATION (With Stream-Aware Merge)
 // ==========================================
-window.handlePythonExtraction = function (jsonString) {
+window.handlePythonExtraction = async function (jsonString) {
     console.log("Received data from Python...");
     
     // 1. Get Configuration
@@ -12707,7 +12753,7 @@ window.handlePythonExtraction = function (jsonString) {
         });
 
         // 4. Merge Logic (Interactive Diff)
-        const currentDB = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+        const currentDB = await loadExamDataIDB();
 
         // A. IGNORED DATA: Keep everything that doesn't match our specific Course+Date+Stream
         // (This protects Regular students when uploading EDE, and vice versa)
