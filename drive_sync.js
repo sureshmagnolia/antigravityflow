@@ -17,6 +17,41 @@ const DATA_KEYS = [
     'examSessionNames', 'examRemunerationConfig'
 ];
 
+// --- IndexedDB Configuration (Sync with app.js) ---
+const IDB_NAME = 'AntigravityDB';
+const IDB_STORE = 'examStore';
+const IDB_KEY = 'examBaseData';
+
+function openExamDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = e => reject(e.target.error);
+    });
+}
+function loadExamDataIDB() {
+    return openExamDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readonly');
+            const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+            req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
+            req.onerror = e => { db.close(); reject(e.target.error); };
+        });
+    });
+}
+function saveExamDataIDB(dataArray) {
+    return openExamDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = e => { db.close(); reject(e.target.error); };
+        });
+    });
+}
+
+
 // --- INITIALIZATION ---
 function gapiLoaded() { gapi.load('client', intializeGapiClient); }
 async function intializeGapiClient() {
@@ -173,10 +208,15 @@ async function syncData() {
     try {
         const folderId = await getBackupFolder();
         const localData = {};
-        DATA_KEYS.forEach(k => {
+        for (const k of DATA_KEYS) {
+        if (k === 'examBaseData') {
+            localData[k] = await loadExamDataIDB();
+        } else {
             const v = localStorage.getItem(k);
             if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
-        });
+        }
+    }
+
         
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
@@ -283,13 +323,18 @@ window.executeRestore = async function(fileId) {
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
         const cloudData = response.result;
-        Object.keys(cloudData).forEach(key => {
-            if (DATA_KEYS.includes(key)) {
-                const val = cloudData[key];
+        for (const key of Object.keys(cloudData)) {
+        if (DATA_KEYS.includes(key)) {
+            const val = cloudData[key];
+            if (key === 'examBaseData') {
+                await saveExamDataIDB(val);
+            } else {
                 if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
                 else localStorage.setItem(key, val);
             }
-        });
+        }
+    }
+
         alert("✅ Restored successfully! Reloading...");
         location.reload();
     } catch (e) { alert("Restore Error: " + e.message); }
