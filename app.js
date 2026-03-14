@@ -294,6 +294,7 @@ let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
 
 document.addEventListener('DOMContentLoaded', () => {
+    migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
     const loaderMessages = [
@@ -386,6 +387,30 @@ function loadExamDataIDB() {
 
 
 
+async function migrateFromLocalStorage() {
+    const oldData = localStorage.getItem(BASE_DATA_KEY);
+    if (oldData) {
+        console.log("🚚 Migrating existing student data to IndexedDB...");
+        try {
+            const dataArray = JSON.parse(oldData);
+            // Save to IDB
+            await new Promise(resolve => {
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onsuccess = e => {
+                    const db = e.target.result;
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
+                    tx.oncomplete = () => { db.close(); resolve(); };
+                };
+            });
+            // 🚨 CRITICAL: Remove from localStorage to free up the 5MB quota
+            localStorage.removeItem(BASE_DATA_KEY);
+            console.log("✅ Migration complete. localStorage freed.");
+        } catch (e) {
+            console.error("Migration failed:", e);
+        }
+    }
+}
 
 
 
@@ -13421,7 +13446,7 @@ window.handlePythonExtraction = async function (jsonString) {
     }
 
     // --- V65: Initial Data Load on Startup (Clean Version) ---
-    function loadInitialData() {
+async function loadInitialData() { 
         try {
             console.log("Loading Local Data...");
             updateHeaderCollegeName(); // <--- ADD THIS LINE HERE
@@ -13435,7 +13460,7 @@ window.handlePythonExtraction = async function (jsonString) {
             // ******************************************************************************
             if (typeof initRemunerationModule === 'function') initRemunerationModule();
             // 2. Check for base student data persistence
-            const savedDataJson = localStorage.getItem(BASE_DATA_KEY);
+            const savedData = await loadExamDataIDB();
             if (savedDataJson) {
                 try {
                     const savedData = JSON.parse(savedDataJson);
