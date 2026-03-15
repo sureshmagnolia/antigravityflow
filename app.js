@@ -2,6 +2,8 @@
 // These 11 functions MUST be outside the DOMContentLoaded listener
 // to be available when Python loads.
 
+const BASE_DATA_KEY = 'examBaseData';
+
 function clear_csv_upload_status() {
     const csvLoadStatusElement = document.getElementById('csv-load-status');
     const correctedCsvUploadElement = document.getElementById('corrected-csv-upload');
@@ -231,7 +233,6 @@ async function autoCleanPastGhostData() {
         console.log("✅ [System] Data is clean. No old records found.");
     }
 }
-
 
 
 
