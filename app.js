@@ -13525,6 +13525,10 @@ async function loadInitialData() {
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         }
     }
+    } catch (error) {
+        console.error("Startup Logic Error:", error);
+    }
+}
 
     // ==========================================
     // 💰 REMUNERATION LOGIC (FINAL - B&W + EXAM FILTER)
