@@ -175,7 +175,25 @@ function handleAuthClick() {
 
 async function getBackupFolder() {
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
-    const res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
+    let res;
+    try {
+        res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
+    } catch(e) {
+        localStorage.removeItem('drive_access_token');
+        localStorage.removeItem('drive_token_expiry');
+        localStorage.removeItem('isDriveConnected');
+        gapi.client.setToken(null);
+        showReconnectState();
+        throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+    }
+    if (res.status === 401) {
+        localStorage.removeItem('drive_access_token');
+        localStorage.removeItem('drive_token_expiry');
+        localStorage.removeItem('isDriveConnected');
+        gapi.client.setToken(null);
+        showReconnectState();
+        throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+    }
     if (res.result.files.length > 0) return res.result.files[0].id;
     const meta = { 'name': 'ExamFlow_Backups', 'mimeType': 'application/vnd.google-apps.folder' };
     const createRes = await gapi.client.drive.files.create({ resource: meta, fields: 'id' });
@@ -206,6 +224,19 @@ async function syncData() {
     btn.disabled = true;
 
     try {
+        // Check if token is still valid, refresh silently if needed
+        const currentToken = gapi.client.getToken();
+        if (!currentToken || !currentToken.access_token) {
+            btn.innerHTML = "🔄 Refreshing login...";
+            await new Promise((resolve, reject) => {
+                tokenClient.callback = (resp) => {
+                    if (resp.error) reject(new Error('Login refresh failed. Please reconnect Drive.'));
+                    else { handleTokenResponse(resp); resolve(); }
+                };
+                tokenClient.requestAccessToken({ prompt: '' });
+            });
+        }
+
         const folderId = await getBackupFolder();
         const localData = {};
         for (const k of DATA_KEYS) {
