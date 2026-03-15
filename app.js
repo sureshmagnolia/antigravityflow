@@ -8522,7 +8522,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
     // 3. Backup All Data
     if (backupDataButton) {
-        backupDataButton.addEventListener('click', () => {
+        backupDataButton.addEventListener('click', async () => {
             const backupData = {};
             for (const key of ALL_DATA_KEYS) {
             if (key === BASE_DATA_KEY) {
