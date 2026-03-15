@@ -3,6 +3,9 @@
 // to be available when Python loads.
 
 const BASE_DATA_KEY = 'examBaseData';
+const IDB_NAME = 'AntigravityDB';
+const IDB_STORE = 'examStore';
+const IDB_KEY = 'examBaseData';
 
 function clear_csv_upload_status() {
     const csvLoadStatusElement = document.getElementById('csv-load-status');
