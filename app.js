@@ -13479,7 +13479,6 @@ async function loadInitialData() {
             const savedData = await loadExamDataIDB();
 
     // 2. Check for base student data persistence in IndexedDB
-    const savedData = await loadExamDataIDB(); 
     if (savedData && savedData.length > 0) {
         try {
             // No need to parse JSON, IDB returns the object directly
