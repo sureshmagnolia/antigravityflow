@@ -295,6 +295,13 @@ let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
 
 document.addEventListener('DOMContentLoaded', () => {
+       // --- Global localStorage Key ---
+    const STREAM_CONFIG_KEY = 'examStreamsConfig'; // <-- Add this definition
+    const ROOM_CONFIG_KEY = 'examRoomConfig';
+    const COLLEGE_NAME_KEY = 'examCollegeName';
+    const ABSENTEE_LIST_KEY = 'examAbsenteeList';
+    const QP_CODE_LIST_KEY = 'examQPCodes';
+    const BASE_DATA_KEY = 'examBaseData';
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -339,13 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ------------------------------------
 
-    // --- Global localStorage Key ---
-    const STREAM_CONFIG_KEY = 'examStreamsConfig'; // <-- Add this definition
-    const ROOM_CONFIG_KEY = 'examRoomConfig';
-    const COLLEGE_NAME_KEY = 'examCollegeName';
-    const ABSENTEE_LIST_KEY = 'examAbsenteeList';
-    const QP_CODE_LIST_KEY = 'examQPCodes';
-    const BASE_DATA_KEY = 'examBaseData';
+
 
 
 // ==========================================
