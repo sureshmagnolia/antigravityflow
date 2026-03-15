@@ -602,7 +602,7 @@ async function migrateFromLocalStorage() {
                 if (btnInvigilation) btnInvigilation.classList.add('hidden');
 
                 // Load Local Data & Finalize
-                loadInitialData();
+                await loadInitialData();
                 finalizeAppLoad();
             }
         });
@@ -13499,6 +13499,12 @@ async function loadInitialData() {
             // Update UI Stores
             jsonDataStore.innerHTML = JSON.stringify(savedData);
             qPaperDataStore.innerHTML = JSON.stringify(Object.values(qPaperSummary));
+            // --- NEW CRITICAL SYNC ---
+            allStudentData = savedData; // Link to global variable
+            disable_edit_data_tab(false); // Enable the Editor tab
+            updateDashboard(); // Refresh the counts on the home screen
+            // --------------------------
+
             
             // Enable UI
             generateReportButton.disabled = false;
