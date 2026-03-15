@@ -272,11 +272,17 @@ async function syncData() {
         btn.innerHTML = "✅ Saved!";
         setTimeout(() => btn.innerHTML = originalText, 2000);
         
-    } catch (e) {
+
+} catch (e) {
         console.error(e);
-        alert("Backup Failed: " + e.message);
+        // Show a friendly message for token/auth errors
+        if (e.message && e.message.includes('expired')) {
+            alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
+        } else {
+            alert("Backup Failed: " + e.message);
+        }
         btn.innerHTML = "❌ Error";
-        setTimeout(() => btn.innerHTML = originalText, 2000);
+        setTimeout(() => btn.innerHTML = originalText, 3000);
     }
     btn.disabled = false;
 }
