@@ -568,7 +568,7 @@ async function migrateFromLocalStorage() {
     // Auth Listener - REMOVED THE SETTIMEOUT WRAPPER
     if (window.firebase && window.firebase.auth) {
         const { auth, onAuthStateChanged } = window.firebase;
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             if (user) {
                 currentUser = user;
                 loginBtn.classList.add('hidden');
