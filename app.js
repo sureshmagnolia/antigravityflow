@@ -356,10 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 // 💾 INDEXEDDB HELPER (replaces localStorage for examBaseData)
 // ==========================================
-const IDB_NAME = 'AntigravityDB';
-const IDB_STORE = 'examStore';
-const IDB_KEY = 'examBaseData';
-
 function openExamDB() {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(IDB_NAME, 1);
