@@ -25,7 +25,7 @@
 
         // *** UPDATED: Added 'orderBy' to imports ***
         import {
-            getFirestore, doc, getDoc, setDoc,
+            getFirestore, doc, getDoc, setDoc, deleteDoc,
             collection, query, where, getDocs, orderBy,
             addDoc, updateDoc, arrayUnion, arrayRemove,
             onSnapshot, writeBatch
@@ -51,7 +51,7 @@
         // *** EXPOSE ALL TOOLS TO WINDOW ***
         window.firebase = {
             auth, db, provider, signInWithPopup, signOut, onAuthStateChanged,
-            doc, getDoc, setDoc,
+            doc, getDoc, setDoc, deleteDoc,
             collection, query, where, getDocs, orderBy,
             addDoc, updateDoc, arrayUnion, arrayRemove,
             onSnapshot, writeBatch
