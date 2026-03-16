@@ -4,6 +4,14 @@
 
 const BASE_DATA_KEY = 'examBaseData';
 
+// Fail-safe constants (Avoids conflict with drive_sync.js)
+if (typeof IDB_NAME === 'undefined') {
+    window.IDB_NAME = 'AntigravityDB';
+    window.IDB_STORE = 'examStore';
+    window.IDB_KEY = 'examBaseData';
+}
+
+
 function clear_csv_upload_status() {
     const csvLoadStatusElement = document.getElementById('csv-load-status');
     const correctedCsvUploadElement = document.getElementById('corrected-csv-upload');
@@ -1003,6 +1011,7 @@ function updateLocalSlotsFromStudents() {
 
                     // Save to Local Storage (Hydrate App Memory)
                     localStorage.setItem('examBaseData', JSON.stringify(allStudents));
+                    await saveExamDataIDB(allStudents);
                     localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
                     localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
                     localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
@@ -7652,6 +7661,8 @@ function parseCsvAndLoadData(csvText) {
         // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
         localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+        await saveExamDataIDB(allStudentData);
+
 
         // Update UI
         csvLoadStatus.textContent = `Processed. Total Students: ${allStudentData.length}`;
@@ -14359,6 +14370,7 @@ if (btnSessionReschedule) {
 
                 // Save to Local Storage
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+                await saveExamDataIDB(allStudentData);
 
                 // 2. Move Auxiliary Data (ONLY IF MOVING)
                 if (isMove) {
@@ -14433,6 +14445,8 @@ if (btnSessionReschedule) {
                 // 1. Delete Students
                 allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
                 localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+                await saveExamDataIDB(allStudentData);
+
 
                 // 2. Helper to Delete Key
                 const deleteKeyInStorage = (storageKey) => {
@@ -15524,6 +15538,8 @@ if (displayLoc) {
                         }
                     });
                     localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+                    await saveExamDataIDB(allStudentData);
+
                 }
 
                 // 3. Fix Object Keys (Slots, Allotments, etc.)
@@ -17075,6 +17091,7 @@ window.executeBulkDelete = async function() {
             return !sessionSet.has(key);
         });
         localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
+        await saveExamDataIDB(allStudentData);
 
         // 2. Remove Aux Data (Assignments, Rooms, etc.)
         // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
