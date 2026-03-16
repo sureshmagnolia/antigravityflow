@@ -7694,6 +7694,12 @@ async function parseCsvAndLoadData(csvText) {
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
        // localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
+        // Add this after saveExamDataIDB(allStudentData);
+        const modifiedSessions = new Set();
+        finalBatch.forEach(s => modifiedSessions.add(`${s.Date} | ${s.Time}`));
+        for (const sessionKey of modifiedSessions) {
+        await syncSessionToCloud(sessionKey);
+        }
 
 
         // Update UI
