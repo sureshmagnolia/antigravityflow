@@ -373,12 +373,26 @@ function openExamDB() {
 }
 
 function saveExamDataIDB(dataArray) {
-    openExamDB().then(db => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
-        tx.oncomplete = () => db.close();
-    }).catch(err => console.error('IDB Write Error:', err));
+    return new Promise((resolve, reject) => {
+        openExamDB().then(db => {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            const store = tx.objectStore(IDB_STORE);
+            store.put(dataArray, IDB_KEY);
+            tx.oncomplete = () => {
+                db.close();
+                resolve();
+            };
+            tx.onerror = e => {
+                db.close();
+                reject(e.target.error);
+            };
+        }).catch(err => {
+            console.error('IDB Write Error:', err);
+            reject(err);
+        });
+    });
 }
+
 
 function loadExamDataIDB() {
     return openExamDB().then(db => {
