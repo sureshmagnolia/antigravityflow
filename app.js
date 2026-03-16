@@ -1094,6 +1094,24 @@ function updateLocalSlotsFromStudents() {
         }
     }
 
+async function deleteSessionFromCloud(sessionKey) {
+    if (!currentCollegeId || !navigator.onLine) return;
+    
+    updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
+    const { db, doc, deleteDoc } = window.firebase;
+    const sessionId = generateSessionId(sessionKey);
+    
+    try {
+        await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+        updateSyncStatus("Deleted from Cloud", "success");
+    } catch (e) {
+        console.error("Session Delete Error:", e);
+        updateSyncStatus("Delete Failed", "error");
+    }
+}
+
+
+    
    async function syncSessionToCloud(sessionKey) {
         // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
         if (!currentCollegeId || !navigator.onLine) return;
@@ -7674,7 +7692,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-        localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+       // localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
 
 
@@ -17104,7 +17122,7 @@ window.executeBulkDelete = async function() {
             const key = `${s.Date} | ${s.Time}`;
             return !sessionSet.has(key);
         });
-        localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
+        //localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
 
         // 2. Remove Aux Data (Assignments, Rooms, etc.)
@@ -17129,6 +17147,10 @@ window.executeBulkDelete = async function() {
         });
 
         // 3. Sync to Cloud
+        // A. DELETE MODULAR SESSIONS (V2)
+        for (const sessionKey of sessionsToDelete) {
+            await deleteSessionFromCloud(sessionKey);
+            }
         // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
