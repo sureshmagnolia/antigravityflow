@@ -7548,7 +7548,7 @@ if (toggleButton && sidebar) {
 
 
 // V34: INTERACTIVE DIFF MERGE (With Add/Delete Permissions)
-function parseCsvAndLoadData(csvText) {
+async function parseCsvAndLoadData(csvText) {
     try {
         // --- 1. PARSE THE CSV ---
         const lines = csvText.trim().split('\n');
