@@ -398,8 +398,10 @@ window.executeRestore = async function(fileId) {
         }
     }
 
+        localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
         alert("✅ Restored successfully! Reloading...");
         location.reload();
+
     } catch (e) { alert("Restore Error: " + e.message); }
 };
 
