@@ -9416,7 +9416,7 @@ window.executeMergeSlots = async function() {
 
     if (!src || !tgt) return alert("Invalid slot selection.");
 
-    const confirmMsg = \`⚠️ CRITICAL WARNING: MERGING SLOTS ⚠️\n\nMoving Volunteers FROM: \${srcKey}\nINTO TARGET: \${tgtKey}\n\nAfter successfully merging, the source slot (\${srcKey}) will be PERMANENTLY DELETED.\n\nType 'MERGE' to proceed:\`;
+    const confirmMsg = `⚠️ CRITICAL WARNING: MERGING SLOTS ⚠️\n\nMoving Volunteers FROM: ${srcKey}\nINTO TARGET: ${tgtKey}\n\nAfter successfully merging, the source slot (${srcKey}) will be PERMANENTLY DELETED.\n\nType 'MERGE' to proceed:`;
     const approval = prompt(confirmMsg);
     
     if (approval !== 'MERGE') return alert("Merge Cancelled.");
@@ -9450,7 +9450,8 @@ window.executeMergeSlots = async function() {
         updateSyncStatus("Syncing Merge...", "neutral");
         await window.syncSlotsToCloud();
         
-        alert(\`✅ Successfully merged \${srcKey} volunteers into \${tgtKey}!\`);
+        alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
+
 
     } catch (e) {
         console.error("Merge error:", e);
