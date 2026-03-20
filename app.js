@@ -1045,7 +1045,6 @@ function updateLocalSlotsFromStudents() {
                     });
 
                     // Save to Local Storage (Hydrate App Memory)
-                    localStorage.setItem('examBaseData', JSON.stringify(allStudents));
                     await saveExamDataIDB(allStudents);
                     localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
                     localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
@@ -1068,9 +1067,10 @@ function updateLocalSlotsFromStudents() {
 
                     if (fullPayload) {
                         const bulkData = JSON.parse(fullPayload);
-                        ['examBaseData', 'examRoomAllotment'].forEach(key => {
-                            if (bulkData[key]) localStorage.setItem(key, bulkData[key]);
-                        });
+                        if (bulkData['examRoomAllotment']) localStorage.setItem('examRoomAllotment', bulkData['examRoomAllotment']);
+                        if (bulkData['examBaseData']) await saveExamDataIDB(JSON.parse(bulkData['examBaseData']
+                    ));
+
                         updateSyncStatus("Synced (V1)", "success");
                     } else {
                         updateSyncStatus("Synced (Empty)", "success");
@@ -11014,7 +11014,7 @@ function renderScribeAllotmentList(sessionKey) {
     });
 
     // 10. Save All Changes to LocalStorage
-    saveEditDataButton.addEventListener('click', () => {
+    saveEditDataButton.addEventListener('click', async () => {
         if (!hasUnsavedEdits) {
             editDataStatus.textContent = 'No changes to save.';
             setTimeout(() => { editDataStatus.textContent = ''; }, 3000);
@@ -11039,10 +11039,12 @@ function renderScribeAllotmentList(sessionKey) {
 
             // 2. Create the new master list
             const updatedAllStudentData = [...otherStudents, ...currentCourseStudents];
-
-            // 3. Update the global variable and localStorage
+          
+            // 3. Update the global variable and IDB
             allStudentData = updatedAllStudentData;
-            localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+            await saveExamDataIDB(allStudentData);
+
+
 
             editDataStatus.textContent = 'All changes saved successfully!';
             setUnsavedChanges(false);
@@ -11350,8 +11352,9 @@ Are you sure you want to update these records?
                     }
                 });
 
-                // 7. Save & Sync
-                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+                // 7. Save to IDB & Sync
+                await saveExamDataIDB(allStudentData);
+
                 
                 alert(`✅ Updated ${updateCount} students! Syncing changes...`);
                 
@@ -15610,7 +15613,6 @@ if (displayLoc) {
                             studentUpdateCount++;
                         }
                     });
-                    localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                     await saveExamDataIDB(allStudentData);
 
                 }
