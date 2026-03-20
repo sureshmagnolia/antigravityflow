@@ -16802,7 +16802,7 @@ async function runSystemHealthCheck() {
         if (!streams || streams.length === 0) log('fail', 'Settings', 'No Exam Streams defined.');
 
         // LAYER 2: SESSION SCOPE & DATA
-        const allStudents = JSON.parse(localStorage.getItem('examBaseData') || '[]');
+        const allStudents = await loadExamDataIDB() || [];
         const scribesList = JSON.parse(localStorage.getItem('examScribes') || '[]');
         
         if (allStudents.length === 0) {
@@ -17179,7 +17179,7 @@ window.executeBulkDelete = async function() {
 };
 
 
-window.downloadInvigilationListPDF = function () {
+window.downloadInvigilationListPDF = async function () {
     const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
         ? allotmentSessionSelect.value 
         : document.getElementById('allotment-session-select')?.value;
@@ -17191,7 +17191,8 @@ window.downloadInvigilationListPDF = function () {
     const currentSessionInvigs = invigMap[sessionKey] || {};
     const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
     const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
-    const allStudentData = JSON.parse(localStorage.getItem('examData_v2') || '[]');
+    const allStudentData = await loadExamDataIDB() || [];
+
     
     // Scribe Data
     const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
