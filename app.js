@@ -17130,6 +17130,10 @@ window.executeBulkDelete = async function() {
         });
         //localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
+        
+        // 🟢 FIX: Purge old legacy keys to prevent deleted data from resurrecting
+        localStorage.removeItem('examBaseData');
+        localStorage.removeItem('examData_v2');
 
         // 2. Remove Aux Data (Assignments, Rooms, etc.)
         // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
