@@ -12207,7 +12207,6 @@ Are you sure?
                         sStream === targetStream);
                 });
 
-                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
 
                // MODULAR SYNC (V2)
@@ -14445,7 +14444,6 @@ if (btnSessionReschedule) {
                 });
 
                 // Save to Local Storage
-                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 await saveExamDataIDB(allStudentData);
 
                 // 2. Move Auxiliary Data (ONLY IF MOVING)
@@ -14520,7 +14518,6 @@ if (btnSessionReschedule) {
             try {
                 // 1. Delete Students
                 allStudentData = allStudentData.filter(s => !(s.Date === oldDate && s.Time === oldTime));
-                localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
                 await saveExamDataIDB(allStudentData);
 
 
