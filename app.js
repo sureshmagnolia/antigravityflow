@@ -372,7 +372,7 @@ function openExamDB() {
     });
 }
 
-function saveExamDataIDB(dataArray) {
+function saveExamDataIDB(dataArray, skipCloudSync = false) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
             const tx = db.transaction(IDB_STORE, 'readwrite');
@@ -380,6 +380,10 @@ function saveExamDataIDB(dataArray) {
             store.put(dataArray, IDB_KEY);
             tx.oncomplete = () => {
                 db.close();
+                // --- ADDED: Auto-sync to Cloud unless skipped ---
+                if (!skipCloudSync && typeof syncDataToCloud === 'function') {
+                    syncDataToCloud('baseData');
+                }
                 resolve();
             };
             tx.onerror = e => {
@@ -392,6 +396,7 @@ function saveExamDataIDB(dataArray) {
         });
     });
 }
+
 
 
 function loadExamDataIDB() {
@@ -1080,6 +1085,25 @@ async function updateLocalSlotsFromStudents() {
                 updateSyncStatus("Error", "error");
             }
 
+// --- ADD THIS BLOCK FOR STORAGE RECOVERY ---
+const existingData = await loadExamDataIDB();
+if (existingData.length === 0 && currentUser && currentCollegeId) {
+    updateSyncStatus("Checking Storage...", "neutral");
+    try {
+        const { storage, ref, getDownloadURL } = window.firebase;
+        const storageRef = ref(storage, `colleges/${currentCollegeId}/data/examBaseData.json`);
+        const url = await getDownloadURL(storageRef);
+        const response = await fetch(url);
+        const cloudData = await response.json();
+        if (cloudData && cloudData.length > 0) {
+            await saveExamDataIDB(cloudData, true); // true = skip redundant upload
+            updateSyncStatus("Cloud Data Restored", "success");
+        }
+    } catch (e) {
+        console.log("No cloud storage backup found.");
+    }
+}
+            
             // Final UI Load (Refresh Dashboards, Tables, etc.)
             loadInitialData();
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
@@ -1271,6 +1295,21 @@ async function deleteSessionFromCloud(sessionKey) {
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
             }
+
+            // Add this as case #6 inside syncDataToCloud(targetSection)
+            else if (targetSection === 'baseData') {
+                const students = await loadExamDataIDB();
+                if (students && students.length > 0) {
+                    const { storage, ref, uploadString } = window.firebase;
+                    const storageRef = ref(storage, `colleges/${cid}/data/examBaseData.json`);
+                    await uploadString(storageRef, JSON.stringify(students), 'raw', {
+                contentType: 'application/json'
+                    });
+                console.log("📁 Heavy Data (examBaseData) synced to Firebase Storage.");
+                    }
+                }
+
+            
 
             updateSyncStatus("Saved", "success");
 
