@@ -10524,23 +10524,31 @@ function renderScribeAllotmentList(sessionKey) {
     // **********************************
 
     // --- Helper function to disable all report buttons ---
-    window.real_disable_all_report_buttons = function (disabled) {
-        const ids = [
-            'generate-report-button',
-            'generate-daywise-report-button', // <--- Updated to match HTML
-            'generate-qpaper-report-button',
-            'generate-scribe-report-button',
-            'generate-scribe-proforma-button',
-            'generate-qp-distribution-report-button',
-            'generate-invigilator-report-button',
-            'generate-absentee-report-button'
-        ];
+   /* Standardized Report Button Controller */
+window.real_disable_all_report_buttons = function (disabled) {
+    const ids = [
+        'generate-qpaper-report-button',        // 1
+        'generate-qp-distribution-report-button', // 2
+        'generate-report-button',                // 3
+        'generate-daywise-report-button',         // 4
+        'generate-sticker-button',               // 5
+        'generate-scribe-proforma-button',       // 6
+        'generate-scribe-report-button',         // 7
+        'generate-invigilator-report-button',    // 8
+        'generate-room-summary-button',          // 9
+        'generate-absentee-report-button'
+    ];
+    ids.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.disabled = disabled;
+            // Add/Remove visual "disabled" look
+            if (disabled) btn.classList.add('opacity-50');
+            else btn.classList.remove('opacity-50');
+        }
+    });
+};
 
-        ids.forEach(id => {
-            const btn = document.getElementById(id);
-            if (btn) btn.disabled = disabled;
-        });
-    }
 
     // --- NEW: STUDENT DATA EDIT FUNCTIONALITY (MODAL VERSION) ---
 
