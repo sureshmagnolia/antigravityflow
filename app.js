@@ -987,7 +987,28 @@ function updateLocalSlotsFromStudents() {
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
         const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
+            
+            // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
+            if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
+                console.log("🔄 Detected pending Drive Restore. Syncing local IDB to Firebase UP first...");
+                localStorage.removeItem('pendingDriveRestoreSync');
+                
+                const restoredData = await loadExamDataIDB() || [];
+                const sessionsToSync = new Set();
+                restoredData.forEach(s => sessionsToSync.add(`${s.Date} | ${s.Time}`));
+                
+                allStudentData = restoredData; // Temporarily update global memory for the sync function
+                
+                let count = 0;
+                for (const sessionKey of sessionsToSync) {
+                    count++;
+                    updateSyncStatus(`Uploading Restored Data ${count}/${sessionsToSync.size}...`, "neutral");
+                    await syncSessionToCloud(sessionKey);
+                }
+            }
+
             try {
+
                 // A. TRY V2 (Modular Sessions) FIRST
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
                 const sessionSnap = await getDocs(sessionsRef);
