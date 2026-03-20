@@ -8624,12 +8624,19 @@ window.real_populate_qp_code_session_dropdown = function () {
                     // Clear existing data first
                     localStorage.clear();
 
-                    // Restore data
+                    // Restore data (Intercepting Old Student Data Formats)
                     for (const key in restoredData) {
                         if (Object.hasOwnProperty.call(restoredData, key)) {
-                            localStorage.setItem(key, restoredData[key]);
+                            if (key === 'examBaseData') {
+                                // Route legacy student data to the new DB format
+                                await saveExamDataIDB(restoredData[key]);
+                            } else if (key !== 'examData_v2') {
+                                // Restore everything else normally (except stale v2 backups)
+                                localStorage.setItem(key, restoredData[key]);
+                            }
                         }
                     }
+
 
                     alert('Restore successful! Syncing all sessions to V2 Cloud...');
                     
@@ -15922,15 +15929,21 @@ if (displayLoc) {
                         throw new Error("Invalid or empty backup file.");
                     }
 
-                    // Restore to Local Storage
+                    // Restore to Local Storage & IndexedDB securely
                     let count = 0;
-                    Object.keys(data).forEach(key => {
-                        // Restore known keys or all keys that look like app data
-                        if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
-                            localStorage.setItem(key, data[key]);
+                    for (const key of Object.keys(data)) {
+                        if (key === 'examBaseData') {
+                            // Route legacy student data to the new DB format
+                            await saveExamDataIDB(data[key]);
+                            count++;
+                        } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
+                            // Skip stale v2 backups, restore everything else
+                            if (key !== 'examData_v2') {
+                                localStorage.setItem(key, data[key]);
+                            }
                             count++;
                         }
-                    });
+                    }
 
                     // Sync to Cloud (if online)
                     if (typeof syncDataToCloud === 'function' && count > 0) {
