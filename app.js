@@ -1187,7 +1187,7 @@ async function deleteSessionFromCloud(sessionKey) {
             
             // Recalculate Invigilation Slots
             if (typeof updateLocalSlotsFromStudents === 'function') {
-                updateLocalSlotsFromStudents();
+                await updateLocalSlotsFromStudents();
             }
             
             // Sync Slots (This function call is fine)
