@@ -8677,28 +8677,10 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
                     alert('Restore successful! Syncing all sessions to V2 Cloud...');
+                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
+                    localStorage.removeItem('searchIndex');
+                    location.reload();
                     
-                    // MODULAR SYNC (V2) - Loop through ALL restored sessions
-                    if (typeof syncSessionToCloud === 'function') {
-                        // 1. Identify all sessions in the restored file
-                        const sessionsToSync = new Set();
-                        if (allStudentData) {
-                            allStudentData.forEach(s => sessionsToSync.add(`${s.Date} | ${s.Time}`));
-                        }
-
-                        // 2. Sync them one by one to 'colleges/{id}/sessions'
-                        // This DOES NOT touch 'colleges/{id}/data' (V1 is safe)
-                        let count = 0;
-                        for (const sessionKey of sessionsToSync) {
-                            count++;
-                            updateSyncStatus(`Restoring ${count}/${sessionsToSync.size}...`, "neutral");
-                            await syncSessionToCloud(sessionKey);
-                        }
-                        
-                        updateSyncStatus("Restore Complete", "success");
-                    }
-                    
-                    window.location.reload();
 
                 } catch (e) {
                     console.error("Error parsing restore file:", e);
@@ -16010,7 +15992,7 @@ if (displayLoc) {
                         await syncDataToCloud('staff');
                         await syncDataToCloud('slots');
                     }
-
+                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
                     window.location.reload();
 
