@@ -9448,7 +9448,8 @@ window.executeMergeSlots = async function() {
         // Ensure both the new data and the deletion register with the cloud
         btn.innerHTML = "Syncing to Cloud...";
         updateSyncStatus("Syncing Merge...", "neutral");
-        await window.syncSlotsToCloud();
+        await syncSlotsToCloud();
+
         
         alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
 
