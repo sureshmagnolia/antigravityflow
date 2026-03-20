@@ -729,12 +729,11 @@ function populateAllExamDropdowns() {
 
 
 // --- HELPER: Calculate Slot Requirements from Student Data ---
-function updateLocalSlotsFromStudents() {
-    const localBaseData = localStorage.getItem('examBaseData');
-    if (!localBaseData) return false;
+async function updateLocalSlotsFromStudents() {
+    const students = await loadExamDataIDB();
+    if (!students || students.length === 0) return false;
 
     try {
-        const students = JSON.parse(localBaseData);
         const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
         const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
         const sessionStats = {};
@@ -7650,8 +7649,9 @@ async function parseCsvAndLoadData(csvText) {
             }
         });
 
-        // Get current DB data
-        const currentDB = JSON.parse(localStorage.getItem(BASE_DATA_KEY) || '[]');
+        // Get current DB data from IDB
+        const currentDB = await loadExamDataIDB() || [];
+
 
         // Split DB into:
         // A. IRRELEVANT DATA (Exams not in this file) -> We keep these 100%
