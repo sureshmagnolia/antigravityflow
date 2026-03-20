@@ -9378,6 +9378,93 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
     window.openManualAllocationModal(key);
 };
 
+// ==========================================
+// 🔗 MERGE INVIGILATION SLOTS LOGIC
+// ==========================================
+
+window.openMergeSlotsModal = function() {
+    const srcSelect = document.getElementById('merge-source-slot');
+    const tgtSelect = document.getElementById('merge-target-slot');
+    
+    srcSelect.innerHTML = '<option value="">-- Select Source Slot --</option>';
+    tgtSelect.innerHTML = '<option value="">-- Select Target Slot --</option>';
+
+    // Populate dropdowns with perfectly sorted dates
+    const allKeys = Object.keys(invigilationSlots).sort((a, b) => {
+        const dA = parseDate(a); const dB = parseDate(b);
+        return dA - dB;
+    });
+
+    allKeys.forEach(key => {
+        srcSelect.add(new Option(key, key));
+        tgtSelect.add(new Option(key, key));
+    });
+
+    window.openModal('merge-slots-modal');
+};
+
+window.executeMergeSlots = async function() {
+    const srcKey = document.getElementById('merge-source-slot').value;
+    const tgtKey = document.getElementById('merge-target-slot').value;
+    const btn = document.getElementById('btn-execute-merge');
+
+    if (!srcKey || !tgtKey) return alert("Please select both a Source and Target slot.");
+    if (srcKey === tgtKey) return alert("Source and Target cannot be the exact same slot.");
+
+    const src = invigilationSlots[srcKey];
+    const tgt = invigilationSlots[tgtKey];
+
+    if (!src || !tgt) return alert("Invalid slot selection.");
+
+    const confirmMsg = \`⚠️ CRITICAL WARNING: MERGING SLOTS ⚠️\n\nMoving Volunteers FROM: \${srcKey}\nINTO TARGET: \${tgtKey}\n\nAfter successfully merging, the source slot (\${srcKey}) will be PERMANENTLY DELETED.\n\nType 'MERGE' to proceed:\`;
+    const approval = prompt(confirmMsg);
+    
+    if (approval !== 'MERGE') return alert("Merge Cancelled.");
+
+    try {
+        btn.innerHTML = "Merging Data...";
+        btn.disabled = true;
+
+        // 1. Sensibly Combine Arrays avoiding duplicates
+        const mergeArrays = (arr1, arr2) => [...new Set([...(arr1 || []), ...(arr2 || [])])];
+
+        tgt.assigned = mergeArrays(tgt.assigned, src.assigned);
+        tgt.unavailable = mergeArrays(tgt.unavailable, src.unavailable);
+        tgt.attendance = mergeArrays(tgt.attendance, src.attendance);
+        tgt.exchangeRequests = mergeArrays(tgt.exchangeRequests, src.exchangeRequests);
+
+        // 2. Annihilate the Source Slot
+        delete invigilationSlots[srcKey];
+
+        // 3. Save Locally
+        localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+        
+        // 4. Update the User Interface instantly
+        window.closeModal('merge-slots-modal');
+        if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+        if (typeof updateAdminUI === 'function') updateAdminUI();
+
+        // 5. Fire off to Firebase (Silent Syncing)
+        // Ensure both the new data and the deletion register with the cloud
+        btn.innerHTML = "Syncing to Cloud...";
+        updateSyncStatus("Syncing Merge...", "neutral");
+        await window.syncSlotsToCloud();
+        
+        alert(\`✅ Successfully merged \${srcKey} volunteers into \${tgtKey}!\`);
+
+    } catch (e) {
+        console.error("Merge error:", e);
+        alert("An error occurred during merge: " + e.message);
+    } finally {
+        btn.innerHTML = "Merge Slots Now";
+        btn.disabled = false;
+        updateSyncStatus("Online & Merged", "success");
+    }
+};
+
+
+
+
 // --- ATTENDANCE REPORT - PRINTABLE/PDF ---
 window.printAttendanceReport = function () {
     const acYear = getCurrentAcademicYear();
