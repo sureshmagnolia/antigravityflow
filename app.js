@@ -14362,20 +14362,29 @@ if (btnSessionReschedule) {
 
             if (!currentSession) return alert("No session selected.");
 
-            // Validation: Must have EITHER (Date+Time) OR (ExamName)
-            if ((!rawDate || !rawTime) && !newExamName) {
-                return alert("Please enter a New Date/Time OR a New Exam Name to apply changes.");
+
+                        // Validation: Must have AT LEAST ONE field changed
+            if (!rawDate && !rawTime && !newExamName) {
+                return alert("Please enter a New Date, a New Time, OR a New Exam Name to apply changes.");
             }
 
-            // A. Determine New Date/Time
+            // A. Determine New Date/Time (Support changing Date or Time independently)
             let newDate = "";
             let newTime = "";
             let isMove = false; // Tracks if we are changing the session key
+            
+            const parts = currentSession.split('|');
+            const oldDate = parts[0].trim();
+            const oldTime = parts[1].trim();
 
-            if (rawDate && rawTime) {
+            if (rawDate) {
                 const [y, m, d] = rawDate.split('-');
-                newDate = `${d}.${m}.${y}`;
-                
+                newDate = \`\${d}.\${m}.\${y}\`;
+            } else {
+                newDate = oldDate;
+            }
+
+            if (rawTime) {
                 if (typeof normalizeTime === 'function') {
                     newTime = normalizeTime(rawTime);
                 } else {
@@ -14384,19 +14393,16 @@ if (btnSessionReschedule) {
                     const ampm = hours >= 12 ? 'PM' : 'AM';
                     hours = hours % 12;
                     hours = hours ? hours : 12;
-                    newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+                    newTime = \`\${String(hours).padStart(2, '0')}:\${min} \${ampm}\`;
                 }
-                
-                const newSessionKey = `${newDate} | ${newTime}`;
-                if (newSessionKey !== currentSession) isMove = true;
             } else {
-                // Keep existing Date/Time
-                const parts = currentSession.split('|');
-                newDate = parts[0].trim();
-                newTime = parts[1].trim();
+                newTime = oldTime;
             }
 
-            const newSessionKey = `${newDate} | ${newTime}`;
+            const newSessionKey = \`\${newDate} | \${newTime}\`;
+            if (newSessionKey !== currentSession) isMove = true;
+
+            
 
             // B. Confirmation Message
             let changesMsg = "";
