@@ -361,16 +361,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 // 💾 INDEXEDDB HELPER (replaces localStorage for examBaseData)
 // ==========================================
+/* Bumping to version 2 to force the missing store creation */
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 1);
+        const req = indexedDB.open(IDB_NAME, 2); // BUMPED TO 2
         req.onupgradeneeded = e => {
-            e.target.result.createObjectStore(IDB_STORE);
+            const db = e.target.result;
+            // Safe check: create the store if it doesn't exist
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                db.createObjectStore(IDB_STORE);
+            }
         };
         req.onsuccess = e => resolve(e.target.result);
         req.onerror = e => reject(e.target.error);
     });
 }
+
 
 function saveExamDataIDB(dataArray, skipCloudSync = false) {
     return new Promise((resolve, reject) => {
@@ -402,13 +408,20 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
 function loadExamDataIDB() {
     return openExamDB().then(db => {
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(IDB_STORE, 'readonly');
-            const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
-            req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
-            req.onerror = e => { db.close(); reject(e.target.error); };
+            try {
+                const tx = db.transaction(IDB_STORE, 'readonly');
+                const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+                req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
+                req.onerror = e => { db.close(); reject(e.target.error); };
+            } catch (err) {
+                db.close();
+                console.warn("IDB Store not found, returning empty array.");
+                resolve([]); // Fallback to empty array instead of crashing
+            }
         });
     });
 }
+
 // ==========================================
 
 
