@@ -357,15 +357,41 @@ function showRestoreModal(files) {
 
 window.executeRestore = async function(fileId) {
     document.getElementById('drive-restore-modal').remove();
+
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
         const cloudData = response.result;
+        
+        // Ask user for Restore Mode
+        const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported Google Drive data with your existing local data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
+
+        // If REPLACE, wipe local data for a clean slate
+        if (!isMerge) {
+            localStorage.clear();
+            await saveExamDataIDB([]); 
+        }
+
         for (const key of Object.keys(cloudData)) {
         if (DATA_KEYS.includes(key)) {
             const val = cloudData[key];
+            
             if (key === 'examBaseData') {
-                await saveExamDataIDB(val);
+                // Smart Merge Logic for Student Data
+                if (isMerge) {
+                    const existingData = await loadExamDataIDB() || [];
+                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                    const existingKeys = new Set(existingData.map(getRowKey));
+                    
+                    const newUniqueData = val.filter(student => !existingKeys.has(getRowKey(student)));
+                    await saveExamDataIDB([...existingData, ...newUniqueData]);
+                } else {
+                    // Replace strictly
+                    await saveExamDataIDB(val);
+                }
             } else {
+
+
+    
                 if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
                 else localStorage.setItem(key, val);
             }
