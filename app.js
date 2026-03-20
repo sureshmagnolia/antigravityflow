@@ -14379,7 +14379,8 @@ if (btnSessionReschedule) {
 
             if (rawDate) {
                 const [y, m, d] = rawDate.split('-');
-                newDate = \`\${d}.\${m}.\${y}\`;
+                newDate = `${d}.${m}.${y}`;
+
             } else {
                 newDate = oldDate;
             }
@@ -14393,13 +14394,14 @@ if (btnSessionReschedule) {
                     const ampm = hours >= 12 ? 'PM' : 'AM';
                     hours = hours % 12;
                     hours = hours ? hours : 12;
-                    newTime = \`\${String(hours).padStart(2, '0')}:\${min} \${ampm}\`;
+                    newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
+
                 }
             } else {
                 newTime = oldTime;
             }
 
-            const newSessionKey = \`\${newDate} | \${newTime}\`;
+            const newSessionKey = `${newDate} | ${newTime}`;
             if (newSessionKey !== currentSession) isMove = true;
 
             
