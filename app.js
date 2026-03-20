@@ -8618,18 +8618,35 @@ window.real_populate_qp_code_session_dropdown = function () {
             const reader = new FileReader();
                reader.onload = async (event) => { //
                 try {
-                    const jsonString = event.target.result;
+
+
+                                        const jsonString = event.target.result;
                     const restoredData = JSON.parse(jsonString);
 
-                    // Clear existing data first
-                    localStorage.clear();
+                    // Ask user for Restore Mode
+                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported file's data with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
 
-                    // Restore data (Intercepting Old Student Data Formats)
+                    if (!isMerge) {
+                        localStorage.clear();
+                        await saveExamDataIDB([]);
+                    }
+
+                    // Restore data with Interception
                     for (const key in restoredData) {
                         if (Object.hasOwnProperty.call(restoredData, key)) {
                             if (key === 'examBaseData') {
-                                // Route legacy student data to the new DB format
-                                await saveExamDataIDB(restoredData[key]);
+                                const importedStudents = restoredData[key];
+                                if (isMerge) {
+                                    const existingData = await loadExamDataIDB() || [];
+                                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                                    const existingKeys = new Set(existingData.map(getRowKey));
+                                    
+                                    const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
+                                    await saveExamDataIDB([...existingData, ...newUniqueData]);
+                                } else {
+                                    await saveExamDataIDB(importedStudents);
+                                }
+                    
                             } else if (key !== 'examData_v2') {
                                 // Restore everything else normally (except stale v2 backups)
                                 localStorage.setItem(key, restoredData[key]);
@@ -15929,13 +15946,31 @@ if (displayLoc) {
                         throw new Error("Invalid or empty backup file.");
                     }
 
-                    // Restore to Local Storage & IndexedDB securely
+                    // Ask user for Restore Mode
+                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported backup with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
+
+                    if (!isMerge) {
+                        localStorage.clear();
+                        await saveExamDataIDB([]);
+                    }
+
+                    // Restore & Sync securely
                     let count = 0;
                     for (const key of Object.keys(data)) {
                         if (key === 'examBaseData') {
-                            // Route legacy student data to the new DB format
-                            await saveExamDataIDB(data[key]);
+                            const importedStudents = data[key];
+                            if (isMerge) {
+                                const existingData = await loadExamDataIDB() || [];
+                                const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                                const existingKeys = new Set(existingData.map(getRowKey));
+                                
+                                const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
+                                await saveExamDataIDB([...existingData, ...newUniqueData]);
+                            } else {
+                                await saveExamDataIDB(importedStudents);
+                            }
                             count++;
+                            
                         } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
                             // Skip stale v2 backups, restore everything else
                             if (key !== 'examData_v2') {
