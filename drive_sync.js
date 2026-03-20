@@ -398,6 +398,11 @@ window.executeRestore = async function(fileId) {
         }
     }
 
+    // KILL GHOST DATA BEFORE RELOAD
+        localStorage.removeItem('examBaseData');
+        localStorage.removeItem('examData_v2');
+
+        
         localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
         alert("✅ Restored successfully! Reloading...");
         location.reload();
