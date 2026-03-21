@@ -103,6 +103,29 @@
         </style>
     </div>
 
+    <!-- 🔒 SECURITY LOCK SCREEN (z-90 sits right below the z-100 loader) -->
+    <div id="password-lock-screen" class="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-gray-900 transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
+            
+            <div class="mb-5 flex justify-center">
+                <div class="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center border-4 border-indigo-50 shadow-inner">
+                    <svg class="w-8 h-8 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C9.243 2 7 4.243 7 7v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7c0-2.757-2.243-5-5-5zM9 7c0-1.654 1.346-3 3-3s3 1.346 3 3v3H9V7zm3 10c-1.103 0-2-.897-2-2s.897-2 2-2 2 .897 2 2-.897 2-2 2z"/></svg>
+                </div>
+            </div>
+
+            <h2 class="text-2xl font-bold text-gray-800 mb-1">Security Lock</h2>
+            <p class="text-xs text-gray-500 mb-6">Enter password to access ExamFlow.</p>
+            
+            <input type="password" id="app-entry-password" class="w-full border-2 border-gray-200 rounded-lg py-3 px-4 text-center tracking-[0.5em] font-mono text-xl mb-4 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition" placeholder="••••••••" autocomplete="off">
+            
+            <button id="app-entry-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition transform active:scale-95">Unlock System</button>
+            <p id="app-entry-error" class="text-red-500 text-xs font-bold mt-3 h-4 opacity-0 transition-opacity">Incorrect passcode.</p>
+        </div>
+    </div>
+
+
+
+    
     <header
         class="w-full bg-gray-900 text-white h-14 px-3 shadow-lg flex flex-row items-center justify-between shrink-0 z-50 relative">
 
