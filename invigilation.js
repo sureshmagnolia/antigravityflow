@@ -4726,7 +4726,7 @@ window.openSlotReminderModal = function (key) {
         if (staffEmail) {
             window.currentEmailQueue.push({ 
                 email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId,
-                isNew: !isAlerted, dutyKeys: dutyKeys
+                 isNew: !isMailed, dutyKeys: dutyKeys
             });
         }
 
