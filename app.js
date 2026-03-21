@@ -11604,14 +11604,15 @@ Are you sure you want to update these records?
                     <div class="text-center mb-6 pb-4 border-b-2 border-slate-300">
                         <h1 class="text-2xl font-black text-slate-900 tracking-tight uppercase">${currentCollegeName}</h1>
                         <h2 class="text-lg font-bold text-slate-700 mt-2 tracking-wide">Invigilator Requirement Summary</h2>
-                        <div class="mt-2 text-sm text-slate-500 space-x-2">
+                            <div class="mt-2 text-sm text-slate-500 flex flex-col sm:flex-row items-center justify-center gap-2">
                             <span>Generated: <strong class="text-slate-700">${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong></span>
                             ${filterFutureOnly && filterFutureOnly.checked ? '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full uppercase tracking-wider">Upcoming Exams Only</span>' : ''}
                         </div>
                     </div>
 
-                    <div class="overflow-hidden rounded-xl border border-slate-300 shadow-sm print:rounded-none print:shadow-none print:border-none">
-                        <table class="w-full text-left text-slate-700 border-collapse print:border-slate-400">
+                    <div class="overflow-x-auto overflow-y-hidden rounded-xl border border-slate-300 shadow-sm print:overflow-visible print:rounded-none print:shadow-none print:border-none">
+                        <table class="w-full min-w-[700px] text-left text-slate-700 border-collapse print:border-slate-400">
+
                             <thead>
                                 <tr class="bg-slate-100 print:bg-slate-200 text-slate-600 print:text-slate-900 uppercase text-xs tracking-wider border-b-2 border-slate-300 print:border-slate-400">
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-1/5">Date / Time</th>
