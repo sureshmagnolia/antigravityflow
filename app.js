@@ -11517,10 +11517,11 @@ Are you sure you want to update these records?
             }
 
             let tableRowsHtml = '';
-            // Grand Totals
+            
+            
+                        // Grand Totals
             let grandTotalInvigs = 0;
-            let grandTotalReserves = 0;
-
+            let grandTotalReserves = 0; // Track reserves
 
             sortedSessionKeys.forEach(key => {
                 const stats = sessionStats[key];
@@ -11555,9 +11556,9 @@ Are you sure you want to update these records?
                 const scribeCount = stats.scribeCount;
                 const scribeInvigs = Math.ceil(scribeCount / 5); // 1 per 5 rule
 
-                // C. Session Total
+                // C. Session Total & Reserves
                 const sessionTotalInvigs = streamInvigTotal + scribeInvigs;
-                const sessionReserve = Math.ceil(sessionTotalInvigs * 0.10);
+                const sessionReserve = Math.ceil(sessionTotalInvigs * 0.10); // 10% Reserves
                 const sessionFinalTotal = sessionTotalInvigs + sessionReserve;
 
                 grandTotalInvigs += sessionTotalInvigs;
@@ -11570,7 +11571,7 @@ Are you sure you want to update these records?
                             ${streamHtmlParts.join('')}
                         </td>
                         <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
-                             ${scribeCount > 0 ? `<strong>${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">${scribeInvigs}</strong> Inv` : '<span class="text-gray-400">-</span>'}
+                             ${scribeCount > 0 ? \`<strong>\${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">\${scribeInvigs}</strong> Inv\` : '<span class="text-gray-400">-</span>'}
                         </td>
                         <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #0d9488;">
                             ${sessionTotalInvigs}
@@ -11583,10 +11584,9 @@ Are you sure you want to update these records?
                         </td>
                     </tr>
                 `;
-                
             });
 
-                       // Summary Row
+            // Summary Row
             tableRowsHtml += `
                 <tr style="background-color: #f0fdf4; border-top: 2px solid #0d9488;">
                     <td colspan="3" style="border: 1px solid #ccc; padding: 10px; text-align: right; font-weight: bold;">GRAND TOTAL DUTIES REQUIRED:</td>
@@ -11596,7 +11596,6 @@ Are you sure you want to update these records?
                 </tr>
             `;
 
-
             const fullHtml = `
                 <div class="print-page">
                     <div class="print-header-group text-center mb-6 border-b-2 border-black pb-4">
@@ -11605,26 +11604,38 @@ Are you sure you want to update these records?
                         <p class="text-sm text-gray-500 mt-1">Generated on: ${new Date().toLocaleString()}</p>
                         ${filterFutureOnly && filterFutureOnly.checked ? '<span class="inline-block mt-1 px-2 py-0.5 bg-teal-100 text-teal-800 text-xs font-bold rounded">Filtered: Upcoming Exams Only</span>' : ''}
                     </div>
+
+                    <table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 10pt;">
+                        <thead>
                             <tr style="background-color: #f3f4f6;">
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 20%;">Date | Time</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 22%;">Date | Time</th>
                                 <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Stream-wise (1:30)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 15%;">Scribe (1:5)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Base</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Reserve (10%)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Final</th>
-                            </tr>                
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 18%;">Scribe (1:5)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Base</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Reserve</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Total</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             ${tableRowsHtml}
                         </tbody>
                     </table>
                     
                     <div class="mt-8 text-xs text-gray-500">
-                        <p><strong>Note:</strong> Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.</p>
+                        <p><strong>Note:</strong> Base Calculation: 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes. A 10% Reserve is applied per session.</p>
                     </div>
                 </div>
             `;
 
             reportOutputArea.innerHTML = fullHtml;
+
+
+
+            
+
+
+
+            
             reportOutputArea.style.display = 'block';
             reportStatus.textContent = `Generated summary for ${sortedSessionKeys.length} sessions.`;
             reportControls.classList.remove('hidden');
