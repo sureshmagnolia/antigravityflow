@@ -709,7 +709,7 @@ function getFirstName(fullName) {
 }
 
 // --- AUTOMATIC EMAIL SYSTEM (Google Apps Script) ---
-window.sendSingleEmail = function (btn, email, name, subject, message, dutyKeysJson = '[]') {
+window.sendSingleEmail = function (btn, email, name, subject, message) {
     if (!email) return alert("No email address for this faculty.");
     // Use the global variable from your settings
     if (!googleScriptUrl) return alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
@@ -735,10 +735,9 @@ window.sendSingleEmail = function (btn, email, name, subject, message, dutyKeysJ
             body: htmlBody 
         })
     })
-       .then(() => {
-        console.log('Request sent to Google Script');
+      .then(() => {
         try {
-            const keys = JSON.parse(dutyKeysJson);
+            const keys = JSON.parse(btn ? (btn.dataset.dutyKeys || '[]') : '[]');
             if (keys.length > 0) window.markUserAlerted(email, keys);
         } catch(e) {}
         
@@ -4763,7 +4762,7 @@ window.openSlotReminderModal = function (key) {
                     <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}', '${JSON.stringify(dutyKeys)}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
+                    <button id="${btnId}"  onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" data-duty-keys='${JSON.stringify(dutyKeys)}' ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
                     <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
                     <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")});" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
                 </div>
