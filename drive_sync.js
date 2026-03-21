@@ -302,8 +302,9 @@ async function manageRetention(folderId) {
 
 async function restoreFromDrive() {
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
-        if (!confirm("⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?")) return;
+        if (!(await UiModal.confirm("Drive Restore", "⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?"))) return;
     }
+
 
     try {
         const folderId = await getBackupFolder();
