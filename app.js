@@ -13645,10 +13645,7 @@ async function loadInitialData() {
 
             
             // Enable UI
-            generateReportButton.disabled = false;
-            generateQPaperReportButton.disabled = false;
-            generateDaywiseReportButton.disabled = false;
-            generateScribeReportButton.disabled = false;
+            if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
             disable_absentee_tab(false);
             disable_qpcode_tab(false);
             disable_room_allotment_tab(false);
