@@ -738,7 +738,7 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
       .then(() => {
         try {
             const keys = JSON.parse(btn ? (btn.dataset.dutyKeys || '[]') : '[]');
-            if (keys.length > 0) window.markUserAlerted(email, keys);
+            if (keys.length > 0) window.markUserAlerted(email, keys, 'email');
         } catch(e) {}
         
         btn.innerHTML = `
@@ -4705,17 +4705,23 @@ window.openSlotReminderModal = function (key) {
 
         const dutyKeys = duties.map(d => `${d.date} | ${d.time}`);
         
-        // Determine if they are 100% alerted for all duties today
-        let isAlerted = true;
+
+    // Check mail and WA separately
+        let isMailed = true;
+        let isWA = true;
         dutyKeys.forEach(k => {
-             if (invigilationSlots[k] && (!invigilationSlots[k].alertStatus || !invigilationSlots[k].alertStatus[email])) {
-                 isAlerted = false; 
-             }
+            const as = invigilationSlots[k] && invigilationSlots[k].alertStatus && invigilationSlots[k].alertStatus[email];
+            if (!as || !as.email) isMailed = false;
+            if (!as || !as.wa) isWA = false;
         });
 
-        const statusBadge = isAlerted 
-            ? '<span class="ml-2 text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded border border-green-200">✔ Alerted</span>'
-            : '<span class="ml-2 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">🔔 New</span>';
+        const mailedBadge = isMailed ? '<span class="ml-1 text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-200">✉ Mailed</span>' : '';
+        const waBadge = isWA ? '<span class="ml-1 text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded border border-green-200">✔ WA Sent</span>' : '';
+        const newBadge = (!isMailed && !isWA) ? '<span class="ml-1 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">🔔 New</span>' : '';
+        const statusBadge = mailedBadge + waBadge + newBadge;
+
+        const isNew = !isMailed; // Only email counts for "New" in bulk queue
+
 
         if (staffEmail) {
             window.currentEmailQueue.push({ 
@@ -4760,7 +4766,7 @@ window.openSlotReminderModal = function (key) {
                 <div class="flex gap-2 shrink-0">
                     <button id="${btnId}"  onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" data-duty-keys='${JSON.stringify(dutyKeys)}' ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
                     <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this);" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")}, 'wa');" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
                 </div>
             </div>
 
@@ -9475,22 +9481,22 @@ window.executeMergeSlots = async function() {
 };
 
 
-window.markUserAlerted = function(email, dutyKeys = []) {
+
+window.markUserAlerted = function(email, dutyKeys = [], channel = 'email') {
     let changed = false;
     dutyKeys.forEach(k => {
         if (invigilationSlots[k]) {
             if (!invigilationSlots[k].alertStatus) invigilationSlots[k].alertStatus = {};
-            if (!invigilationSlots[k].alertStatus[email]) {
-                invigilationSlots[k].alertStatus[email] = true;
+            if (!invigilationSlots[k].alertStatus[email]) invigilationSlots[k].alertStatus[email] = {};
+            if (!invigilationSlots[k].alertStatus[email][channel]) {
+                invigilationSlots[k].alertStatus[email][channel] = true;
                 changed = true;
             }
         }
     });
-    // Triggers cloud sync to save the "Alerted" status permanently
-    if (changed && typeof syncSlotsToCloud === 'function') {
-        syncSlotsToCloud();
-    }
+    if (changed && typeof syncSlotsToCloud === 'function') syncSlotsToCloud();
 };
+
 
 
 
