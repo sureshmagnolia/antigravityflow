@@ -4764,7 +4764,7 @@ window.openSlotReminderModal = function (key) {
                 <div class="flex gap-2 shrink-0">
                     <button id="${btnId}"  onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" data-duty-keys='${JSON.stringify(dutyKeys)}' ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
                     <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")});" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this);" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
                 </div>
             </div>
 
