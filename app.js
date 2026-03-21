@@ -17722,3 +17722,45 @@ window.downloadInvigilationListPDF = async function () {
     // Call it after data is loaded
     restoreActiveTab();
 });
+
+
+
+
+// ==========================================
+// 🔒 APP SECURITY: DAILY ENTRY LOCK
+// ==========================================
+function verifyAppPassword() {
+    const input = document.getElementById('app-entry-password').value;
+    const error = document.getElementById('app-entry-error');
+    
+    // Generate today's date in DDMMYYYY exactly
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0
+    const yyyy = today.getFullYear();
+    const requiredPasscode = dd + mm + yyyy; // e.g., 21032026
+
+    if (input === requiredPasscode) {
+        document.getElementById('password-lock-screen').style.opacity = '0';
+        document.getElementById('password-lock-screen').style.pointerEvents = 'none';
+        setTimeout(() => {
+            document.getElementById('password-lock-screen').remove();
+        }, 300);
+    } else {
+        error.classList.remove('opacity-0');
+        document.getElementById('app-entry-password').value = ''; // clear it
+        setTimeout(() => { error.classList.add('opacity-0'); }, 2000); // hide error after 2s
+    }
+}
+
+// Attach Event Listeners on Load
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('app-entry-btn');
+    const inp = document.getElementById('app-entry-password');
+    if (btn) btn.addEventListener('click', verifyAppPassword);
+    if (inp) {
+        inp.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') verifyAppPassword(); 
+        });
+    }
+});
