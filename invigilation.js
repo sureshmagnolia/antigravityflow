@@ -4725,10 +4725,6 @@ window.openSlotReminderModal = function (key) {
         }
 
 
-        if (staffEmail) {
-            window.currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
-        }
-
         // *** UPDATED: Generate detailed daily message ***
         // WhatsApp (Elaborate & Detailed)
         const sessionsStr = duties.map(d => d.session).join(' & ');
