@@ -11519,6 +11519,8 @@ Are you sure you want to update these records?
             let tableRowsHtml = '';
             // Grand Totals
             let grandTotalInvigs = 0;
+            let grandTotalReserves = 0;
+
 
             sortedSessionKeys.forEach(key => {
                 const stats = sessionStats[key];
@@ -11555,7 +11557,11 @@ Are you sure you want to update these records?
 
                 // C. Session Total
                 const sessionTotalInvigs = streamInvigTotal + scribeInvigs;
+                const sessionReserve = Math.ceil(sessionTotalInvigs * 0.10);
+                const sessionFinalTotal = sessionTotalInvigs + sessionReserve;
+
                 grandTotalInvigs += sessionTotalInvigs;
+                grandTotalReserves += sessionReserve;
 
                 tableRowsHtml += `
                     <tr>
@@ -11569,17 +11575,27 @@ Are you sure you want to update these records?
                         <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #0d9488;">
                             ${sessionTotalInvigs}
                         </td>
+                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1em; color: #f59e0b;">
+                            ${sessionReserve}
+                        </td>
+                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #e11d48;">
+                            ${sessionFinalTotal}
+                        </td>
                     </tr>
                 `;
+                
             });
 
-            // Summary Row
+                       // Summary Row
             tableRowsHtml += `
                 <tr style="background-color: #f0fdf4; border-top: 2px solid #0d9488;">
                     <td colspan="3" style="border: 1px solid #ccc; padding: 10px; text-align: right; font-weight: bold;">GRAND TOTAL DUTIES REQUIRED:</td>
                     <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em; color: #0d9488;">${grandTotalInvigs}</td>
+                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.1em; color: #f59e0b;">${grandTotalReserves}</td>
+                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em; color: #e11d48;">${grandTotalInvigs + grandTotalReserves}</td>
                 </tr>
             `;
+
 
             const fullHtml = `
                 <div class="print-page">
@@ -11589,16 +11605,14 @@ Are you sure you want to update these records?
                         <p class="text-sm text-gray-500 mt-1">Generated on: ${new Date().toLocaleString()}</p>
                         ${filterFutureOnly && filterFutureOnly.checked ? '<span class="inline-block mt-1 px-2 py-0.5 bg-teal-100 text-teal-800 text-xs font-bold rounded">Filtered: Upcoming Exams Only</span>' : ''}
                     </div>
-
-                    <table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 10pt;">
-                        <thead>
                             <tr style="background-color: #f3f4f6;">
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 25%;">Date | Time</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Stream-wise Requirements (1:30)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 20%;">Scribe Requirements (1:5)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 10%;">Total</th>
-                            </tr>
-                        </thead>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 20%;">Date | Time</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Stream-wise (1:30)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 15%;">Scribe (1:5)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Base</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Reserve (10%)</th>
+                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 8%;">Final</th>
+                            </tr>                
                         <tbody>
                             ${tableRowsHtml}
                         </tbody>
