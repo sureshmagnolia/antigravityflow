@@ -11571,7 +11571,8 @@ Are you sure you want to update these records?
                             ${streamHtmlParts.join('')}
                         </td>
                         <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
-                             ${scribeCount > 0 ? `<strong>\${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">${scribeInvigs}</strong> Inv` : '<span class="text-gray-400">-</span>'}
+                        ${scribeCount > 0 ? `<strong>${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">${scribeInvigs}</strong> Inv` : '<span class="text-gray-400">-</span>'}
+
                         </td>
                         <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #0d9488;">
                             ${sessionTotalInvigs}
