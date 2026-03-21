@@ -4665,7 +4665,7 @@ window.openSlotReminderModal = function (key) {
     // ADD BULK BUTTONS (WITH CANCEL)
     list.innerHTML = \`
         <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">Queue: <b>\${Object.keys(dailyDuties).length}</b> faculty.</div>
+            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
             <div class="flex gap-2">
                 <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition items-center gap-2">
                     Stop / Cancel
@@ -4704,7 +4704,7 @@ window.openSlotReminderModal = function (key) {
         const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
         const btnId = `email-btn-${index}`;
 
-        const dutyKeys = duties.map(d => \`\${d.date} | \${d.time}\`);
+        const dutyKeys = duties.map(d => \`${d.date} | ${d.time}\`);
         
         // Determine if they are 100% alerted for all duties today
         let isAlerted = true;
@@ -4759,13 +4759,13 @@ window.openSlotReminderModal = function (key) {
         list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">\${fullName} \${noEmailWarning} \${statusBadge}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: \${sessionsStr}</div>
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning} ${statusBadge}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button id="\${btnId}" onclick="sendSingleEmail(this, '\${staffEmail}', '\${safeName}', '\${safeSubject}', '\${safeBody}', '\${JSON.stringify(dutyKeys)}')" \${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
-                    <a href="\${smsLink}" target="_blank" \${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="\${waLink}" target="_blank" \${phoneDisabled} onclick="markAsSent(this); markUserAlerted('\${email}', \${JSON.stringify(dutyKeys).replace(/"/g, "'")});" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
+                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}', '${JSON.stringify(dutyKeys)}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
+                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")});" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
                 </div>
             </div>
 
@@ -5480,7 +5480,7 @@ window.sendBulkEmails = async function (mode) {
     }
 
     if (queue.length === 0) return alert("No emails match this criteria. Everyone is already alerted!");
-    if (!confirm(\`Send \${queue.length} emails to faculty members?\`)) return;
+    if (!confirm(\`Send ${queue.length} emails to faculty members?\`)) return;
 
     // UI Setup
     const progressBar = document.getElementById('bulk-progress-bar');
@@ -5495,8 +5495,8 @@ window.sendBulkEmails = async function (mode) {
     for (let i = 0; i < queue.length; i++) {
         const item = queue[i];
         
-        if (statusText) statusText.textContent = \`Sending \${i+1} of \${queue.length} to \${item.name}...\`;
-        if (progressFill) progressFill.style.width = \`\${Math.round(((i+1) / queue.length) * 100)}%\`;
+        if (statusText) statusText.textContent = \`Sending ${i+1} of ${queue.length} to ${item.name}...\`;
+        if (progressFill) progressFill.style.width = \`${Math.round(((i+1) / queue.length) * 100)}%\`;
 
         const rowBtn = document.getElementById(item.btnId);
         if (rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
@@ -5523,8 +5523,8 @@ window.sendBulkEmails = async function (mode) {
     }
 
     if (statusText) statusText.textContent = "Completed.";
-    alert(\`Batch Complete.\\nSent \${sentCount} emails.\`);
-    if (typeof logActivity === 'function') logActivity("Bulk Email", \`Sent \${sentCount} duty intimations (\${mode}).\`);
+    alert(\`Batch Complete.\\nSent ${sentCount} emails.\`);
+    if (typeof logActivity === 'function') logActivity("Bulk Email", \`Sent ${sentCount} duty intimations (${mode}).\`);
 };
 
 
