@@ -9195,6 +9195,7 @@ window.processBulkQueue = async function(mode = 'all') {
 
         // Update Row Success
         item.status = 'sent';
+        if (item.dutyKeys) window.markUserAlerted(item.email, item.dutyKeys, 'email');
         sentCount++;
         if(rowStatus) { rowStatus.textContent = "✅ Sent"; rowStatus.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
         if(rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }
