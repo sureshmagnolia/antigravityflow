@@ -709,7 +709,7 @@ function getFirstName(fullName) {
 }
 
 // --- AUTOMATIC EMAIL SYSTEM (Google Apps Script) ---
-window.sendSingleEmail = function (btn, email, name, subject, message) {
+window.sendSingleEmail = function (btn, email, name, subject, message, dutyKeysJson = '[]') {
     if (!email) return alert("No email address for this faculty.");
     // Use the global variable from your settings
     if (!googleScriptUrl) return alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
@@ -735,9 +735,15 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
             body: htmlBody 
         })
     })
-    .then(() => {
+       .then(() => {
         console.log('Request sent to Google Script');
+        try {
+            const keys = JSON.parse(dutyKeysJson);
+            if (keys.length > 0) window.markUserAlerted(email, keys);
+        } catch(e) {}
+        
         btn.innerHTML = `
+
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
             Sent
         `;
@@ -4657,21 +4663,23 @@ window.openSlotReminderModal = function (key) {
     if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
 
     // ADD BULK BUTTONS (WITH CANCEL)
-    list.innerHTML = `
+    list.innerHTML = \`
         <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
+            <div class="text-xs text-gray-500">Queue: <b>\${Object.keys(dailyDuties).length}</b> faculty.</div>
             <div class="flex gap-2">
-                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition flex items-center gap-2">
+                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition items-center gap-2">
                     Stop / Cancel
                 </button>
-                <button id="btn-bulk-email-day" onclick="sendBulkEmails('btn-bulk-email-day')" 
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    Send Bulk Emails
+                <button onclick="sendBulkEmails('new')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                    Send to NEW Only
+                </button>
+                <button onclick="sendBulkEmails('all')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                    Send to ALL
                 </button>
             </div>
         </div>
-    `;
+    \`;
+
 
     // ... (Rest of the loop logic is same as previous) ...
     // (Use the loop from the previous openSlotReminderModal)
@@ -4695,6 +4703,28 @@ window.openSlotReminderModal = function (key) {
         const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
         const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
         const btnId = `email-btn-${index}`;
+
+        const dutyKeys = duties.map(d => \`\${d.date} | \${d.time}\`);
+        
+        // Determine if they are 100% alerted for all duties today
+        let isAlerted = true;
+        dutyKeys.forEach(k => {
+             if (invigilationSlots[k] && (!invigilationSlots[k].alertStatus || !invigilationSlots[k].alertStatus[email])) {
+                 isAlerted = false; 
+             }
+        });
+
+        const statusBadge = isAlerted 
+            ? '<span class="ml-2 text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded border border-green-200">✔ Alerted</span>'
+            : '<span class="ml-2 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">🔔 New</span>';
+
+        if (staffEmail) {
+            window.currentEmailQueue.push({ 
+                email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId,
+                isNew: !isAlerted, dutyKeys: dutyKeys
+            });
+        }
+
 
         if (staffEmail) {
             window.currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
@@ -4729,15 +4759,16 @@ window.openSlotReminderModal = function (key) {
         list.innerHTML += `
             <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
                 <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
+                    <div class="font-bold text-gray-800 truncate">\${fullName} \${noEmailWarning} \${statusBadge}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: \${sessionsStr}</div>
                 </div>
                 <div class="flex gap-2 shrink-0">
-                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">Remind</a>
+                    <button id="\${btnId}" onclick="sendSingleEmail(this, '\${staffEmail}', '\${safeName}', '\${safeSubject}', '\${safeBody}', '\${JSON.stringify(dutyKeys)}')" \${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
+                    <a href="\${smsLink}" target="_blank" \${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="\${waLink}" target="_blank" \${phoneDisabled} onclick="markAsSent(this); markUserAlerted('\${email}', \${JSON.stringify(dutyKeys).replace(/"/g, "'")});" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
                 </div>
             </div>
+
         `;
     });
 
@@ -5440,79 +5471,63 @@ function formatMessageForEmail(text) {
     return html;
 }
 
-window.sendBulkEmails = async function (btnId) {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
 
-    if (window.currentEmailQueue.length === 0) return alert("No emails in queue.");
-    if (!confirm(`Send ${window.currentEmailQueue.length} emails to faculty members via the system?`)) return;
+window.sendBulkEmails = async function (mode) {
+    // Determine the target queue based on Mode
+    let queue = window.currentEmailQueue;
+    if (mode === 'new') {
+        queue = queue.filter(item => item.isNew);
+    }
+
+    if (queue.length === 0) return alert("No emails match this criteria. Everyone is already alerted!");
+    if (!confirm(\`Send \${queue.length} emails to faculty members?\`)) return;
 
     // UI Setup
     const progressBar = document.getElementById('bulk-progress-bar');
     const progressFill = document.getElementById('bulk-progress-fill');
     const statusText = document.getElementById('bulk-status-text');
-    const cancelBtn = document.getElementById('btn-cancel-bulk'); // If you add one
 
-    btn.classList.add('hidden'); // Hide start button
     if (progressBar) progressBar.classList.remove('hidden');
     if (statusText) statusText.classList.remove('hidden');
 
     let sentCount = 0;
     
-    for (let i = 0; i < window.currentEmailQueue.length; i++) {
-        const item = window.currentEmailQueue[i];
+    for (let i = 0; i < queue.length; i++) {
+        const item = queue[i];
         
-        // Update Status
-        if (statusText) statusText.textContent = `Sending ${i+1} of ${window.currentEmailQueue.length} to ${item.name}...`;
-        if (progressFill) progressFill.style.width = `${Math.round(((i+1) / window.currentEmailQueue.length) * 100)}%`;
+        if (statusText) statusText.textContent = \`Sending \${i+1} of \${queue.length} to \${item.name}...\`;
+        if (progressFill) progressFill.style.width = \`\${Math.round(((i+1) / queue.length) * 100)}%\`;
 
-        // Update Individual Button Row
         const rowBtn = document.getElementById(item.btnId);
-        if (rowBtn) {
-            rowBtn.textContent = "...";
-            rowBtn.disabled = true;
-        }
+        if (rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
 
-        // Send
         try {
             await fetch(googleScriptUrl, {
-                method: "POST",
-                mode: "no-cors",
+                method: "POST", mode: "no-cors",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    to: item.email,
-                    subject: item.subject,
-                    body: item.body // Send the HTML body
-                })
+                body: JSON.stringify({ to: item.email, subject: item.subject, body: item.body })
             });
 
-            // Success UI
             if (rowBtn) {
                 rowBtn.innerHTML = "✅";
-                rowBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                rowBtn.classList.remove('bg-gray-700', 'hover:bg-gray-800');
                 rowBtn.classList.add('bg-green-600', 'cursor-default');
             }
             sentCount++;
-            
-            // Delay
-            await new Promise(r => setTimeout(r, 800)); 
+            window.markUserAlerted(item.email, item.dutyKeys); // Saves the state to Cloud
 
+            await new Promise(r => setTimeout(r, 800)); 
         } catch (e) {
-            console.error(e);
-            if (rowBtn) {
-                rowBtn.textContent = "Failed";
-                rowBtn.classList.add('bg-red-600');
-            }
+            if (rowBtn) { rowBtn.textContent = "Failed"; rowBtn.disabled = false; }
         }
     }
 
-    if (statusText) statusText.textContent = `Done! Sent ${sentCount} emails.`;
-    alert(`Batch Process Complete.\nSent: ${sentCount}`);
-    
-    // Reset (Optional)
-    // btn.classList.remove('hidden');
-    // if (progressBar) progressBar.classList.add('hidden');
+    if (statusText) statusText.textContent = "Completed.";
+    alert(\`Batch Complete.\\nSent \${sentCount} emails.\`);
+    if (typeof logActivity === 'function') logActivity("Bulk Email", \`Sent \${sentCount} duty intimations (\${mode}).\`);
 };
+
+
 
 
 // --- HELPER: Consolidated Department Email Template ---
@@ -9464,6 +9479,23 @@ window.executeMergeSlots = async function() {
     }
 };
 
+
+window.markUserAlerted = function(email, dutyKeys = []) {
+    let changed = false;
+    dutyKeys.forEach(k => {
+        if (invigilationSlots[k]) {
+            if (!invigilationSlots[k].alertStatus) invigilationSlots[k].alertStatus = {};
+            if (!invigilationSlots[k].alertStatus[email]) {
+                invigilationSlots[k].alertStatus[email] = true;
+                changed = true;
+            }
+        }
+    });
+    // Triggers cloud sync to save the "Alerted" status permanently
+    if (changed && typeof syncSlotsToCloud === 'function') {
+        syncSlotsToCloud();
+    }
+};
 
 
 
