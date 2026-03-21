@@ -9348,51 +9348,7 @@ window.generateDepartmentConsolidatedEmail = function(deptName, duties, title) {
     `;
 };
 
-// 2. Missing Bulk Sender for Departments
-window.sendBulkDeptEmails = async function () {
-    const pendingItems = window.currentDeptEmailQueue.filter(i => i.status === 'pending' && i.email);
-    if (pendingItems.length === 0) return alert("No valid pending emails to send.");
-    if (!confirm(`Start bulk sending to ${pendingItems.length} Departments?`)) return;
 
-    // UI Feedback
-    const btn = document.getElementById('btn-bulk-dept-send');
-    const bar = document.getElementById('dept-progress-bar');
-    const fill = document.getElementById('dept-progress-fill');
-    const txt = document.getElementById('dept-status-text');
-    
-    if (btn) btn.classList.add('hidden');
-    if (bar) bar.classList.remove('hidden');
-    if (txt) { txt.classList.remove('hidden'); txt.textContent = "Starting..."; }
-
-    let successCount = 0;
-    for (let i = 0; i < pendingItems.length; i++) {
-        const item = pendingItems[i];
-        if (txt) txt.textContent = `Sending to ${item.dept} (${i + 1}/${pendingItems.length})...`;
-        if (fill) fill.style.width = `${Math.round(((i + 1) / pendingItems.length) * 100)}%`;
-
-        try {
-            await fetch(googleScriptUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ to: item.email, subject: item.subject, body: item.body })
-            });
-            item.status = 'sent';
-            successCount++;
-            
-            // Update individual row status if exists
-            const rStatus = document.getElementById(item.statusId);
-            if (rStatus) { rStatus.textContent = "Sent"; rStatus.classList.remove('hidden'); rStatus.classList.add('text-green-600'); }
-        } catch (e) { console.error(e); }
-        
-        await new Promise(r => setTimeout(r, 1000));
-    }
-    
-    if (txt) txt.textContent = "Completed.";
-    alert(`Batch Complete. Sent to ${successCount} departments.`);
-    if (btn) btn.classList.remove('hidden');
-    if (bar) bar.classList.add('hidden');
-};
 
 // --- ADMIN: Remove Unavailability (From Manual Modal) ---
 window.adminRemoveUnavailable = async function(key, email, isAdvance) {
