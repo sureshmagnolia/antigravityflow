@@ -11519,7 +11519,8 @@ Are you sure you want to update these records?
             let tableRowsHtml = '';
             
             
-                        // Grand Totals
+            
+            // Grand Totals
             let grandTotalInvigs = 0;
             let grandTotalReserves = 0; // Track reserves
 
@@ -11543,10 +11544,10 @@ Are you sure you want to update these records?
                     streamInvigTotal += requiredInvigs;
                     
                     streamHtmlParts.push(`
-                        <div class="flex justify-between items-center text-sm mb-1 border-b border-gray-200 pb-1 last:border-0">
-                            <span class="font-medium text-gray-700">${strm}:</span>
-                            <span class="text-gray-600">
-                                <strong>${count}</strong> Students <span class="text-xs text-gray-400">→</span> <strong class="text-blue-600">${requiredInvigs}</strong> Inv
+                        <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100 last:border-0">
+                            <span class="font-medium text-slate-700">${strm}</span>
+                            <span class="text-slate-600">
+                                <span class="inline-block w-8 text-right font-bold">${count}</span> <span class="text-[10px] text-slate-300 mx-1">▶</span> <strong class="text-indigo-600 inline-block w-4 text-right">${requiredInvigs}</strong>
                             </span>
                         </div>
                     `);
@@ -11565,22 +11566,23 @@ Are you sure you want to update these records?
                 grandTotalReserves += sessionReserve;
 
                 tableRowsHtml += `
-                    <tr>
-                        <td style="border: 1px solid #ccc; padding: 8px; font-weight: bold;">${key}</td>
-                        <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
+                    <tr class="hover:bg-slate-50 transition-colors bg-white print:bg-white">
+                        <td class="border border-slate-300 print:border-slate-400 p-3 font-bold text-slate-800 align-middle">
+                            ${key.replace(' | ', '<br><span class="text-xs font-normal text-slate-500 print:text-slate-600">')}</span>
+                        </td>
+                        <td class="border border-slate-300 print:border-slate-400 p-2 align-top">
                             ${streamHtmlParts.join('')}
                         </td>
-                        <td style="border: 1px solid #ccc; padding: 8px; vertical-align: top;">
-                        ${scribeCount > 0 ? `<strong>${scribeCount}</strong> Scribes <span class="text-xs text-gray-400">→</span> <strong class="text-orange-600">${scribeInvigs}</strong> Inv` : '<span class="text-gray-400">-</span>'}
-
+                        <td class="border border-slate-300 print:border-slate-400 p-3 align-middle text-sm text-center">
+                             ${scribeCount > 0 ? `<div class="bg-amber-50 print:bg-transparent rounded px-2 py-1 border border-amber-100 print:border-0 tracking-tight"><strong class="text-amber-800 print:text-black">${scribeCount}</strong> Scr <span class="text-[10px] text-amber-300 print:text-black mx-1">▶</span> <strong class="text-amber-600 print:text-black">${scribeInvigs}</strong> Inv</div>` : '<span class="text-slate-300">-</span>'}
                         </td>
-                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #0d9488;">
+                        <td class="border border-slate-300 print:border-slate-400 p-3 text-center align-middle font-bold text-teal-700 bg-teal-50/50 print:bg-transparent print:text-black text-lg">
                             ${sessionTotalInvigs}
                         </td>
-                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1em; color: #f59e0b;">
+                        <td class="border border-slate-300 print:border-slate-400 p-3 text-center align-middle font-bold text-amber-600 bg-amber-50/50 print:bg-transparent print:text-black text-lg">
                             ${sessionReserve}
                         </td>
-                        <td style="border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 1.1em; color: #e11d48;">
+                        <td class="border border-slate-300 print:border-slate-400 p-3 text-center align-middle font-bold text-rose-700 bg-rose-50 print:bg-transparent print:text-black text-xl">
                             ${sessionFinalTotal}
                         </td>
                     </tr>
@@ -11589,46 +11591,51 @@ Are you sure you want to update these records?
 
             // Summary Row
             tableRowsHtml += `
-                <tr style="background-color: #f0fdf4; border-top: 2px solid #0d9488;">
-                    <td colspan="3" style="border: 1px solid #ccc; padding: 10px; text-align: right; font-weight: bold;">GRAND TOTAL DUTIES REQUIRED:</td>
-                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em; color: #0d9488;">${grandTotalInvigs}</td>
-                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.1em; color: #f59e0b;">${grandTotalReserves}</td>
-                    <td style="border: 1px solid #ccc; padding: 10px; text-align: center; font-weight: bold; font-size: 1.2em; color: #e11d48;">${grandTotalInvigs + grandTotalReserves}</td>
+                <tr class="bg-slate-800 text-white print:bg-slate-200 print:text-black">
+                    <td colspan="3" class="border border-slate-700 print:border-slate-400 p-4 text-right text-sm font-bold tracking-wide uppercase">GRAND TOTAL DUTIES REQUIRED:</td>
+                    <td class="border border-slate-700 print:border-slate-400 p-4 text-center font-bold text-xl">${grandTotalInvigs}</td>
+                    <td class="border border-slate-700 print:border-slate-400 p-4 text-center font-bold text-xl">${grandTotalReserves}</td>
+                    <td class="border border-slate-700 print:border-slate-400 p-4 text-center font-extrabold text-2xl">${grandTotalInvigs + grandTotalReserves}</td>
                 </tr>
             `;
 
             const fullHtml = `
-                <div class="print-page">
-                    <div class="print-header-group text-center mb-6 border-b-2 border-black pb-4">
-                        <h1 class="text-xl font-bold text-gray-900 uppercase">${currentCollegeName}</h1>
-                        <h2 class="text-lg font-bold text-gray-700 mt-1">Invigilator Requirement Summary</h2>
-                        <p class="text-sm text-gray-500 mt-1">Generated on: ${new Date().toLocaleString()}</p>
-                        ${filterFutureOnly && filterFutureOnly.checked ? '<span class="inline-block mt-1 px-2 py-0.5 bg-teal-100 text-teal-800 text-xs font-bold rounded">Filtered: Upcoming Exams Only</span>' : ''}
+                <div class="print-page bg-white p-2">
+                    <div class="text-center mb-6 pb-4 border-b-2 border-slate-300">
+                        <h1 class="text-2xl font-black text-slate-900 tracking-tight uppercase">${currentCollegeName}</h1>
+                        <h2 class="text-lg font-bold text-slate-700 mt-2 tracking-wide">Invigilator Requirement Summary</h2>
+                        <div class="mt-2 text-sm text-slate-500 space-x-2">
+                            <span>Generated: <strong class="text-slate-700">${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong></span>
+                            ${filterFutureOnly && filterFutureOnly.checked ? '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full uppercase tracking-wider">Upcoming Exams Only</span>' : ''}
+                        </div>
                     </div>
 
-                    <table style="width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 10pt;">
-                        <thead>
-                            <tr style="background-color: #f3f4f6;">
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 22%;">Date | Time</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left;">Stream-wise (1:30)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: left; width: 18%;">Scribe (1:5)</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Base</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Reserve</th>
-                                <th style="border: 1px solid #ccc; padding: 8px; text-align: center; width: 7%;">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRowsHtml}
-                        </tbody>
-                    </table>
+                    <div class="overflow-hidden rounded-xl border border-slate-300 shadow-sm print:rounded-none print:shadow-none print:border-none">
+                        <table class="w-full text-left text-slate-700 border-collapse print:border-slate-400">
+                            <thead>
+                                <tr class="bg-slate-100 print:bg-slate-200 text-slate-600 print:text-slate-900 uppercase text-xs tracking-wider border-b-2 border-slate-300 print:border-slate-400">
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-1/5">Date / Time</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400">Stream-wise Required (1:30)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-32 text-center">Scribes (1:5)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-teal-700">Base</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-amber-600">Resv(10%)</th>
+                                    <th class="p-4 font-bold text-center w-24 text-rose-700">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
                     
-                    <div class="mt-8 text-xs text-gray-500">
-                        <p><strong>Note:</strong> Base Calculation: 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes. A 10% Reserve is applied per session.</p>
+                    <div class="mt-6 p-4 bg-slate-50 print:bg-transparent rounded-lg border border-slate-200 print:border-0 text-xs text-slate-600 leading-relaxed max-w-2xl mx-auto text-center">
+                        <p><strong>Note:</strong> Base Calculation utilizes 1 Invigilator per 30 Normal Candidates (calculated per stream) and 1 Invigilator per 5 Scribes. A robust mathematically rounded <strong>10% Reserve Buffer</strong> is subsequently applied to each session.</p>
                     </div>
                 </div>
             `;
 
             reportOutputArea.innerHTML = fullHtml;
+
 
 
 
