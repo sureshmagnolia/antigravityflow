@@ -4663,7 +4663,7 @@ window.openSlotReminderModal = function (key) {
     if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
 
     // ADD BULK BUTTONS (WITH CANCEL)
-    list.innerHTML = \`
+    list.innerHTML = `
         <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
             <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
             <div class="flex gap-2">
@@ -4678,7 +4678,7 @@ window.openSlotReminderModal = function (key) {
                 </button>
             </div>
         </div>
-    \`;
+    `;
 
 
     // ... (Rest of the loop logic is same as previous) ...
@@ -4704,7 +4704,7 @@ window.openSlotReminderModal = function (key) {
         const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
         const btnId = `email-btn-${index}`;
 
-        const dutyKeys = duties.map(d => \`${d.date} | ${d.time}\`);
+        const dutyKeys = duties.map(d => `${d.date} | ${d.time}`);
         
         // Determine if they are 100% alerted for all duties today
         let isAlerted = true;
@@ -5480,7 +5480,7 @@ window.sendBulkEmails = async function (mode) {
     }
 
     if (queue.length === 0) return alert("No emails match this criteria. Everyone is already alerted!");
-    if (!confirm(\`Send ${queue.length} emails to faculty members?\`)) return;
+    if (!confirm(`Send ${queue.length} emails to faculty members?`)) return;
 
     // UI Setup
     const progressBar = document.getElementById('bulk-progress-bar');
@@ -5495,8 +5495,8 @@ window.sendBulkEmails = async function (mode) {
     for (let i = 0; i < queue.length; i++) {
         const item = queue[i];
         
-        if (statusText) statusText.textContent = \`Sending ${i+1} of ${queue.length} to ${item.name}...\`;
-        if (progressFill) progressFill.style.width = \`${Math.round(((i+1) / queue.length) * 100)}%\`;
+        if (statusText) statusText.textContent = `Sending ${i+1} of ${queue.length} to ${item.name}...`;
+        if (progressFill) progressFill.style.width = `${Math.round(((i+1) / queue.length) * 100)}%`;
 
         const rowBtn = document.getElementById(item.btnId);
         if (rowBtn) { rowBtn.textContent = "..."; rowBtn.disabled = true; }
@@ -5523,8 +5523,8 @@ window.sendBulkEmails = async function (mode) {
     }
 
     if (statusText) statusText.textContent = "Completed.";
-    alert(\`Batch Complete.\\nSent ${sentCount} emails.\`);
-    if (typeof logActivity === 'function') logActivity("Bulk Email", \`Sent ${sentCount} duty intimations (${mode}).\`);
+    alert(`Batch Complete.\\nSent ${sentCount} emails.`);
+    if (typeof logActivity === 'function') logActivity("Bulk Email", `Sent ${sentCount} duty intimations (${mode}).`);
 };
 
 
