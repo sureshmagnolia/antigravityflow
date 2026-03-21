@@ -9162,7 +9162,6 @@ window.sendIndividualEmail = async function(index) {
 window.processBulkQueue = async function(mode = 'all') {
     let pendingItems = window.currentEmailQueue.filter(i => i.status === 'pending');
     if (mode === 'new') pendingItems = pendingItems.filter(i => i.isNew);
-    const pendingItems = window.currentEmailQueue.filter(i => i.status === 'pending' && i.email);
     
     if (pendingItems.length === 0) return alert("No pending emails to send.");
     if (!confirm(`Start bulk sending to ${pendingItems.length} recipients?\n\nKeep this window open until finished.`)) return;
