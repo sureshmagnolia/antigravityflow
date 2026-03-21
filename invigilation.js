@@ -8747,7 +8747,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
         <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 group">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 text-sm truncate">${item.name}</div>
+                    <div class="font-bold text-gray-800 text-sm truncate">${item.name} ${wkMailedBadge} ${wkWABadge} ${wkNewBadge}</div>
                     ${!phone ? '<span class="text-[9px] text-red-400 bg-red-50 px-1 rounded">No Phone</span>' : ''}
                 </div>
                 <div class="text-xs text-gray-500 mt-0.5">${item.duties.length} Session(s)</div>
