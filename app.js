@@ -17725,7 +17725,6 @@ window.downloadInvigilationListPDF = async function () {
 
 
 
-
 // ==========================================
 // 🔒 APP SECURITY: DAILY ENTRY LOCK
 // ==========================================
@@ -17741,10 +17740,15 @@ function verifyAppPassword() {
     const requiredPasscode = dd + mm + yyyy; // e.g., 21032026
 
     if (input === requiredPasscode) {
+        // --- NEW: Save to LocalStorage for today ---
+        localStorage.setItem('appDailyPasscode', requiredPasscode);
+        // ---------------------------------------------
+        
         document.getElementById('password-lock-screen').style.opacity = '0';
         document.getElementById('password-lock-screen').style.pointerEvents = 'none';
         setTimeout(() => {
-            document.getElementById('password-lock-screen').remove();
+            const lockScreen = document.getElementById('password-lock-screen');
+            if (lockScreen) lockScreen.remove();
         }, 300);
     } else {
         error.classList.remove('opacity-0');
@@ -17755,6 +17759,23 @@ function verifyAppPassword() {
 
 // Attach Event Listeners on Load
 document.addEventListener('DOMContentLoaded', () => {
+    // --- NEW: Auto-bypass if already entered today ---
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const requiredPasscode = dd + mm + yyyy;
+
+    const savedPasscode = localStorage.getItem('appDailyPasscode');
+    
+    if (savedPasscode === requiredPasscode) {
+        // Automatically remove the lock screen before the user sees it
+        const lockScreen = document.getElementById('password-lock-screen');
+        if (lockScreen) lockScreen.remove();
+        return; // Exit early, no need to attach listeners to UI that doesn't exist
+    }
+    // --------------------------------------------------
+
     const btn = document.getElementById('app-entry-btn');
     const inp = document.getElementById('app-entry-password');
     if (btn) btn.addEventListener('click', verifyAppPassword);
@@ -17764,3 +17785,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
