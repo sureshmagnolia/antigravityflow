@@ -7735,30 +7735,45 @@ function isActionAllowed(dateInput) {
 // NOTE: 'vacationExtraHolidays', 'vacationStart', 'vacationEnd' are defined in Global State at top.
 
 window.openVacationReportModal = function() {
-    // 1. Set Inputs from Saved State (or defaults)
-    const today = new Date();
-    const year = today.getFullYear();
-    
-    // Use saved values if they exist, otherwise default to April-May
-    const startVal = vacationStart || `${year}-04-01`;
-    const endVal = vacationEnd || `${year}-05-31`;
+    console.log("Vacation Report Button Clicked!");
+    try {
+        const today = new Date();
+        const year = today.getFullYear();
+        
+        const startVal = vacationStart || `${year}-04-01`;
+        const endVal = vacationEnd || `${year}-05-31`;
+        console.log("Settings loaded:", startVal, endVal);
 
-    const startInput = document.getElementById('vac-start');
-    const endInput = document.getElementById('vac-end');
+        const startInput = document.getElementById('vac-start');
+        const endInput = document.getElementById('vac-end');
 
-    startInput.value = startVal;
-    endInput.value = endVal;
+        if (!startInput || !endInput) {
+            console.error("Missing Date inputs in HTML!");
+            return alert("Missing vac-start or vac-end in HTML");
+        }
 
-    // 2. Attach Auto-Save Listeners
-    startInput.onchange = saveVacationConfig;
-    endInput.onchange = saveVacationConfig;
-    
-    // 3. Clear Input & Render
-    document.getElementById('vac-holiday-input').value = "";
-    renderVacationHolidays();
-    
-    window.openModal('vacation-report-modal');
+        startInput.value = startVal;
+        endInput.value = endVal;
+
+        startInput.onchange = saveVacationConfig;
+        endInput.onchange = saveVacationConfig;
+        
+        const holidayInput = document.getElementById('vac-holiday-input');
+        if (holidayInput) holidayInput.value = "";
+        
+        console.log("Rendering holidays...");
+        renderVacationHolidays();
+        
+        console.log("Opening modal...");
+        window.openModal('vacation-report-modal');
+        console.log("Completed without error.");
+        
+    } catch (e) {
+        console.error("Crash inside openVacationReportModal:", e);
+        alert("Error: " + e.message);
+    }
 }
+
 
 // --- CLOUD SAVING FUNCTION ---
 async function saveVacationConfig() {
