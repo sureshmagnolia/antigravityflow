@@ -371,6 +371,8 @@ function applyCollegeConfig(data, mode, triggerRender) {
     if (collegeData.invigGlobalTarget !== undefined) globalDutyTarget = parseInt(collegeData.invigGlobalTarget);
     if (collegeData.invigGuestTarget !== undefined) guestGlobalTarget = parseInt(collegeData.invigGuestTarget);
     if (collegeData.invigVacationTarget !== undefined) vacationDutyTarget = parseInt(collegeData.invigVacationTarget);
+    window.vacationDutyDates = (collegeData.invigVacationDutyDates || "").split(',').map(d => d.trim()).filter(d => Boolean(d));
+
 
 
     if (triggerRender && mode === 'admin') {
@@ -437,8 +439,10 @@ function getVacationDutiesDoneCount(email) {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
         
-        // Only count if it's actually in the vacation period
-        if (isDateInVacation(dateObj)) {
+        // Count if in standard vacation range OR manually marked as an Extra Date
+        const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(key);
+        if (isDateInVacation(dateObj) || isExtraDutyDate) {
+
             // Check if attended (or assigned if no attendance data yet)
             if (slot.attendance && slot.attendance.length > 0) {
                 if (slot.attendance.includes(email)) count++;
@@ -3046,12 +3050,20 @@ window.openRoleConfigModal = function () {
         targetInput.disabled = true;
     }
 
+    const dutyDatesInput = document.getElementById('vacation-duty-dates');
+    if (dutyDatesInput) {
+        dutyDatesInput.value = window.vacationDutyDates ? window.vacationDutyDates.join(', ') : "";
+        dutyDatesInput.disabled = true;
+    }
+
+    
     const guestInput = document.getElementById('guest-duty-target');
     if (guestInput) {
         guestInput.value = guestGlobalTarget;
         guestInput.disabled = true;
     }
 
+    
 
     const vacationInput = document.getElementById('vacation-duty-target');
     if (vacationInput) {
@@ -3157,6 +3169,7 @@ window.saveRoleConfig = async function () {
     const newGlobal = parseInt(document.getElementById('global-duty-target').value);
     const newGuest = parseInt(document.getElementById('guest-duty-target').value);
     const newVacation = parseInt(document.getElementById('vacation-duty-target').value) || 0;
+    const newExtraDates = document.getElementById('vacation-duty-dates') ? document.getElementById('vacation-duty-dates').value.trim() : "";
 
     if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
     if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
@@ -3178,6 +3191,8 @@ window.saveRoleConfig = async function () {
         invigGlobalTarget: globalDutyTarget,
         invigGuestTarget: guestGlobalTarget, // <--- SAVED HERE
         invigVacationTarget: vacationDutyTarget,
+        invigVacationDutyDates: newExtraDates,
+
 
         invigGoogleScriptUrl: googleScriptUrl
     });
@@ -5733,10 +5748,28 @@ window.toggleGlobalTargetLock = function () {
         }
     }
 
+        const dutyDatesInput = document.getElementById('vacation-duty-dates');
+    if (dutyDatesInput) {
+        dutyDatesInput.disabled = isGlobalTargetLocked;
+        if (!isGlobalTargetLocked) {
+            dutyDatesInput.classList.remove('text-gray-600', 'border-gray-200');
+            dutyDatesInput.classList.add('text-black', 'bg-white', 'border-indigo-300');
+        } else {
+            dutyDatesInput.classList.add('text-gray-600', 'border-gray-200');
+            dutyDatesInput.classList.remove('text-black', 'bg-white', 'border-indigo-300');
+        }
+    }
+
+
     
     if (btn) updateLockIcon('global-target-lock-btn', isGlobalTargetLocked);
     if (!isGlobalTargetLocked && input) input.focus();
 }
+
+
+
+
+
 // ==========================================
 // 💾 MASTER BACKUP & RESTORE SYSTEM
 // ==========================================
