@@ -6436,10 +6436,13 @@ window.saveManualAllocation = async function () {
 
         // GOD MODE UPDATE
         selectedEmails.forEach(email => {
-            if (!oldAssigned.has(email) || !slot.assignmentMeta?.[email]) {
+            // Only tag as ADMIN if they are truly NEW and have no existing source
+            const existingSource = slot.assignmentMeta?.[email]?.source;
+            if (!oldAssigned.has(email) && !existingSource) {
                 updateAssignmentMeta(slot, email, 'ADMIN');
             }
         });
+
         
         if (slot.assignmentMeta) {
             Object.keys(slot.assignmentMeta).forEach(e => {
