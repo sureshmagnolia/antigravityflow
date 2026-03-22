@@ -1011,7 +1011,23 @@
                             <span class="text-xs text-orange-700 leading-tight">During<br>Vacation</span>
                         </div>
                     </div>
+           
+                    <!-- NEW: Extra Vacation Duty Dates (Math Only) -->
+                    <div class="col-span-full bg-indigo-50 p-3 rounded border border-indigo-100 mt-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-xs font-bold text-indigo-800">Extra Dates to Treat as Vacation (Math Only)</label>
+                        </div>
+                        <div class="space-y-1">
+                            <input type="text" id="vacation-duty-dates"
+                                placeholder="e.g. 2026-03-20, 2026-03-25"
+                                class="w-full p-2 border border-indigo-300 rounded text-sm font-medium text-gray-700 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 transition" disabled>
+                            <p class="text-[10px] text-indigo-600 leading-tight block">Enter comma-separated dates (YYYY-MM-DD). If a slot falls on these dates, the Auto-Assigner prioritizes staff as if it is a Vacation day.</p>
+                        </div>
+                    </div>
+
+                
                 </div>
+
 
                 
 
