@@ -958,157 +958,172 @@
     </div>
 
 
-    <div id="role-config-modal"
-        class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md m-4 max-h-[90vh] flex flex-col">
 
-            <div class="shrink-0">
-                <h3 class="text-lg font-bold text-gray-800 mb-1">Invigilation Settings</h3>
-                <p class="text-xs text-gray-500 mb-4">Configure roles, limits, and integrations.</p>
+<div id="role-config-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[95vh] overflow-hidden border border-gray-100">
+        
+        <!-- Header -->
+        <div class="shrink-0 p-5 px-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+            <div>
+                <h3 class="text-xl font-black text-gray-800 tracking-tight">⚙️ Settings & Roles</h3>
+                <p class="text-xs text-gray-500 mt-1 font-medium">Configure duty targets, integrations, and department roles.</p>
             </div>
-
-            <div class="flex-1 overflow-y-auto custom-scroll min-h-0 pr-1">
-
-                
-                <div class="mb-4 flex flex-col md:flex-row gap-4">
-                    <!-- Global Default -->
-                    <div class="flex-1 bg-blue-50 p-3 rounded border border-blue-100">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-bold text-blue-800">Global Default Duty</label>
-                            <button id="global-target-lock-btn" onclick="toggleGlobalTargetLock()"
-                                class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒 Locked</button>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="global-duty-target"
-                                class="w-16 p-1.5 border border-blue-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition"
-                                min="0" disabled>
-                            <span class="text-xs text-blue-600 leading-tight">for Staff /<br>Assistant Prof.</span>
-                        </div>
-                    </div>
-
-                    <!-- Guest Default -->
-                    <div class="flex-1 bg-yellow-50 p-3 rounded border border-yellow-100">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-bold text-yellow-800">Guest Lecturer Base</label>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="guest-duty-target"
-                                class="w-16 p-1.5 border border-yellow-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition"
-                                min="0" disabled>
-                            <span class="text-xs text-yellow-700 leading-tight">Base Target<br>(Scaled by Days)</span>
-                        </div>
-                    </div>
-
-                    <!-- NEW: Vacation Default -->
-                    <div class="flex-1 bg-orange-50 p-3 rounded border border-orange-100">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-bold text-orange-800">Vacation Default</label>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="number" id="vacation-duty-target"
-                                class="w-16 p-1.5 border border-orange-300 rounded text-sm text-center font-bold text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition"
-                                min="0" disabled>
-                            <span class="text-xs text-orange-700 leading-tight">During<br>Vacation</span>
-                        </div>
-                    </div>
-           
-                <!-- NEW: Extra Vacation Duty Dates (Math Only) -->
-                    <div class="col-span-full bg-indigo-50 p-3 rounded border border-indigo-100 mt-2">
-                        <div class="flex justify-between items-center mb-1">
-                            <label class="block text-xs font-bold text-indigo-800">Extra Dates to Treat as Vacation (Math Only)</label>
-                        </div>
-                        <div class="space-y-2">
-                            <p class="text-[10px] text-indigo-600 leading-tight block">If a slot falls on these dates, the Auto-Assigner prioritizes staff as if it is a Vacation day.</p>
-                            
-                            <div class="flex gap-2">
-                                <input type="date" id="vacation-math-date-input" class="flex-1 p-2 border border-indigo-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 transition" disabled>
-                                <button id="vacation-math-date-btn" onclick="addVacationMathDate()" class="bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                                    + Add Date
-                                </button>
-                            </div>
-                            
-                            <div id="vacation-math-date-list" class="flex flex-wrap gap-2 min-h-[50px] max-h-[100px] overflow-y-auto p-2 border border-indigo-200 rounded bg-indigo-50/50">
-                                <span class="text-xs text-indigo-400 italic self-center pl-1">No extra dates added.</span>
-                            </div>
-                        </div>
-                    </div>
-
-
-                
-                </div>
-
-
-                
-
-
-
-                <!-- RESTORED: Google Apps Script URL -->
-                <div class="mb-4 bg-green-50 p-3 rounded border border-green-100">
-                    <div class="flex justify-between items-center mb-1">
-                        <label class="block text-xs font-bold text-green-800">Google Apps Script URL
-                            (Auto-Email)</label>
-                        <button id="email-config-lock-btn" onclick="toggleEmailConfigLock()"
-                            class="text-[10px] bg-white text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition shadow-sm">🔒
-                            Locked</button>
-                    </div>
-                    <input type="text" id="google-script-url"
-                        class="w-full p-1.5 border border-green-300 rounded text-xs text-gray-600 disabled:bg-gray-100 disabled:text-gray-400 transition"
-                        placeholder="Paste your Web App URL here..." disabled>
-                </div>
-
-                <div class="flex justify-between items-center border-b pb-1 mb-2 mt-2">
-                    <h4 class="text-xs font-bold text-indigo-600 uppercase">Departments</h4>
-                    <button id="dept-lock-btn" onclick="toggleDeptLock()"
-                        class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition">🔒
-                        Locked</button>
-                </div>
-
-                <div id="dept-list-container"
-                    class="flex flex-wrap gap-2 mb-3 max-h-32 overflow-y-auto custom-scroll p-2 bg-gray-50 rounded border border-gray-100">
-                </div>
-
-                <div id="dept-input-row" class="flex gap-2 mb-6 hidden items-center">
-                    <input type="text" id="new-dept-name" placeholder="Dept Name"
-                        class="w-1/3 p-2 border rounded text-xs">
-                    <input type="email" id="new-dept-email" placeholder="Dept Email (Optional)"
-                        class="flex-1 p-2 border rounded text-xs">
-                    <button onclick="addNewDepartment()"
-                        class="bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700 py-2">+</button>
-                </div>
-
-                <div class="flex justify-between items-center border-b pb-1 mb-2">
-                    <h4 class="text-xs font-bold text-indigo-600 uppercase">Role Configuration</h4>
-                    <button id="role-lock-btn" onclick="toggleRoleLock()"
-                        class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200 transition">🔒
-                        Locked</button>
-                </div>
-
-                <div id="roles-list-container"
-                    class="space-y-2 max-h-48 overflow-y-auto mb-4 custom-scroll border border-gray-100 rounded p-2 bg-gray-50">
-                </div>
-
-                <div id="role-input-row" class="flex gap-2 mb-4 hidden">
-                    <input type="text" id="new-role-name" placeholder="New Role Name"
-                        class="flex-1 p-2 border rounded text-xs">
-                    <input type="number" id="new-role-target" placeholder="Target"
-                        class="w-16 p-2 border rounded text-xs">
-                    <button onclick="addNewRoleConfig()"
-                        class="bg-green-600 text-white px-3 rounded text-xs font-bold hover:bg-green-700">+</button>
-                </div>
-
-
-            </div>
-            <div class="flex justify-end gap-2 border-t pt-4 mt-2 shrink-0">
-                <button onclick="closeModal('role-config-modal')"
-                    class="px-4 py-2 text-gray-600 bg-gray-100 rounded text-sm font-medium hover:bg-gray-200 transition">Close</button>
-                <button onclick="saveRoleConfig()"
-                    class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 shadow-sm transition">Save
-                    Changes</button>
-            </div>
+            <button onclick="closeModal('role-config-modal')" class="text-gray-400 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-full transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
         </div>
+
+        <!-- Scrollable Body -->
+        <div class="flex-1 overflow-y-auto w-full p-6 space-y-8 custom-scroll">
+            
+            <!-- Section: Duty Targets -->
+            <div>
+                <div class="flex justify-between items-end mb-4 border-b border-gray-100 pb-2">
+                    <h4 class="text-sm font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Duty Targets
+                    </h4>
+                    <button id="global-target-lock-btn" onclick="toggleGlobalTargetLock()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-bold transition flex items-center gap-1 shadow-sm">
+                        🔒 Locked
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Global -->
+                    <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 shadow-sm relative overflow-hidden group hover:border-blue-300 transition">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition">
+                            <svg class="w-20 h-20 text-blue-800" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path></svg>
+                        </div>
+                        <label class="block text-xs font-bold text-blue-800 uppercase tracking-wide mb-3">Regular Staff</label>
+                        <div class="flex items-center gap-3">
+                            <input type="number" id="global-duty-target" class="w-20 p-2 border border-blue-200 rounded-lg text-lg text-center font-black text-gray-800 disabled:bg-blue-50/50 disabled:text-gray-400 focus:ring-2 focus:ring-blue-500 outline-none transition" min="0" disabled>
+                            <span class="text-[10px] text-blue-600 leading-tight font-medium">Duties per<br>academic year</span>
+                        </div>
+                    </div>
+
+                    <!-- Guest -->
+                    <div class="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 shadow-sm relative overflow-hidden group hover:border-yellow-300 transition">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition">
+                            <svg class="w-20 h-20 text-yellow-800" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>
+                        </div>
+                        <label class="block text-xs font-bold text-yellow-800 uppercase tracking-wide mb-3">Guest Staff</label>
+                        <div class="flex items-center gap-3">
+                            <input type="number" id="guest-duty-target" class="w-20 p-2 border border-yellow-200 rounded-lg text-lg text-center font-black text-gray-800 disabled:bg-yellow-50/50 disabled:text-gray-400 focus:ring-2 focus:ring-yellow-500 outline-none transition" min="0" disabled>
+                            <span class="text-[10px] text-yellow-700 leading-tight font-medium">Base target<br>(Scales by days)</span>
+                        </div>
+                    </div>
+
+                    <!-- Vacation -->
+                    <div class="bg-orange-50/50 p-4 rounded-xl border border-orange-100 shadow-sm relative overflow-hidden group hover:border-orange-300 transition">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition">
+                            <svg class="w-20 h-20 text-orange-800" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+                        </div>
+                        <label class="block text-xs font-bold text-orange-800 uppercase tracking-wide mb-3">Vacation Duty</label>
+                        <div class="flex items-center gap-3">
+                            <input type="number" id="vacation-duty-target" class="w-20 p-2 border border-orange-200 rounded-lg text-lg text-center font-black text-gray-800 disabled:bg-orange-50/50 disabled:text-gray-400 focus:ring-2 focus:ring-orange-500 outline-none transition" min="0" disabled>
+                            <span class="text-[10px] text-orange-700 leading-tight font-medium">Target during<br>vacation window</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vacation Math Dates -->
+                <div class="mt-4 bg-indigo-50/40 p-5 rounded-xl border border-indigo-100 shadow-sm">
+                    <label class="block text-sm font-bold text-indigo-900 mb-1">Extra Vacation Dates (Algorithm Only)</label>
+                    <p class="text-xs text-indigo-600/80 leading-relaxed mb-4 font-medium">Add dates outside the actual vacation period here to force the Auto-Assigner to treat them as Vacation Duties. <b>(Will not effect Holiday Surrender calculation bounds).</b></p>
+                    
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="date" id="vacation-math-date-input" class="flex-1 p-2.5 border border-indigo-200 rounded-lg text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-gray-700 disabled:bg-indigo-50/50 disabled:text-gray-400 disabled:border-gray-200 transition shadow-inner" disabled>
+                        <button id="vacation-math-date-btn" onclick="addVacationMathDate()" class="bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow flex-shrink-0 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            + Add Date
+                        </button>
+                    </div>
+                    
+                    <div id="vacation-math-date-list" class="mt-3 flex flex-wrap gap-2 min-h-[48px] max-h-[120px] overflow-y-auto p-3 border border-indigo-100 rounded-lg bg-white/60">
+                        <span class="text-xs text-indigo-400 italic self-center">No extra dates added.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: System Integrations -->
+            <div>
+                <div class="flex justify-between items-end mb-4 border-b border-gray-100 pb-2">
+                    <h4 class="text-sm font-black text-teal-900 uppercase tracking-widest flex items-center gap-2">
+                        <svg class="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                        System Integrations
+                    </h4>
+                    <button id="email-config-lock-btn" onclick="toggleEmailConfigLock()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-bold transition flex items-center gap-1 shadow-sm">
+                        🔒 Locked
+                    </button>
+                </div>
+
+                <div class="bg-teal-50/30 p-4 rounded-xl border border-teal-100 shadow-sm group hover:border-teal-300 transition">
+                    <label class="block text-xs font-bold text-teal-800 uppercase tracking-wide mb-2">Google Apps Script URL (Mail Gateway)</label>
+                    <input type="text" id="google-script-url" class="w-full p-2.5 border border-teal-200 rounded-lg text-sm text-gray-700 font-medium disabled:bg-teal-50/50 disabled:text-gray-400 focus:ring-2 focus:ring-teal-500 outline-none transition shadow-inner" placeholder="https://script.google.com/macros/s/..." disabled>
+                </div>
+            </div>
+
+            <!-- Section: Data Tables -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Departments -->
+                <div class="flex flex-col h-full bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition">
+                    <div class="bg-gray-50/80 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                        <h4 class="text-sm font-black text-gray-700 tracking-wide uppercase">Departments</h4>
+                        <button id="dept-lock-btn" onclick="toggleDeptLock()" class="text-[10px] bg-white border border-gray-200 text-gray-500 hover:bg-gray-100 px-2.5 py-1 rounded-full font-bold transition">🔒 Lock</button>
+                    </div>
+                    
+                    <div id="dept-list-container" class="flex-1 overflow-y-auto custom-scroll p-4 flex flex-wrap gap-2 bg-gray-50/30 min-h-[120px] max-h-[250px] content-start">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <div id="dept-input-row" class="hidden flex-col gap-2 p-3 bg-gray-100 border-t border-gray-200">
+                        <div class="flex gap-2">
+                            <input type="text" id="new-dept-name" placeholder="Code (CS)" class="flex-1 w-0 p-2 border border-gray-300 rounded font-bold text-xs focus:ring-2 focus:ring-gray-400 outline-none">
+                            <input type="email" id="new-dept-email" placeholder="HOD Email" class="flex-[2] w-0 p-2 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-gray-400 outline-none">
+                        </div>
+                        <button onclick="addNewDepartment()" class="w-full bg-gray-800 text-white px-3 py-2 rounded text-xs font-bold hover:bg-gray-700 transition shadow">Add Department</button>
+                    </div>
+                </div>
+
+                <!-- Roles -->
+                <div class="flex flex-col h-full bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition">
+                    <div class="bg-indigo-50/50 px-4 py-3 border-b border-indigo-100 flex justify-between items-center">
+                        <h4 class="text-sm font-black text-indigo-800 tracking-wide uppercase">Custom Roles</h4>
+                        <button id="role-lock-btn" onclick="toggleRoleLock()" class="text-[10px] bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-100 px-2.5 py-1 rounded-full font-bold transition">🔒 Lock</button>
+                    </div>
+
+                    <div id="roles-list-container" class="flex-1 overflow-y-auto custom-scroll p-3 space-y-2 bg-indigo-50/10 min-h-[120px] max-h-[250px]">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <div id="role-input-row" class="hidden flex-col gap-2 p-3 bg-indigo-50 border-t border-indigo-100">
+                        <div class="flex gap-2">
+                            <input type="text" id="new-role-name" placeholder="Role Name (Warden)" class="flex-[2] w-0 p-2 border border-indigo-200 rounded font-bold text-xs focus:ring-2 focus:ring-indigo-400 outline-none">
+                            <input type="number" id="new-role-target" placeholder="Target" class="flex-1 w-0 p-2 border border-indigo-200 rounded text-xs font-bold text-center focus:ring-2 focus:ring-indigo-400 outline-none">
+                        </div>
+                        <button onclick="addNewRoleConfig()" class="w-full bg-indigo-600 text-white px-3 py-2 rounded text-xs font-bold hover:bg-indigo-700 transition shadow">Add Role</button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="shrink-0 p-4 px-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-xl">
+            <button onclick="closeModal('role-config-modal')" class="px-6 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-100 hover:text-gray-900 transition shadow-sm">
+                Cancel
+            </button>
+            <button onclick="saveRoleConfig()" class="px-8 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-black shadow-lg hover:shadow-xl transition flex items-center gap-2 group">
+                Save Configuration
+                <svg class="w-4 h-4 text-gray-400 group-hover:text-white transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            </button>
+        </div>
+
     </div>
-    </div>
-    </div>
+</div>
+
+    
 
 
     <div id="add-slot-modal"
