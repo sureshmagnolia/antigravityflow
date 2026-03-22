@@ -3050,11 +3050,12 @@ window.openRoleConfigModal = function () {
         targetInput.disabled = true;
     }
 
-    const dutyDatesInput = document.getElementById('vacation-duty-dates');
-    if (dutyDatesInput) {
-        dutyDatesInput.value = window.vacationDutyDates ? window.vacationDutyDates.join(', ') : "";
-        dutyDatesInput.disabled = true;
+const mathDateInput = document.getElementById('vacation-math-date-input');
+    if (mathDateInput) {
+        mathDateInput.value = "";
+        renderVacationMathDates();
     }
+
 
     
     const guestInput = document.getElementById('guest-duty-target');
@@ -3169,7 +3170,8 @@ window.saveRoleConfig = async function () {
     const newGlobal = parseInt(document.getElementById('global-duty-target').value);
     const newGuest = parseInt(document.getElementById('guest-duty-target').value);
     const newVacation = parseInt(document.getElementById('vacation-duty-target').value) || 0;
-    const newExtraDates = document.getElementById('vacation-duty-dates') ? document.getElementById('vacation-duty-dates').value.trim() : "";
+    const newExtraDates = window.vacationDutyDates ? window.vacationDutyDates.join(',') : "";
+
 
     if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
     if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
@@ -5748,17 +5750,15 @@ window.toggleGlobalTargetLock = function () {
         }
     }
 
-        const dutyDatesInput = document.getElementById('vacation-duty-dates');
-    if (dutyDatesInput) {
-        dutyDatesInput.disabled = isGlobalTargetLocked;
-        if (!isGlobalTargetLocked) {
-            dutyDatesInput.classList.remove('text-gray-600', 'border-gray-200');
-            dutyDatesInput.classList.add('text-black', 'bg-white', 'border-indigo-300');
-        } else {
-            dutyDatesInput.classList.add('text-gray-600', 'border-gray-200');
-            dutyDatesInput.classList.remove('text-black', 'bg-white', 'border-indigo-300');
-        }
+    const mathDateInput = document.getElementById('vacation-math-date-input');
+    const mathDateBtn = document.getElementById('vacation-math-date-btn');
+    if (mathDateInput && mathDateBtn) {
+        mathDateInput.disabled = isGlobalTargetLocked;
+        mathDateBtn.disabled = isGlobalTargetLocked;
+        // Re-render so the "X" buttons appear when unlocked
+        if (typeof renderVacationMathDates === "function") renderVacationMathDates();
     }
+
 
 
     
@@ -8715,6 +8715,61 @@ window.closeModal = function(id) {
     }
 };
 
+
+// --- EXTRA MATH DATES LOGIC ---
+window.addVacationMathDate = function() {
+    const input = document.getElementById('vacation-math-date-input');
+    const dateVal = input.value; // YYYY-MM-DD
+    
+    if (!dateVal) return;
+    if (!window.vacationDutyDates) window.vacationDutyDates = [];
+
+    if (window.vacationDutyDates.includes(dateVal)) {
+        alert("This date is already in the math list.");
+        return;
+    }
+
+    window.vacationDutyDates.push(dateVal);
+    renderVacationMathDates();
+    input.value = ""; // Clear input
+}
+
+window.removeVacationMathDate = function(dateStr) {
+    if (!window.vacationDutyDates) return;
+    // Remove it from the live array
+    window.vacationDutyDates = window.vacationDutyDates.filter(d => d !== dateStr);
+    renderVacationMathDates();
+}
+
+function renderVacationMathDates() {
+    const list = document.getElementById('vacation-math-date-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!window.vacationDutyDates || window.vacationDutyDates.length === 0) {
+        list.innerHTML = '<span class="text-xs text-indigo-400 italic self-center pl-1">No extra dates added.</span>';
+        return;
+    }
+
+    const sortedDates = [...window.vacationDutyDates].sort();
+    
+    // Check if the add button is currently locked so we know if we can show the "X" button
+    const btn = document.getElementById('vacation-math-date-btn');
+    const isLocked = btn ? btn.disabled : true;
+
+    sortedDates.forEach(dateStr => {
+        const [y, m, d] = dateStr.split('-');
+        const displayDate = `${d}.${m}.${y}`;
+
+        const item = document.createElement('div');
+        item.className = "inline-flex items-center gap-2 bg-white border border-indigo-200 text-indigo-700 px-3 py-1 rounded-full shadow-sm text-xs font-bold";
+        
+        let closeBtn = isLocked ? "" : `<button onclick="removeVacationMathDate('${dateStr}')" class="text-indigo-400 hover:text-red-500 font-black leading-none transition text-sm focus:outline-none">&times;</button>`;
+        
+        item.innerHTML = `<span>${displayDate}</span> ${closeBtn}`;
+        list.appendChild(item);
+    });
+}
 
 
 
