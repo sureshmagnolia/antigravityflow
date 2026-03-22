@@ -1165,12 +1165,15 @@
 
 
 
-    <div id="norms-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
-            <h3 class="text-lg font-bold text-gray-800 mb-2">Duty Calculation Norms</h3>
-            <p class="text-xs text-gray-500 mb-4">Reference for duty assignment targets.</p>
+        <div id="norms-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4">
+        <div class="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full max-w-sm sm:m-4 flex flex-col max-h-[85vh]">
+            <div class="shrink-0 px-5 pt-5 pb-3 border-b border-gray-100">
+                <h3 class="text-base font-bold text-gray-800">Duty Calculation Norms</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Reference for duty assignment targets.</p>
+            </div>
 
-            <div class="space-y-3 text-sm">
+            <div class="flex-1 overflow-y-auto custom-scroll px-5 py-4 space-y-3 text-sm">
+
                 <div class="flex justify-between items-center bg-blue-50 p-2.5 rounded border border-blue-100">
                     <span class="font-bold text-blue-800">Global Default</span>
                     <span class="font-mono font-bold text-blue-600" id="ref-global-target">2/mo</span>
@@ -1219,9 +1222,9 @@
 
 
             
-            <div class="mt-6 text-right">
+            <div class="shrink-0 px-5 py-4 border-t border-gray-100">
                 <button onclick="closeModal('norms-modal')"
-                    class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200">Close</button>
+                    class="w-full px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-bold hover:bg-gray-200 transition">Close</button>
             </div>
         </div>
     </div>
