@@ -7735,22 +7735,17 @@ function isActionAllowed(dateInput) {
 // NOTE: 'vacationExtraHolidays', 'vacationStart', 'vacationEnd' are defined in Global State at top.
 
 window.openVacationReportModal = function() {
-    console.log("Vacation Report Button Clicked!");
     try {
         const today = new Date();
         const year = today.getFullYear();
         
         const startVal = vacationStart || `${year}-04-01`;
         const endVal = vacationEnd || `${year}-05-31`;
-        console.log("Settings loaded:", startVal, endVal);
 
         const startInput = document.getElementById('vac-start');
         const endInput = document.getElementById('vac-end');
 
-        if (!startInput || !endInput) {
-            console.error("Missing Date inputs in HTML!");
-            return alert("Missing vac-start or vac-end in HTML");
-        }
+        if (!startInput || !endInput) return alert("Missing vac-start or vac-end in HTML");
 
         startInput.value = startVal;
         endInput.value = endVal;
@@ -7761,18 +7756,44 @@ window.openVacationReportModal = function() {
         const holidayInput = document.getElementById('vac-holiday-input');
         if (holidayInput) holidayInput.value = "";
         
-        console.log("Rendering holidays...");
         renderVacationHolidays();
         
-        console.log("Opening modal...");
-        window.openModal('vacation-report-modal');
-        console.log("Completed without error.");
-        
+        // --- THE FIX: Yank the modal to the body root and force visibility ---
+        const modal = document.getElementById('vacation-report-modal');
+        if (modal) {
+            // Move it out of any hidden containers
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal); 
+            }
+            modal.classList.remove('hidden');
+            // Force styles just in case Tailwind is overriding it
+            modal.style.display = 'flex';
+            modal.style.zIndex = '999999';
+            modal.style.visibility = 'visible';
+            modal.style.opacity = '1';
+        }
+
     } catch (e) {
         console.error("Crash inside openVacationReportModal:", e);
         alert("Error: " + e.message);
     }
 }
+
+
+// Add this anywhere in invigilation.js to ensure the Cancel button works
+const originalCloseModal = window.closeModal;
+window.closeModal = function(id) {
+    if (id === 'vacation-report-modal') {
+        const modal = document.getElementById(id);
+        if (modal) {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }
+    } else {
+        originalCloseModal(id);
+    }
+}
+
 
 
 // --- CLOUD SAVING FUNCTION ---
