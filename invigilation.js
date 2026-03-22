@@ -6290,9 +6290,18 @@ window.openManualAllocationModal = function (key) {
                             <span class="font-bold text-gray-800 mr-1.5 truncate text-xs md:text-sm">${s.name}</span>
                             <div class="flex flex-wrap gap-0.5">${warningHtml}</div>
                         </div>
+
                         <div class="text-[10px] text-gray-500 leading-tight mt-0.5 md:mt-0 md:ml-1">
                             <span class="md:hidden">• </span>${s.dept} <span class="hidden md:inline">| ${s.designation}</span>
                         </div>
+                        <div class="flex flex-wrap gap-0.5 mt-1">
+                            <span class="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded border border-blue-200 font-mono" title="Duties done this week">📅 Wk: ${s.weeklyLoad ? Object.values(s.weeklyLoad).reduce((a,b)=>a+b,0) : 0}</span>
+                            <span class="text-[9px] bg-purple-50 text-purple-700 px-1 py-0.5 rounded border border-purple-200 font-mono" title="AI Score">⚡ ${s.score}</span>
+                            ${s.badges.length > 0 ? s.badges.map(b => `<span class="text-[9px] bg-red-50 text-red-600 px-1 py-0.5 rounded border border-red-200 font-bold">${b}</span>`).join('') : '<span class="text-[9px] bg-green-50 text-green-600 px-1 py-0.5 rounded border border-green-200">✓ Clear</span>'}
+                        </div>
+
+
+                        
                     </div>
                 </td>
                 <td class="px-2 py-2 md:px-3 text-center w-16 md:w-20">
