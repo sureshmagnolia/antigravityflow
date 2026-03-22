@@ -8318,7 +8318,7 @@ window.showLiveStaffModal = function() {
         </div>
     `;
 
-    if(typeof UiModal !== 'undefined') UiModal.show("Live Status", html);
+    if(typeof UiModal !== 'undefined') UiModal.alert("Live Status", html);
     else alert(online.map(o => o.name).join('\n'));
 };
 // ==========================================
