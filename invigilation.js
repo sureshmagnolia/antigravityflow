@@ -431,6 +431,34 @@ function getDutiesDoneCount(email) {
     return count;
 }
 
+// NEW: Calculate Duties Done specifically on designated Vacation Dates
+function getVacationDutiesDoneCount(email) {
+    let count = 0;
+    // Fallback if the vacation dates array isn't defined yet
+    if (!window.vacationDutyDates) return 0; 
+    
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        
+        // Format to YYYY-MM-DD to match your array
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+
+        // If this slot's date is inside your designated vacation dates list...
+        if (window.vacationDutyDates.includes(dateStr)) {
+            if (slot.attendance && slot.attendance.includes(email)) {
+                count++; // Count it as a vacation duty done!
+            }
+        }
+    });
+    return count;
+}
+
+
+
 function getVacationDutiesDoneCount(email) {
     let count = 0;
     Object.keys(invigilationSlots).forEach(key => {
@@ -6211,11 +6239,32 @@ window.openManualAllocationModal = function (key) {
     const rankedStaff = staffData
         .filter(s => s.status !== 'archived')
         .map(s => {
-            const done = getDutiesDoneCount(s.email);
-            const target = calculateStaffTarget(s);
-            const pending = Math.max(0, target - done);
+            // --- VACATION SPECIFIC OVERRIDE ---
+            const slotYYYY = targetDate.getFullYear();
+            const slotMM = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const slotDD = String(targetDate.getDate()).padStart(2, '0');
+            const slotDateStr = `${slotYYYY}-${slotMM}-${slotDD}`;
+
+            let done, target, pending;
+            
+            // If the manual slot you clicked on is a vacation date...
+            if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                done = getVacationDutiesDoneCount(s.email);
+                target = window.vacationDefaultTarget || 0; 
+                pending = Math.max(0, target - done);
+            } else {
+                // Otherwise do normal academic year calc
+                done = getDutiesDoneCount(s.email);
+                target = calculateStaffTarget(s);
+                pending = Math.max(0, target - done);
+            }
+
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+
+            // Base Score: Pending Duty Priority
             let score = pending * 100;
+            // ---------------------------------
+
             let badges = [];
 
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
