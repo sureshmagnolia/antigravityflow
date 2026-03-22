@@ -431,32 +431,24 @@ function getDutiesDoneCount(email) {
     return count;
 }
 
-// NEW: Calculate Duties Done specifically on designated Vacation Dates
 function getVacationDutiesDoneCount(email) {
     let count = 0;
-    // Fallback if the vacation dates array isn't defined yet
-    if (!window.vacationDutyDates) return 0; 
-    
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
         
-        // Format to YYYY-MM-DD to match your array
-        const yyyy = dateObj.getFullYear();
-        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateObj.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
-
-        // If this slot's date is inside your designated vacation dates list...
-        if (window.vacationDutyDates.includes(dateStr)) {
-            if (slot.attendance && slot.attendance.includes(email)) {
-                count++; // Count it as a vacation duty done!
+        // Only count if it's actually in the vacation period
+        if (isDateInVacation(dateObj)) {
+            // Check if attended (or assigned if no attendance data yet)
+            if (slot.attendance && slot.attendance.length > 0) {
+                if (slot.attendance.includes(email)) count++;
+            } else if (slot.assigned.includes(email)) {
+                count++;
             }
         }
     });
     return count;
 }
-
 
 
 // Centralized way to get the pending count based on the specific session date
