@@ -6271,6 +6271,9 @@ window.openManualAllocationModal = function (key) {
         const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
         const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
         const warningHtml = s.badges.map(b => `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`).join('');
+        const sourceMeta = slot.assignmentMeta ? slot.assignmentMeta[s.email] : null;
+        const sourceBadge = sourceMeta ? getSourceBadge(sourceMeta.source) : '';
+
 
         // ⛔ Button is ALWAYS enabled (even if not locked)
         const unavailBtn = `
@@ -6303,6 +6306,7 @@ window.openManualAllocationModal = function (key) {
                             <span class="inline-flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full border border-purple-200 font-mono whitespace-nowrap" title="AI Score">
                             ⚡<span class="hidden sm:inline ml-0.5">Score:</span> ${s.score}
                             </span>
+                            ${sourceBadge}
                             ${s.badges.length > 0 
                             ? s.badges.map(b => `<span class="inline-flex items-center text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full border border-red-200 font-bold whitespace-nowrap">${b}</span>`).join('') 
                             : `<span class="inline-flex items-center text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full border border-green-200 whitespace-nowrap">✓ Clear</span>`}
