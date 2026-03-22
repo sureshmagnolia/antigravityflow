@@ -12,6 +12,19 @@ if (typeof IDB_NAME === 'undefined') {
 }
 
 
+window.updateLoaderProgress = function(percent, message) {
+    const progressBar = document.getElementById('loader-progress-bar');
+    const percentText = document.getElementById('loader-percentage');
+    const msgElement = document.getElementById('loader-message');
+    
+    // Stop the chaotic text interval if it's still running
+    if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
+    
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (percentText) percentText.textContent = `${percent}%`;
+    if (msgElement && message) msgElement.textContent = message;
+};
+
 function clear_csv_upload_status() {
     const csvLoadStatusElement = document.getElementById('csv-load-status');
     const correctedCsvUploadElement = document.getElementById('corrected-csv-upload');
@@ -44,6 +57,7 @@ function disable_absentee_tab(disabled) {
     }
 }
 window.disable_absentee_tab = disable_absentee_tab;
+
 
 
 
@@ -265,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 function dismissLoader() {
+    updateLoaderProgress(100, "Ready!");
     const loader = document.getElementById('initial-app-loader');
     const msgInterval = window.loaderMessageInterval; // Get the interval ID if defined
 
@@ -609,6 +624,8 @@ async function migrateFromLocalStorage() {
     if (window.firebase && window.firebase.auth) {
         const { auth, onAuthStateChanged } = window.firebase;
         onAuthStateChanged(auth, async (user) => {
+        updateLoaderProgress(10, "Verifying Authentication...");
+            
             if (user) {
                 currentUser = user;
                 loginBtn.classList.add('hidden');
@@ -933,7 +950,7 @@ async function updateLocalSlotsFromStudents() {
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
             return;
         }
-
+        updateLoaderProgress(50, "Connecting to Cloud Server...");
         updateSyncStatus("Connecting...", "neutral");
         const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
 
@@ -12504,6 +12521,7 @@ Are you sure?
     async function findMyCollege(user) {
         // Run Super Admin Check
         checkSuperAdminAccess(user);
+        updateLoaderProgress(25, "Locating College Database...");
 
         updateSyncStatus("Searching...", "neutral");
         const { db, collection, query, where, getDocs, doc, getDoc } = window.firebase;
