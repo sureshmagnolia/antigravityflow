@@ -885,8 +885,11 @@
         </div>
     </div>
 
-    <div id="manual-allocation-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-2 md:p-4">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[95vh] md:h-[90vh] flex flex-col overflow-hidden border border-gray-100">
+
+
+
+ <div id="manual-allocation-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-2 md:p-6">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] md:h-[90vh] flex flex-col overflow-hidden border border-gray-100">
         
         <!-- Header -->
         <div class="shrink-0 p-4 md:p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
@@ -909,10 +912,10 @@
         <input type="hidden" id="manual-session-key">
 
         <!-- Body Grid -->
-        <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden bg-gray-100/50">
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden bg-gray-100/50">
             
-            <!-- LEFT PANE: Available Staff -->
-            <div class="lg:col-span-6 xl:col-span-7 flex flex-col bg-white border-r border-gray-200 h-full overflow-hidden">
+            <!-- LEFT PANE: Available Staff (50% Width) -->
+            <div class="flex flex-col bg-white border-r border-gray-200 h-full overflow-hidden">
                 <div class="p-3 border-b border-gray-100 bg-indigo-50/30 shrink-0">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="font-black text-indigo-900 text-xs uppercase tracking-widest">Available Candidates</h4>
@@ -924,20 +927,20 @@
                     </div>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto custom-scroll bg-gray-50/50 p-2 lg:p-4">
-                    <div id="manual-available-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 auto-rows-max">
+                <div class="flex-1 overflow-y-auto custom-scroll bg-gray-50/50 p-3 lg:p-4">
+                    <div id="manual-available-list" class="grid grid-cols-1 xl:grid-cols-2 gap-3 auto-rows-max">
                         <!-- JS renders styled 'cards' here -->
                     </div>
                     <p id="manual-no-results" class="hidden text-center text-gray-400 text-xs py-8 font-bold">No available candidates match your search.</p>
                 </div>
             </div>
 
-            <!-- RIGHT PANE: Selected & Unavailable -->
-            <div class="lg:col-span-6 xl:col-span-5 flex flex-col h-full overflow-hidden bg-gray-50/30">
+            <!-- RIGHT PANE: Selected & Unavailable (50% Width) -->
+            <div class="flex flex-col h-full overflow-hidden bg-gray-50/30">
                 
                 <!-- Top Half: Selected Staff -->
-                <div class="flex-1 flex flex-col min-h-[50%] border-b border-gray-200 bg-white">
-                    <div class="p-3 border-b border-gray-100 bg-green-50/40 shrink-0 flex justify-between items-center shadow-sm z-10">
+                <div class="flex-1 flex flex-col min-h-[50%] border-b border-gray-200 bg-white shadow-sm">
+                    <div class="p-3 border-b border-gray-100 bg-green-50/40 shrink-0 flex justify-between items-center z-10">
                         <div class="flex items-center gap-3">
                             <h4 class="font-black text-green-900 text-xs uppercase tracking-widest">Selected Roster</h4>
                             <div class="flex items-baseline bg-white px-2.5 py-1 rounded shadow-sm border border-green-200">
@@ -951,20 +954,22 @@
                         </button>
                     </div>
                     
-                    <div class="flex-1 overflow-y-auto custom-scroll bg-green-50/20 p-2 lg:p-3">
-                        <div id="manual-selected-list" class="flex flex-col gap-2 border-slate-100">
+                    <div class="flex-1 overflow-y-auto custom-scroll bg-green-50/20 p-3 lg:p-4">
+                        <!-- Upgraded to a responsive grid for perfect card alignment! -->
+                        <div id="manual-selected-list" class="grid grid-cols-1 xl:grid-cols-2 gap-3 auto-rows-max">
                             <!-- Selected cards map here -->
                         </div>
                     </div>
                 </div>
 
                 <!-- Bottom Half: Unavailable -->
-                <div class="h-[30%] min-h-[150px] flex flex-col bg-red-50/10">
-                    <div class="p-2 px-4 border-b border-red-100 bg-red-50/60 shrink-0">
-                        <h4 class="font-black text-red-800 text-[10px] uppercase tracking-widest flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Unavailable / Excused</h4>
+                <div class="flex-1 min-h-[30%] max-h-[40%] flex flex-col bg-red-50/10">
+                    <div class="p-3 px-4 border-b border-red-100 bg-red-50/60 shrink-0 flex items-center justify-between">
+                        <h4 class="font-black text-red-800 text-[10px] uppercase tracking-widest flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Unavailable / Excused</h4>
                     </div>
-                    <div class="flex-1 overflow-y-auto custom-scroll p-3">
-                        <div id="manual-unavailable-list" class="grid grid-cols-1 gap-2">
+                    <div class="flex-1 overflow-y-auto custom-scroll p-3 lg:p-4">
+                        <!-- Upgraded to a responsive grid as well! -->
+                        <div id="manual-unavailable-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 auto-rows-max">
                             <!-- Unavailable badged cards map here -->
                         </div>
                     </div>
@@ -976,11 +981,12 @@
         <!-- Footer -->
         <div class="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 rounded-b-2xl z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
             <button onclick="closeModal('manual-allocation-modal')" class="px-6 py-2.5 bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-bold transition shadow-sm">Cancel</button>
-            <button id="manual-save-btn" onclick="saveManualAllocation()" class="px-8 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-md hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Save Assignments</button>
+            <button id="manual-save-btn" onclick="saveManualAllocation()" class="px-8 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-md hover:shadow-lg transition block">Save Assignments</button>
         </div>
 
     </div>
 </div>
+   
 
 
 
