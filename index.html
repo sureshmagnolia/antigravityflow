@@ -84,7 +84,13 @@
 
         <h2 class="text-2xl font-bold text-gray-800 mb-2">ExamFlow is Loading...</h2>
         <p id="loader-message" class="text-indigo-600 font-medium italic animate-pulse">Summoning the Exam Spirits... 👻
+        <!-- PROGRESS BAR -->
+        <div class="w-64 h-2 mt-4 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+        <div id="loader-progress-bar" class="h-full bg-blue-600 transition-all duration-500 ease-out" style="width: 0%"></div>
+        </div>
+        <div id="loader-percentage" class="mt-2 text-xs font-black text-blue-800">0%</div>
         </p>
+    
 
         <div class="w-64 h-1 bg-gray-200 rounded-full mt-6 overflow-hidden">
             <div class="h-full bg-indigo-600 animate-[loading_1.5s_ease-in-out_infinite]" style="width: 50%"></div>
