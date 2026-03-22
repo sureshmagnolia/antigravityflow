@@ -6235,7 +6235,8 @@ window.openManualAllocationModal = function (key) {
                 badges.push("Dept Saturation");
             }
 
-            return { ...s, pending, score, badges, weekCount: ctx.weekCount };
+            const alreadyInThisSlot = (slot.assigned || []).includes(s.email);
+            return { ...s, pending, score, badges, weekCount: ctx.weekCount + (alreadyInThisSlot ? 1 : 0) };
         })
         .sort((a, b) => b.score - a.score);
 
