@@ -8671,10 +8671,15 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
     }
 };
 
-// Helper to close the specific ghost modal
+// Helper to close modals (updated for forced display)
 window.closeModal = function(id) {
     const m = document.getElementById(id);
-    if(m) m.classList.add('hidden');
+    if(m) {
+        m.classList.add('hidden');
+        if (id === 'vacation-report-modal') {
+            m.style.display = 'none'; // Re-hide the forced visibility
+        }
+    }
 };
 
 
