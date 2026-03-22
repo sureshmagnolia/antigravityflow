@@ -6292,14 +6292,22 @@ window.openManualAllocationModal = function (key) {
                             <div class="flex flex-wrap gap-0.5">${warningHtml}</div>
                         </div>
 
+
                         <div class="text-[10px] text-gray-500 leading-tight mt-0.5 md:mt-0 md:ml-1">
                             <span class="md:hidden">• </span>${s.dept} <span class="hidden md:inline">| ${s.designation}</span>
                         </div>
-                        <div class="flex flex-wrap gap-0.5 mt-1">
-                            <span class="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded border border-blue-200 font-mono" title="Duties done this week">📅 Wk: ${s.weekCount || 0}</span>
-                            <span class="text-[9px] bg-purple-50 text-purple-700 px-1 py-0.5 rounded border border-purple-200 font-mono" title="AI Score">⚡ ${s.score}</span>
-                            ${s.badges.length > 0 ? s.badges.map(b => `<span class="text-[9px] bg-red-50 text-red-600 px-1 py-0.5 rounded border border-red-200 font-bold">${b}</span>`).join('') : '<span class="text-[9px] bg-green-50 text-green-600 px-1 py-0.5 rounded border border-green-200">✓ Clear</span>'}
+                        <div class="flex flex-wrap items-center gap-0.5 mt-1 overflow-x-auto no-scrollbar">
+                            <span class="inline-flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full border border-blue-200 font-mono whitespace-nowrap" title="Duties this week">
+                            📅<span class="hidden sm:inline ml-0.5">Wk:</span> ${s.weekCount || 0}
+                            </span>
+                            <span class="inline-flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full border border-purple-200 font-mono whitespace-nowrap" title="AI Score">
+                            ⚡<span class="hidden sm:inline ml-0.5">Score:</span> ${s.score}
+                            </span>
+                            ${s.badges.length > 0 
+                            ? s.badges.map(b => `<span class="inline-flex items-center text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full border border-red-200 font-bold whitespace-nowrap">${b}</span>`).join('') 
+                            : `<span class="inline-flex items-center text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full border border-green-200 whitespace-nowrap">✓ Clear</span>`}
                         </div>
+
 
 
                         
