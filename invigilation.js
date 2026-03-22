@@ -459,26 +459,6 @@ function getVacationDutiesDoneCount(email) {
 
 
 
-function getVacationDutiesDoneCount(email) {
-    let count = 0;
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-        
-        // Only count if it's actually in the vacation period
-        if (isDateInVacation(dateObj)) {
-            // Check if attended (or assigned if no attendance data yet)
-            if (slot.attendance && slot.attendance.length > 0) {
-                if (slot.attendance.includes(email)) count++;
-            } else if (slot.assigned.includes(email)) {
-                count++;
-            }
-        }
-    });
-    return count;
-}
-
-
 // Centralized way to get the pending count based on the specific session date
 function getPendingCountForSession(staffEmail, sessionKey) {
     const s = staffData.find(st => st.email === staffEmail);
