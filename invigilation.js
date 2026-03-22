@@ -4309,7 +4309,20 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 if (isUserUnavailable(slot, s.email, key)) return null;
 
                 const dynamicPending = getPendingCountForSession(s.email, key);
-                let score = dynamicPending * 100;
+                 // --- VACATION SPECIFIC OVERRIDE ---
+                let score;
+                const slotYYYY = date.getFullYear();
+                const slotMM = String(date.getMonth() + 1).padStart(2, '0');
+                const slotDD = String(date.getDate()).padStart(2, '0');
+                const slotDateStr = `${slotYYYY}-${slotMM}-${slotDD}`;
+                if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                    const vacTarget = window.vacationDefaultTarget || 0;
+                    const vacDone = getVacationDutiesDoneCount(s.email);
+                    const vacPending = Math.max(0, vacTarget - vacDone);
+                    score = vacPending * 100;
+                } else {
+                    score = dynamicPending * 100;
+                }
                 let warnings = [];
 
                 // --- 1. Adjacent Day Rule ---
