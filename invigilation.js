@@ -6147,109 +6147,174 @@ async function finishAttendanceUpload(count, action) {
         loadSessionAttendance();
     }
 }
-// --- MANUAL ALLOCATION SEARCH ---
+
+
+// --- MANUAL ALLOCATION CORE LOGIC ---
+// Holds state temporarily when modal is open to avoid massive DOM manipulation lag
+window.manualState = {
+    rankedStaff: [],
+    slotsToAutoFill: 0,
+    isFullEditMode: false,
+    key: "",
+    slotInfo: null
+};
+
 window.filterManualStaff = function () {
     const query = document.getElementById('manual-staff-search').value.toLowerCase();
-    const rows = document.querySelectorAll('#manual-available-list tr');
+    const cards = document.querySelectorAll('#manual-available-list .manual-card');
     const noResults = document.getElementById('manual-no-results');
     let hasVisible = false;
 
-    rows.forEach(row => {
-        // The Name is in the second column (index 1), inside a div
-        // The Dept is in the same cell, inside a div with text-[10px]
-        const textContent = row.innerText.toLowerCase(); // Simple check of all text in row
-
-        if (textContent.includes(query)) {
-            row.classList.remove('hidden');
+    cards.forEach(card => {
+        const nameNode = card.querySelector('.search-name');
+        const deptNode = card.querySelector('.search-dept');
+        const text = ((nameNode ? nameNode.textContent : '') + " " + (deptNode ? deptNode.textContent : '')).toLowerCase();
+        
+        if (text.includes(query)) {
+            card.style.display = 'flex';
             hasVisible = true;
         } else {
-            row.classList.add('hidden');
+            card.style.display = 'none';
         }
     });
 
     if (noResults) {
-        if (hasVisible) noResults.classList.add('hidden');
+        if (hasVisible || cards.length === 0) noResults.classList.add('hidden');
         else noResults.classList.remove('hidden');
     }
 }
 
+window.renderManualCards = function() {
+    const availList = document.getElementById('manual-available-list');
+    const selList = document.getElementById('manual-selected-list');
+    availList.innerHTML = '';
+    selList.innerHTML = '';
 
+    let currentSelectionCount = 0;
+
+    window.manualState.rankedStaff.forEach(s => {
+        const isUnavailable = isUserUnavailable(window.manualState.slotInfo, s.email, window.manualState.key);
+        if (s.isChecked) currentSelectionCount++;
+
+        // Hide unavailable from Available pane
+        if (isUnavailable && !s.isChecked) return; 
+
+        const disabledState = !window.manualState.isFullEditMode ? 'opacity-60 cursor-not-allowed pointer-events-none bg-gray-50' : 'cursor-pointer hover:shadow-md hover:border-indigo-300';
+        const pendingColor = s.pending > 0 ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50';
+        
+        const warningHtml = s.badges.map(b => `<span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded shadow-sm border border-amber-200 font-bold">${b}</span>`).join('');
+        const sourceMeta = window.manualState.slotInfo.assignmentMeta ? window.manualState.slotInfo.assignmentMeta[s.email] : null;
+        const sourceBadge = sourceMeta ? getSourceBadge(sourceMeta.source) : '';
+
+        const actionText = s.isChecked ? "Remove" : "+ Select";
+        const actionColor = s.isChecked ? "text-red-500 bg-red-50 hover:bg-red-500 hover:text-white border-red-200" : "text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white border-indigo-200";
+
+        // HTML for the precise modern card
+        const cardHtml = `
+            <div title="Click anywhere to ${actionText.toLowerCase()}" class="manual-card flex w-full justify-between items-center p-3 bg-white border border-gray-200 shadow-sm rounded-xl transition-all duration-200 ${disabledState}" onclick="window.toggleManualStaffCard('${s.email}')">
+                <div class="flex flex-col overflow-hidden">
+                    <div class="flex items-center gap-1.5 mb-1.5">
+                        <span class="font-black text-gray-800 text-sm truncate search-name">${s.name}</span>
+                        ${warningHtml}
+                    </div>
+                    <div class="text-[10px] text-gray-500 leading-tight search-dept flex items-center gap-1.5">
+                        <span class="font-bold">${s.dept}</span> | 
+                        <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">Rem: ${s.pending}</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        <span class="flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold shadow-sm">📅 Wk: ${s.weekCount || 0}</span>
+                        <span class="flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 font-bold shadow-sm">⚡ Sc: ${s.score}</span>
+                        ${sourceBadge}
+                    </div>
+                </div>
+                <div class="flex flex-col justify-center items-end shrink-0 gap-2 ml-2">
+                    <!-- Hidden checkbox powers saveManualAllocation effortlessly -->
+                    <input type="checkbox" class="manual-chk hidden" value="${s.email}" ${s.isChecked ? 'checked' : ''}>
+                    
+                    <button class="text-[10px] font-black uppercase px-3 py-1.5 rounded-lg border ${actionColor} transition shadow-sm w-full" onclick="event.stopPropagation(); window.toggleManualStaffCard('${s.email}')">${actionText}</button>
+                    
+                    ${s.isChecked ? '' : `<button onclick="event.stopPropagation(); adminMarkUnavailable('${window.manualState.key}', '${s.email}')" class="text-[9px] text-gray-500 bg-gray-100 hover:text-white hover:bg-red-500 hover:border-red-600 border border-gray-200 px-2 py-1 rounded transition w-full font-bold shadow-sm">⛔ Unavail.</button>`}
+                </div>
+            </div>`;
+
+        if (s.isChecked) selList.innerHTML += cardHtml;
+        else availList.innerHTML += cardHtml;
+    });
+
+    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
+    window.filterManualStaff();
+}
+
+window.toggleManualStaffCard = function(email) {
+    if (!window.manualState.isFullEditMode) return;
+    const staff = window.manualState.rankedStaff.find(s => s.email === email);
+    if (staff) {
+        staff.isChecked = !staff.isChecked;
+        renderManualCards();
+    }
+}
 
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
     const requiredCount = parseInt(slot.required) || 0; 
-    
-    // --- 1. DETERMINE MODE ---
-    // We allow opening even if NOT locked, but restrict actions
     const isFullEditMode = slot.isAdminLocked;
 
-    // 2. Reset Search
+    // Reset UI
     const searchInput = document.getElementById('manual-staff-search');
     if (searchInput) searchInput.value = "";
-    const noResults = document.getElementById('manual-no-results');
-    if (noResults) noResults.classList.add('hidden');
-
-    // 3. Setup Modal Header
+    
     document.getElementById('manual-session-key').value = key;
     document.getElementById('manual-modal-title').textContent = key;
-    document.getElementById('manual-modal-req').textContent = requiredCount;
+    document.getElementById('manual-modal-req').textContent = requiredCount; 
+    const displayReq = document.getElementById('manual-modal-req-display');
+    if (displayReq) displayReq.textContent = requiredCount;
 
-    // --- 4. HANDLE BUTTON STATE (LOCK LOGIC) ---
-    const saveBtn = document.querySelector('#manual-allocation-modal button[onclick="saveManualAllocation()"]');
-    const headerDiv = document.getElementById('manual-modal-title').parentNode;
+    // Handle Header Locking
+    const saveBtn = document.getElementById('manual-save-btn');
     const existingMsg = document.getElementById('manual-lock-msg');
+    const badge = document.getElementById('manual-lock-status-badge');
     if (existingMsg) existingMsg.remove();
 
     if (!isFullEditMode) {
-        // RESTRICTED MODE
         if (saveBtn) {
             saveBtn.disabled = true;
-            saveBtn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
-            saveBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-            saveBtn.innerHTML = "🔒 Lock Slot to Edit Assignments";
+            saveBtn.innerHTML = "🔒 Slot is Unlocked (Read Only)";
         }
-        // Add Warning Banner
-        const msg = document.createElement('div');
-        msg.id = 'manual-lock-msg';
-        msg.className = "mt-2 bg-blue-50 border border-blue-200 text-blue-800 text-[10px] p-2 rounded flex items-center gap-2";
-        msg.innerHTML = "<span>ℹ️</span> <b>Read-Only Mode:</b> You can mark Unavailability (⛔), but must <b>Admin Lock (🛡️)</b> this slot to change assignments.";
-        headerDiv.appendChild(msg);
+        if (badge) badge.classList.remove('hidden');
+        const container = document.getElementById('manual-lock-msg-container');
+        if (container) {
+            container.innerHTML = `<div id="manual-lock-msg" class="mt-1.5 inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 text-[10px] px-2 py-1 rounded-md shadow-sm font-medium"><span>ℹ️</span> <b>Read-Only Mode:</b> Must <b>Admin Lock (🛡️)</b> slot in dashboard to edit.</div>`;
+        }
     } else {
-        // FULL EDIT MODE
         if (saveBtn) {
             saveBtn.disabled = false;
-            saveBtn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-400');
-            saveBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-            saveBtn.innerHTML = "Save Assignment Changes";
+            saveBtn.innerHTML = "Save Assignments";
         }
+        if (badge) badge.classList.add('hidden');
+        const container = document.getElementById('manual-lock-msg-container');
+        if (container) container.innerHTML = '';
     }
 
-    // --- 5. SMART SORTING & CONTEXT (Standard Logic) ---
+    // Logic Context
     const targetDate = parseDate(key);
     const monthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
     const weekNum = getWeekOfMonth(targetDate);
     const targetDateString = targetDate.toDateString();
+    
+    // Sort logic exactly as before
     const prevDate = new Date(targetDate); prevDate.setDate(targetDate.getDate() - 1);
     const nextDate = new Date(targetDate); nextDate.setDate(targetDate.getDate() + 1);
-    const prevDateStr = prevDate.toDateString();
-    const nextDateStr = nextDate.toDateString();
-
     const staffContext = {};
     staffData.forEach(s => staffContext[s.email] = { weekCount: 0, hasSameDay: false, hasAdjacent: false });
 
     Object.keys(invigilationSlots).forEach(k => {
         if (k === key) return;
-        const sSlot = invigilationSlots[k];
         const sDate = parseDate(k);
-        const sDateString = sDate.toDateString();
-        const sMonth = sDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const sWeek = getWeekOfMonth(sDate);
-        
-        (sSlot.assigned || []).forEach(email => {
+        (invigilationSlots[k].assigned || []).forEach(email => {
             if (staffContext[email]) {
-                if (sMonth === monthStr && sWeek === weekNum) staffContext[email].weekCount++;
-                if (sDateString === targetDateString) staffContext[email].hasSameDay = true;
-                if (sDateString === prevDateStr || sDateString === nextDateStr) staffContext[email].hasAdjacent = true;
+                if (sDate.toLocaleString('default', { month: 'long', year: 'numeric' }) === monthStr && getWeekOfMonth(sDate) === weekNum) staffContext[email].weekCount++;
+                if (sDate.toDateString() === targetDateString) staffContext[email].hasSameDay = true;
+                if (sDate.toDateString() === prevDate.toDateString() || sDate.toDateString() === nextDate.toDateString()) staffContext[email].hasAdjacent = true;
             }
         });
     });
@@ -6257,308 +6322,108 @@ window.openManualAllocationModal = function (key) {
     const rankedStaff = staffData
         .filter(s => s.status !== 'archived')
         .map(s => {
-            // --- VACATION SPECIFIC OVERRIDE ---
-            const slotYYYY = targetDate.getFullYear();
-            const slotMM = String(targetDate.getMonth() + 1).padStart(2, '0');
-            const slotDD = String(targetDate.getDate()).padStart(2, '0');
-            const slotDateStr = `${slotYYYY}-${slotMM}-${slotDD}`;
-
-            let done, target, pending;
+            const slotDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+            let done = 0, target = 0, pending = 0;
             
-            // If the manual slot you clicked on is a vacation date...
             if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
                 done = getVacationDutiesDoneCount(s.email);
                 target = window.vacationDefaultTarget || 0; 
                 pending = Math.max(0, target - done);
             } else {
-                // Otherwise do normal academic year calc
                 done = getDutiesDoneCount(s.email);
                 target = calculateStaffTarget(s);
                 pending = Math.max(0, target - done);
             }
 
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
-
-            // Base Score: Pending Duty Priority
             let score = pending * 100;
-            // ---------------------------------
-
             let badges = [];
 
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
             if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
             if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
             
-            // Dept Saturation
-            const assignedList = slot.assigned || [];
-            const myDeptCount = assignedList.filter(e => {
-                const m = staffData.find(st => st.email === e);
-                return m && m.dept === s.dept;
-            }).length;
-            const totalInDept = staffData.filter(st => st.dept === s.dept).length;
-            
-            if (totalInDept > 1 && ((myDeptCount + 1) / (assignedList.length + 1) > 0.5)) {
-                score -= 500;
-                badges.push("Dept Saturation");
+            const deptStaff = (slot.assigned || []).filter(e => staffData.find(st => st.email === e)?.dept === s.dept).length;
+            if (staffData.filter(st => st.dept === s.dept).length > 1 && ((deptStaff + 1) / ((slot.assigned || []).length + 1) > 0.5)) {
+                score -= 500; badges.push("Dept Sat");
             }
-
-            const alreadyInThisSlot = (slot.assigned || []).includes(s.email);
-            return { ...s, pending, score, badges, weekCount: ctx.weekCount + (alreadyInThisSlot ? 1 : 0) };
+            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0) };
         })
         .sort((a, b) => b.score - a.score);
 
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
-    // --- 6. RENDER LIST ---
-    const availList = document.getElementById('manual-available-list');
-    availList.innerHTML = '';
-
     const assignedSet = new Set(slot.assigned || []);
-    let currentSelectionCount = 0;
-    
     let preFilledCount = 0;
     rankedStaff.forEach(s => { if(assignedSet.has(s.email)) preFilledCount++; });
     let slotsToAutoFill = Math.max(0, requiredCount - preFilledCount);
 
     rankedStaff.forEach(s => {
-        const isUnavailable = isUserUnavailable(slot, s.email, key);
-        const isAssigned = assignedSet.has(s.email);
-
-        if (isUnavailable && !isAssigned) return;
-
-        let isChecked = false;
-        if (isAssigned) isChecked = true;
-        else if (slotsToAutoFill > 0) { isChecked = true; slotsToAutoFill--; }
-
-        if (isChecked) currentSelectionCount++;
-
-        const checkState = isChecked ? 'checked' : '';
-        // DISABLE CHECKBOXES IF NOT ADMIN LOCKED
-        const disabledState = !isFullEditMode ? 'disabled' : '';
-        const rowClass = isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50';
-        const pendingColor = s.pending > 0 ? 'text-red-600' : 'text-green-600';
-        const warningHtml = s.badges.map(b => `<span class="ml-1 text-[9px] bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200">${b}</span>`).join('');
-        const sourceMeta = slot.assignmentMeta ? slot.assignmentMeta[s.email] : null;
-        const sourceBadge = sourceMeta ? getSourceBadge(sourceMeta.source) : '';
-
-
-        // ⛔ Button is ALWAYS enabled (even if not locked)
-        const unavailBtn = `
-            <button onclick="adminMarkUnavailable('${key}', '${s.email}')" 
-                    class="ml-2 text-gray-400 hover:text-red-500 hover:bg-red-50 p-1 rounded transition" 
-                    title="Mark Unavailable">
-                ⛔
-            </button>`;
-
-        availList.innerHTML += `
-            <tr class="${rowClass} border-b last:border-0 transition text-xs">
-                <td class="px-1 py-2 md:px-3 text-center w-8 md:w-10">
-                    <input type="checkbox" class="manual-chk w-4 h-4 text-indigo-600 rounded disabled:opacity-50" value="${s.email}" ${checkState} ${disabledState} onchange="window.updateManualCounts()">
-                </td>
-                <td class="px-2 py-2 md:px-3">
-                    <div class="flex flex-col md:flex-row md:items-center">
-                        <div class="flex items-center">
-                            <span class="font-bold text-gray-800 mr-1.5 truncate text-xs md:text-sm">${s.name}</span>
-                            <div class="flex flex-wrap gap-0.5">${warningHtml}</div>
-                        </div>
-
-
-                        <div class="text-[10px] text-gray-500 leading-tight mt-0.5 md:mt-0 md:ml-1">
-                            <span class="md:hidden">• </span>${s.dept} <span class="hidden md:inline">| ${s.designation}</span>
-                        </div>
-                        <div class="flex flex-wrap items-center gap-0.5 mt-1 overflow-x-auto no-scrollbar">
-                            <span class="inline-flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full border border-blue-200 font-mono whitespace-nowrap" title="Duties this week">
-                            📅<span class="hidden sm:inline ml-0.5">Wk:</span> ${s.weekCount || 0}
-                            </span>
-                            <span class="inline-flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full border border-purple-200 font-mono whitespace-nowrap" title="AI Score">
-                            ⚡<span class="hidden sm:inline ml-0.5">Score:</span> ${s.score}
-                            </span>
-                            ${sourceBadge}
-                            ${s.badges.length > 0 
-                            ? s.badges.map(b => `<span class="inline-flex items-center text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full border border-red-200 font-bold whitespace-nowrap">${b}</span>`).join('') 
-                            : `<span class="inline-flex items-center text-[9px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded-full border border-green-200 whitespace-nowrap">✓ Clear</span>`}
-                        </div>
-
-
-
-                        
-                    </div>
-                </td>
-                <td class="px-2 py-2 md:px-3 text-center w-16 md:w-20">
-                     <div class="flex items-center justify-center gap-1">
-                        <span class="font-mono font-bold ${pendingColor} text-xs md:text-sm">${s.pending}</span>
-                        ${unavailBtn}
-                     </div>
-                </td>
-            </tr>`;
+        s.isChecked = assignedSet.has(s.email);
+        if (!s.isChecked && slotsToAutoFill > 0 && !isUserUnavailable(slot, s.email, key)) {
+            s.isChecked = true;
+            slotsToAutoFill--;
+        }
     });
 
-    if (availList.innerHTML === "") {
-        availList.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500 italic">No available staff found.</td></tr>`;
-    }
+    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
+    renderManualCards();
 
-    // 7. Render Unavailable List
+    // Render Unavailable List manually at bottom right
     const unavList = document.getElementById('manual-unavailable-list');
     unavList.innerHTML = '';
     const allUnavailable = [];
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
 
-    // Merge Advance
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
-    const t = timeStr ? timeStr.toUpperCase() : "";
-    if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
+    if (timeStr && (timeStr.toUpperCase().includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."))) session = "AN";
 
     if (advanceUnavailability && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
         advanceUnavailability[dateStr][session].forEach(u => {
              const email = (typeof u === 'string') ? u : u.email;
              if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === email)) {
-                 const entry = (typeof u === 'string') ? { email: u, reason: "Advance Leave" } : u;
-                 allUnavailable.push({...entry, type: 'Advance'});
+                 allUnavailable.push({...((typeof u === 'string') ? { email: u, reason: "Advance Leave" } : u), type: 'Advance'});
              }
         });
     }
 
     if (allUnavailable.length > 0) {
         allUnavailable.forEach(u => {
-            const email = (typeof u === 'string') ? u : u.email;
+            const email = typeof u === 'string' ? u : u.email;
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
             const s = staffData.find(st => st.email === email) || { name: email };
-            const isAdvance = u.type === 'Advance';
-            const removeAction = `adminRemoveUnavailable('${key}', '${email}', ${isAdvance})`;
-
             unavList.innerHTML += `
-                <div class="bg-white p-2 rounded border border-red-100 text-[10px] md:text-xs shadow-sm mb-1 flex justify-between items-center">
-                    <div class="flex items-center gap-2">
-                         <span class="font-bold text-red-700 truncate">${s.name}</span>
-                         <span class="text-[9px] text-gray-400">(${isAdvance ? 'Gen' : 'Slot'})</span>
+                <div class="bg-white p-2.5 rounded-lg border border-red-200 shadow-sm flex flex-col gap-1">
+                    <div class="flex items-center justify-between">
+                        <span class="font-black text-red-800 text-[11px] truncate">${s.name}</span>
+                        <span class="text-[9px] bg-red-50 text-red-600 px-1 border border-red-100 rounded font-bold">${u.type === 'Advance' ? 'Full Day' : 'This Slot'}</span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded whitespace-nowrap">${reason}</span>
-                        <button onclick="${removeAction}" class="text-red-400 hover:text-red-600 hover:bg-red-50 rounded px-1 font-bold text-sm">×</button>
+                    <div class="flex items-center justify-between mt-1 pt-1 border-t border-red-50">
+                        <span class="text-[10px] text-gray-500 font-medium truncate">${reason}</span>
+                        <button onclick="adminRemoveUnavailable('${key}', '${email}', ${u.type === 'Advance'})" class="text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 font-bold text-[10px] transition shadow-sm">Remove</button>
                     </div>
                 </div>`;
         });
     } else {
-        unavList.innerHTML = `<div class="text-center text-gray-400 text-xs py-4 italic">No requests.</div>`;
+        unavList.innerHTML = `<div class="col-span-full py-6 text-center text-red-400 text-xs font-bold italic">No requests.</div>`;
     }
 
-    document.getElementById('manual-sel-count').textContent = currentSelectionCount;
     window.openModal('manual-allocation-modal');
 }
 
-
-
 window.updateManualCounts = function () {
-    const count = document.querySelectorAll('.manual-chk:checked').length;
-    document.getElementById('manual-sel-count').textContent = count;
+    // Legacy function replaced by State Engine renderManualCards
 }
 
-window.saveManualAllocation = async function () {
-    const key = document.getElementById('manual-session-key').value;
-    
-    // --- SECURITY CHECK ---
-    if (!invigilationSlots[key].isAdminLocked) {
-        return alert("⚠️ Security Alert\n\nThis slot is currently OPEN. You must 'Lock (🛡️)' it before you can manually edit staff assignments.");
-    }
-
-    const selectedEmails = Array.from(document.querySelectorAll('.manual-chk:checked')).map(c => c.value);
-
-    if (invigilationSlots[key]) {
-        // ... (Existing Logic for Log Generation and Metadata) ...
-        const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
-        const adminName = currentUser ? currentUser.email : "Admin";
-
-        let logHtml = "";
-        if (typeof lastManualRanking !== 'undefined' && lastManualRanking.length > 0) {
-             // ... (Keep your existing log generation logic here) ...
-             // Re-paste the logic from previous turn if needed, or just wrap this check around existing function body
-             logHtml = `
-                <div class="mb-3 pb-2 border-b border-gray-200">
-                    <div class="font-bold text-gray-800">Assignment Logic Report</div>
-                    <div class="text-[10px] text-gray-500">${timestamp} by ${adminName}</div>
-                </div>
-                <div class="mb-3">
-                    <div class="text-xs font-bold text-green-700 uppercase mb-1">Assigned Staff (${selectedEmails.length})</div>`;
-             
-             selectedEmails.forEach((email, i) => {
-                const rankData = lastManualRanking.find(s => s.email === email);
-                if (rankData) {
-                    const warnings = rankData.badges.length > 0 ? `<span class="text-red-600 font-bold ml-1">[${rankData.badges.join(', ')}]</span>` : "";
-                    logHtml += `<div class="text-xs mb-1">${i + 1}. <b>${rankData.name}</b> <span class="text-gray-500">(Score: ${rankData.score})</span> ${warnings}</div>`;
-                } else {
-                    logHtml += `<div class="text-xs mb-1">${i + 1}. ${getNameFromEmail(email)} (Manually Added)</div>`;
-                }
-            });
-            logHtml += `</div>`;
-        } else {
-            logHtml = `<div class="text-gray-500 italic">Log not available (Session reloaded).</div>`;
-        }
-
-        const slot = invigilationSlots[key];
-        const oldAssigned = new Set(slot.assigned || []);
-
-        slot.allocationLog = logHtml;
-        slot.assigned = selectedEmails;
-
-        // GOD MODE UPDATE
-        selectedEmails.forEach(email => {
-            // Only tag as ADMIN if they are truly NEW and have no existing source
-            const existingSource = slot.assignmentMeta?.[email]?.source;
-            if (!oldAssigned.has(email) && !existingSource) {
-                updateAssignmentMeta(slot, email, 'ADMIN');
-            }
-        });
-
-        
-        if (slot.assignmentMeta) {
-            Object.keys(slot.assignmentMeta).forEach(e => {
-                if (!selectedEmails.includes(e)) delete slot.assignmentMeta[e];
-            });
-        }
-
-        if (typeof logActivity === 'function') logActivity("Manual Assignment", `Assigned ${selectedEmails.length} staff to session ${key}`);
-
-        await syncSlotsToCloud();
-        window.closeModal('manual-allocation-modal');
-        renderSlotsGridAdmin();
-    }
-}
-
-
-
-window.switchAdminTab = function (tabName) {
-    const tabs = ['staff', 'slots', 'attendance'];
-
-    tabs.forEach(t => {
-        const content = document.getElementById(`tab-content-${t}`);
-        const btn = document.getElementById(`tab-btn-${t}`);
-
-        if (t === tabName) {
-            // --- ACTIVE STATE (White Card + Shadow) ---
-            if (content) content.classList.remove('hidden');
-            if (btn) {
-                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center";
-            }
-        } else {
-            // --- INACTIVE STATE (Gray + No Shadow) ---
-            if (content) content.classList.add('hidden');
-            if (btn) {
-                btn.className = "flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center";
-            }
-        }
-    });
-}
-
-// --- MANUAL ALLOCATION HELPER: Unselect All ---
 window.unselectAllManualStaff = function () {
-    const checkboxes = document.querySelectorAll('.manual-chk');
-    checkboxes.forEach(chk => {
-        chk.checked = false;
-    });
-    // Update the "Selected/Required" counter immediately
-    window.updateManualCounts();
+    if (!window.manualState.isFullEditMode) return;
+    window.manualState.rankedStaff.forEach(s => s.isChecked = false);
+    renderManualCards();
 }
+
+
+
 
 // --- BULK CANCEL FUNCTION ---
 window.cancelBulkSending = function () {
