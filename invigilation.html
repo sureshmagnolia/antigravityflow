@@ -885,77 +885,102 @@
         </div>
     </div>
 
-    <div id="manual-allocation-modal"
-        class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
-        <div class="bg-white rounded-xl shadow-2xl p-3 md:p-6 w-full max-w-4xl m-2 md:m-4 h-[90vh] flex flex-col">
-            <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
-                <div>
-                    <h3 class="text-xl font-bold text-gray-800">Manual Duty Allocation</h3>
-                    <p class="text-sm text-gray-500">Session: <span id="manual-modal-title"
-                            class="font-bold text-indigo-700"></span> | Required: <span id="manual-modal-req"
-                            class="font-bold">0</span></p>
-                </div>
-                <div class="flex gap-2"><span
-                        class="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">Slot
-                        Locked</span><button onclick="closeModal('manual-allocation-modal')"
-                        class="text-gray-400 text-2xl">&times;</button></div>
+    <div id="manual-allocation-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-2 md:p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[95vh] md:h-[90vh] flex flex-col overflow-hidden border border-gray-100">
+        
+        <!-- Header -->
+        <div class="shrink-0 p-4 md:p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+            <div>
+                <h3 class="text-xl md:text-2xl font-black text-gray-800 tracking-tight flex items-center gap-2">
+                    <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    Duty Allocation
+                </h3>
+                <p class="text-xs md:text-sm text-gray-500 mt-1 font-medium">Session: <span id="manual-modal-title" class="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100"></span> &nbsp;|&nbsp; Target: <span id="manual-modal-req" class="font-black text-gray-800">0</span> Staff</p>
+                <div id="manual-lock-msg-container"></div>
             </div>
-            <input type="hidden" id="manual-session-key">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 flex-1 min-h-0 overflow-hidden">
-                <div class="md:col-span-2 flex flex-col min-h-0">
-                    <div class="flex flex-col gap-2 mb-2 shrink-0">
-                        <div class="flex justify-between items-center">
-                            <h4 class="font-bold text-gray-700 text-sm uppercase">Available Staff</h4>
-                            <button onclick="unselectAllManualStaff()"
-                                class="text-xs text-red-600 hover:text-red-800 font-bold bg-red-50 border border-red-200 px-2 py-1 rounded transition cursor-pointer shadow-sm">
-                                Unselect All
-                            </button>
-                        </div>
-                        <div class="relative">
-                            <input type="text" id="manual-staff-search" oninput="filterManualStaff()"
-                                placeholder="Search staff by name or department..."
-                                class="w-full p-2 pl-8 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                            <svg class="w-4 h-4 text-gray-400 absolute left-2.5 top-2.5" fill="none"
-                                stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                            </svg>
-                        </div>
-                    </div>
+            <div class="flex items-center gap-3">
+                <span id="manual-lock-status-badge" class="px-3 py-1 bg-red-100 text-red-700 border border-red-200 rounded-full text-xs font-bold hidden shadow-sm">🔒 Locked</span>
+                <button onclick="closeModal('manual-allocation-modal')" class="text-gray-400 hover:text-gray-700 hover:bg-gray-200 p-2 rounded-full transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
 
-                    <div class="border border-gray-200 rounded-lg bg-gray-50 flex-1 overflow-y-auto custom-scroll p-2">
-                        <table class="w-full text-sm text-left">
-                            <tbody id="manual-available-list" class="divide-y divide-gray-200 bg-white"></tbody>
-                        </table>
-                        <p id="manual-no-results" class="hidden text-center text-gray-400 text-xs py-4 italic">No
-                            matches found.</p>
+        <input type="hidden" id="manual-session-key">
+
+        <!-- Body Grid -->
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden bg-gray-100/50">
+            
+            <!-- LEFT PANE: Available Staff -->
+            <div class="lg:col-span-6 xl:col-span-7 flex flex-col bg-white border-r border-gray-200 h-full overflow-hidden">
+                <div class="p-3 border-b border-gray-100 bg-indigo-50/30 shrink-0">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="font-black text-indigo-900 text-xs uppercase tracking-widest">Available Candidates</h4>
+                        <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold border border-indigo-200">🧠 Ranked by AI</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="manual-staff-search" oninput="filterManualStaff()" placeholder="Search staff names or departments..." class="w-full p-2.5 pl-9 border border-indigo-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition shadow-sm font-medium text-gray-700">
+                        <svg class="w-4 h-4 text-indigo-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </div>
                 </div>
-                <div class="flex flex-col gap-4 min-h-0">
-                    <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 shrink-0">
-                        <div class="text-center">
-                            <div class="text-xs text-indigo-500 font-bold uppercase">Selected / Required</div>
-                            <div class="text-3xl font-black text-indigo-700 mt-1"><span id="manual-sel-count">0</span> /
-                                <span id="manual-req-count">0</span>
+                
+                <div class="flex-1 overflow-y-auto custom-scroll bg-gray-50/50 p-2 lg:p-4">
+                    <div id="manual-available-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 auto-rows-max">
+                        <!-- JS renders styled 'cards' here -->
+                    </div>
+                    <p id="manual-no-results" class="hidden text-center text-gray-400 text-xs py-8 font-bold">No available candidates match your search.</p>
+                </div>
+            </div>
+
+            <!-- RIGHT PANE: Selected & Unavailable -->
+            <div class="lg:col-span-6 xl:col-span-5 flex flex-col h-full overflow-hidden bg-gray-50/30">
+                
+                <!-- Top Half: Selected Staff -->
+                <div class="flex-1 flex flex-col min-h-[50%] border-b border-gray-200 bg-white">
+                    <div class="p-3 border-b border-gray-100 bg-green-50/40 shrink-0 flex justify-between items-center shadow-sm z-10">
+                        <div class="flex items-center gap-3">
+                            <h4 class="font-black text-green-900 text-xs uppercase tracking-widest">Selected Roster</h4>
+                            <div class="flex items-baseline bg-white px-2.5 py-1 rounded shadow-sm border border-green-200">
+                                <span id="manual-sel-count" class="text-lg font-black text-green-600 leading-none">0</span>
+                                <span class="text-xs font-bold text-gray-400 mx-1">/</span>
+                                <span id="manual-req-count-display" class="text-sm font-black text-gray-700 leading-none">0</span>
                             </div>
                         </div>
+                        <button onclick="unselectAllManualStaff()" class="text-[10px] text-red-600 hover:text-white font-bold bg-white hover:bg-red-500 border border-red-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
+                            Clear Selection
+                        </button>
                     </div>
-                    <div class="flex flex-col flex-1 min-h-0">
-                        <h4 class="font-bold text-red-700 text-sm uppercase tracking-wide mb-2 shrink-0">Unavailable
-                            Staff</h4>
-                        <div id="manual-unavailable-list"
-                            class="border border-red-100 bg-red-50 rounded-lg p-2 flex-1 overflow-y-auto custom-scroll space-y-2">
+                    
+                    <div class="flex-1 overflow-y-auto custom-scroll bg-green-50/20 p-2 lg:p-3">
+                        <div id="manual-selected-list" class="flex flex-col gap-2 border-slate-100">
+                            <!-- Selected cards map here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Half: Unavailable -->
+                <div class="h-[30%] min-h-[150px] flex flex-col bg-red-50/10">
+                    <div class="p-2 px-4 border-b border-red-100 bg-red-50/60 shrink-0">
+                        <h4 class="font-black text-red-800 text-[10px] uppercase tracking-widest flex items-center gap-1.5"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Unavailable / Excused</h4>
+                    </div>
+                    <div class="flex-1 overflow-y-auto custom-scroll p-3">
+                        <div id="manual-unavailable-list" class="grid grid-cols-1 gap-2">
+                            <!-- Unavailable badged cards map here -->
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end gap-3 shrink-0"><button
-                    onclick="closeModal('manual-allocation-modal')"
-                    class="px-5 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-bold">Cancel</button><button
-                    onclick="saveManualAllocation()"
-                    class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold">Save Assignments</button></div>
+            
         </div>
+
+        <!-- Footer -->
+        <div class="shrink-0 p-4 border-t border-gray-200 bg-white flex justify-end gap-3 rounded-b-2xl z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <button onclick="closeModal('manual-allocation-modal')" class="px-6 py-2.5 bg-gray-100 border border-gray-300 text-gray-700 hover:bg-gray-200 rounded-lg text-sm font-bold transition shadow-sm">Cancel</button>
+            <button id="manual-save-btn" onclick="saveManualAllocation()" class="px-8 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-md hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed">Save Assignments</button>
+        </div>
+
     </div>
+</div>
 
 
 
