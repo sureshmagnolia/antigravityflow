@@ -17729,19 +17729,25 @@ window.downloadInvigilationListPDF = async function () {
 // 🔒 APP SECURITY: DAILY ENTRY LOCK
 // ==========================================
 function verifyAppPassword() {
-    const input = document.getElementById('app-entry-password').value;
+    const input = document.getElementById('app-entry-password').value.trim().toLowerCase();
     const error = document.getElementById('app-entry-error');
     
-    // Generate today's date in DDMMYYYY exactly
     const today = new Date();
+    
+    // Passcode 1: Generate today's date in DDMMYYYY exactly
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0
     const yyyy = today.getFullYear();
-    const requiredPasscode = dd + mm + yyyy; // e.g., 21032026
+    const requiredPasscodeDate = dd + mm + yyyy; // e.g., 21032026
 
-    if (input === requiredPasscode) {
+    // Passcode 2: Generate today's name in lowercase
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const requiredPasscodeDay = days[today.getDay()];
+
+    if (input === requiredPasscodeDate || input === requiredPasscodeDay) {
         // --- NEW: Save to LocalStorage for today ---
-        localStorage.setItem('appDailyPasscode', requiredPasscode);
+        // Save the date string as the verification token so it automatically expires tomorrow
+        localStorage.setItem('appDailyPasscodeToken', requiredPasscodeDate);
         // ---------------------------------------------
         
         document.getElementById('password-lock-screen').style.opacity = '0';
@@ -17764,11 +17770,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const yyyy = today.getFullYear();
-    const requiredPasscode = dd + mm + yyyy;
+    const currentToken = dd + mm + yyyy;
 
-    const savedPasscode = localStorage.getItem('appDailyPasscode');
+    const savedToken = localStorage.getItem('appDailyPasscodeToken');
     
-    if (savedPasscode === requiredPasscode) {
+    if (savedToken === currentToken) {
         // Automatically remove the lock screen before the user sees it
         const lockScreen = document.getElementById('password-lock-screen');
         if (lockScreen) lockScreen.remove();
@@ -17785,4 +17791,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
 
