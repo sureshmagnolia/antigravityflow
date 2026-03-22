@@ -1012,18 +1012,27 @@
                         </div>
                     </div>
            
-                    <!-- NEW: Extra Vacation Duty Dates (Math Only) -->
+                <!-- NEW: Extra Vacation Duty Dates (Math Only) -->
                     <div class="col-span-full bg-indigo-50 p-3 rounded border border-indigo-100 mt-2">
                         <div class="flex justify-between items-center mb-1">
                             <label class="block text-xs font-bold text-indigo-800">Extra Dates to Treat as Vacation (Math Only)</label>
                         </div>
-                        <div class="space-y-1">
-                            <input type="text" id="vacation-duty-dates"
-                                placeholder="e.g. 2026-03-20, 2026-03-25"
-                                class="w-full p-2 border border-indigo-300 rounded text-sm font-medium text-gray-700 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 transition" disabled>
-                            <p class="text-[10px] text-indigo-600 leading-tight block">Enter comma-separated dates (YYYY-MM-DD). If a slot falls on these dates, the Auto-Assigner prioritizes staff as if it is a Vacation day.</p>
+                        <div class="space-y-2">
+                            <p class="text-[10px] text-indigo-600 leading-tight block">If a slot falls on these dates, the Auto-Assigner prioritizes staff as if it is a Vacation day.</p>
+                            
+                            <div class="flex gap-2">
+                                <input type="date" id="vacation-math-date-input" class="flex-1 p-2 border border-indigo-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 transition" disabled>
+                                <button id="vacation-math-date-btn" onclick="addVacationMathDate()" class="bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-indigo-700 shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    + Add Date
+                                </button>
+                            </div>
+                            
+                            <div id="vacation-math-date-list" class="flex flex-wrap gap-2 min-h-[50px] max-h-[100px] overflow-y-auto p-2 border border-indigo-200 rounded bg-indigo-50/50">
+                                <span class="text-xs text-indigo-400 italic self-center pl-1">No extra dates added.</span>
+                            </div>
                         </div>
                     </div>
+
 
                 
                 </div>
