@@ -6417,6 +6417,71 @@ window.unselectAllManualStaff = function () {
     renderManualCards();
 }
 
+window.saveManualAllocation = async function () {
+    // 1. Get the current session key
+    const key = window.manualState.key || document.getElementById('manual-session-key').value;
+    const slot = invigilationSlots[key];
+    
+    if (!slot) return alert("Error: Slot not found.");
+
+    // 2. Get all selected staff from the state manager
+    const selectedEmails = window.manualState.rankedStaff
+        .filter(s => s.isChecked)
+        .map(s => s.email);
+
+    // 3. Optional: Warn if under-assigned
+    if (selectedEmails.length < slot.required) {
+        if (!confirm(`⚠️ Warning: You have only assigned ${selectedEmails.length} staff, but ${slot.required} are required.\n\nSave anyway?`)) {
+            return;
+        }
+    }
+
+    // 4. Update Tracking Meta (God Mode tagging) for newly added staff
+    const currentAssigned = new Set(slot.assigned || []);
+    selectedEmails.forEach(email => {
+        if (!currentAssigned.has(email)) {
+            // If they weren't assigned before, mark them as assigned by ADMIN
+            updateAssignmentMeta(slot, email, 'ADMIN');
+        }
+    });
+
+    // 5. Update the actual array
+    slot.assigned = selectedEmails;
+
+    // 6. UI Loading State
+    const btn = document.getElementById('manual-save-btn') || document.querySelector('button[onclick="saveManualAllocation()"]');
+    const originalText = btn ? btn.innerHTML : "Save";
+    if (btn) {
+        btn.innerHTML = "Saving...";
+        btn.disabled = true;
+    }
+
+    // 7. Save to Cloud
+    try {
+        await syncSlotsToCloud();
+        
+        // Log the activity
+        if (typeof logActivity === 'function') {
+            logActivity("Manual Allocation", `Admin manually updated assignments for ${key}. Total assigned: ${selectedEmails.length}`);
+        }
+        
+        // Close modal and refresh grid
+        window.closeModal('manual-allocation-modal');
+        if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+        
+        alert("✅ Manual allocation saved successfully!");
+        
+    } catch (error) {
+        console.error("Save Error:", error);
+        alert("❌ Failed to save changes to the cloud.");
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+};
+    
 
 
 
