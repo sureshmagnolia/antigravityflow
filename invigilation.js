@@ -3346,7 +3346,7 @@ window.loadSessionAttendance = function () {
     }
 
     // --- 2. ATTENDANCE LIST ---
-    let presentSet = new Set(slot.attendance || slot.assigned || []);
+    let presentSet = new Set(slot.attendance && slot.attendance.length > 0 ? slot.attendance : (slot.assigned || []));
 
     // Auto-Mark CS/SAS as Present
     if (currentCS && !presentSet.has(currentCS)) presentSet.add(currentCS);
