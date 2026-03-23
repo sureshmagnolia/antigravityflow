@@ -2228,12 +2228,6 @@ window.lockAllSessions = async function () {
     }
 }
 
-    
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(email); // Refresh
-}
 
 window.changeSlotReq = async function (key, delta) {
     const slot = invigilationSlots[key];
@@ -4700,7 +4694,6 @@ window.openSlotReminderModal = function (key) {
                 dailyDuties[email].push({ date: d, day: dayName, time: t, session: sessionCode });
             });
             
-            });
         }
     });
 
