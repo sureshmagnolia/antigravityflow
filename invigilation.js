@@ -630,15 +630,27 @@ function initStaffDashboard(me) {
 
 // --- HELPERS ---
 function isUserUnavailable(slot, email, key) {
-    // 1. Check Global Weekly Preference (Applies to Guest Lecturers ONLY)
+    // 1. Check Global Weekly Preference & Role Exemptions
     if (key) {
         const date = parseDate(key);
         const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon ... 6=Sat
         const staff = staffData.find(s => s.email === email);
 
         if (staff) {
-// *** LOGIC FIX: Only check days if Guest Lecturer ***
-            // Regular staff are assumed available Mon-Sat (1-6) regardless of saved preference
+            // Check for Active Exempt Roles (Target = 0)
+            if (staff.roleHistory && staff.roleHistory.length > 0) {
+                const activeRole = staff.roleHistory.find(r => {
+                    const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
+                    const rEnd = new Date(r.end); rEnd.setHours(23, 59, 59, 999);
+                    return date >= rStart && date <= rEnd;
+                });
+
+                if (activeRole && rolesConfig[activeRole.role] === 0) {
+                    return true; // Mark as Unavailable/Excused
+                }
+            }
+
+            // Check Guest Lecturer Preferred Days
             if (staff.designation === "Guest Lecturer") {
                 const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
                 if (!allowedDays.includes(dayOfWeek)) {
@@ -647,27 +659,25 @@ function isUserUnavailable(slot, email, key) {
             }
         }
     }
-    return false; // <--- ADD THIS
-} // <--- ADD THIS
 
-    // 2. Check Slot Specific Unavailability (Manual Calendar Blocks)
-    // Handles mixed data types (string vs object)
-    if (slot && slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email))) return true;
+    // 2. Check Session-Specific Unavailability
+    if (slot && slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email))) {
+        return true;
+    }
 
-    // 3. Check Advance Unavailability (OD/DL/Leave)
-    if (key) {
+    // 3. Check Advance Unavailability (Whole Day / Half Day Leaves)
+    if (key && typeof advanceUnavailability !== 'undefined') {
         const [dateStr, timeStr] = key.split(' | ');
-        if (advanceUnavailability[dateStr]) {
-            let session = "FN";
-            const t = timeStr ? timeStr.toUpperCase() : "";
-            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
-
-            const list = advanceUnavailability[dateStr][session];
-            if (list) {
-                return list.some(u => (typeof u === 'string' ? u === email : u.email === email));
+        const session = (timeStr && (timeStr.toUpperCase().includes('PM') || timeStr.startsWith('12'))) ? 'AN' : 'FN';
+        
+        if (advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
+            if (advanceUnavailability[dateStr][session].some(u => (typeof u === 'string' ? u === email : u.email === email))) {
+                return true;
             }
         }
     }
+
+    // If none of the above triggered, the user is available
     return false;
 }
 
