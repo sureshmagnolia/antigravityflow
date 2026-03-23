@@ -630,13 +630,29 @@ function initStaffDashboard(me) {
 
 // --- HELPERS ---
 function isUserUnavailable(slot, email, key) {
-    // 1. Check Global Weekly Preference (Applies to Guest Lecturers ONLY)
+    // 1. Check Global Weekly Preference & Role Exemptions
     if (key) {
         const date = parseDate(key);
         const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon ... 6=Sat
         const staff = staffData.find(s => s.email === email);
 
         if (staff) {
+            // --- NEW: Check for Active Exempt Roles (Target = 0) ---
+            // If the user has a role on this date like "EXCL" where the target is 0, they are unavailable.
+            if (staff.roleHistory && staff.roleHistory.length > 0) {
+                const activeRole = staff.roleHistory.find(r => {
+                    const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
+                    const rEnd = new Date(r.end); rEnd.setHours(23, 59, 59, 999);
+                    return date >= rStart && date <= rEnd;
+                });
+
+                // If they have an active role, check if its target is 0 in the rolesConfig
+                if (activeRole && rolesConfig[activeRole.role] === 0) {
+                    return true; // Mark as Unavailable/Excused
+                }
+            }
+            // -------------------------------------------------------
+
             // *** LOGIC FIX: Only check days if Guest Lecturer ***
             // Regular staff are assumed available Mon-Sat (1-6) regardless of saved preference
             if (staff.designation === "Guest Lecturer") {
@@ -647,27 +663,6 @@ function isUserUnavailable(slot, email, key) {
             }
         }
     }
-
-    // 2. Check Slot Specific Unavailability (Manual Calendar Blocks)
-    // Handles mixed data types (string vs object)
-    if (slot && slot.unavailable && slot.unavailable.some(u => (typeof u === 'string' ? u === email : u.email === email))) return true;
-
-    // 3. Check Advance Unavailability (OD/DL/Leave)
-    if (key) {
-        const [dateStr, timeStr] = key.split(' | ');
-        if (advanceUnavailability[dateStr]) {
-            let session = "FN";
-            const t = timeStr ? timeStr.toUpperCase() : "";
-            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
-
-            const list = advanceUnavailability[dateStr][session];
-            if (list) {
-                return list.some(u => (typeof u === 'string' ? u === email : u.email === email));
-            }
-        }
-    }
-    return false;
-}
 
 
 
