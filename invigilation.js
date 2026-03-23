@@ -637,7 +637,7 @@ function isUserUnavailable(slot, email, key) {
         const staff = staffData.find(s => s.email === email);
 
         if (staff) {
-            // *** LOGIC FIX: Only check days if Guest Lecturer ***
+// *** LOGIC FIX: Only check days if Guest Lecturer ***
             // Regular staff are assumed available Mon-Sat (1-6) regardless of saved preference
             if (staff.designation === "Guest Lecturer") {
                 const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
@@ -647,6 +647,8 @@ function isUserUnavailable(slot, email, key) {
             }
         }
     }
+    return false; // <--- ADD THIS
+} // <--- ADD THIS
 
     // 2. Check Slot Specific Unavailability (Manual Calendar Blocks)
     // Handles mixed data types (string vs object)
