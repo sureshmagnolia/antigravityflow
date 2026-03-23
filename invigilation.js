@@ -650,7 +650,7 @@ function isUserUnavailable(slot, email, key) {
                 }
             }
 
-            // Check Guest Lecturer Preferred Days
+            // Only check preferred days if Guest Lecturer
             if (staff.designation === "Guest Lecturer") {
                 const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
                 if (!allowedDays.includes(dayOfWeek)) {
@@ -680,7 +680,6 @@ function isUserUnavailable(slot, email, key) {
     // If none of the above triggered, the user is available
     return false;
 }
-
 
 
 // --- DATE HELPERS ---
