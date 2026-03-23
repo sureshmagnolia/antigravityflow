@@ -6422,56 +6422,57 @@ window.unselectAllManualStaff = function () {
     renderManualCards();
 }
 
-
 window.saveManualAllocation = async function () {
-    // 1. Get the current session key
+    // 1. Get the current session key from the modal state
     const key = window.manualState.key || document.getElementById('manual-session-key').value;
     const slot = invigilationSlots[key];
     
     if (!slot) return alert("Error: Slot not found.");
 
-    // 2. Get all selected staff from the state manager
+    // 2. Extract selected emails from the manualState
+    // This looks at the temporary array built when the modal opened and updated by the checkboxes
     const selectedEmails = window.manualState.rankedStaff
         .filter(s => s.isChecked)
         .map(s => s.email);
 
-    // 3. Optional: Warn if under-assigned
+    // 3. Optional Warning: If you are assigning fewer staff than required
     if (selectedEmails.length < slot.required) {
         if (!confirm(`⚠️ Warning: You have only assigned ${selectedEmails.length} staff, but ${slot.required} are required.\n\nSave anyway?`)) {
-            return;
+            return; // Cancel save
         }
     }
 
-    // 4. Update Tracking Meta (God Mode tagging) for newly added staff
+    // 4. Update the "God Mode" Assignment Meta tags
+    // Any newly added staff via this modal will get the 'ADMIN' tag
     const currentAssigned = new Set(slot.assigned || []);
     selectedEmails.forEach(email => {
         if (!currentAssigned.has(email)) {
-            // If they weren't assigned before, mark them as assigned by ADMIN
+            // This relies on your existing updateAssignmentMeta function
             updateAssignmentMeta(slot, email, 'ADMIN');
         }
     });
 
-    // 5. Update the actual array
+    // 5. Update the actual assigned array
     slot.assigned = selectedEmails;
 
     // 6. UI Loading State
     const btn = document.getElementById('manual-save-btn') || document.querySelector('button[onclick="saveManualAllocation()"]');
-    const originalText = btn ? btn.innerHTML : "Save";
+    const originalText = btn ? btn.innerHTML : "Save Assignments";
     if (btn) {
         btn.innerHTML = "Saving...";
         btn.disabled = true;
     }
 
-    // 7. Save to Cloud
     try {
+        // 7. Save the updated slots to Firestore
         await syncSlotsToCloud();
         
-        // Log the activity
+        // 8. Log the activity
         if (typeof logActivity === 'function') {
             logActivity("Manual Allocation", `Admin manually updated assignments for ${key}. Total assigned: ${selectedEmails.length}`);
         }
         
-        // Close modal and refresh grid
+        // 9. Close the modal and refresh the Admin Grid
         window.closeModal('manual-allocation-modal');
         if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
         
@@ -6481,12 +6482,14 @@ window.saveManualAllocation = async function () {
         console.error("Save Error:", error);
         alert("❌ Failed to save changes to the cloud.");
     } finally {
+        // Restore button state just in case
         if (btn) {
             btn.innerHTML = originalText;
             btn.disabled = false;
         }
     }
 };
+
 
 
 // --- BULK CANCEL FUNCTION ---
