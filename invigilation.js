@@ -4674,7 +4674,6 @@ window.openSlotReminderModal = function (key) {
     if (list) list.innerHTML = '';
     window.currentEmailQueue =[];
 
-    // Find ALL Sessions for this Date
     const dailyDuties = {};
     Object.keys(invigilationSlots).forEach(slotKey => {
         if (slotKey.startsWith(targetDateStr)) {
@@ -4683,54 +4682,54 @@ window.openSlotReminderModal = function (key) {
             const isAN = (t.includes("PM") || t.startsWith("12"));
             const sessionCode = isAN ? "AN" : "FN";
             
-            // ✅ FIX: Calculate Day Name (e.g. MONDAY)
-            // Parse DD.MM.YYYY
             const [dayPart, monthPart, yearPart] = d.split('.');
             const dateObj = new Date(`${yearPart}-${monthPart}-${dayPart}`); 
-            const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' }); // e.g. Monday
-            const assignedList = slot.assigned ||[]; // SAFE ACCESS
+            const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' }); 
+            
+            const assignedList = slot.assigned ||[]; 
             assignedList.forEach(email => {
+                if (!email) return; // Skip empty emails
                 if (!dailyDuties[email]) dailyDuties[email] = [];
                 dailyDuties[email].push({ date: d, day: dayName, time: t, session: sessionCode });
             });
-            
         }
     });
 
-    if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
+    if (Object.keys(dailyDuties).length === 0) {
+        alert("No duties assigned for this date.");
+        return;
+    }
 
-    // ADD BULK BUTTONS (WITH CANCEL)
-    list.innerHTML = `
-        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
-            <div class="flex gap-2">
-                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition items-center gap-2">
-                    Stop / Cancel
-                </button>
-                <button onclick="sendBulkEmails('new')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
-                    Send to NEW Only
-                </button>
-                <button onclick="sendBulkEmails('all')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
-                    Send to ALL
-                </button>
+    if (list) {
+        list.innerHTML = `
+            <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+                <div class="text-xs text-gray-500">Queue: <b>${Object.keys(dailyDuties).length}</b> faculty.</div>
+                <div class="flex gap-2">
+                    <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition items-center gap-2">
+                        Stop / Cancel
+                    </button>
+                    <button onclick="sendBulkEmails('new')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                        Send to NEW Only
+                    </button>
+                    <button onclick="sendBulkEmails('all')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">
+                        Send to ALL
+                    </button>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    }
 
-
-    // ... (Rest of the loop logic is same as previous) ...
-    // (Use the loop from the previous openSlotReminderModal)
+    // SAFE SORT
     const sortedEmails = Object.keys(dailyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
 
     sortedEmails.forEach((email, index) => {
         const duties = dailyDuties[email];
         duties.sort((a, b) => a.time.localeCompare(b.time));
 
-        // FIX: Case-insensitive search + Fallback
-        const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+        // SAFE ACCESS
+        const staff = staffData.find(s => s.email && s.email.toLowerCase() === email.toLowerCase());
         const fullName = staff ? staff.name : email;
         const firstName = getFirstName(fullName);
-        // FIX: If staff not found, use the raw email from the duty list
         const staffEmail = staff ? staff.email : email;
 
         let phone = staff ? (staff.phone || "") : "";
@@ -4738,14 +4737,12 @@ window.openSlotReminderModal = function (key) {
         if (phone.length === 10) phone = "91" + phone;
 
         const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
-        // FIX: Add window. prefix to prevent ReferenceError
+        // USE window. PREFIX
         const emailBody = window.generateProfessionalEmail ? window.generateProfessionalEmail(fullName, duties, "Invigilation Duty") : "";
         const btnId = `email-btn-${index}`;
 
         const dutyKeys = duties.map(d => `${d.date} | ${d.time}`);
-        
 
-    // Check mail and WA separately
         let isMailed = true;
         let isWA = true;
         dutyKeys.forEach(k => {
@@ -4759,37 +4756,28 @@ window.openSlotReminderModal = function (key) {
         const newBadge = (!isMailed && !isWA) ? '<span class="ml-1 text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">🔔 New</span>' : '';
         const statusBadge = mailedBadge + waBadge + newBadge;
 
-        const isNew = !isMailed; // Only email counts for "New" in bulk queue
-
-
         if (staffEmail) {
             window.currentEmailQueue.push({ 
                 email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId,
-                 isNew: !isMailed, dutyKeys: dutyKeys
+                isNew: !isMailed, dutyKeys: dutyKeys
             });
         }
 
-
-        // *** UPDATED: Generate detailed daily message ***
-        // WhatsApp (Elaborate & Detailed)
-// *** UPDATED: Generate detailed daily message ***
         const sessionsStr = duties.map(d => d.session).join(' & ');
         
-        // FIX: Add window. prefix
+        // USE window. PREFIX
         const waMsg = window.generateDailyWhatsApp ? window.generateDailyWhatsApp(fullName, targetDateStr, duties) : "";
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
 
         const smsMsg = window.generateDailySMS ? window.generateDailySMS(firstName, targetDateStr, duties) : "";
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-        // *** NEW: Update Preview Box (Show 1st person's message) ***
+
         if (index === 0) {
             const previewEl = document.getElementById('notif-message-preview');
             if (previewEl) {
                 previewEl.textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
             }
         }
-        const shortDate = targetDateStr.slice(0, 5);
-
 
         const phoneDisabled = phone ? "" : "disabled";
         const emailDisabled = staffEmail ? "" : "disabled";
@@ -4798,23 +4786,25 @@ window.openSlotReminderModal = function (key) {
         const safeSubject = emailSubject.replace(/'/g, "\\'");
         const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
 
-        list.innerHTML += `
-            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
-                <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning} ${statusBadge}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
+        if (list) {
+            list.innerHTML += `
+                <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
+                    <div class="flex-1 min-w-0 pr-2">
+                        <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning} ${statusBadge}</div>
+                        <div class="text-xs text-gray-500 mt-1 font-bold text-indigo-600">Sessions: ${sessionsStr}</div>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" data-duty-keys='${JSON.stringify(dutyKeys)}' ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
+                        <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                        <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")}, 'wa');" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
+                    </div>
                 </div>
-                <div class="flex gap-2 shrink-0">
-                    <button id="${btnId}"  onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" data-duty-keys='${JSON.stringify(dutyKeys)}' ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this); markUserAlerted('${email}', ${JSON.stringify(dutyKeys).replace(/"/g, "'")}, 'wa');" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA Alert</a>
-                </div>
-            </div>
-
-        `;
+            `;
+        }
     });
 
-    window.openModal('notification-modal');
+    const modalEl = document.getElementById('notification-modal');
+    if (modalEl) modalEl.classList.remove('hidden');
 }
 
 // ==========================================
@@ -7554,7 +7544,8 @@ window.openDashboardInvigModal = function (sessionKey) {
     const slot = invigilationSlots[sessionKey];
     if (!slot) return;
 
-    const assignedList = slot.assigned ||[]; // SAFE ACCESS: Prevents crash if undefined
+    // SAFE ACCESS: Prevents crash if 'assigned' is missing
+    const assignedList = slot.assigned || []; 
 
     const [datePart, timePart] = sessionKey.split(' | ');
     const titleEl = document.getElementById('dash-modal-title');
@@ -7564,7 +7555,7 @@ window.openDashboardInvigModal = function (sessionKey) {
     if (subTitleEl) subTitleEl.textContent = `${datePart} • ${assignedList.length} Staff Assigned`;
 
     const listContainer = document.getElementById('dash-invig-list');
-    if (!listContainer) return; // Prevents crash if HTML is missing
+    if (!listContainer) return; // Prevents crash if HTML element is missing
     listContainer.innerHTML = '';
 
     if (assignedList.length === 0) {
@@ -7573,25 +7564,26 @@ window.openDashboardInvigModal = function (sessionKey) {
                 <svg class="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
                 <p class="text-sm">No invigilators assigned yet.</p>
             </div>`;
- } else {
+    } else {
+        // SAFE SORT: Fallback to string casting if name is missing
         const sortedEmails = [...assignedList].sort((a, b) => {
-            const nameA = (staffData.find(s => s.email === a) || {}).name || a;
-            const nameB = (staffData.find(s => s.email === b) || {}).name || b;
+            const nameA = a ? ((staffData.find(s => s.email === a) || {}).name || String(a)) : "";
+            const nameB = b ? ((staffData.find(s => s.email === b) || {}).name || String(b)) : "";
             return nameA.localeCompare(nameB);
         });
 
         sortedEmails.forEach(email => {
-            const staff = staffData.find(s => s.email === email) || { name: email.split('@')[0], dept: "Unknown", phone: "" };
+            if (!email) return; // Skip empty array items
             
-            // GOD MODE: Get Badge
+            const staff = staffData.find(s => s.email === email) || { name: String(email).split('@')[0], dept: "Unknown", phone: "" };
+            
             const meta = slot.assignmentMeta ? slot.assignmentMeta[email] : null;
-            const sourceBadge = meta ? getSourceBadge(meta.source) : '';
+            const sourceBadge = meta ? (window.getSourceBadge ? window.getSourceBadge(meta.source) : '') : '';
 
-            // Phone Logic
             let waLink = "#";
             let waClass = "opacity-50 cursor-not-allowed grayscale";
             if (staff.phone) {
-                let cleanNum = staff.phone.replace(/\D/g, '');
+                let cleanNum = String(staff.phone).replace(/\D/g, '');
                 if (cleanNum.length === 10) cleanNum = '91' + cleanNum;
                 if (cleanNum.length >= 10) {
                     waLink = `https://wa.me/${cleanNum}`;
@@ -7605,7 +7597,7 @@ window.openDashboardInvigModal = function (sessionKey) {
             card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-                        ${staff.name.charAt(0)}
+                        ${staff.name.charAt(0).toUpperCase()}
                     </div>
                     <div class="min-w-0">
                         <div class="flex items-center gap-2">
@@ -7620,15 +7612,17 @@ window.openDashboardInvigModal = function (sessionKey) {
                     ${staff.phone ? `<a href="tel:${staff.phone}" class="p-2 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600 border border-gray-100 transition"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg></a>` : ''}
                     <a href="${waLink}" target="_blank" class="p-2 rounded-full border transition flex items-center justify-center ${waClass}">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.008-.57-.008-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-                    </a>
-                </div>
-            `;
+                        </a>
+                    </div>
+                `;
             listContainer.appendChild(card);
         });
     }
 
-    document.getElementById('dashboard-invig-modal').classList.remove('hidden');
+    const modalEl = document.getElementById('dashboard-invig-modal');
+    if (modalEl) modalEl.classList.remove('hidden');
 }
+
 
 
 
