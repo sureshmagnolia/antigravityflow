@@ -2218,14 +2218,17 @@ window.lockAllSessions = async function () {
         }
     });
 
-    if (!confirm("Confirm duty?")) return;
+    if (changed) {
+        logActivity("Global Lock", "Admin locked all standard sessions.");
+        await syncSlotsToCloud();
+        renderSlotsGridAdmin();
+        alert("All sessions have been locked.");
+    } else {
+        alert("All sessions are already locked.");
+    }
+}
 
-    const slot = invigilationSlots[key];
-    slot.assigned.push(email);
-
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
+    
     await syncSlotsToCloud();
     await syncStaffToCloud();
     window.closeModal('day-detail-modal');
@@ -4670,13 +4673,12 @@ window.openSlotReminderModal = function (key) {
     const title = document.getElementById('notif-modal-title');
     const subtitle = document.getElementById('notif-modal-subtitle');
 
-    // ... (Keep existing Date/Slot logic) ...
-    // Identify Date
+    if (!key) return;
     const [targetDateStr] = key.split(' | ');
-    title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
-    subtitle.textContent = "Send reminders for ALL duties on this day.";
-    list.innerHTML = '';
-    window.currentEmailQueue = [];
+    if (title) title.textContent = `🔔 Daily Reminder: ${targetDateStr}`;
+    if (subtitle) subtitle.textContent = "Send reminders for ALL duties on this day.";
+    if (list) list.innerHTML = '';
+    window.currentEmailQueue =[];
 
     // Find ALL Sessions for this Date
     const dailyDuties = {};
@@ -4692,10 +4694,12 @@ window.openSlotReminderModal = function (key) {
             const [dayPart, monthPart, yearPart] = d.split('.');
             const dateObj = new Date(`${yearPart}-${monthPart}-${dayPart}`); 
             const dayName = dateObj.toLocaleString('en-us', { weekday: 'long' }); // e.g. Monday
-            slot.assigned.forEach(email => {
+            const assignedList = slot.assigned ||[]; // SAFE ACCESS
+            assignedList.forEach(email => {
                 if (!dailyDuties[email]) dailyDuties[email] = [];
-                // ✅ FIX: Include 'day' in the object
                 dailyDuties[email].push({ date: d, day: dayName, time: t, session: sessionCode });
+            });
+            
             });
         }
     });
@@ -4741,7 +4745,8 @@ window.openSlotReminderModal = function (key) {
         if (phone.length === 10) phone = "91" + phone;
 
         const emailSubject = `Reminder: Exam Duty Tomorrow (${targetDateStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Invigilation Duty");
+        // FIX: Add window. prefix to prevent ReferenceError
+        const emailBody = window.generateProfessionalEmail ? window.generateProfessionalEmail(fullName, duties, "Invigilation Duty") : "";
         const btnId = `email-btn-${index}`;
 
         const dutyKeys = duties.map(d => `${d.date} | ${d.time}`);
@@ -4774,12 +4779,14 @@ window.openSlotReminderModal = function (key) {
 
         // *** UPDATED: Generate detailed daily message ***
         // WhatsApp (Elaborate & Detailed)
+// *** UPDATED: Generate detailed daily message ***
         const sessionsStr = duties.map(d => d.session).join(' & ');
-        const waMsg = generateDailyWhatsApp(fullName, targetDateStr, duties);
+        
+        // FIX: Add window. prefix
+        const waMsg = window.generateDailyWhatsApp ? window.generateDailyWhatsApp(fullName, targetDateStr, duties) : "";
         const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
 
-        // SMS (Shortest Possible)
-        const smsMsg = generateDailySMS(firstName, targetDateStr, duties);
+        const smsMsg = window.generateDailySMS ? window.generateDailySMS(firstName, targetDateStr, duties) : "";
         const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
         // *** NEW: Update Preview Box (Show 1st person's message) ***
         if (index === 0) {
@@ -7554,21 +7561,27 @@ window.openDashboardInvigModal = function (sessionKey) {
     const slot = invigilationSlots[sessionKey];
     if (!slot) return;
 
+    const assignedList = slot.assigned ||[]; // SAFE ACCESS: Prevents crash if undefined
+
     const [datePart, timePart] = sessionKey.split(' | ');
-    document.getElementById('dash-modal-title').textContent = timePart;
-    document.getElementById('dash-modal-subtitle').textContent = `${datePart} • ${slot.assigned.length} Staff Assigned`;
+    const titleEl = document.getElementById('dash-modal-title');
+    if (titleEl) titleEl.textContent = timePart;
+    
+    const subTitleEl = document.getElementById('dash-modal-subtitle');
+    if (subTitleEl) subTitleEl.textContent = `${datePart} • ${assignedList.length} Staff Assigned`;
 
     const listContainer = document.getElementById('dash-invig-list');
+    if (!listContainer) return; // Prevents crash if HTML is missing
     listContainer.innerHTML = '';
 
-    if (!slot.assigned || slot.assigned.length === 0) {
+    if (assignedList.length === 0) {
         listContainer.innerHTML = `
             <div class="flex flex-col items-center justify-center py-8 text-gray-400">
                 <svg class="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
                 <p class="text-sm">No invigilators assigned yet.</p>
             </div>`;
-    } else {
-        const sortedEmails = [...slot.assigned].sort((a, b) => {
+ } else {
+        const sortedEmails = [...assignedList].sort((a, b) => {
             const nameA = (staffData.find(s => s.email === a) || {}).name || a;
             const nameB = (staffData.find(s => s.email === b) || {}).name || b;
             return nameA.localeCompare(nameB);
