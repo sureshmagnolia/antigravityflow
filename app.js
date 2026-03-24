@@ -12579,10 +12579,14 @@ Are you sure?
                     signOut(auth).then(() => location.reload());
                 }
             }
-        } catch (e) {
+                } catch (e) {
             console.error("Error finding college:", e);
             updateSyncStatus("Auth Error", "error");
+            // Guarantee loader is dismissed even if college lookup fails
+            await loadInitialData();
+            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         }
+
     }
     // 7. SWITCH COLLEGE (SUPER ADMIN)
     const btnAdminSwitch = document.getElementById('btn-admin-switch-college');
