@@ -931,9 +931,13 @@ function renderSlotsGridAdmin() {
                     </div>
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
                     
+                    <!-- NEW LOGS BUTTON -->
+                    <button onclick="viewAutoAssignLogs()" class="text-[10px] bg-gray-600 text-white border border-gray-700 px-2 py-1 rounded hover:bg-gray-700 font-bold shadow-sm" title="View Logs">📜</button>
+                    
                     <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" class="text-[10px] bg-green-600 text-white border border-green-700 px-2 py-1 rounded hover:bg-green-700 font-bold shadow-sm flex items-center gap-1">📢 Notify</button>
                 </div>
             </div>`;
+
 
         group.items.sort((a, b) => {
             if (a.date - b.date !== 0) return a.date - b.date;
@@ -9600,3 +9604,302 @@ window.printAttendanceReport = function () {
     printWindow.document.write(html);
     printWindow.document.close();
 };
+
+// ==========================================
+// RESTORED: WEEKLY AUTO-ASSIGN & LOGS
+// ==========================================
+window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
+    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
+
+    const targetSlots = [];
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+        const slot = invigilationSlots[key];
+        if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
+            targetSlots.push({ key, date, slot });
+        }
+    });
+
+    if (targetSlots.length === 0) return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
+
+    targetSlots.sort((a, b) => a.date - b.date);
+
+    const deptCounts = {};
+    let eligibleStaff = staffData.map(s => {
+        if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+        return {
+            ...s,
+            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+            weeklyLoad: {}
+        };
+    });
+
+    Object.keys(invigilationSlots).forEach(k => {
+        const d = parseDate(k);
+        const mStr = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(d);
+        const weekKey = `${mStr}-${wNum}`;
+        invigilationSlots[k].assigned.forEach(email => {
+            const s = eligibleStaff.find(st => st.email === email);
+            if (s) {
+                if (!s.weeklyLoad[weekKey]) s.weeklyLoad[weekKey] = 0;
+                s.weeklyLoad[weekKey]++;
+            }
+        });
+    });
+
+    const logEntries = [];
+    let assignedCount = 0;
+    const timestamp = new Date().toLocaleString();
+
+    for (const target of targetSlots) {
+        const { key, date, slot } = target;
+        const needed = slot.required - slot.assigned.length;
+        if (needed <= 0) continue;
+
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+        const currentWeekKey = `${mStr}-${wNum}`;
+        const prevDate = new Date(date); prevDate.setDate(date.getDate() - 1);
+        const nextDate = new Date(date); nextDate.setDate(date.getDate() + 1);
+
+        const slotDeptCounts = {};
+        slot.assigned.forEach(email => {
+            const s = staffData.find(st => st.email === email);
+            if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
+        });
+
+        for (let i = 0; i < needed; i++) {
+            const candidates = eligibleStaff.map(s => {
+                let score = s.pending * 100;
+                let warnings = [];
+
+                if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
+
+                const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
+                if (dutiesThisWeek >= 3) { score -= 5000; warnings.push("Max 3/wk"); }
+
+                const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
+                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) { score -= 2000; warnings.push("Same Day"); }
+
+                const dTotal = deptCounts[s.dept] || 0;
+                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { score -= 4000; warnings.push("Dept Saturation"); }
+
+                let hasAdjacent = false;
+                targetSlots.forEach(t => {
+                    if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
+                        hasAdjacent = true;
+                    }
+                });
+                if (hasAdjacent) { score -= 1000; warnings.push("Adjacent"); }
+
+                return { staff: s, score, warnings };
+            }).filter(c => c !== null);
+
+            candidates.sort((a, b) => b.score - a.score);
+
+            if (candidates.length > 0) {
+                const choice = candidates[0];
+                slot.assigned.push(choice.staff.email);
+                choice.staff.pending--;
+                if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
+                choice.staff.weeklyLoad[currentWeekKey]++;
+                slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
+                assignedCount++;
+
+                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1"><span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> <span class="text-gray-500">(Score: ${choice.score})</span>${choice.warnings.length > 0 ? `<span class="text-red-500 ml-1">[${choice.warnings.join(', ')}]</span>` : ""}</div>`;
+                const skipped = candidates.slice(1, 4);
+                if (skipped.length > 0) logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+
+                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
+                slot.allocationLog += logEntry;
+
+                if (choice.warnings.length > 0) logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
+            }
+        }
+    }
+
+    if (logEntries.length > 0) {
+        const logRef = doc(db, "colleges", currentCollegeId);
+        const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
+        try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
+    }
+
+    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+    await syncSlotsToCloud();
+    renderSlotsGrid();
+
+    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
+    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated. Check Logs.`;
+    alert(alertMsg);
+};
+
+window.viewAutoAssignLogs = async function () {
+    const ref = doc(db, "colleges", currentCollegeId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+        const logs = snap.data().autoAssignLogs || [];
+        if (logs.length === 0) return alert("No logs found.");
+        const list = document.getElementById('inconvenience-list');
+        const title = document.getElementById('inconvenience-modal-subtitle');
+        document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
+        title.textContent = "History of automated decisions & overrides.";
+        list.innerHTML = logs.reverse().map(l => {
+            const isWarn = l.includes("WARN");
+            const isErr = l.includes("ERROR");
+            const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
+            return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
+        }).join('');
+        window.openModal('inconvenience-modal');
+    }
+};
+
+window.openWeeklyNotificationModal = function (monthStr, weekNum) {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+    title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
+    subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
+    list.innerHTML = '';
+    currentEmailQueue = [];
+
+    const facultyDuties = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        const date = parseDate(key);
+        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const wNum = getWeekOfMonth(date);
+        if (mStr === monthStr && wNum === weekNum) {
+            const [dStr, tStr] = key.split(' | ');
+            const sessionCode = (tStr.includes("PM") || tStr.startsWith("12")) ? "AN" : "FN";
+            const dayName = date.toLocaleString('en-us', { weekday: 'short' });
+            invigilationSlots[key].assigned.forEach(email => {
+                if (!facultyDuties[email]) facultyDuties[email] = [];
+                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
+            });
+        }
+    });
+
+    if (Object.keys(facultyDuties).length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
+        return window.openModal('notification-modal');
+    }
+
+    list.innerHTML = `
+        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
+            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(facultyDuties).length}</b> Faculty + Dept Copies.</div>
+            <div class="flex gap-2">
+                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition flex items-center gap-2">Stop / Cancel</button>
+                <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">Send Bulk Emails</button>
+            </div>
+        </div>
+    `;
+
+    const deptAggregator = {};
+    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
+
+    sortedEmails.forEach((email, index) => {
+        const duties = facultyDuties[email];
+        duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
+        const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
+        const staff = staffData.find(s => s.email === email);
+        const fullName = staff ? staff.name : email;
+        const firstName = getFirstName(fullName);
+        const staffEmail = staff ? staff.email : "";
+
+        let phone = staff ? (staff.phone || "") : "";
+        phone = phone.replace(/\D/g, '');
+        if (phone.length === 10) phone = "91" + phone;
+
+        const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
+        const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
+        const btnId = `email-btn-${index}`;
+
+        if (staffEmail) currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
+        if (staff && staff.dept) {
+            if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
+            deptAggregator[staff.dept].push({ name: fullName, duties });
+        }
+
+        const waMsg = typeof generateWeeklyWhatsApp === 'function' ? generateWeeklyWhatsApp(fullName, duties) : "Duty Update";
+        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
+        const smsMsg = typeof generateWeeklySMS === 'function' ? generateWeeklySMS(firstName, duties) : "Duty Update";
+        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
+
+        if (index === 0 && document.getElementById('notif-message-preview')) {
+            document.getElementById('notif-message-preview').textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
+        }
+
+        const phoneDisabled = phone ? "" : "disabled";
+        const emailDisabled = staffEmail ? "" : "disabled";
+        const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
+        const safeName = fullName.replace(/'/g, "\\'");
+        const safeSubject = emailSubject.replace(/'/g, "\\'");
+        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
+
+        list.innerHTML += `
+            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
+                <div class="flex-1 min-w-0 pr-2">
+                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
+                    <div class="text-xs text-gray-500 mt-1 font-mono truncate">${dutyString}</div>
+                    ${staff && staff.dept ? `<div class="text-[9px] text-gray-400">${staff.dept}</div>` : ''}
+                </div>
+                <div class="flex gap-2 shrink-0">
+                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
+                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
+                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA</a>
+                </div>
+            </div>`;
+    });
+
+    const cleanDepts = (typeof departmentsConfig !== 'undefined') ? departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d) : [];
+    Object.keys(deptAggregator).forEach(deptName => {
+        const deptObj = cleanDepts.find(d => d.name === deptName);
+        if (deptObj && deptObj.email) {
+            const facultyList = deptAggregator[deptName];
+            const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
+            const deptBody = (typeof generateDepartmentConsolidatedEmail !== 'undefined') ? generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr) : "Duty List Attached";
+            currentEmailQueue.push({ email: deptObj.email, name: `HOD ${deptName}`, subject: deptSubject, body: deptBody, btnId: null });
+            list.insertAdjacentHTML('beforeend', `<div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1"><span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})</div>`);
+        }
+    });
+
+    window.openModal('notification-modal');
+};
+
+// ==========================================
+// RESTORED: SAVE MANUAL ALLOCATION 
+// ==========================================
+window.saveManualAllocation = async function () {
+    const key = document.getElementById('manual-alloc-slot-key').value;
+    if (!key) return;
+    
+    // Convert selected map to array
+    const newAssigned = [];
+    document.querySelectorAll('.manual-select-checkbox:checked').forEach(cb => {
+        newAssigned.push(cb.value);
+    });
+    
+    if(!invigilationSlots[key]) return;
+    invigilationSlots[key].assigned = newAssigned;
+    
+    // Save to Firebase
+    try {
+        await syncSlotsToCloud();
+        alert('✅ Assignments Saved successfully!');
+        window.closeModal('manual-allocation-modal');
+        
+        if (currentUser && typeof logActivity === 'function') {
+            logActivity("Manual Update", `Updated assignments for ${key}. Count: ${newAssigned.length}`);
+        }
+        
+        // Re-render based on active admin view
+        renderSlotsGrid();
+    } catch (e) {
+        console.error("Save failed:", e);
+        alert('Error saving. Check console.');
+    }
+};
+
+
