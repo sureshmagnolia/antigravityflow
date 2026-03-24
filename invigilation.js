@@ -295,11 +295,6 @@ function setupLiveSync(collegeId, mode) {
             // Dynamic UI Refresh based on what is visible
             const adminView = document.getElementById('view-admin');
             const staffView = document.getElementById('view-staff');
-
-    if (adminView && !adminView.classList.contains('hidden')) 
-
-
-
 if (adminView && !adminView.classList.contains('hidden')) {
     renderSlotsGridAdmin();
     renderAdminTodayStats();
