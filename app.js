@@ -1140,12 +1140,15 @@ if (existingData.length === 0 && currentUser && currentCollegeId) {
         console.log("No cloud storage backup found.");
     }
 }
-            
-            // Final UI Load (Refresh Dashboards, Tables, etc.)
-            loadInitialData();
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-}        
+} catch (idbErr) {
+    console.warn("IDB check failed, continuing:", idbErr);
+} finally {
+    // Final UI Load — guaranteed to run even if IDB fails
+    loadInitialData();
+    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+}
 };
+
 
         fetchHeavyData();
     }
