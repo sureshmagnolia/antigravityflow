@@ -1122,6 +1122,7 @@ async function updateLocalSlotsFromStudents() {
             }
 
 // --- ADD THIS BLOCK FOR STORAGE RECOVERY ---
+try {
 const existingData = await loadExamDataIDB();
 if (existingData.length === 0 && currentUser && currentCollegeId) {
     updateSyncStatus("Checking Storage...", "neutral");
@@ -1143,7 +1144,8 @@ if (existingData.length === 0 && currentUser && currentCollegeId) {
             // Final UI Load (Refresh Dashboards, Tables, etc.)
             loadInitialData();
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-        };
+}        
+};
 
         fetchHeavyData();
     }
