@@ -296,23 +296,51 @@ function setupLiveSync(collegeId, mode) {
             const adminView = document.getElementById('view-admin');
             const staffView = document.getElementById('view-staff');
 
-            if (adminView && !adminView.classList.contains('hidden')) {
-                renderSlotsGridAdmin();
-                renderAdminTodayStats();
-                populateAttendanceSessions(); // 🟢 ADD THIS LINE HERE
-            } else if (staffView && !staffView.classList.contains('hidden')) {
-                // If staff view is open, refresh calendar
-                let emailToRender = currentUser ? currentUser.email : null;
-                if (staffData.length > 0 && currentUser) {
-                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                     if (me) emailToRender = me.email;
-                }
-                if (emailToRender) {
-                    renderStaffCalendar(emailToRender);
-                    if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
-                    if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
-                }
-            }
+    if (adminView && !adminView.classList.contains('hidden')) 
+
+
+
+if (adminView && !adminView.classList.contains('hidden')) {
+    renderSlotsGridAdmin();
+    renderAdminTodayStats();
+    populateAttendanceSessions();
+} else if (staffView && !staffView.classList.contains('hidden')) {
+    // If staff view is open, refresh calendar
+    let emailToRender = currentUser ? currentUser.email : null;
+    if (staffData.length > 0 && currentUser) {
+         const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+         if (me) emailToRender = me.email;
+    }
+    if (emailToRender) {
+        renderStaffCalendar(emailToRender);
+        if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
+        if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
+    }
+} else if (mode === 'admin') {
+    // Mobile fallback: admin view not ready yet when first snapshot fires
+    setTimeout(() => {
+        if (adminView && !adminView.classList.contains('hidden')) {
+            renderSlotsGridAdmin();
+            renderAdminTodayStats();
+            populateAttendanceSessions();
+        }
+    }, 800);
+} else if (mode === 'staff') {
+    // Mobile fallback: staff view not ready yet when first snapshot fires
+    setTimeout(() => {
+        if (staffView && !staffView.classList.contains('hidden') && currentUser) {
+            let emailToRender = currentUser.email;
+            const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+            if (me) emailToRender = me.email;
+            renderStaffCalendar(emailToRender);
+            if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
+            if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
+        }
+    }, 800);
+}
+
+
+        
         }
     });
 
@@ -345,9 +373,11 @@ function setupLiveSync(collegeId, mode) {
                 // If user is just logging in, initialize their dashboard now
                 if (currentUser) {
                     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-                    if (me && document.getElementById('view-staff').classList.contains('hidden')) {
-                         initStaffDashboard(me);
+                   if (me) {
+                    // Initialize regardless of current visibility — safe to call multiple times
+                    initStaffDashboard(me);
                     }
+
                 }
             }
         });
