@@ -2691,7 +2691,7 @@ For any queries contact examinations@gvc.ac.in _Exam Committee - ${sasPhone}_ Th
 
 window.sendWelcomeMessage = function(email) {
     // Safe robust lookup
-    const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+    const staff = staffData.find(s => s.email && email && s.email.toLowerCase() === email.toLowerCase());
     if (!staff) return alert("Staff record not found.");
     const msg = window.generateWelcomeText(staff.name, staff.dept);
     
@@ -9756,117 +9756,6 @@ window.viewAutoAssignLogs = async function () {
     }
 };
 
-window.openWeeklyNotificationModal = function (monthStr, weekNum) {
-    const list = document.getElementById('notif-list-container');
-    const title = document.getElementById('notif-modal-title');
-    const subtitle = document.getElementById('notif-modal-subtitle');
-    title.textContent = `📢 Notify Week ${weekNum} (${monthStr})`;
-    subtitle.textContent = "Send detailed professional emails (Faculty + Consolidated Dept Summary).";
-    list.innerHTML = '';
-    currentEmailQueue = [];
-
-    const facultyDuties = {};
-    Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
-        const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        const wNum = getWeekOfMonth(date);
-        if (mStr === monthStr && wNum === weekNum) {
-            const [dStr, tStr] = key.split(' | ');
-            const sessionCode = (tStr.includes("PM") || tStr.startsWith("12")) ? "AN" : "FN";
-            const dayName = date.toLocaleString('en-us', { weekday: 'short' });
-            invigilationSlots[key].assigned.forEach(email => {
-                if (!facultyDuties[email]) facultyDuties[email] = [];
-                facultyDuties[email].push({ date: dStr, day: dayName, session: sessionCode, time: tStr });
-            });
-        }
-    });
-
-    if (Object.keys(facultyDuties).length === 0) {
-        list.innerHTML = `<div class="text-center text-gray-400 py-8 italic">No duties assigned in this week yet.</div>`;
-        return window.openModal('notification-modal');
-    }
-
-    list.innerHTML = `
-        <div class="mb-4 pb-4 border-b border-gray-100 flex justify-between items-center">
-            <div class="text-xs text-gray-500">Queue: <b>${Object.keys(facultyDuties).length}</b> Faculty + Dept Copies.</div>
-            <div class="flex gap-2">
-                <button id="btn-cancel-bulk" onclick="cancelBulkSending()" class="hidden bg-red-100 text-red-700 border border-red-200 text-xs font-bold px-4 py-2 rounded shadow-sm hover:bg-red-200 transition flex items-center gap-2">Stop / Cancel</button>
-                <button id="btn-bulk-email-week" onclick="sendBulkEmails('btn-bulk-email-week')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded shadow-md transition flex items-center gap-2">Send Bulk Emails</button>
-            </div>
-        </div>
-    `;
-
-    const deptAggregator = {};
-    const sortedEmails = Object.keys(facultyDuties).sort((a, b) => getNameFromEmail(a).localeCompare(getNameFromEmail(b)));
-
-    sortedEmails.forEach((email, index) => {
-        const duties = facultyDuties[email];
-        duties.sort((a, b) => a.date.split('.').reverse().join('').localeCompare(b.date.split('.').reverse().join('')));
-        const dutyString = duties.map(d => `(${d.date}-${d.day}-${d.session})`).join(', ');
-        const staff = staffData.find(s => s.email === email);
-        const fullName = staff ? staff.name : email;
-        const firstName = getFirstName(fullName);
-        const staffEmail = staff ? staff.email : "";
-
-        let phone = staff ? (staff.phone || "") : "";
-        phone = phone.replace(/\D/g, '');
-        if (phone.length === 10) phone = "91" + phone;
-
-        const emailSubject = `Invigilation Duty: Week ${weekNum} (${monthStr})`;
-        const emailBody = generateProfessionalEmail(fullName, duties, "Upcoming Invigilation Duties");
-        const btnId = `email-btn-${index}`;
-
-        if (staffEmail) currentEmailQueue.push({ email: staffEmail, name: fullName, subject: emailSubject, body: emailBody, btnId: btnId });
-        if (staff && staff.dept) {
-            if (!deptAggregator[staff.dept]) deptAggregator[staff.dept] = [];
-            deptAggregator[staff.dept].push({ name: fullName, duties });
-        }
-
-        const waMsg = typeof generateWeeklyWhatsApp === 'function' ? generateWeeklyWhatsApp(fullName, duties) : "Duty Update";
-        const waLink = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}` : "#";
-        const smsMsg = typeof generateWeeklySMS === 'function' ? generateWeeklySMS(firstName, duties) : "Duty Update";
-        const smsLink = phone ? `sms:${phone}?body=${encodeURIComponent(smsMsg)}` : "#";
-
-        if (index === 0 && document.getElementById('notif-message-preview')) {
-            document.getElementById('notif-message-preview').textContent = "--- WhatsApp Format ---\n" + waMsg + "\n\n--- SMS Format ---\n" + smsMsg;
-        }
-
-        const phoneDisabled = phone ? "" : "disabled";
-        const emailDisabled = staffEmail ? "" : "disabled";
-        const noEmailWarning = staffEmail ? "" : `<span class="text-red-500 text-xs ml-2">(No Email)</span>`;
-        const safeName = fullName.replace(/'/g, "\\'");
-        const safeSubject = emailSubject.replace(/'/g, "\\'");
-        const safeBody = emailBody.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '');
-
-        list.innerHTML += `
-            <div class="flex justify-between items-center bg-white border border-gray-200 p-3 rounded-lg shadow-sm hover:shadow-md transition mt-2">
-                <div class="flex-1 min-w-0 pr-2">
-                    <div class="font-bold text-gray-800 truncate">${fullName} ${noEmailWarning}</div>
-                    <div class="text-xs text-gray-500 mt-1 font-mono truncate">${dutyString}</div>
-                    ${staff && staff.dept ? `<div class="text-[9px] text-gray-400">${staff.dept}</div>` : ''}
-                </div>
-                <div class="flex gap-2 shrink-0">
-                    <button id="${btnId}" onclick="sendSingleEmail(this, '${staffEmail}', '${safeName}', '${safeSubject}', '${safeBody}')" ${emailDisabled} class="bg-gray-700 hover:bg-gray-800 text-white text-xs font-bold px-3 py-2 rounded shadow transition flex items-center gap-1">Mail</button>
-                    <a href="${smsLink}" target="_blank" ${phoneDisabled} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">SMS</a>
-                    <a href="${waLink}" target="_blank" ${phoneDisabled} onclick="markAsSent(this)" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded shadow transition">WA</a>
-                </div>
-            </div>`;
-    });
-
-    const cleanDepts = (typeof departmentsConfig !== 'undefined') ? departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d) : [];
-    Object.keys(deptAggregator).forEach(deptName => {
-        const deptObj = cleanDepts.find(d => d.name === deptName);
-        if (deptObj && deptObj.email) {
-            const facultyList = deptAggregator[deptName];
-            const deptSubject = `Consolidated Duty List: ${deptName} - Week ${weekNum}`;
-            const deptBody = (typeof generateDepartmentConsolidatedEmail !== 'undefined') ? generateDepartmentConsolidatedEmail(deptName, facultyList, weekNum, monthStr) : "Duty List Attached";
-            currentEmailQueue.push({ email: deptObj.email, name: `HOD ${deptName}`, subject: deptSubject, body: deptBody, btnId: null });
-            list.insertAdjacentHTML('beforeend', `<div class="bg-indigo-50 border border-indigo-100 p-2 rounded text-xs text-indigo-800 text-center mt-1"><span class="font-bold">queued:</span> Consolidated email for <b>${deptName}</b> (${deptObj.email})</div>`);
-        }
-    });
-
-    window.openModal('notification-modal');
-};
 
 // ==========================================
 // RESTORED: SAVE MANUAL ALLOCATION 
