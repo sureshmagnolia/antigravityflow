@@ -621,7 +621,12 @@ async function migrateFromLocalStorage() {
     }
 
     // Auth Listener - REMOVED THE SETTIMEOUT WRAPPER
-    if (window.firebase && window.firebase.auth) {
+    function startAuthListener() {
+        if (!window.firebase || !window.firebase.auth) {
+            setTimeout(startAuthListener, 150);
+            return;
+        }
+
         const { auth, onAuthStateChanged } = window.firebase;
         onAuthStateChanged(auth, async (user) => {
         updateLoaderProgress(10, "Verifying Authentication...");
@@ -664,6 +669,7 @@ async function migrateFromLocalStorage() {
             }
         });
     }
+       startAuthListener();
     // ------------------------------------------
 
     async function createNewCollege(user) {
