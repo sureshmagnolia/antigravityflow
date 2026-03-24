@@ -9872,34 +9872,31 @@ window.openWeeklyNotificationModal = function (monthStr, weekNum) {
 // RESTORED: SAVE MANUAL ALLOCATION 
 // ==========================================
 window.saveManualAllocation = async function () {
-    const key = document.getElementById('manual-alloc-slot-key').value;
-    if (!key) return;
-    
-    // Convert selected map to array
-    const newAssigned = [];
-    document.querySelectorAll('.manual-select-checkbox:checked').forEach(cb => {
-        newAssigned.push(cb.value);
-    });
-    
-    if(!invigilationSlots[key]) return;
+    const state = window.manualState;
+    if (!state || !state.key) return;
+
+    const key = state.key;
+    const newAssigned = state.rankedStaff.filter(s => s.isChecked).map(s => s.email);
+
+    if (!invigilationSlots[key]) return;
     invigilationSlots[key].assigned = newAssigned;
-    
-    // Save to Firebase
+
     try {
         await syncSlotsToCloud();
         alert('✅ Assignments Saved successfully!');
         window.closeModal('manual-allocation-modal');
-        
-        if (currentUser && typeof logActivity === 'function') {
-            logActivity("Manual Update", `Updated assignments for ${key}. Count: ${newAssigned.length}`);
+
+        if (window.currentUser && typeof window.logActivity === 'function') {
+            window.logActivity("Manual Update", `Updated assignments for ${key}. Count: ${newAssigned.length}`);
         }
         
-        // Re-render based on active admin view
-        renderSlotsGrid();
+        if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+        else renderSlotsGrid();
     } catch (e) {
         console.error("Save failed:", e);
         alert('Error saving. Check console.');
     }
 };
+
 
 
