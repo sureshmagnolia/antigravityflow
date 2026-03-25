@@ -1,4 +1,4 @@
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged  }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -35,6 +35,16 @@ const appCheck = initializeAppCheck(app, {
 const auth = window.firebase.auth;
 const db = window.firebase.db;
 const provider = window.firebase.provider;
+// ⚡ FIX: Gracefully handle mobile browser partition and redirect errors
+getRedirectResult(auth).catch((error) => {
+    if (error.code === 'auth/missing-initial-state') {
+        console.warn("Caught partitioned storage redirect error.");
+        alert("⚠️ Login Blocked by Browser Privacy Settings.\n\nTo fix this: Open this page directly in a standard browser (like Chrome or Safari). If you opened this link inside an app like WhatsApp or Telegram, the login system is blocked.");
+    } else {
+        console.error("Auth Error:", error);
+    }
+});
+
 
 // --- CONFIG ---
 const DEFAULT_DESIGNATIONS = { "Assistant Professor": 2, "Associate Professor": 1, "Guest Lecturer": 4, "Professor": 0 };
@@ -156,7 +166,17 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-document.getElementById('login-btn').addEventListener('click', () => signInWithPopup(auth, provider));
+document.getElementById('login-btn').addEventListener('click', () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+        signInWithRedirect(auth, provider);
+    } else {
+        signInWithPopup(auth, provider).catch(err => {
+            if (err.code === 'auth/popup-blocked') signInWithRedirect(auth, provider);
+        });
+    }
+});
+
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
