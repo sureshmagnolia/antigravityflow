@@ -971,6 +971,18 @@ async function updateLocalSlotsFromStudents() {
         updateLoaderProgress(50, "Connecting to Cloud Server...");
         updateSyncStatus("Connecting...", "neutral");
         const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
+                // --- NEW SAFETY FALLBACK: Give up on Cloud Connection if it takes > 10 seconds ---
+        const connectionTimeout = setTimeout(() => {
+            console.warn("⚠️ Cloud connection is blocked by browser. Falling back to Local Data!");
+            updateSyncStatus("Cloud Blocked (Using Local)", "error");
+            
+            // Unsubscribe listeners immediately so they don't unexpectedly fire later
+            if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
+            
+            loadInitialData(); // Load the local data instead
+            if (typeof finalizeAppLoad === 'function') finalizeAppLoad(); // Unfreeze the screen!
+        }, 10000); // 10 seconds max wait
+
 
         // Cleanup old listeners
         if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
@@ -979,7 +991,6 @@ async function updateLocalSlotsFromStudents() {
         if (allocUnsub) allocUnsub();
         if (staffUnsub) staffUnsub();
         if (slotsUnsub) slotsUnsub();
-
         const syncLocal = (dataObj) => {
             if (!dataObj) return;
             Object.keys(dataObj).forEach(key => {
@@ -990,6 +1001,7 @@ async function updateLocalSlotsFromStudents() {
         // 1. METADATA (Root Doc)
         cloudSyncUnsubscribe = onSnapshot(doc(db, "colleges", collegeId), (snap) => {
             if (snap.exists()) {
+                clearTimeout(connectionTimeout); // <--- ADD THIS EXACT LINE HERE
                 currentCollegeData = snap.data();
                 const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
                 const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
