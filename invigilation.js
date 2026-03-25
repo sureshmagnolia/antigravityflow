@@ -6970,7 +6970,7 @@ window.printDutyNotification = function (key) {
                         }
 
                         doc.autoTable({
-                            startY: 55,
+                            startY: 58,
                             head: [headRow],
                             body: tableRows,
                             theme: "grid",
