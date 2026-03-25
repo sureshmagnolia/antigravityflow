@@ -6866,88 +6866,77 @@ window.printDutyNotification = function (key) {
     const [dateStr, timeStr] = key.split(' | ');
     const [d, m, y] = dateStr.split('.');
     const examDate = new Date(`${y}-${m}-${d}`);
-
     const excelBaseDate = new Date(1899, 11, 30);
     const dayDiff = Math.floor((examDate - excelBaseDate) / (1000 * 60 * 60 * 24));
-
     const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
     const sessionCode = isAN ? "AN" : "FN";
     const reportTime = calculateReportTime(timeStr);
     const logoUrl = "CollegeLogo.png";
 
-    // 2. LAYOUT LOGIC (Limit 20)
+    // 2. DYNAMIC LAYOUT LOGIC (1, 2, or 3 Columns)
     const totalStaff = slot.assigned.length;
-    const useTwoColumns = totalStaff > 20;
+    let columns = 1;
+    if (totalStaff > 32) columns = 3;
+    else if (totalStaff > 16) columns = 2;
 
     const generateRow = (email, idx) => {
-        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "" };
-        let phone = staff.phone || "-";
+        const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "-" };
         let nameDisplay = staff.name.length > 28 ? staff.name.substring(0, 26) + ".." : staff.name;
-
         return `
             <tr>
                 <td style="text-align: center;">${idx + 1}</td>
                 <td>
-                    <div style="font-weight: bold;">${nameDisplay}</div>
-                    <div style="font-size: 9pt; color: #444;">${staff.dept}</div>
+                    <div style="font-weight: bold; color: #111;">${nameDisplay}</div>
+                    <div style="font-size: 7.5pt; color: #444; line-height: 1;">${staff.dept}</div>
                 </td>
-                <td style="text-align: center; font-size: 9pt;">${phone}</td>
+                <td style="text-align: center;">${staff.phone || "-"}</td>
             </tr>
         `;
     };
 
-    let tableContentHtml = "";
+    const renderMiniTable = (list, startIdx) => `
+        <table class="staff-table" style="width: 100%;">
+            <thead>
+                <tr>
+                    <th style="width: 20px;">No</th>
+                    <th>Name & Dept</th>
+                    <th style="width: 65px;">Mobile</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${list.map((email, i) => generateRow(email, startIdx + i)).join('')}
+            </tbody>
+        </table>
+    `;
 
-    if (useTwoColumns) {
-        // --- 2 COLUMN LAYOUT (No Signature) ---
+    let tableContentHtml = "";
+    if (columns === 3) {
+        const third = Math.ceil(totalStaff / 3);
+        const col1 = slot.assigned.slice(0, third);
+        const col2 = slot.assigned.slice(third, third * 2);
+        const col3 = slot.assigned.slice(third * 2);
+        tableContentHtml = `
+            <div style="display: flex; gap: 6px; align-items: flex-start;">
+                <div style="flex: 1;">${renderMiniTable(col1, 0)}</div>
+                <div style="flex: 1;">${renderMiniTable(col2, third)}</div>
+                <div style="flex: 1;">${renderMiniTable(col3, third * 2)}</div>
+            </div>
+        `;
+    } else if (columns === 2) {
         const mid = Math.ceil(totalStaff / 2);
         const leftList = slot.assigned.slice(0, mid);
         const rightList = slot.assigned.slice(mid);
-
-        const renderMiniTable = (list, startIdx) => `
-            <table class="staff-table" style="width: 100%; font-size: 9pt;">
-                <thead>
-                    <tr>
-                        <th style="width: 25px;">No</th>
-                        <th>Name & Dept</th>
-                        <th style="width: 80px;">Mobile</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${list.map((email, i) => generateRow(email, startIdx + i)).join('')}
-                </tbody>
-            </table>
-        `;
-
         tableContentHtml = `
-            <div style="display: flex; gap: 15px; align-items: flex-start;">
-                <div style="flex: 1;">
-                    ${renderMiniTable(leftList, 0)}
-                </div>
-                <div style="flex: 1;">
-                    ${renderMiniTable(rightList, mid)}
-                </div>
+            <div style="display: flex; gap: 10px; align-items: flex-start;">
+                <div style="flex: 1;">${renderMiniTable(leftList, 0)}</div>
+                <div style="flex: 1;">${renderMiniTable(rightList, mid)}</div>
             </div>
         `;
     } else {
-        // --- 1 COLUMN LAYOUT (No Signature) ---
-        tableContentHtml = `
-            <table class="staff-table" style="width: 100%; margin-top: 10px;">
-                <thead>
-                    <tr>
-                        <th style="width: 40px;">SL. NO</th>
-                        <th>Name and Department of the Invigilator</th>
-                        <th style="width: 120px;">Mobile</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${slot.assigned.map((email, i) => generateRow(email, i)).join('')}
-                </tbody>
-            </table>
-        `;
+        tableContentHtml = renderMiniTable(slot.assigned, 0);
     }
 
-    // 3. OPEN PREVIEW WINDOW
+    // 3. OPEN PREVIEW WINDOW WITH COMPRESSED CSS
     const w = window.open('', '_blank');
     w.document.write(`
         <html>
@@ -6956,74 +6945,52 @@ window.printDutyNotification = function (key) {
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
             <style>
                 @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
-                
                 body { font-family: 'Times New Roman', serif; background: #f3f4f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
                 
-                /* CONTROL BAR */
-                #controls {
-                    margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-                }
-                .btn {
-                    padding: 10px 20px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 14px; margin: 0 5px;
-                }
+                #controls { margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                .btn { padding: 8px 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 13px; margin: 0 5px; }
                 .btn-print { background-color: #374151; color: white; }
                 .btn-download { background-color: #2563eb; color: white; }
-                .btn:hover { opacity: 0.9; }
-
-                /* CONTENT CONTAINER */
+                
                 .content-wrapper {
-                    width: 100%; 
-                    max-width: 200mm; /* Fits safely inside A4 */
-                    /* CHANGED FROM min-height: 297mm TO auto */
-                    height: auto; 
-                    min-height: 100mm; 
-                    background: white;
-                    padding: 10mm 15mm;
-                    box-sizing: border-box;
-                    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+                    width: 100%; max-width: 200mm; height: auto; min-height: 100mm; 
+                    background: white; padding: 8mm 10mm; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
                 }
 
-                .header { text-align: center; margin-bottom: 15px; }
-                .header img { height: 60px; width: auto; margin-bottom: 5px; }
-                .college-name { font-size: 14pt; font-weight: bold; text-transform: uppercase; line-height: 1.2; }
-                .address { font-size: 9pt; }
-                .meta { font-size: 9pt; font-weight: bold; margin-top: 4px; border-bottom: 1px solid #000; padding-bottom: 8px; }
+                .header { text-align: center; margin-bottom: 5px; }
+                .header img { height: 45px; width: auto; margin-bottom: 2px; }
+                .college-name { font-size: 12pt; font-weight: bold; text-transform: uppercase; line-height: 1.1; }
+                .address { font-size: 8pt; }
+                .meta { font-size: 8pt; font-weight: bold; margin-top: 2px; border-bottom: 1px solid #000; padding-bottom: 4px; }
                 
-                .title-section { margin: 12px 0; display: flex; justify-content: space-between; align-items: flex-end; }
-                .designation { font-weight: bold; font-size: 11pt; text-align: left; line-height: 1.2; }
-                .doc-number { font-weight: bold; font-size: 11pt; text-align: right; line-height: 1.2; }
+                .title-section { margin: 6px 0; display: flex; justify-content: space-between; align-items: flex-end; }
+                .designation { font-weight: bold; font-size: 10pt; text-align: left; line-height: 1.1; }
+                .doc-number { font-weight: bold; font-size: 10pt; text-align: right; line-height: 1.1; }
                 
-                .body-text { font-size: 11pt; text-align: justify; margin-bottom: 12px; line-height: 1.3; }
+                .body-text { font-size: 9.5pt; text-align: justify; margin-bottom: 6px; line-height: 1.2; }
                 
-                .highlight-box { 
-                    font-weight: bold; margin: 12px 0; font-size: 10pt; 
-                    border: 1px solid #000; padding: 6px; text-align: center; background: #f9f9f9; 
-                }
+                .highlight-box { font-weight: bold; margin: 6px 0; font-size: 9pt; border: 1px solid #000; padding: 4px; text-align: center; background: #f9f9f9; }
                 
-                /* TABLE */
-                .staff-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-                .staff-table th, .staff-table td { border: 1px solid black; padding: 5px; vertical-align: middle; }
-                .staff-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; font-size: 10pt; }
+                .staff-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
+                .staff-table th, .staff-table td { border: 1px solid black; padding: 2px 4px; vertical-align: middle; }
+                .staff-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; font-size: 9pt; }
+                .staff-table td { font-size: 8.5pt; line-height: 1.1; }
                 
-                .footer { margin-top: 40px; text-align: right; font-weight: bold; font-size: 11pt; }
-                .signature-line { display: inline-block; text-align: center; }
-
-                /* PRINT HIDING */
+                .footer { margin-top: 20px; text-align: right; font-weight: bold; font-size: 10pt; }
+                
                 @media print {
                     body { background: white; padding: 0; }
                     #controls { display: none !important; }
                     .content-wrapper { box-shadow: none; width: 100%; margin: 0; padding: 0; }
-                    @page { margin: 15mm; }
+                    @page { margin: 5mm; }
                 }
             </style>
         </head>
         <body>
-            
             <div id="controls">
                 <button class="btn btn-print" onclick="window.print()">🖨️ Print</button>
                 <button class="btn btn-download" onclick="downloadPDF()">⬇️ Download PDF</button>
             </div>
-
             <div class="content-wrapper" id="pdf-content">
                 <div class="header">
                     <img src="${logoUrl}" alt="Logo" onerror="this.style.display='none'"> 
@@ -7031,29 +6998,22 @@ window.printDutyNotification = function (key) {
                     <div class="address">Kerala, India, PIN 678001 | Affiliation: University of Calicut</div>
                     <div class="meta">📞 0491 2576773 | ✉️ victoriapkd@gmail.com | 🌐 www.gvc.ac.in</div>
                 </div>
-
                 <div class="title-section">
                     <div class="designation">Chief Superintendent,<br>University Examinations</div>
                     <div class="doc-number">No: EXAM/${dayDiff}${sessionCode}<br>Date: ${new Date().toLocaleDateString('en-GB')}</div>
                 </div>
-
                 <div class="body-text">
                     The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. 
                     Invigilators are requested to report to the Chief Superintendent's office <strong>30 minutes before</strong> the commencement of the exam.
-                    In case of any inconvenience, invigilators must arrange for a substitute and inform the office accordingly.
                 </div>
-
                 <div class="highlight-box">
-                    EXAM DATE: ${dateStr} &nbsp;|&nbsp; SESSION: ${sessionCode} (${timeStr}) &nbsp;|&nbsp; REPORT BY: ${reportTime}
+                    EXAM: ${dateStr} &nbsp;|&nbsp; SESSION: ${sessionCode} (${timeStr}) &nbsp;|&nbsp; REPORT BY: ${reportTime}
                 </div>
-
                 ${tableContentHtml}
-
                 <div class="footer">
-                    <div class="signature-line">Chief Superintendent</div>
+                    Chief Superintendent
                 </div>
             </div>
-
             <script>
                 function downloadPDF() {
                     const element = document.getElementById('pdf-content');
@@ -7062,7 +7022,7 @@ window.printDutyNotification = function (key) {
                     btn.disabled = true;
 
                     const opt = {
-                        margin: 10, 
+                        margin: [8, 8, 8, 8], 
                         filename: 'Duty_Notification_${dateStr}.pdf',
                         image: { type: 'jpeg', quality: 0.98 },
                         html2canvas: { scale: 2, useCORS: true },
@@ -7071,10 +7031,7 @@ window.printDutyNotification = function (key) {
 
                     html2pdf().set(opt).from(element).save().then(() => {
                         btn.textContent = "✅ Downloaded";
-                        setTimeout(() => { 
-                            btn.textContent = "⬇️ Download PDF"; 
-                            btn.disabled = false; 
-                        }, 2000);
+                        setTimeout(() => { btn.textContent = "⬇️ Download PDF"; btn.disabled = false; }, 2000);
                     });
                 }
             <\/script>
@@ -7083,6 +7040,7 @@ window.printDutyNotification = function (key) {
     `);
     w.document.close();
 }
+
 
 
 // Network Listeners
