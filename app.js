@@ -352,6 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ensure this function exists to stop it later
     window.finalizeAppLoad = function () {
+        // Cancel the safety timer since we loaded successfully  ← NEW LINE
+        if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer); 
         // 1. Run UI Updates
         if (typeof updateDashboard === 'function') updateDashboard();
         if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
@@ -367,6 +369,16 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => { loader.remove(); }, 500);
         }
     };
+    // --- SAFETY TIMEOUT: Force-dismiss loader after 12 seconds on all browsers ---
+    window._loaderSafetyTimer = setTimeout(function() {
+        const loader = document.getElementById('initial-app-loader');
+        if (loader) {
+            console.warn('⚠️ Loader safety timeout fired — dismissing loader forcefully.');
+            if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
+            loader.style.opacity = '0';
+            setTimeout(() => { loader.remove(); }, 500);
+        }
+    }, 12000); // 12 seconds max wait
 
     // ------------------------------------
 
