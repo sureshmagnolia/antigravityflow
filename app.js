@@ -971,13 +971,20 @@ async function updateLocalSlotsFromStudents() {
         updateLoaderProgress(50, "Connecting to Cloud Server...");
         updateSyncStatus("Connecting...", "neutral");
         const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
-                // --- NEW SAFETY FALLBACK: Give up on Cloud Connection if it takes > 10 seconds ---
+
+        // --- PASTE START ---
         const connectionTimeout = setTimeout(() => {
-            console.warn("⚠️ Cloud connection is blocked by browser. Falling back to Local Data!");
+            console.warn("⚠️ Cloud connection is blocked or completely dead. Falling back to Local Data!");
             updateSyncStatus("Cloud Blocked (Using Local)", "error");
-            
-            // Unsubscribe listeners immediately so they don't unexpectedly fire later
             if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
+            loadInitialData();
+            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+        }, 10000);
+        // --- PASTE END ---
+
+        // Cleanup old listeners
+        if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
+
             
             loadInitialData(); // Load the local data instead
             if (typeof finalizeAppLoad === 'function') finalizeAppLoad(); // Unfreeze the screen!
@@ -1001,7 +1008,7 @@ async function updateLocalSlotsFromStudents() {
         // 1. METADATA (Root Doc)
         cloudSyncUnsubscribe = onSnapshot(doc(db, "colleges", collegeId), (snap) => {
             if (snap.exists()) {
-                clearTimeout(connectionTimeout); // <--- ADD THIS EXACT LINE HERE
+                clearTimeout(connectionTimeout); // <-- PASTE THIS LINE HERE
                 currentCollegeData = snap.data();
                 const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
                 const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
@@ -1011,8 +1018,18 @@ async function updateLocalSlotsFromStudents() {
 
                 updateHeaderCollegeName();
                 if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
-            }
+            } else { // <-- PASTE FROM HERE DOWN
+                console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
+                localStorage.clear();
+                sessionStorage.clear();
+                alert("Session corrupted or expired. Please log in again.");
+                if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
+                location.reload();
+            } // <-- TO HERE
         });
+
+        // 2. SETTINGS
+
 
         // 2. SETTINGS
         settingsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "settings"), (snap) => {
