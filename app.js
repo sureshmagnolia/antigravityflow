@@ -984,15 +984,6 @@ async function updateLocalSlotsFromStudents() {
 
         // Cleanup old listeners
         if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
-
-            
-            loadInitialData(); // Load the local data instead
-            if (typeof finalizeAppLoad === 'function') finalizeAppLoad(); // Unfreeze the screen!
-        }, 10000); // 10 seconds max wait
-
-
-        // Cleanup old listeners
-        if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
         if (settingsUnsub) settingsUnsub();
         if (opsUnsub) opsUnsub();
         if (allocUnsub) allocUnsub();
