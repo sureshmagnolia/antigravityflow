@@ -6858,11 +6858,11 @@ function openRescheduleNotification(staffList, oldKey, newKey) {
 // 📄 DUTY NOTIFICATION PREVIEW (No Signature, No Blank Page)
 // ==========================================
 
+
 window.printDutyNotification = function (key) {
     const slot = invigilationSlots[key];
     if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
 
-    // 1. DATA PREPARATION
     const [dateStr, timeStr] = key.split(' | ');
     const [d, m, y] = dateStr.split('.');
     const examDate = new Date(`${y}-${m}-${d}`);
@@ -6871,168 +6871,125 @@ window.printDutyNotification = function (key) {
     const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:") || timeStr.startsWith("12."));
     const sessionCode = isAN ? "AN" : "FN";
     const reportTime = calculateReportTime(timeStr);
-    const logoUrl = "CollegeLogo.png";
 
-    // 2. DYNAMIC LAYOUT LOGIC (1, 2, or 3 Columns)
     const totalStaff = slot.assigned.length;
-    let columns = 1;
-    if (totalStaff > 32) columns = 3;
-    else if (totalStaff > 16) columns = 2;
+    let cols = totalStaff > 32 ? 3 : (totalStaff > 16 ? 2 : 1);
 
-    const generateRow = (email, idx) => {
+    const staffListJson = JSON.stringify(slot.assigned.map((email, idx) => {
         const staff = staffData.find(s => s.email === email) || { name: getNameFromEmail(email), dept: "", phone: "-" };
         let nameDisplay = staff.name.length > 28 ? staff.name.substring(0, 26) + ".." : staff.name;
-        return `
-            <tr>
-                <td style="text-align: center;">${idx + 1}</td>
-                <td>
-                    <div style="font-weight: bold; color: #111;">${nameDisplay}</div>
-                    <div style="font-size: 7.5pt; color: #444; line-height: 1;">${staff.dept}</div>
-                </td>
-                <td style="text-align: center;">${staff.phone || "-"}</td>
-            </tr>
-        `;
-    };
+        return { no: idx + 1, name: nameDisplay, dept: staff.dept, phone: staff.phone || "-" };
+    }));
 
-    const renderMiniTable = (list, startIdx) => `
-        <table class="staff-table" style="width: 100%;">
-            <thead>
-                <tr>
-                    <th style="width: 20px;">No</th>
-                    <th>Name & Dept</th>
-                    <th style="width: 65px;">Mobile</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${list.map((email, i) => generateRow(email, startIdx + i)).join('')}
-            </tbody>
-        </table>
-    `;
-
-    let tableContentHtml = "";
-    if (columns === 3) {
-        const third = Math.ceil(totalStaff / 3);
-        const col1 = slot.assigned.slice(0, third);
-        const col2 = slot.assigned.slice(third, third * 2);
-        const col3 = slot.assigned.slice(third * 2);
-        tableContentHtml = `
-            <div style="display: flex; gap: 6px; align-items: flex-start;">
-                <div style="flex: 1;">${renderMiniTable(col1, 0)}</div>
-                <div style="flex: 1;">${renderMiniTable(col2, third)}</div>
-                <div style="flex: 1;">${renderMiniTable(col3, third * 2)}</div>
-            </div>
-        `;
-    } else if (columns === 2) {
-        const mid = Math.ceil(totalStaff / 2);
-        const leftList = slot.assigned.slice(0, mid);
-        const rightList = slot.assigned.slice(mid);
-        tableContentHtml = `
-            <div style="display: flex; gap: 10px; align-items: flex-start;">
-                <div style="flex: 1;">${renderMiniTable(leftList, 0)}</div>
-                <div style="flex: 1;">${renderMiniTable(rightList, mid)}</div>
-            </div>
-        `;
-    } else {
-        tableContentHtml = renderMiniTable(slot.assigned, 0);
-    }
-
-    // 3. OPEN PREVIEW WINDOW WITH COMPRESSED CSS
     const w = window.open('', '_blank');
     w.document.write(`
         <html>
         <head>
             <title>Notification_${dateStr}_${sessionCode}</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+            <script src="jspdf.umd.min.js"><\/script>
+            <script src="jspdf.plugin.autotable.min.js"><\/script>
             <style>
-                @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
-                body { font-family: 'Times New Roman', serif; background: #f3f4f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-                
-                #controls { margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                .btn { padding: 8px 16px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-family: sans-serif; font-size: 13px; margin: 0 5px; }
-                .btn-print { background-color: #374151; color: white; }
+                body { font-family: 'Times New Roman', serif; background: #f3f4f6; margin: 0; padding: 20px; text-align: center; }
+                #controls { margin-bottom: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: inline-block; }
+                .btn { padding: 10px 20px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; margin: 0 5px; }
                 .btn-download { background-color: #2563eb; color: white; }
-                
-                .content-wrapper {
-                    width: 100%; max-width: 200mm; height: auto; min-height: 100mm; 
-                    background: white; padding: 8mm 10mm; box-sizing: border-box; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-                }
-
-                .header { text-align: center; margin-bottom: 5px; }
-                .header img { height: 45px; width: auto; margin-bottom: 2px; }
-                .college-name { font-size: 12pt; font-weight: bold; text-transform: uppercase; line-height: 1.1; }
-                .address { font-size: 8pt; }
-                .meta { font-size: 8pt; font-weight: bold; margin-top: 2px; border-bottom: 1px solid #000; padding-bottom: 4px; }
-                
-                .title-section { margin: 6px 0; display: flex; justify-content: space-between; align-items: flex-end; }
-                .designation { font-weight: bold; font-size: 10pt; text-align: left; line-height: 1.1; }
-                .doc-number { font-weight: bold; font-size: 10pt; text-align: right; line-height: 1.1; }
-                
-                .body-text { font-size: 9.5pt; text-align: justify; margin-bottom: 6px; line-height: 1.2; }
-                
-                .highlight-box { font-weight: bold; margin: 6px 0; font-size: 9pt; border: 1px solid #000; padding: 4px; text-align: center; background: #f9f9f9; }
-                
-                .staff-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
-                .staff-table th, .staff-table td { border: 1px solid black; padding: 2px 4px; vertical-align: middle; }
-                .staff-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; font-size: 9pt; }
-                .staff-table td { font-size: 8.5pt; line-height: 1.1; }
-                
-                .footer { margin-top: 20px; text-align: right; font-weight: bold; font-size: 10pt; }
-                
-                @media print {
-                    body { background: white; padding: 0; }
-                    #controls { display: none !important; }
-                    .content-wrapper { box-shadow: none; width: 100%; margin: 0; padding: 0; }
-                    @page { margin: 5mm; }
-                }
+                p { color: #555; font-size: 14px; margin-top: 10px;}
             </style>
         </head>
         <body>
             <div id="controls">
-                <button class="btn btn-print" onclick="window.print()">🖨️ Print</button>
-                <button class="btn btn-download" onclick="downloadPDF()">⬇️ Download PDF</button>
+                <h2>Native Vector PDF Ready</h2>
+                <button class="btn btn-download" onclick="downloadVectorPDF()">⬇️ Instantly Download PDF</button>
+                <p>Click the button to generate a crisp, selectable, single-page native PDF.</p>
             </div>
-            <div class="content-wrapper" id="pdf-content">
-                <div class="header">
-                    <img src="${logoUrl}" alt="Logo" onerror="this.style.display='none'"> 
-                    <div class="college-name">GOVERNMENT VICTORIA COLLEGE, PALAKKAD</div>
-                    <div class="address">Kerala, India, PIN 678001 | Affiliation: University of Calicut</div>
-                    <div class="meta">📞 0491 2576773 | ✉️ victoriapkd@gmail.com | 🌐 www.gvc.ac.in</div>
-                </div>
-                <div class="title-section">
-                    <div class="designation">Chief Superintendent,<br>University Examinations</div>
-                    <div class="doc-number">No: EXAM/${dayDiff}${sessionCode}<br>Date: ${new Date().toLocaleDateString('en-GB')}</div>
-                </div>
-                <div class="body-text">
-                    The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. 
-                    Invigilators are requested to report to the Chief Superintendent's office <strong>30 minutes before</strong> the commencement of the exam.
-                </div>
-                <div class="highlight-box">
-                    EXAM: ${dateStr} &nbsp;|&nbsp; SESSION: ${sessionCode} (${timeStr}) &nbsp;|&nbsp; REPORT BY: ${reportTime}
-                </div>
-                ${tableContentHtml}
-                <div class="footer">
-                    Chief Superintendent
-                </div>
-            </div>
+            
             <script>
-                function downloadPDF() {
-                    const element = document.getElementById('pdf-content');
+                function downloadVectorPDF() {
                     const btn = document.querySelector('.btn-download');
-                    btn.textContent = "Generating...";
+                    btn.textContent = "Generating Vector PDF...";
                     btn.disabled = true;
 
-                    const opt = {
-                        margin: [8, 8, 8, 8], 
-                        filename: 'Duty_Notification_${dateStr}.pdf',
-                        image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, useCORS: true },
-                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                    };
+                    setTimeout(() => {
+                        const { jsPDF } = window.jspdf;
+                        const doc = new jsPDF('p', 'mm', 'a4');
+                        const staffList = ${staffListJson};
+                        const cols = ${cols};
 
-                    html2pdf().set(opt).from(element).save().then(() => {
-                        btn.textContent = "✅ Downloaded";
-                        setTimeout(() => { btn.textContent = "⬇️ Download PDF"; btn.disabled = false; }, 2000);
-                    });
+                        doc.setFont("times", "bold");
+                        doc.setFontSize(14);
+                        doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 12, { align: "center" });
+                        doc.setFontSize(8);
+                        doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 16, { align: "center" });
+                        doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 20, { align: "center" });
+                        doc.setLineWidth(0.3);
+                        doc.line(10, 22, 200, 22);
+
+                        doc.setFontSize(10);
+                        doc.text("Chief Superintendent, University Examinations", 10, 27);
+                        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 27, { align: "right" });
+                        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 31, { align: "right" });
+
+                        doc.setFont("times", "normal");
+                        doc.text("The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations.", 10, 38);
+                        doc.text("Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the exam.", 10, 42);
+                        doc.text("In case of any inconvenience, invigilators must arrange for a substitute and inform the office accordingly.", 10, 46);
+
+                        doc.setDrawColor(0);
+                        doc.setFillColor(245, 245, 245);
+                        doc.rect(10, 49, 190, 7, "FD");
+                        doc.setFont("times", "bold");
+                        doc.setFontSize(9);
+                        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 53.5, { align: "center" });
+
+                        let rowsPerCol = Math.ceil(staffList.length / cols);
+                        let headRow = [];
+                        let colConfig = {};
+
+                        
+                        for (let c = 0; c < cols; c++) {
+                            headRow.push("No", "Name & Dept", "Mobile");
+                            const offset = c * 3;
+                            colConfig[offset] = { halign: "center", cellWidth: 8 };
+                            colConfig[offset + 1] = { cellWidth: "auto" };
+                            colConfig[offset + 2] = { halign: "center", cellWidth: 18 };
+                        }
+
+                        let tableRows = [];
+                        for (let r = 0; r < rowsPerCol; r++) {
+                            let row = [];
+                            for (let c = 0; c < cols; c++) {
+                                let idx = c * rowsPerCol + r;
+                                if (idx < staffList.length) {
+                                    let s = staffList[idx];
+                                    row.push(s.no, s.name + "\\n" + s.dept, s.phone);
+                                } else {
+                                    row.push("", "", "");
+                                }
+                            }
+                            tableRows.push(row);
+                        }
+
+                        doc.autoTable({
+                            startY: 55,
+                            head: [headRow],
+                            body: tableRows,
+                            theme: "grid",
+                            headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: "bold", halign: "center" },
+                            styles: { fontSize: 8, font: "times", cellPadding: 1, valign: "middle", textColor: [20, 20, 20] },
+                            columnStyles: colConfig,
+                            margin: { left: 10, right: 10, bottom: 20 }
+                        });
+
+                        const finalY = doc.lastAutoTable.finalY || 200;
+                        doc.setFontSize(11);
+                        doc.setFont("times", "bold");
+                        doc.text("Chief Superintendent", 190, finalY + 15, { align: "right" });
+
+                        doc.save("Duty_Notification_${dateStr}_${sessionCode}.pdf");
+                        
+                        btn.textContent = "✅ File Saved!";
+                        setTimeout(() => { btn.textContent = "⬇️ Instantly Download PDF"; btn.disabled = false; }, 2000);
+                    }, 300);
                 }
             <\/script>
         </body>
