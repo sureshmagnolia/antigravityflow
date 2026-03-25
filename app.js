@@ -15190,46 +15190,54 @@ if (btnSessionReschedule) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
-        // --- START FIX: Remove Old Invigilator from Pool ---
+
+        // --- START FIX: Handle Old & New Invigilator in Pool ---
         const oldName = currentInvigMapping[room];
-        if (oldName && oldName !== name) { // If we are replacing someone
-            // 1. Find the Email of the Old Staff (Pool uses Emails)
+        if (oldName && oldName !== name) { // If we are changing or replacing someone
             const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
             const oldStaff = staffData.find(s => s.name === oldName);
+            const newStaff = staffData.find(s => s.name === name);
             
-            if (oldStaff && oldStaff.email) {
-                // 2. Remove them from the Session Slot "Assigned" List (The Pool)
+            if (oldStaff && oldStaff.email && newStaff && newStaff.email) {
                 const allSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
                 const slot = allSlots[sessionKey];
                 
                 if (slot && slot.assigned) {
-                    const idx = slot.assigned.indexOf(oldStaff.email);
+                    const oldIdx = slot.assigned.indexOf(oldStaff.email);
+                    const newIdx = slot.assigned.indexOf(newStaff.email);
 
-                    // [NEW CODE] - Paste this instead
-if (idx > -1) {
-    // 1. Remove from active pool (so they don't show as Reserve)
-    slot.assigned.splice(idx, 1); 
+                    // If New Staff is NOT in the pool (Global Replace used)
+                    if (newIdx === -1) {
+                        // Swap them exactly to keep the total posted count identical
+                        if (oldIdx > -1) {
+                            slot.assigned[oldIdx] = newStaff.email; 
+                        } else {
+                            slot.assigned.push(newStaff.email); 
+                        }
+                    } 
+                    // If New Staff IS in the pool (Regular Change used):
+                    // We DO NOT splice out the old staff, so they properly become a Reserve!
 
-    // 2. Add to 'replaced' history (So they are NOT deleted from system)
-    if (!slot.replaced) slot.replaced = [];
-    slot.replaced.push({
-        original: oldStaff.email,
-        replacement: name,
-        room: room,
-        timestamp: new Date().toISOString()
-    });
+                    // Keep a log of the replacement
+                    if (!slot.replaced) slot.replaced = [];
+                    slot.replaced.push({
+                        original: oldStaff.email,
+                        replacement: newStaff.email,
+                        room: room,
+                        timestamp: new Date().toISOString()
+                    });
 
-    localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
-    
-    // Force Sync 'slots'
-    if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
-}
-
+                    localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
                     
+                    // Force Sync 'slots'
+                    if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
                 }
             }
         }
         // --- END FIX ---
+
+
+        
 
         
         currentInvigMapping[room] = name;
