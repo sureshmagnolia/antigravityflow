@@ -23,11 +23,12 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import {
-        getFirestore, doc, getDoc, setDoc, deleteDoc,
+        initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
         addDoc, updateDoc, arrayUnion, arrayRemove,
         onSnapshot, writeBatch
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 
     // --- ADD THIS IMPORT ---
     import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
@@ -44,7 +45,10 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db = initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true
+    });
+
     // --- ADD THIS INITIALIZATION ---
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
