@@ -46,8 +46,9 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = initializeFirestore(app, {
-        experimentalAutoDetectLongPolling: true
+        experimentalForceLongPolling: true
     });
+
 
     // --- ADD THIS INITIALIZATION ---
     const storage = getStorage(app);
