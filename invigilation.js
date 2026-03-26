@@ -1084,7 +1084,7 @@ function renderSlotsGridAdmin() {
                     </div>
 
                     <div class="grid grid-cols-5 gap-1.5 mt-2">
-                         <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold" title="Add Directly">+ Add</button>
+                        <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold transition shadow-sm" title="Direct Add Staff">+ Add</button>
                         <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
                          <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
                          <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
@@ -9837,5 +9837,96 @@ window.directAddStaff = async function(key) {
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
 
+// --- EMERGENCY / ADMIN DIRECT ADD FUNCTIONS ---
+window.directAddStaff = function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot) return alert("Error: Slot data not found.");
+
+    // Set UI labels
+    document.getElementById('direct-add-slot-key').textContent = key;
+    document.getElementById('direct-add-slot-key').dataset.key = key;
+
+    const select = document.getElementById('direct-add-select');
+    select.innerHTML = '<option value="">-- Select Faculty --</option>';
+
+    // Prepare date string for exact role exclusion matching
+    const targetDateObj = parseDate(key);
+    const slotTargetDateStr = `${targetDateObj.getFullYear()}-${String(targetDateObj.getMonth() + 1).padStart(2, '0')}-${String(targetDateObj.getDate()).padStart(2, '0')}`;
+    
+    // Sort staff alphabetically for the dropdown rendering
+    const sortedStaff = [...staffData].sort((a, b) => a.name.localeCompare(b.name));
+
+    sortedStaff.forEach(s => {
+        if (s.status === 'archived') return; // Exclude archived
+        if (slot.assigned && slot.assigned.includes(s.email)) return; // Exclude currently assigned
+        
+        // Exclude specific Roles (EXCL, Principal, CS, SAS) active on this Target Date
+        let hasExcludedRole = false;
+        if (s.roleHistory && Array.isArray(s.roleHistory)) {
+            hasExcludedRole = s.roleHistory.some(r => {
+                const isExcludedRole = ['EXCL', 'Principal', 'CS', 'SAS'].includes(r.role);
+                const isActiveDate = slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end);
+                return isExcludedRole && isActiveDate;
+            });
+        }
+        if (hasExcludedRole) return;
+
+        // Exclude those already registered as unavailable (sick leave, marked via admin, etc.)
+        if (typeof isUserUnavailable === 'function' && isUserUnavailable(slot, s.email, key)) return;
+
+        // Add mathematically clean survivor to the drop down
+        select.innerHTML += `<option value="${s.email}">${s.name} (${s.dept})</option>`;
+    });
+
+    // Reset Submit Button Status 
+    const btn = document.getElementById('direct-add-confirm-btn');
+    if(btn) { btn.innerText = "Add Faculty"; btn.disabled = false; }
+
+    window.openModal('direct-add-modal');
+};
+
+window.confirmDirectAdd = async function() {
+    const key = document.getElementById('direct-add-slot-key').dataset.key;
+    const select = document.getElementById('direct-add-select');
+    const email = select.value;
+    
+    if (!key || !email) return alert("Please select a faculty member from the dropdown first.");
+
+    const slot = invigilationSlots[key];
+    const staff = staffData.find(s => s.email === email);
+    
+    if (!slot || !staff) return;
+
+    // Trigger visual wait state
+    const btn = document.getElementById('direct-add-confirm-btn');
+    if(btn) { btn.innerText = "Saving..."; btn.disabled = true; }
+
+    // Add to assignment list
+    if(!slot.assigned) slot.assigned = [];
+    slot.assigned.push(staff.email);
+    
+    // Ensure the tracking source acts as Admin tag
+    if (!slot.assignmentMeta) slot.assignmentMeta = {};
+    slot.assignmentMeta[staff.email] = {
+        source: 'Admin',
+        timestamp: new Date().toISOString()
+    };
+    
+    // Attempt tracking log
+    if (typeof logActivity === 'function') {
+        logActivity("Admin Override Add", `Admin explicitly assigned ${staff.name} to ${key} manually.`);
+    }
+    
+    // Save state globally 
+    if (typeof syncSlotsToCloud === 'function') {
+        await syncSlotsToCloud();
+    }
+    if (typeof renderSlotsGridAdmin === 'function') {
+        renderSlotsGridAdmin();
+    }
+    
+    window.closeModal('direct-add-modal');
+    alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
+};
 
 
