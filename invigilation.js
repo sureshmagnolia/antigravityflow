@@ -6437,23 +6437,61 @@ window.openManualAllocationModal = function (key) {
         });
     }
 
+    // --- START OF NEW CODE ---
+    // Check for active roles EXCL, Principal, CS, SAS
+    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+    
+    staffData.forEach(s => {
+        if (s.roleHistory && Array.isArray(s.roleHistory)) {
+            s.roleHistory.forEach(r => {
+                // Check if they hold one of the targeted roles
+                if (['EXCL', 'Principal', 'CS', 'SAS'].includes(r.role)) {
+                    // Check if the role is active on the date of this specific slot
+                    if (slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end)) {
+                        // Prevent duplicates if they were already marked unavailable
+                        if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === s.email)) {
+                            allUnavailable.push({
+                                email: s.email,
+                                reason: `Admin Role: ${r.role}`,
+                                type: 'Role',
+                                role: r.role
+                            });
+                        }
+                    }
+                }
+            });
+        }
+    });
+    // --- END OF NEW CODE ---
+
+
+
+    
     if (allUnavailable.length > 0) {
+                // --- REPLACE THE ORIGINAL FOREACH LOOP WITH THIS ONE ---
         allUnavailable.forEach(u => {
             const email = typeof u === 'string' ? u : u.email;
             const reason = (typeof u === 'object' && u.reason) ? u.reason : "Marked Unavailable";
             const s = staffData.find(st => st.email === email) || { name: email };
+            
+            // Determine the badge text based on the unavailability type
+            let badgeText = 'This Slot';
+            if (u.type === 'Advance') badgeText = 'Full Day';
+            if (u.type === 'Role') badgeText = u.role;
+
             unavList.innerHTML += `
                 <div class="bg-white p-2.5 rounded-lg border border-red-200 shadow-sm flex flex-col gap-1">
                     <div class="flex items-center justify-between">
                         <span class="font-black text-red-800 text-[11px] truncate">${s.name}</span>
-                        <span class="text-[9px] bg-red-50 text-red-600 px-1 border border-red-100 rounded font-bold">${u.type === 'Advance' ? 'Full Day' : 'This Slot'}</span>
+                        <span class="text-[9px] bg-red-50 text-red-600 px-1 border border-red-100 rounded font-bold">${badgeText}</span>
                     </div>
                     <div class="flex items-center justify-between mt-1 pt-1 border-t border-red-50">
                         <span class="text-[10px] text-gray-500 font-medium truncate">${reason}</span>
-                        <button onclick="adminRemoveUnavailable('${key}', '${email}', ${u.type === 'Advance'})" class="text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 font-bold text-[10px] transition shadow-sm">Remove</button>
+                        ${u.type === 'Role' ? '' : `<button onclick="adminRemoveUnavailable('${key}', '${email}', ${u.type === 'Advance'})" class="text-red-500 hover:text-white hover:bg-red-500 border border-red-200 rounded px-2 py-0.5 font-bold text-[10px] transition shadow-sm">Remove</button>`}
                     </div>
                 </div>`;
         });
+        // --- END REPLACEMENT ---
     } else {
         unavList.innerHTML = `<div class="col-span-full py-6 text-center text-red-400 text-xs font-bold italic">No requests.</div>`;
     }
