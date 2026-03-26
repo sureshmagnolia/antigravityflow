@@ -9871,11 +9871,24 @@ window.directAddStaff = function(key) {
             if (slot.assigned && slot.assigned.includes(s.email)) return false; 
             
             // Check active EXCL roles
+                        // Check active administrative roles (EXCL, CS, SAS, Principal, etc.)
             if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                if (s.roleHistory.some(r => ['EXCL', 'Principal', 'CS', 'SAS'].includes(r.role) && slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end))) {
-                    return false;
+                const exemptRoles = [
+                    'EXCL', 
+                    'Principal',  
+                    'Chief Superintendent', 
+                    'Chief Supt', 
+                    'CS', 
+                    'Senior Asst. Superintendent', 
+                    'Senior Assistant Supt', 
+                    'SAS', 
+                    'Exam Chief'
+                ];
+                if (s.roleHistory.some(r => exemptRoles.includes(r.role) && slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end))) {
+                    return false; // Skip rendering this user in the dropdown results
                 }
             }
+
             if (typeof isUserUnavailable === 'function' && isUserUnavailable(slot, s.email, key)) return false;
 
             return true;
