@@ -1771,6 +1771,32 @@
     </div>
 </div>
 
+<!-- DIRECT ADD ADMIN MODAL -->
+<div id="direct-add-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
+        <h3 class="text-lg font-bold text-gray-800 mb-1">Direct Add Staff</h3>
+        <p class="text-xs text-gray-500 mb-4">Slot: <span id="direct-add-slot-key" class="font-bold text-indigo-600"></span></p>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Select Available Faculty</label>
+                <select id="direct-add-select" class="w-full p-2 border border-gray-300 rounded text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="">-- Select Faculty --</option>
+                </select>
+            </div>
+            <div class="bg-blue-50 p-3 rounded border border-blue-200 text-[10px] text-blue-800 leading-tight">
+                <strong>ℹ️ Note:</strong> This list automatically hides staff who are currently assigned, on leave, or hold active Admin Roles (EXCL, CS, SAS, Principal).
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+            <button onclick="closeModal('direct-add-modal')" class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded text-sm font-bold transition">Cancel</button>
+            <button id="direct-add-confirm-btn" onclick="confirmDirectAdd()" class="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 shadow transition">Add Faculty</button>
+        </div>
+    </div>
+</div>
+
+
     
 
     <script type="module" src="invigilation.js?v=v26">
