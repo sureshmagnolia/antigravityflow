@@ -477,7 +477,37 @@ function getDutiesDoneCount(email) {
     });
     return count;
 }
+// NEW: Get duty count broken down per ROLE PERIOD
+// Returns an object: { "Chief Superintendent": 3, "Senior Asst. Superintendent": 5, "Regular": 7 }
+function getDutiesDoneByRole(email) {
+    const acYear = getCurrentAcademicYear();
+    const staff = staffData.find(s => s.email === email);
+    const breakdown = {};
 
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+        if (isDateInVacation(dateObj)) return;
+        if (!slot.attendance || !slot.attendance.includes(email)) return;
+
+        // Find which role this person held on THIS specific slot date
+        let roleName = "Regular";
+        if (staff && staff.roleHistory && staff.roleHistory.length > 0) {
+            const activeRole = staff.roleHistory.find(r => {
+                const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
+                const rEnd = r.end ? new Date(r.end) : new Date("9999-12-31"); rEnd.setHours(23, 59, 59, 999);
+                return dateObj >= rStart && dateObj <= rEnd;
+            });
+            if (activeRole) roleName = activeRole.role;
+        }
+
+        breakdown[roleName] = (breakdown[roleName] || 0) + 1;
+    });
+
+    return breakdown;
+}
 function getVacationDutiesDoneCount(email) {
     let count = 0;
     Object.keys(invigilationSlots).forEach(key => {
@@ -638,7 +668,8 @@ function initStaffDashboard(me) {
             const start = new Date(r.start);
             start.setHours(0, 0, 0, 0); // Normalize Start to Midnight
 
-            const end = new Date(r.end);
+            const end = r.end ? new Date(r.end) : new Date("9999-12-31");
+
             end.setHours(23, 59, 59, 999); // Fix: Set End Date to the VERY END of the day
 
             // 3. Check Role Name (Case Insensitive)
@@ -1201,9 +1232,10 @@ function renderStaffTable() {
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRole = staff.roleHistory.find(r => {
                 const start = new Date(r.start);
-                const end = new Date(r.end);
+                const end = r.end ? new Date(r.end) : new Date("9999-12-31");
                 return start <= today && end >= today;
             });
+
             if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
         }
 
