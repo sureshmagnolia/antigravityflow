@@ -1083,7 +1083,8 @@ function renderSlotsGridAdmin() {
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-4 gap-1.5 mt-2">
+                    <div class="grid grid-cols-5 gap-1.5 mt-2">
+                         <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold" title="Add Directly">+ Add</button>
                         <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
                          <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
                          <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
@@ -9783,6 +9784,57 @@ window.saveManualAllocation = async function () {
         console.error("Save failed:", e);
         alert('Error saving. Check console.');
     }
+};
+
+// --- EMERGENCY / ADMIN DIRECT ADD FUNCTION ---
+window.directAddStaff = async function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot) return alert("Error: Slot data not found.");
+
+    // Prompt the admin for the Email ID or Name
+    const rawInput = prompt("Enter the exact Full Name or Email of the Invigilator to add:");
+    if (!rawInput) return; // Action Cancelled
+    
+    const query = rawInput.toLowerCase().trim();
+    
+    // Attempt to locate the exact staff member securely
+    let staff = staffData.find(s => s.email.toLowerCase() === query);
+    if (!staff) staff = staffData.find(s => s.name.toLowerCase() === query);
+    if (!staff) staff = staffData.find(s => s.name.toLowerCase().includes(query)); // Fallback to partial name
+    
+    if (!staff) {
+        return alert("❌ Could not find any staff member matching '" + rawInput + "'. Please check spelling or use their email ID.");
+    }
+    
+    if (slot.assigned.includes(staff.email)) {
+        return alert("⚠️ " + staff.name + " is already assigned to this duty.");
+    }
+    
+    // Add to slot assignment list
+    slot.assigned.push(staff.email);
+    
+    // Ensure the 'Admin' tracking tag is correctly appended
+    if (!slot.assignmentMeta) slot.assignmentMeta = {};
+    slot.assignmentMeta[staff.email] = {
+        source: 'Admin',
+        timestamp: new Date().toISOString()
+    };
+    
+    // Log the override if the activity log feature is present
+    if (typeof logActivity === 'function') {
+        logActivity("Admin Override Add", `Admin explicitly added ${staff.name} to slot ${key}.`);
+    }
+    
+    // Write changes to Firebase/Local and refresh UI
+    if (typeof syncSlotsToCloud === 'function') {
+        await syncSlotsToCloud();
+    }
+    
+    if (typeof renderSlotsGridAdmin === 'function') {
+        renderSlotsGridAdmin();
+    }
+    
+    alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
 
 
