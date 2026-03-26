@@ -4204,7 +4204,27 @@ window.openCompletedDutiesModal = function (email) {
     });
 
     // 2. Sort (Newest First)
+        // 2. Sort (Newest First)
     history.sort((a, b) => b.dateObj - a.dateObj);
+
+    // --- NEW: Calculate Role Breakdown ---
+    let csCount = 0, sasCount = 0, invigCount = 0;
+    history.forEach(h => {
+        if (h.role === "Chief Supt.") csCount++;
+        else if (h.role === "Senior Asst.") sasCount++;
+        else invigCount++;
+    });
+
+    // Update Modal Header with Breakdown Badges
+    const headerSub = document.querySelector('#completed-duties-modal p');
+    if (headerSub) {
+        let statsHtml = `<span class="font-bold text-gray-700">Total: ${history.length}</span> <span class="text-gray-400 font-normal ml-1"> (AY ${acYear.label})</span> <br>`;
+        if (csCount > 0) statsHtml += `<span class="mt-1 inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-bold border border-purple-200 shadow-sm mr-1">CS: ${csCount}</span>`;
+        if (sasCount > 0) statsHtml += `<span class="mt-1 inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold border border-blue-200 shadow-sm mr-1">SAS: ${sasCount}</span>`;
+        if (invigCount > 0) statsHtml += `<span class="mt-1 inline-block px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold border border-green-200 shadow-sm">INV: ${invigCount}</span>`;
+        headerSub.innerHTML = statsHtml;
+    }
+    // -------------------------------------
 
     // 3. Render Neat List
     if (history.length === 0) {
