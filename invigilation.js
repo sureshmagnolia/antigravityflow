@@ -4216,7 +4216,6 @@ window.openCompletedDutiesModal = function (email) {
     });
 
     // Update Modal Header with Breakdown Badges
-    const headerSub = document.querySelector('#completed-duties-modal p');
     if (headerSub) {
         let statsHtml = `<span class="font-bold text-gray-700">Total: ${history.length}</span> <span class="text-gray-400 font-normal ml-1"> (AY ${acYear.label})</span> <br>`;
         if (csCount > 0) statsHtml += `<span class="mt-1 inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-bold border border-purple-200 shadow-sm mr-1">CS: ${csCount}</span>`;
