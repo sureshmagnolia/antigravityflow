@@ -3360,12 +3360,26 @@ window.loadSessionAttendance = function () {
     const isCS = (r) => { const s = r.toLowerCase().trim(); return s === "cs" || s.includes("chief"); };
     const isSAS = (r) => { const s = r.toLowerCase().trim(); return s === "sas" || s.includes("senior"); };
 
-    staffData.forEach(s => {
+       staffData.forEach(s => {
         if (s.roleHistory) {
-            const activeRole = s.roleHistory.find(r => {
-                const rStart = new Date(r.start); rStart.setHours(0, 0, 0, 0);
-                const rEnd = new Date(r.end); rEnd.setHours(23, 59, 59, 999);
-                return rStart <= endOfDay && rEnd >= startOfDay && (isCS(r.role) || isSAS(r.role));
+            // Sort history so most recent assignments take automatic precedence
+            const sortedHistory = [...s.roleHistory].sort((a, b) => new Date(b.start) - new Date(a.start));
+            
+            const activeRole = sortedHistory.find(r => {
+                // Must be a CS or SAS variant
+                if (!(isCS(r.role) || isSAS(r.role))) return false;
+                
+                const rStart = new Date(r.start); 
+                rStart.setHours(0, 0, 0, 0);
+                
+                // If no end date is provided, role continues indefinitely into the future
+                let rEnd = new Date("9999-12-31"); 
+                if (r.end) {
+                    rEnd = new Date(r.end);
+                    rEnd.setHours(23, 59, 59, 999);
+                }
+                
+                return rStart <= endOfDay && rEnd >= startOfDay;
             });
 
             if (activeRole) {
@@ -3374,6 +3388,7 @@ window.loadSessionAttendance = function () {
             }
         }
     });
+
 
     const savedSup = slot.supervision || {};
     const currentCS = savedSup.cs || defaultCS;
