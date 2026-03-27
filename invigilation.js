@@ -750,7 +750,13 @@ function isUserUnavailable(slot, email, key) {
         const staff = staffData.find(s => s.email === email);
         if (staff && staff.roleHistory && Array.isArray(staff.roleHistory)) {
              const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
-             if (staff.roleHistory.some(r => exemptRoles.includes(r.role) && slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end))) {
+            const targetStamp = new Date(slotTargetDateStr).getTime();
+             if (staff.roleHistory.some(r => {
+                 const startStamp = new Date(r.start).getTime();
+                 const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                 return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+             })) {
+
                  return true;
              }
         }
@@ -6542,8 +6548,13 @@ window.openManualAllocationModal = function (key) {
                 // Check if they hold one of the targeted roles
                                 // FIX: Added full spelling of CS and SAS roles to catch them properly
                 if (['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'].includes(r.role)) {
-                    // Check if the role is active on the date of this specific slot
-                    if (slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end)) {
+                    // FIX: Process mathematically as exact timestamps to destroy formatting bugs
+                    const targetStamp = new Date(slotTargetDateStr).getTime();
+                    const startStamp = new Date(r.start).getTime();
+                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+
+                    if (targetStamp >= startStamp && targetStamp <= endStamp) {
+
                         // Prevent duplicates if they were already marked unavailable
                         if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === s.email)) {
                             allUnavailable.push({
@@ -9979,7 +9990,13 @@ window.directAddStaff = function(key) {
                     'SAS', 
                     'Exam Chief'
                 ];
-                if (s.roleHistory.some(r => exemptRoles.includes(r.role) && slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end))) {
+                const targetStamp = new Date(slotTargetDateStr).getTime();
+                if (s.roleHistory.some(r => {
+                    const startStamp = new Date(r.start).getTime();
+                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                })) {
+
                     return false; // Skip rendering this user in the dropdown results
                 }
             }
