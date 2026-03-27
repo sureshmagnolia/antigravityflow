@@ -4420,7 +4420,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 const slotMM = String(date.getMonth() + 1).padStart(2, '0');
                 const slotDD = String(date.getDate()).padStart(2, '0');
                 const slotDateStr = `${slotYYYY}-${slotMM}-${slotDD}`;
-                    if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                    // FIX: Also check if the date falls inside the main vacation start/end period
+                    if (isDateInVacation(date) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr))) {
+
                     // FIX: Replaced window.vacationDefaultTarget with global vacationDutyTarget
                     const vacTarget = vacationDutyTarget || 0;
                     const vacDone = getVacationDutiesDoneCount(s.email);
@@ -6342,11 +6344,11 @@ window.renderManualCards = function() {
                     </div>
                     <div class="text-[10px] text-gray-500 leading-tight search-dept flex items-center gap-1.5">
                         <span class="font-bold">${s.dept}</span> | 
-                        <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">Rem: ${s.pending}</span>
+                                                <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">${isDateInVacation(parseDate(window.manualState.key)) ? 'Vac Rem:' : 'Rem:'} ${s.pending}</span>
                     </div>
                     <div class="flex flex-wrap gap-1 mt-2">
                         <span class="flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold shadow-sm">📅 Wk: ${s.weekCount || 0}</span>
-                        <span class="flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 font-bold shadow-sm">⚡ Sc: ${s.score}</span>
+                        <span class="flex items-center gap-0.5 text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 font-bold shadow-sm">${isDateInVacation(parseDate(window.manualState.key)) ? '🏖️ Vac Sc:' : '⚡ Sc:'} ${s.score}</span>
                         ${sourceBadge}
                     </div>
                 </div>
@@ -6448,7 +6450,9 @@ window.openManualAllocationModal = function (key) {
             const slotDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
             let done = 0, target = 0, pending = 0;
             
-                if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                // FIX: Also check if targetDate falls inside the main vacation start/end period
+                if (isDateInVacation(targetDate) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr))) {
+
                 done = getVacationDutiesDoneCount(s.email);
                 // FIX: Replaced window.vacationDefaultTarget with global vacationDutyTarget
                 target = vacationDutyTarget || 0; 
