@@ -2982,7 +2982,26 @@ window.openRoleAssignmentModal = function (index) {
     const select = document.getElementById('assign-role-select');
     select.innerHTML = Object.keys(rolesConfig).map(r => `<option value="${r}">${r}</option>`).join('');
     const hist = document.getElementById('role-history-list');
-    hist.innerHTML = (staff.roleHistory || []).map((h, i) => `<div class="flex justify-between text-xs p-1 bg-gray-50 mb-1"><span>${h.role}</span> <button onclick="removeRoleFromStaff(${index},${i})" class="text-red-500">&times;</button></div>`).join('');
+        // FIX: Render interactive date editors for each active role block
+    hist.innerHTML = (staff.roleHistory || []).map((h, i) => `
+        <div class="flex flex-col gap-1 text-xs p-2 bg-gray-50 mb-2 rounded border border-gray-200 shadow-sm">
+            <div class="flex justify-between items-center font-bold text-gray-700">
+                <span class="text-indigo-700">${h.role}</span>
+                <button onclick="removeRoleFromStaff(${index},${i})" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded transition shadow-sm font-black text-xs" title="Remove entire role layout">&times; Revoke</button>
+            </div>
+            <div class="flex gap-2 items-center mt-1">
+                <div class="flex flex-col flex-1">
+                    <label class="text-[9px] text-gray-500 uppercase font-black">Start Date</label>
+                    <input type="date" value="${h.start || ''}" onchange="updateRolePeriod(${index}, ${i}, 'start', this.value)" class="border border-gray-300 rounded px-1.5 py-1 text-xs focus:ring-2 focus:ring-indigo-300 outline-none w-full bg-white transition cursor-pointer">
+                </div>
+                <div class="flex flex-col flex-1">
+                    <label class="text-[9px] text-gray-500 uppercase font-black">End Date</label>
+                    <input type="date" value="${h.end || ''}" onchange="updateRolePeriod(${index}, ${i}, 'end', this.value)" class="border border-gray-300 rounded px-1.5 py-1 text-xs focus:ring-2 focus:ring-indigo-300 outline-none w-full bg-white transition cursor-pointer">
+                </div>
+            </div>
+        </div>
+    `).join('');
+
     modal.classList.remove('hidden');
 }
 
@@ -3010,10 +3029,21 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
     // 3. Log it (Now roleName is defined)
     logActivity("Role Removed", `Removed role '${roleName}' from ${staffData[sIdx].name}.`);
     
+    // NEW: Instantly edits underlying roles right from the active list UI  
+    window.updateRolePeriod = async function (sIdx, rIdx, field, value) {
+    if (!staffData[sIdx] || !staffData[sIdx].roleHistory || !staffData[sIdx].roleHistory[rIdx]) return;
+    
+    // Update the exact start/end value in memory safely
+    staffData[sIdx].roleHistory[rIdx][field] = value;
+    
+    const roleName = staffData[sIdx].roleHistory[rIdx].role;
+    logActivity("Role Period Edited", `Updated ${field} date for historical role '${roleName}' on ${staffData[sIdx].name} to [${value || 'No End Date'}].`);
+    
+    // Auto-sync gracefully behind the scenes (No need to close modal)
     await syncStaffToCloud();
-    window.closeModal('role-assignment-modal');
     renderStaffTable();
-}
+};
+
 
 // [In invigilation.js]
 
