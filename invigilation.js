@@ -3029,8 +3029,13 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
     // 3. Log it (Now roleName is defined)
     logActivity("Role Removed", `Removed role '${roleName}' from ${staffData[sIdx].name}.`);
     
-    // NEW: Instantly edits underlying roles right from the active list UI  
-    window.updateRolePeriod = async function (sIdx, rIdx, field, value) {
+    await syncStaffToCloud();
+    window.closeModal('role-assignment-modal');
+    renderStaffTable();
+};
+
+// NEW: Instantly edits underlying roles right from the active list UI  
+window.updateRolePeriod = async function (sIdx, rIdx, field, value) {
     if (!staffData[sIdx] || !staffData[sIdx].roleHistory || !staffData[sIdx].roleHistory[rIdx]) return;
     
     // Update the exact start/end value in memory safely
@@ -3043,6 +3048,7 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
     await syncStaffToCloud();
     renderStaffTable();
 };
+
 
 
 // [In invigilation.js]
