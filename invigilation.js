@@ -4420,12 +4420,19 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 const slotMM = String(date.getMonth() + 1).padStart(2, '0');
                 const slotDD = String(date.getDate()).padStart(2, '0');
                 const slotDateStr = `${slotYYYY}-${slotMM}-${slotDD}`;
-                if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
-                    const vacTarget = window.vacationDefaultTarget || 0;
+                    if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                    // FIX: Replaced window.vacationDefaultTarget with global vacationDutyTarget
+                    const vacTarget = vacationDutyTarget || 0;
                     const vacDone = getVacationDutiesDoneCount(s.email);
+                    
+                    // If you want pure ranking by lowest duties done (ignoring target bounds):
+                    // score = -(vacDone * 100); 
+                    
+                    // OR, using the target boundary math (Standard Way):
                     const vacPending = Math.max(0, vacTarget - vacDone);
                     score = vacPending * 100;
                 } else {
+
                     score = dynamicPending * 100;
                 }
                 let warnings = [];
@@ -6441,11 +6448,13 @@ window.openManualAllocationModal = function (key) {
             const slotDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
             let done = 0, target = 0, pending = 0;
             
-            if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
+                if (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr)) {
                 done = getVacationDutiesDoneCount(s.email);
-                target = window.vacationDefaultTarget || 0; 
+                // FIX: Replaced window.vacationDefaultTarget with global vacationDutyTarget
+                target = vacationDutyTarget || 0; 
                 pending = Math.max(0, target - done);
             } else {
+
                 done = getDutiesDoneCount(s.email);
                 target = calculateStaffTarget(s);
                 pending = Math.max(0, target - done);
