@@ -737,13 +737,28 @@ function isUserUnavailable(slot, email, key) {
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
 
             const list = advanceUnavailability[dateStr][session];
-            if (list) {
+                        if (list) {
                 return list.some(u => (typeof u === 'string' ? u === email : u.email === email));
             }
         }
     }
+
+    // 4. FIX: Block Administrative Roles (CS, SAS, Principal, etc.) from being available everywhere
+    if (key) {
+        const dateObj = parseDate(key);
+        const slotTargetDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        const staff = staffData.find(s => s.email === email);
+        if (staff && staff.roleHistory && Array.isArray(staff.roleHistory)) {
+             const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
+             if (staff.roleHistory.some(r => exemptRoles.includes(r.role) && slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end))) {
+                 return true;
+             }
+        }
+    }
+
     return false;
 }
+
 
 
 
@@ -6525,7 +6540,8 @@ window.openManualAllocationModal = function (key) {
         if (s.roleHistory && Array.isArray(s.roleHistory)) {
             s.roleHistory.forEach(r => {
                 // Check if they hold one of the targeted roles
-                if (['EXCL', 'Principal', 'CS', 'SAS'].includes(r.role)) {
+                                // FIX: Added full spelling of CS and SAS roles to catch them properly
+                if (['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'].includes(r.role)) {
                     // Check if the role is active on the date of this specific slot
                     if (slotTargetDateStr >= r.start && (!r.end || slotTargetDateStr <= r.end)) {
                         // Prevent duplicates if they were already marked unavailable
