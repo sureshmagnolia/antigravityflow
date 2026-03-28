@@ -1081,11 +1081,23 @@ async function updateLocalSlotsFromStudents() {
                 allStudentData = restoredData; // Temporarily update global memory for the sync function
                 
                 let count = 0;
-                for (const sessionKey of sessionsToSync) {
-                    count++;
+                const sessionArray = Array.from(sessionsToSync);
+                const BATCH_SIZE = 5; // Only 5 sessions per batch
+
+                for (let i = 0; i < sessionArray.length; i += BATCH_SIZE) {
+                    const batch = sessionArray.slice(i, i + BATCH_SIZE);
+                    count += batch.length;
                     updateSyncStatus(`Uploading Restored Data ${count}/${sessionsToSync.size}...`, "neutral");
-                    await syncSessionToCloud(sessionKey);
+                    
+                    // Process this small batch in parallel (safe size)
+                    await Promise.all(batch.map(key => syncSessionToCloud(key)));
+                    
+                    // 500ms breathing space between batches to prevent queue exhaustion
+                    if (i + BATCH_SIZE < sessionArray.length) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
                 }
+
             }
 
             try {
