@@ -600,7 +600,10 @@ async function migrateFromLocalStorage() {
 
     window.addEventListener('offline', () => {
         updateSyncStatus("No Connection", "error");
+        // NEW: Alert User regarding Cache Limitations
+        alert("⚠️ Connectivity Lost. ExamFlow is in Offline Mode.\n\nOnly the recent/upcoming sessions saved in your local cache are available. Historical data cannot be accessed until the internet is restored.");
     });
+
 
     // --- 1. AUTHENTICATION ---
 
