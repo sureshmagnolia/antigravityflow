@@ -417,31 +417,44 @@ if (!document.getElementById('drive-anim-style')) {
     style.innerHTML = `@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-fadeIn { animation: fadeIn 0.2s ease-out; }`;
     document.head.appendChild(style);
 }
+
+
 // ==========================================
-// ☁️ FIREBASE ON-DEMAND CACHE MANAGER 
+// ☁️ HYBRID DATA MANAGER (BASIC USERS + CLOUD USERS)
 // ==========================================
 window.ExamCloudCache = {
-    // Stores the last 10 loaded historical dates to prevent memory bloat
+    // Stores the last 10 loaded historical dates to prevent memory bloat (for Cloud users)
     recentDatesLoaded: new Set(),
 
     async fetchHistoricalData(dateKey) {
-        // 1. Check Offline State immediately
+        // 1. BASIC USER CHECK: If not logged into a college Firebase, use Full Local DB
+        if (!window.currentCollegeId) {
+            console.log("👤 Basic User Mode: Relying entirely on local IndexedDB.");
+            const allLocalData = await loadExamDataIDB();
+            // Basic users have everything in IDB. Return the filtered chunk for this date.
+            return allLocalData.filter(student => student.Date === dateKey.split(' | ')[0]);
+        }
+
+        // 2. CLOUD USER: Offline Check
         if (!navigator.onLine) {
             alert("⚠️ Cannot fetch historical data for " + dateKey + " while offline. Please connect to the internet.");
             return [];
         }
 
+        // 3. CLOUD USER: Fetch from Firebase Storage
         try {
             // Show Loading Indicator
             const loader = document.createElement('div');
             loader.id = 'cloud-lazy-loader';
             loader.className = 'fixed inset-0 bg-black bg-opacity-50 z-[200] flex flex-col items-center justify-center text-white font-bold';
-            loader.innerHTML = `<div class="animate-spin rounded-full h-12 w-12 border-b-4 border-white mb-4"></div> Loading Data for ${dateKey}...`;
+            loader.innerHTML = `<div class="animate-spin rounded-full h-12 w-12 border-b-4 border-white mb-4"></div> Loading Cloud Data for ${dateKey}...`;
             document.body.appendChild(loader);
 
-            // 2. Fetch from Firebase Storage
             const { storage, ref, getDownloadURL } = window.firebase;
-            const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
+            
+            // Extract just the Date part (DD.MM.YYYY) from the session key
+            const cleanDate = dateKey.includes('|') ? dateKey.split(' | ')[0].trim() : dateKey.trim();
+            const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${cleanDate}.json`);
             
             const url = await getDownloadURL(fileRef);
             const response = await fetch(url);
@@ -449,19 +462,16 @@ window.ExamCloudCache = {
             if (!response.ok) throw new Error("File missing");
             const sessionDataChunk = await response.json();
 
-            // 3. Cache into IndexedDB (Merging gently)
+            // Cache into IndexedDB for subsequent rapid clicks
             const existingCache = await loadExamDataIDB();
             const merged = [...existingCache, ...sessionDataChunk];
             
-            // Note: In a full production implementation, we'd slice 'merged' to evict LRU data
-            // but for safety in this strict insertion, we append.
             await saveExamDataIDB(merged, true); 
 
-            // Track loaded dates to manage memory
-            this.recentDatesLoaded.add(dateKey);
+            // Track loaded dates to manage memory limits
+            this.recentDatesLoaded.add(cleanDate);
             if(this.recentDatesLoaded.size > 10) {
-                 console.warn("Cache Warning: More than 10 historical dates loaded. IDB might be bloated.");
-                 // Eviction logic can be triggered here.
+                 console.warn("☁️ Cache Warning: More than 10 historical dates loaded for Cloud User.");
             }
 
             document.getElementById('cloud-lazy-loader').remove();
@@ -470,15 +480,18 @@ window.ExamCloudCache = {
         } catch (e) {
             if(document.getElementById('cloud-lazy-loader')) document.getElementById('cloud-lazy-loader').remove();
             
-            // Only alert if we know it's a structural error
+            // Only alert if we know it's an actual unexpected error, ignore 404s for empty exam days
             if(e.message !== "File missing" && !e.message.includes("Object 'historical_sessions")) {
                 console.error("Cloud Fetch Error:", e);
                 alert("Cloud Request Failed: " + e.message);
             }
-            return []; // Fail silently if date simply doesn't exist
+            return []; 
         }
     }
 };
+
+
+
 // ==========================================
 // 🚀 HISTORICAL DATA MIGRATION LOGIC
 // ==========================================
