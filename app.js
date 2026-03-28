@@ -732,6 +732,8 @@ async function migrateFromLocalStorage() {
             currentCollegeId = docRef.id;
             await UiModal.alert("Success", `✅ Database Created for "${newName}"!\nYou are the Admin.`);
             syncDataFromCloud(currentCollegeId);
+            document.getElementById('cloud-migration-wrapper')?.classList.remove('hidden');
+
         } catch (e) {
             console.error("Creation failed:", e);
             await UiModal.alert("Error", "Failed to create database. " + e.message);
@@ -4285,9 +4287,29 @@ if (toggleButton && sidebar) {
                 dateSelect.appendChild(option);
             });
             if (currentVal) dateSelect.value = currentVal;
-            dateSelect.onchange = (e) => {
-                updateSpecificDateGrid(e.target.value, specificDateGrid);
+                        dateSelect.onchange = async (e) => {
+                const selectedDate = e.target.value;
+                if (!selectedDate) {
+                    updateSpecificDateGrid('', specificDateGrid);
+                    return;
+                }
+
+                // Check if data for this date is already in local memory
+                const localMatch = allStudentData.some(s => s.Date === selectedDate);
+
+                if (!localMatch && window.ExamCloudCache) {
+                    // Not in local cache — try lazy-fetching from cloud (Cloud users only)
+                    // Basic users will get empty array and show "No exams found"
+                    const fetched = await window.ExamCloudCache.fetchHistoricalData(selectedDate);
+                    if (fetched && fetched.length > 0) {
+                        // Merge into the in-memory working set for this session
+                        allStudentData = [...allStudentData, ...fetched];
+                    }
+                }
+
+                updateSpecificDateGrid(selectedDate, specificDateGrid);
             };
+
         }
 
         // --- 5. UPDATE DATA LOADING TAB STATUS ---
@@ -12589,6 +12611,8 @@ Are you sure?
                 currentCollegeId = collegeDoc.id;
                 console.log("Joined College:", currentCollegeId);
                 syncDataFromCloud(currentCollegeId);
+                document.getElementById('cloud-migration-wrapper')?.classList.remove('hidden');
+
             } else {
                 // FAIL: No college found. 
                 // 2. CHECK WHITELIST: Is this user allowed to create a NEW college?
