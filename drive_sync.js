@@ -403,7 +403,46 @@ window.executeRestore = async function(fileId) {
         localStorage.removeItem('examBaseData');
         localStorage.removeItem('examData_v2');
 
-        
+                // NEW: Offer to also push examBaseData to Firebase Storage as date-chunks
+        if (window.currentCollegeId && navigator.onLine && cloudData.examBaseData && Array.isArray(cloudData.examBaseData)) {
+            const pushToCloud = confirm("☁️ Cloud Storage Sync:\n\nDo you also want to push the restored student data to Firebase Storage as on-demand date chunks?\n\nThis allows historical data to be lazy-loaded on other devices.\nClick [OK] to Push, [Cancel] to skip.");
+
+            if (pushToCloud) {
+                const { storage, ref, uploadString, getDownloadURL } = window.firebase;
+                const pushIsMerge = confirm("CLOUD PUSH MODE:\n\nClick [OK] to MERGE with existing cloud chunks.\nClick [Cancel] to OVERWRITE existing cloud chunks.");
+
+                // Group restored data by Date
+                const groupedByDate = {};
+                cloudData.examBaseData.forEach(student => {
+                    const d = student.Date ? student.Date.trim() : "Unknown_Date";
+                    if (!groupedByDate[d]) groupedByDate[d] = [];
+                    groupedByDate[d].push(student);
+                });
+
+                let cloudPushCount = 0;
+                for (const dateKey of Object.keys(groupedByDate)) {
+                    if (dateKey === "Unknown_Date") continue;
+                    const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
+                    let finalData = groupedByDate[dateKey];
+
+                    if (pushIsMerge) {
+                        try {
+                            const url = await getDownloadURL(fileRef);
+                            const existing = await fetch(url).then(r => r.json());
+                            const getKey = r => `${r.Date || ''}|${r.Time || ''}|${r['Register Number'] || ''}`.toUpperCase();
+                            const existingKeys = new Set(existing.map(getKey));
+                            const newOnly = finalData.filter(r => !existingKeys.has(getKey(r)));
+                            finalData = [...existing, ...newOnly];
+                        } catch (e) { /* No existing chunk, first upload */ }
+                    }
+
+                    await uploadString(fileRef, JSON.stringify(finalData), 'raw', { contentType: 'application/json' });
+                    cloudPushCount++;
+                }
+                alert(`☁️ Cloud Push Complete: ${cloudPushCount} date chunks pushed to Firebase Storage.`);
+            }
+        }
+
         localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
         alert("✅ Restored successfully! Reloading...");
         location.reload();
@@ -529,7 +568,11 @@ window.startHistoricalMigration = async function() {
             });
 
             const uniqueDates = Object.keys(groupedByDate);
-            if (!confirm(`Found ${uniqueDates.length} unique dates in your data. Ready to upload them in chunks to Firebase Storage?`)) return;
+            if (!confirm(`Found ${uniqueDates.length} unique dates in your data.\n\nReady to upload to Firebase Storage?`)) return;
+
+            // NEW: Ask Merge or Overwrite for cloud chunks
+            const isMergeCloud = confirm("CLOUD UPLOAD MODE:\n\nClick [OK] to MERGE with existing cloud data (safe, keeps old records).\nClick [Cancel] to OVERWRITE — replaces existing cloud chunks entirely.");
+
 
             // 2. Upload Chunks loop
             let successCount = 0;
@@ -547,9 +590,28 @@ window.startHistoricalMigration = async function() {
                 
                 // Path: historical_sessions/COLLEGE_ID/DD.MM.YYYY.json
                 const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
-                
-                // Upload text content directly to Storage
-                await uploadString(fileRef, chunkData, 'raw', { contentType: 'application/json' });
+
+                let finalChunkData = chunkData; // Default: use incoming data as-is (OVERWRITE)
+
+                if (isMergeCloud) {
+                    // MERGE: Try to fetch existing cloud chunk and deduplicate
+                    try {
+                        const { getDownloadURL } = window.firebase;
+                        const url = await getDownloadURL(fileRef);
+                        const existing = await fetch(url).then(r => r.json());
+                        const getKey = r => `${r.Date || ''}|${r.Time || ''}|${r['Register Number'] || ''}`.toUpperCase();
+                        const existingKeys = new Set(existing.map(getKey));
+                        const incoming = groupedByDate[dateKey];
+                        const newOnly = incoming.filter(r => !existingKeys.has(getKey(r)));
+                        finalChunkData = JSON.stringify([...existing, ...newOnly]);
+                    } catch (fetchErr) {
+                        // No existing chunk found — first upload, proceed normally
+                        finalChunkData = chunkData;
+                    }
+                }
+
+                await uploadString(fileRef, finalChunkData, 'raw', { contentType: 'application/json' });
+
                 successCount++;
             }
 
