@@ -8426,7 +8426,43 @@ window.real_populate_session_dropdown = function () {
     // V89: Loads the *entire* QP code map from localStorage into the global var
     function loadQPCodes() {
         qpCodeMap = JSON.parse(localStorage.getItem(QP_CODE_LIST_KEY) || '{}');
+        let needsSave = false;
+
+        // --- NEW: Auto-Migrate V1 QP Codes (Course Only) to V2 (Stream-Aware) ---
+        for (const sessionKey in qpCodeMap) {
+            const sessionData = qpCodeMap[sessionKey];
+            const migratedData = {};
+            let sessionMigrated = false;
+
+            for (const oldKey in sessionData) {
+                try {
+                    const decoded = decodeURIComponent(escape(atob(oldKey)));
+                    // If the old key doesn't have the V2 Stream separator '|', it's a V1 backup!
+                    if (!decoded.includes('|')) {
+                        // Upgrade it by attaching the default 'Regular' stream layout
+                        const newKey = btoa(unescape(encodeURIComponent(`${decoded}|Regular`)));
+                        migratedData[newKey] = sessionData[oldKey];
+                        sessionMigrated = true;
+                        needsSave = true;
+                    } else {
+                        migratedData[oldKey] = sessionData[oldKey];
+                    }
+                } catch (e) {
+                    migratedData[oldKey] = sessionData[oldKey];
+                }
+            }
+            if (sessionMigrated) {
+                qpCodeMap[sessionKey] = migratedData;
+            }
+        }
+
+        // Save the freshly migrated data safely back to memory so subsequent reads don't fail
+        if (needsSave) {
+            localStorage.setItem(QP_CODE_LIST_KEY, JSON.stringify(qpCodeMap));
+        }
+        // ------------------------------------------------------------------------
     }
+
 
     // --- NEW: Real-time Cloud Listener ---
     function subscribeToQPSession(sessionKey) {
