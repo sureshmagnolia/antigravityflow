@@ -417,3 +417,65 @@ if (!document.getElementById('drive-anim-style')) {
     style.innerHTML = `@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-fadeIn { animation: fadeIn 0.2s ease-out; }`;
     document.head.appendChild(style);
 }
+// ==========================================
+// ☁️ FIREBASE ON-DEMAND CACHE MANAGER 
+// ==========================================
+window.ExamCloudCache = {
+    // Stores the last 10 loaded historical dates to prevent memory bloat
+    recentDatesLoaded: new Set(),
+
+    async fetchHistoricalData(dateKey) {
+        // 1. Check Offline State immediately
+        if (!navigator.onLine) {
+            alert("⚠️ Cannot fetch historical data for " + dateKey + " while offline. Please connect to the internet.");
+            return [];
+        }
+
+        try {
+            // Show Loading Indicator
+            const loader = document.createElement('div');
+            loader.id = 'cloud-lazy-loader';
+            loader.className = 'fixed inset-0 bg-black bg-opacity-50 z-[200] flex flex-col items-center justify-center text-white font-bold';
+            loader.innerHTML = `<div class="animate-spin rounded-full h-12 w-12 border-b-4 border-white mb-4"></div> Loading Data for ${dateKey}...`;
+            document.body.appendChild(loader);
+
+            // 2. Fetch from Firebase Storage
+            const { storage, ref, getDownloadURL } = window.firebase;
+            const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
+            
+            const url = await getDownloadURL(fileRef);
+            const response = await fetch(url);
+            
+            if (!response.ok) throw new Error("File missing");
+            const sessionDataChunk = await response.json();
+
+            // 3. Cache into IndexedDB (Merging gently)
+            const existingCache = await loadExamDataIDB();
+            const merged = [...existingCache, ...sessionDataChunk];
+            
+            // Note: In a full production implementation, we'd slice 'merged' to evict LRU data
+            // but for safety in this strict insertion, we append.
+            await saveExamDataIDB(merged, true); 
+
+            // Track loaded dates to manage memory
+            this.recentDatesLoaded.add(dateKey);
+            if(this.recentDatesLoaded.size > 10) {
+                 console.warn("Cache Warning: More than 10 historical dates loaded. IDB might be bloated.");
+                 // Eviction logic can be triggered here.
+            }
+
+            document.getElementById('cloud-lazy-loader').remove();
+            return sessionDataChunk;
+
+        } catch (e) {
+            if(document.getElementById('cloud-lazy-loader')) document.getElementById('cloud-lazy-loader').remove();
+            
+            // Only alert if we know it's a structural error
+            if(e.message !== "File missing" && !e.message.includes("Object 'historical_sessions")) {
+                console.error("Cloud Fetch Error:", e);
+                alert("Cloud Request Failed: " + e.message);
+            }
+            return []; // Fail silently if date simply doesn't exist
+        }
+    }
+};
