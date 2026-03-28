@@ -4310,16 +4310,32 @@ if (toggleButton && sidebar) {
                 const localMatch = allStudentData.some(s => s.Date === selectedDate);
 
                 if (!localMatch && window.ExamCloudCache) {
-                    // Not in local cache — try lazy-fetching from cloud (Cloud users only)
-                    // Basic users will get empty array and show "No exams found"
                     const fetched = await window.ExamCloudCache.fetchHistoricalData(selectedDate);
                     if (fetched && fetched.length > 0) {
-                        // Merge into the in-memory working set for this session
                         allStudentData = [...allStudentData, ...fetched];
                     }
                 }
 
+                // Show historical context notice if a context package was loaded for this date
+                const histCtx = window.historicalContextCache && window.historicalContextCache[selectedDate];
+                const existingNotice = document.getElementById('historical-context-notice');
+                if (existingNotice) existingNotice.remove();
+
+                if (histCtx && (Object.keys(histCtx.roomAllotment || {}).length > 0 || Object.keys(histCtx.invigilatorMapping || {}).length > 0)) {
+                    const notice = document.createElement('div');
+                    notice.id = 'historical-context-notice';
+                    notice.className = 'mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 font-medium';
+                    const rCount = Object.keys(histCtx.roomAllotment || {}).length;
+                    const iCount = Object.keys(histCtx.invigilatorMapping || {}).length;
+                    const sCount = Object.keys(histCtx.scribeAllotment || {}).length;
+                    notice.innerHTML = `☁️ <strong>Historical context loaded for ${selectedDate}</strong> — 
+                        Rooms: ${rCount} sessions, Invigilators: ${iCount} sessions, Scribes: ${sCount} sessions. 
+                        <em>(This data is read-only and does not affect your current session.)</em>`;
+                    specificDateGrid.parentElement.insertBefore(notice, specificDateGrid);
+                }
+
                 updateSpecificDateGrid(selectedDate, specificDateGrid);
+
             };
 
         }
