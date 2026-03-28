@@ -479,3 +479,74 @@ window.ExamCloudCache = {
         }
     }
 };
+// ==========================================
+// 🚀 HISTORICAL DATA MIGRATION LOGIC
+// ==========================================
+window.startHistoricalMigration = async function() {
+    const fileInput = document.getElementById('historical-json-upload');
+    if (!fileInput.files.length) {
+        alert("Please select a JSON file first.");
+        return;
+    }
+
+    if (!currentCollegeId) {
+        alert("System not fully initialized. Please ensure you are logged in.");
+        return;
+    }
+
+    const { storage, ref, uploadString } = window.firebase;
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async function(e) {
+        try {
+            const fullData = JSON.parse(e.target.result);
+            if (!Array.isArray(fullData)) {
+                alert("Invalid JSON format. Expected an array of student records.");
+                return;
+            }
+
+            // 1. Group records by Date
+            const groupedByDate = {};
+            fullData.forEach(student => {
+                const d = student.Date ? student.Date.trim() : "Unknown_Date";
+                if (!groupedByDate[d]) groupedByDate[d] = [];
+                groupedByDate[d].push(student);
+            });
+
+            const uniqueDates = Object.keys(groupedByDate);
+            if (!confirm(`Found ${uniqueDates.length} unique dates in your data. Ready to upload them in chunks to Firebase Storage?`)) return;
+
+            // 2. Upload Chunks loop
+            let successCount = 0;
+            const btn = document.querySelector('button[onclick="window.startHistoricalMigration()"]');
+            const originalText = btn.innerHTML;
+
+            for (let i = 0; i < uniqueDates.length; i++) {
+                const dateKey = uniqueDates[i];
+                if (dateKey === "Unknown_Date") continue; // Skip bad data
+
+                btn.innerHTML = `Uploading: ${i + 1} / ${uniqueDates.length}...`;
+                
+                // Format the chunk
+                const chunkData = JSON.stringify(groupedByDate[dateKey]);
+                
+                // Path: historical_sessions/COLLEGE_ID/DD.MM.YYYY.json
+                const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
+                
+                // Upload text content directly to Storage
+                await uploadString(fileRef, chunkData, 'raw', { contentType: 'application/json' });
+                successCount++;
+            }
+
+            btn.innerHTML = originalText;
+            alert(`✅ Migration Complete! Successfully uploaded ${successCount} date chunks to Firebase Storage.`);
+            
+        } catch (err) {
+            console.error("Migration Error:", err);
+            alert("Migration Failed: " + err.message);
+        }
+    };
+
+    reader.readAsText(file);
+};
