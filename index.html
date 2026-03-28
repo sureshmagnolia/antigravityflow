@@ -2867,8 +2867,8 @@
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <h4 class="font-bold text-gray-800 text-base mb-2">Restore Data</h4>
                         <p class="text-xs text-gray-500 mb-4 h-10">Upload your previously saved JSON file to recover your work on a new machine.</p>
-                        <!-- NEW: HISTORICAL CLOUD UPLOAD BUTTON -->
-<div class="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+<!-- NEW: HISTORICAL CLOUD UPLOAD BUTTON (Visible ONLY to Logged-in Cloud Users) -->
+<div id="cloud-migration-wrapper" class="hidden mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
     <h4 class="text-xs font-bold text-purple-800 uppercase mb-2">Cloud History Migration</h4>
     <p class="text-[10px] text-purple-600 mb-2">Split and upload your massive historical data to Firebase Cloud Storage. Do this once.</p>
     
@@ -2878,6 +2878,7 @@
         Upload to Cloud Storage
     </button>
 </div>
+
 
                         <div class="bg-indigo-50 px-3 py-2 rounded text-xs font-mono text-center text-indigo-600 border border-indigo-200">
                             Action: Upload JSON
