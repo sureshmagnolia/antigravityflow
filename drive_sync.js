@@ -509,22 +509,27 @@ window.ExamCloudCache = {
             const response = await fetch(url);
             
             if (!response.ok) throw new Error("File missing");
-            const sessionDataChunk = await response.json();
+            const datePackage = await response.json();
 
-            // Cache into IndexedDB for subsequent rapid clicks
+            // Handle both old format (plain array) and new format (object with students key)
+            const students = Array.isArray(datePackage) ? datePackage : (datePackage.students || []);
+
+            // Merge only the student records into IDB (allotments stay in memory only)
             const existingCache = await loadExamDataIDB();
-            const merged = [...existingCache, ...sessionDataChunk];
-            
-            await saveExamDataIDB(merged, true); 
+            const getKey = r => `${r.Date||''}|${r.Time||''}|${r['Register Number']||''}`.toUpperCase();
+            const existingKeys = new Set(existingCache.map(getKey));
+            const newOnly = students.filter(r => !existingKeys.has(getKey(r)));
+            await saveExamDataIDB([...existingCache, ...newOnly], true);
 
-            // Track loaded dates to manage memory limits
+            // Store the full historical context in memory (NOT in localStorage)
+            // This lets the UI read allotments for this date without touching current data
+            if (!window.historicalContextCache) window.historicalContextCache = {};
+            window.historicalContextCache[cleanDate] = Array.isArray(datePackage) ? {} : datePackage;
+
             this.recentDatesLoaded.add(cleanDate);
-            if(this.recentDatesLoaded.size > 10) {
-                 console.warn("☁️ Cache Warning: More than 10 historical dates loaded for Cloud User.");
-            }
-
             document.getElementById('cloud-lazy-loader').remove();
-            return sessionDataChunk;
+            return students;
+
 
         } catch (e) {
             if(document.getElementById('cloud-lazy-loader')) document.getElementById('cloud-lazy-loader').remove();
@@ -561,21 +566,43 @@ window.startHistoricalMigration = async function() {
     const file = fileInput.files[0];
     const reader = new FileReader();
 
-    reader.onload = async function(e) {
+        reader.onload = async function(e) {
         try {
-            const fullData = JSON.parse(e.target.result);
-            if (!Array.isArray(fullData)) {
-                alert("Invalid JSON format. Expected an array of student records.");
+            const parsed = JSON.parse(e.target.result);
+            
+            // Support both formats:
+            // Format A: Array (old-style examBaseData only)
+            // Format B: Object (full Drive backup with DATA_KEYS)
+            const isFullBackup = !Array.isArray(parsed) && typeof parsed === 'object';
+            const studentArray = isFullBackup ? (parsed.examBaseData || []) : parsed;
+            
+            if (!Array.isArray(studentArray) || studentArray.length === 0) {
+                alert("Invalid JSON. No valid student records found.");
                 return;
             }
 
-            // 1. Group records by Date (DD.MM.YYYY)
+            // Extract session-keyed data maps from full backup (empty if Format A)
+            const rawRoomAllotment    = isFullBackup ? (typeof parsed.examRoomAllotment === 'string' ? JSON.parse(parsed.examRoomAllotment) : (parsed.examRoomAllotment || {})) : {};
+            const rawScribeAllotment  = isFullBackup ? (typeof parsed.examScribeAllotment === 'string' ? JSON.parse(parsed.examScribeAllotment) : (parsed.examScribeAllotment || {})) : {};
+            const rawInvigMapping     = isFullBackup ? (typeof parsed.examInvigilatorMapping === 'string' ? JSON.parse(parsed.examInvigilatorMapping) : (parsed.examInvigilatorMapping || {})) : {};
+            const rawQPCodes          = isFullBackup ? (typeof parsed.examQPCodes === 'string' ? JSON.parse(parsed.examQPCodes) : (parsed.examQPCodes || {})) : {};
+            const rawAbsentees        = isFullBackup ? (typeof parsed.examAbsenteeList === 'string' ? JSON.parse(parsed.examAbsenteeList) : (parsed.examAbsenteeList || {})) : {};
+
+            // Helper: filter an object by date prefix
+            const filterByDate = (obj, dateKey) => {
+                const result = {};
+                Object.keys(obj).forEach(k => { if (k.startsWith(dateKey)) result[k] = obj[k]; });
+                return result;
+            };
+
+            // 1. Group student records by Date (DD.MM.YYYY)
             const groupedByDate = {};
-            fullData.forEach(student => {
+            studentArray.forEach(student => {
                 const d = student.Date ? student.Date.trim() : "Unknown_Date";
                 if (!groupedByDate[d]) groupedByDate[d] = [];
                 groupedByDate[d].push(student);
             });
+
 
             const uniqueDates = Object.keys(groupedByDate);
             if (!confirm(`Found ${uniqueDates.length} unique dates in your data.\n\nReady to upload to Firebase Storage?`)) return;
@@ -596,7 +623,17 @@ window.startHistoricalMigration = async function() {
                 btn.innerHTML = `Uploading: ${i + 1} / ${uniqueDates.length}...`;
                 
                 // Format the chunk
-                const chunkData = JSON.stringify(groupedByDate[dateKey]);
+                // Build complete date context package
+                const datePackage = {
+                    students:          groupedByDate[dateKey],
+                    roomAllotment:     filterByDate(rawRoomAllotment, dateKey),
+                    scribeAllotment:   filterByDate(rawScribeAllotment, dateKey),
+                    invigilatorMapping: filterByDate(rawInvigMapping, dateKey),
+                    qpCodes:           filterByDate(rawQPCodes, dateKey),
+                    absentees:         filterByDate(rawAbsentees, dateKey)
+                };
+                const chunkData = JSON.stringify(datePackage);
+
                 
                 // Path: historical_sessions/COLLEGE_ID/DD.MM.YYYY.json
                 const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
