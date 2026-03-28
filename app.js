@@ -12256,14 +12256,14 @@ function showStudentDetailsModal(regNo, sessionKey) {
     if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
         const roomName = allocatedStudent['Room No'];
         const roomInfo = currentRoomConfig[roomName] || {};
-                // --- Look up the Serial Number and display ONLY the number ---
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const sessionAllotment = allAllotments[sessionKey] || {};
-        const roomIndex = Object.keys(sessionAllotment).indexOf(roomName);
+
+                // --- NEW: Use Built-in Serial Map for Exact Allotment Order ---
+        const serialMap = getRoomSerialMap(sessionKey);
+        const serialNum = serialMap[roomName] ? `#${serialMap[roomName]}` : "N/A";
         
-        // This makes the result display exactly as "#1"
-        document.getElementById('search-result-room').textContent = roomIndex !== -1 ? `#${roomIndex + 1}` : "N/A";
-        // -------------------------------------------------------------
+        document.getElementById('search-result-room').textContent = serialNum;
+        // --------------------------------------------------------------
+
 
         document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
         document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
@@ -12280,13 +12280,13 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const scribeBlock = document.getElementById('search-result-scribe-block');
     if (scribeRoom) {
         const scribeInfo = currentRoomConfig[scribeRoom] || {};
-                // --- Look up the Scribe Serial Number ---
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const sessionAllotment = allAllotments[sessionKey] || {};
-        const scribeRoomIdx = Object.keys(sessionAllotment).indexOf(scribeRoom);
+        // --- NEW: Use Built-in Serial Map for Scribe Result ---
+        const serialMap = getRoomSerialMap(sessionKey);
+        const scribeSerial = serialMap[scribeRoom] ? `#${serialMap[scribeRoom]}` : "N/A";
         
-        document.getElementById('search-result-scribe-room').textContent = scribeRoomIdx !== -1 ? `#${scribeRoomIdx + 1}` : "N/A";
-        // ----------------------------------------
+        document.getElementById('search-result-scribe-room').textContent = scribeSerial;
+        // ------------------------------------------------------
+
 
         document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
         
