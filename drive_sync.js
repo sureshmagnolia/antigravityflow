@@ -389,13 +389,23 @@ window.executeRestore = async function(fileId) {
                     // Replace strictly
                     await saveExamDataIDB(val);
                 }
-            } else {
-
-
-    
-                if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
-                else localStorage.setItem(key, val);
+                        } else {
+                // In MERGE mode: preserve all existing local config keys.
+                // Only write this key if user chose REPLACE, OR if the key doesn't exist locally yet.
+                if (!isMerge) {
+                    // REPLACE mode: overwrite everything
+                    if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
+                    else localStorage.setItem(key, val);
+                } else {
+                    // MERGE mode: only write if key is completely absent locally
+                    // (never overwrite existing Scribe List, Room Allotment, Invigilator data etc.)
+                    if (!localStorage.getItem(key)) {
+                        if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
+                        else localStorage.setItem(key, val);
+                    }
+                }
             }
+
         }
     }
 
