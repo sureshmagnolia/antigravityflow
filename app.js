@@ -12256,7 +12256,15 @@ function showStudentDetailsModal(regNo, sessionKey) {
     if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
         const roomName = allocatedStudent['Room No'];
         const roomInfo = currentRoomConfig[roomName] || {};
-        document.getElementById('search-result-room').textContent = roomName;
+                // --- Look up the Serial Number and display ONLY the number ---
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[sessionKey] || {};
+        const roomIndex = Object.keys(sessionAllotment).indexOf(roomName);
+        
+        // This makes the result display exactly as "#1"
+        document.getElementById('search-result-room').textContent = roomIndex !== -1 ? `#${roomIndex + 1}` : "N/A";
+        // -------------------------------------------------------------
+
         document.getElementById('search-result-seat').textContent = allocatedStudent.seatNumber;
         document.getElementById('search-result-room-location').textContent = roomInfo.location || "N/A";
         
