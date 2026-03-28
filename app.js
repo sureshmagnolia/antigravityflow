@@ -9510,6 +9510,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         container.innerHTML = '';
         container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4";
         container.classList.remove('hidden');
+                // Show the mixing strategy panel once a session is loaded
+        const mixPanel = document.getElementById('mixing-strategy-panel');
+        if (mixPanel) mixPanel.classList.remove('hidden');
+
 
         // 1. Calculate Stats
         const streamStats = {};
@@ -9834,6 +9838,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         </div>
     `;
         roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
+        // Show selected strategy as read-only info in modal
+        const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+        const strategyLabels = { 'none': 'No Mix', 'ratio_1_1': '1:1 Mix', 'ratio_2_1': '2:1 Mix' };
+        const strategyInfoHtml = `<div class="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 font-bold">Active Strategy: ${strategyLabels[activeStrategy]}</div>`;
+        roomSelectionList.insertAdjacentHTML('beforeend', strategyInfoHtml);
+
 
         // 2. List Rooms (Updated Logic)
 
@@ -9893,9 +9903,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (!isUnavailable) {
                 roomOption.onclick = () => {
                     const selectedStream = document.getElementById('allotment-stream-select').value;
-                    selectRoomForAllotment(roomName, room.capacity, selectedStream);
+                    // Read the strategy from the persistent radio buttons on the main page
+                    const selectedStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+                    selectRoomForAllotment(roomName, room.capacity, selectedStream, selectedStrategy);
                 };
             }
+
+
 
             roomSelectionList.appendChild(roomOption);
         });
@@ -9904,7 +9918,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
 
     // Select a room and allot students (Auto-Save & Sync enabled)
-    async function selectRoomForAllotment(roomName, capacity, targetStream) {
+       async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none') {
         const [date, time] = currentSessionKey.split(' | ');
 
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
@@ -9945,12 +9959,50 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        // SMART ALLOTMENT: If remaining students are <= 33, put them ALL in this room
-        let limit = capacity;
-        if (candidates.length <= 33) {
-            limit = candidates.length;
+        // PAPER MIXING ENGINE
+        // NOTE: Streams never mix. 'candidates' is already filtered to targetStream only.
+        // Mixing happens WITHIN the stream, across different Courses (Papers).
+        let limit = parseInt(capacity) || 30;
+        let newStudents = [];
+
+        if ((strategy === 'ratio_1_1' || strategy === 'ratio_2_1') ) {
+            // Group remaining candidates by Course (Paper), within this one stream
+            const paperGroups = {};
+            candidates.forEach(s => {
+                const paper = s.Course;
+                if (!paperGroups[paper]) paperGroups[paper] = [];
+                paperGroups[paper].push(s);
+            });
+            const availablePapers = Object.keys(paperGroups);
+
+            if (availablePapers.length >= 2) {
+                // Two or more papers exist: apply the ratio
+                const ratio = (strategy === 'ratio_1_1') ? 0.5 : (2 / 3);
+                let target1 = Math.round(limit * ratio);
+                let target2 = limit - target1;
+
+                const sliceA = paperGroups[availablePapers[0]].slice(0, target1);
+                const sliceB = paperGroups[availablePapers[1]].slice(0, target2);
+                newStudents = [...sliceA, ...sliceB];
+
+                // Fill any remaining gap if one paper didn't have enough students
+                if (newStudents.length < limit) {
+                    const pickedIds = new Set(newStudents.map(s => s['Register Number']));
+                    for (const s of candidates) {
+                        if (newStudents.length >= limit) break;
+                        if (!pickedIds.has(s['Register Number'])) newStudents.push(s);
+                    }
+                }
+            } else {
+                // Only one paper left — cannot mix, fall back to standard
+                newStudents = candidates.slice(0, Math.min(limit, candidates.length));
             }
-        const newStudents = candidates.slice(0, limit);
+        } else {
+            // Standard (No Mix): fill with one paper at a time, as before
+            if (candidates.length <= 33) limit = candidates.length;
+            newStudents = candidates.slice(0, limit);
+        }
+
 
         if (newStudents.length === 0) {
             alert(`No unallotted students found for stream: ${targetStream}`);
