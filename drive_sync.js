@@ -496,14 +496,15 @@ window.ExamCloudCache = {
 // 🚀 HISTORICAL DATA MIGRATION LOGIC
 // ==========================================
 window.startHistoricalMigration = async function() {
-    const fileInput = document.getElementById('historical-json-upload');
-    if (!fileInput.files.length) {
-        alert("Please select a JSON file first.");
+    // Only logged-in users can push to cloud
+    if (!window.currentCollegeId) {
+        alert("Basic Users operate exclusively offline. Cloud Migration requires a Firebase Login.");
         return;
     }
 
-    if (!currentCollegeId) {
-        alert("System not fully initialized. Please ensure you are logged in.");
+    const fileInput = document.getElementById('historical-json-upload');
+    if (!fileInput.files.length) {
+        alert("Please select a JSON file first.");
         return;
     }
 
@@ -519,7 +520,7 @@ window.startHistoricalMigration = async function() {
                 return;
             }
 
-            // 1. Group records by Date
+            // 1. Group records by Date (DD.MM.YYYY)
             const groupedByDate = {};
             fullData.forEach(student => {
                 const d = student.Date ? student.Date.trim() : "Unknown_Date";
@@ -563,3 +564,4 @@ window.startHistoricalMigration = async function() {
 
     reader.readAsText(file);
 };
+
