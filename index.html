@@ -1917,10 +1917,28 @@
                             </select>
                         </div>
 
-                        <div class="border border-gray-200 rounded-lg p-4">
+                                                <div class="border border-gray-200 rounded-lg p-4">
                             <h2 class="text-xl font-bold text-gray-800 mb-4 pb-2 border-b border-gray-300">
                                 Regular Room Allotment (Manual)
                             </h2>
+                            <div id="mixing-strategy-panel" class="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3 hidden">
+                                <p class="text-xs font-bold text-amber-700 uppercase mb-2">Paper Mixing Strategy (for next room added):</p>
+                                <div class="flex flex-col gap-2 text-sm text-gray-700">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="mixing-strategy" id="mix-none" value="none" checked class="accent-indigo-600">
+                                        <span><strong>No Mix</strong> — Fill room with one paper only (default)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="mixing-strategy" id="mix-1-1" value="ratio_1_1" class="accent-indigo-600">
+                                        <span><strong>1:1 Mix</strong> — Equal split of 2 papers (Paper A : Paper B = 50% : 50%)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" name="mixing-strategy" id="mix-2-1" value="ratio_2_1" class="accent-indigo-600">
+                                        <span><strong>2:1 Mix</strong> — Two-thirds from Paper A, one-third from Paper B</span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div id="allotment-student-count-section" class="mb-6 hidden">
                                 <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
                                     <div class="flex justify-between items-center">
