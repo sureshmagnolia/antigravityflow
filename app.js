@@ -12280,7 +12280,14 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const scribeBlock = document.getElementById('search-result-scribe-block');
     if (scribeRoom) {
         const scribeInfo = currentRoomConfig[scribeRoom] || {};
-        document.getElementById('search-result-scribe-room').textContent = scribeRoom;
+                // --- Look up the Scribe Serial Number ---
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[sessionKey] || {};
+        const scribeRoomIdx = Object.keys(sessionAllotment).indexOf(scribeRoom);
+        
+        document.getElementById('search-result-scribe-room').textContent = scribeRoomIdx !== -1 ? `#${scribeRoomIdx + 1}` : "N/A";
+        // ----------------------------------------
+
         document.getElementById('search-result-scribe-room-location').textContent = scribeInfo.location || "N/A";
         
         if(scribeBlock) scribeBlock.classList.remove('hidden');
