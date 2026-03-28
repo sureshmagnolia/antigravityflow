@@ -2867,19 +2867,6 @@
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <h4 class="font-bold text-gray-800 text-base mb-2">Restore Data</h4>
                         <p class="text-xs text-gray-500 mb-4 h-10">Upload your previously saved JSON file to recover your work on a new machine.</p>
-<!-- NEW: HISTORICAL CLOUD UPLOAD BUTTON (Visible ONLY to Logged-in Cloud Users) -->
-<div id="cloud-migration-wrapper" class="hidden mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-    <h4 class="text-xs font-bold text-purple-800 uppercase mb-2">Cloud History Migration</h4>
-    <p class="text-[10px] text-purple-600 mb-2">Split and upload your massive historical data to Firebase Cloud Storage. Do this once.</p>
-    
-    <input type="file" id="historical-json-upload" accept=".json" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 mb-2">
-    
-    <button onclick="window.startHistoricalMigration()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded text-xs shadow-sm transition w-full">
-        Upload to Cloud Storage
-    </button>
-</div>
-
-
                         <div class="bg-indigo-50 px-3 py-2 rounded text-xs font-mono text-center text-indigo-600 border border-indigo-200">
                             Action: Upload JSON
                         </div>
@@ -3979,6 +3966,21 @@
                             <input type="file" id="restore-file-input" accept=".json" class="hidden" />
                         </div>
                     </div>
+                                    <!-- === CLOUD HISTORY MIGRATION (Cloud Users Only) === -->
+                    <div id="cloud-migration-wrapper" class="hidden">
+                        <div class="mt-1 p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                            <h4 class="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1 flex items-center gap-1">
+                                ☁️ Cloud History Migration
+                            </h4>
+                            <p class="text-[10px] text-purple-500 mb-2 leading-tight">Upload legacy JSON to offload historical data to Firebase Storage.</p>
+                            <input type="file" id="historical-json-upload" accept=".json" class="block w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 mb-2">
+                            <button onclick="window.startHistoricalMigration()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition">
+                                Upload to Cloud
+                            </button>
+                        </div>
+                    </div>
+                    <!-- ================================================= -->
+
                 </div>
             </div>
 
