@@ -317,6 +317,14 @@ let allocUnsub = null;
 let staffUnsub = null;
 let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
+// --- MIXING ENGINE STATE (Session-Level Pre-Split) ---
+let mixingPartA = [];        // First portion of full session student list
+let mixingPartB = [];        // Second portion
+let mixingPointerA = 0;      // How many taken from Part A so far
+let mixingPointerB = 0;      // How many taken from Part B so far
+let mixingActiveStrategy = 'none'; // The strategy locked in for this session
+// -----------------------------------------------------
+
 
 document.addEventListener('DOMContentLoaded', () => {
        // --- Global localStorage Key ---
@@ -9483,6 +9491,51 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
    
+    // --- NEW: Pre-splits the session student list into Part A and Part B ---
+    // Call this whenever a new session is loaded OR strategy radio changes.
+    function precomputeSessionParts(sessionKey, strategy) {
+        mixingActiveStrategy = strategy;
+
+        if (strategy === 'none' || !sessionKey) {
+            mixingPartA = [];
+            mixingPartB = [];
+            mixingPointerA = 0;
+            mixingPointerB = 0;
+            return;
+        }
+
+        const [date, time] = sessionKey.split(' | ');
+
+        // 1. Get ALL students for this session in the original sorted order
+        //    (course-alphabetical, then register number — same as current sort)
+        const sessionStudents = allStudentData
+            .filter(s => s.Date === date && s.Time === time)
+            .sort((a, b) => {
+                if (a.Stream !== b.Stream) return a.Stream.localeCompare(b.Stream);
+                if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                const rA = (a['Register Number'] || '').toString();
+                const rB = (b['Register Number'] || '').toString();
+                return rA.localeCompare(rB);
+            });
+
+        // 2. Calculate split point based on strategy
+        const total = sessionStudents.length;
+        const splitAt = (strategy === 'ratio_2_1')
+            ? Math.round(total * (2 / 3))
+            : Math.round(total * 0.5); // ratio_1_1
+
+        // 3. Divide into two parts
+        mixingPartA = sessionStudents.slice(0, splitAt);
+        mixingPartB = sessionStudents.slice(splitAt);
+
+        // 4. Reset pointers to the beginning
+        mixingPointerA = 0;
+        mixingPointerB = 0;
+
+        console.log(`?? Session Parts Pre-computed: Part A=${mixingPartA.length}, Part B=${mixingPartB.length}`);
+    }
+    // -------------------------------------------------------------------
+
 
     // Load Room Allotment for a session
     function loadRoomAllotment(sessionKey) {
@@ -9959,49 +10012,57 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        // PAPER MIXING ENGINE
-        // NOTE: Streams never mix. 'candidates' is already filtered to targetStream only.
-        // Mixing happens WITHIN the stream, across different Courses (Papers).
+       
+        // --- MIXING ENGINE: Pre-Split Queue Strategy ---
         let limit = parseInt(capacity) || 30;
         let newStudents = [];
 
-        if ((strategy === 'ratio_1_1' || strategy === 'ratio_2_1') ) {
-            // Group remaining candidates by Course (Paper), within this one stream
-            const paperGroups = {};
-            candidates.forEach(s => {
-                const paper = s.Course;
-                if (!paperGroups[paper]) paperGroups[paper] = [];
-                paperGroups[paper].push(s);
-            });
-            const availablePapers = Object.keys(paperGroups);
+        if ((mixingActiveStrategy === 'ratio_1_1' || mixingActiveStrategy === 'ratio_2_1') &&
+             mixingPartA.length > 0) {
 
-            if (availablePapers.length >= 2) {
-                // Two or more papers exist: apply the ratio
-                const ratio = (strategy === 'ratio_1_1') ? 0.5 : (2 / 3);
-                let target1 = Math.round(limit * ratio);
-                let target2 = limit - target1;
+            // Calculate how many to take from each queue for this room
+            const ratio = (mixingActiveStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
+            let takeA = Math.round(limit * ratio);
+            let takeB = limit - takeA;
 
-                const sliceA = paperGroups[availablePapers[0]].slice(0, target1);
-                const sliceB = paperGroups[availablePapers[1]].slice(0, target2);
-                newStudents = [...sliceA, ...sliceB];
+            // Take from the pre-split queues using pointers (stream-filtered)
+            // Stream filtering: only take students matching targetStream
+            const streamA = mixingPartA.slice(mixingPointerA)
+                .filter(s => (s.Stream || 'Regular') === targetStream)
+                .slice(0, takeA);
+            const streamB = mixingPartB.slice(mixingPointerB)
+                .filter(s => (s.Stream || 'Regular') === targetStream)
+                .slice(0, takeB);
 
-                // Fill any remaining gap if one paper didn't have enough students
-                if (newStudents.length < limit) {
-                    const pickedIds = new Set(newStudents.map(s => s['Register Number']));
-                    for (const s of candidates) {
-                        if (newStudents.length >= limit) break;
-                        if (!pickedIds.has(s['Register Number'])) newStudents.push(s);
-                    }
-                }
-            } else {
-                // Only one paper left — cannot mix, fall back to standard
-                newStudents = candidates.slice(0, Math.min(limit, candidates.length));
+            newStudents = [...streamA, ...streamB];
+
+            // Advance the global pointers by how many raw items we consumed
+            // (scan forward past already-allotted or wrong-stream items)
+            let consumedA = 0, consumedB = 0;
+            for (let i = mixingPointerA; i < mixingPartA.length && consumedA < streamA.length; i++) {
+                if ((mixingPartA[i].Stream || 'Regular') === targetStream) consumedA++;
+                mixingPointerA = i + 1;
             }
+            for (let i = mixingPointerB; i < mixingPartB.length && consumedB < streamB.length; i++) {
+                if ((mixingPartB[i].Stream || 'Regular') === targetStream) consumedB++;
+                mixingPointerB = i + 1;
+            }
+
+            // Safety: if queues exhausted, fill remainder from unallotted candidates
+            if (newStudents.length < limit) {
+                const pickedIds = new Set(newStudents.map(s => s['Register Number']));
+                for (const s of candidates) {
+                    if (newStudents.length >= limit) break;
+                    if (!pickedIds.has(s['Register Number'])) newStudents.push(s);
+                }
+            }
+
         } else {
-            // Standard (No Mix): fill with one paper at a time, as before
+            // Standard (No Mix): original behaviour preserved exactly
             if (candidates.length <= 33) limit = candidates.length;
             newStudents = candidates.slice(0, limit);
         }
+        // -----------------------------------------------
 
 
         if (newStudents.length === 0) {
@@ -10042,6 +10103,10 @@ window.real_populate_qp_code_session_dropdown = function () {
             // 1. Reset Dirty Flag (New session loaded fresh)
             hasUnsavedAllotment = false;
             hasUnsavedScribes = false;   // ADD THIS
+            // 2. Pre-compute mixing parts for the new session
+            const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+            precomputeSessionParts(sessionKey, activeStrategy);
+
 
             populateAbsenteeQpFilter(sessionKey);
 
@@ -10063,6 +10128,14 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     addRoomAllotmentButton.addEventListener('click', () => {
         showRoomSelectionModal();
+    });
+    // Re-compute session parts whenever the mixing strategy changes
+    document.querySelectorAll('input[name="mixing-strategy"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            if (currentSessionKey) {
+                precomputeSessionParts(currentSessionKey, radio.value);
+            }
+        });
     });
 
     closeRoomModal.addEventListener('click', () => {
