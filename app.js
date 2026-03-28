@@ -15238,15 +15238,21 @@ if (btnSessionReschedule) {
                     const oldIdx = slot.assigned.indexOf(oldStaff.email);
                     const newIdx = slot.assigned.indexOf(newStaff.email);
 
-                    // If New Staff is NOT in the pool (Global Replace used)
+                // If New Staff is NOT in the pool (Global Replace used)
                     if (newIdx === -1) {
-                        // Swap them exactly to keep the total posted count identical
+                        // Add new staff to the pool first
+                        slot.assigned.push(newStaff.email); 
+                        
+                        // Ask the Admin what to do with the old staff
                         if (oldIdx > -1) {
-                            slot.assigned[oldIdx] = newStaff.email; 
-                        } else {
-                            slot.assigned.push(newStaff.email); 
+                             if (confirm(`Do you want to completely REMOVE ${oldStaff.name} from this session's duty list?\n\n• Click OK to remove them completely.\n• Click Cancel to keep them as a Reserve.`)) {
+                                 // recalculate index because we pushed to array
+                                 const currentOldIdx = slot.assigned.indexOf(oldStaff.email);
+                                 if (currentOldIdx > -1) slot.assigned.splice(currentOldIdx, 1);
+                             }
                         }
                     } 
+
                     // If New Staff IS in the pool (Regular Change used):
                     // We DO NOT splice out the old staff, so they properly become a Reserve!
 
@@ -15272,7 +15278,17 @@ if (btnSessionReschedule) {
         
 
         
+    // FIX: Prevent Duplicate Room Assignments
+        if (currentInvigMapping) {
+            // Find if this specific name is already assigned to a different room
+            const existingRoom = Object.keys(currentInvigMapping).find(k => currentInvigMapping[k] === name);
+            if (existingRoom && existingRoom !== room) {
+                // Remove them from the old room so they "move" instead of duplicate
+                delete currentInvigMapping[existingRoom];
+            }
+        }
         currentInvigMapping[room] = name;
+
 
         // Save Global
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
