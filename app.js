@@ -411,14 +411,19 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
             const tx = db.transaction(IDB_STORE, 'readwrite');
             const store = tx.objectStore(IDB_STORE);
             store.put(dataArray, IDB_KEY);
-            tx.oncomplete = () => {
+                      tx.oncomplete = () => {
                 db.close();
-                // --- ADDED: Auto-sync to Cloud unless skipped ---
+                // --- Auto-sync to Cloud (if online user) ---
                 if (!skipCloudSync && typeof syncDataToCloud === 'function') {
                     syncDataToCloud('baseData');
                 }
+                // --- NEW: Trigger Basic User Pruning silently in background ---
+                if (!skipCloudSync) {
+                    setTimeout(pruneOldDataForBasicUsers, 1500);
+                }
                 resolve();
             };
+
             tx.onerror = e => {
                 db.close();
                 reject(e.target.error);
@@ -447,6 +452,61 @@ function loadExamDataIDB() {
             }
         });
     });
+}
+// --- NEW: BASIC USER AUTO-PRUNER ---
+async function pruneOldDataForBasicUsers() {
+    // 1. Only run for Basic (Offline) Users
+    if (window.currentCollegeId) return;
+    
+    try {
+        const dbData = await loadExamDataIDB() || [];
+        if (dbData.length === 0) return;
+
+        // 2. Count Unique Dates
+        const uniqueDates = [...new Set(dbData.map(s => s.Date).filter(Boolean))];
+        const MAX_DAYS_TO_KEEP = 60; // Keep roughly 1 full semester of history
+        
+        if (uniqueDates.length <= MAX_DAYS_TO_KEEP) return;
+
+        // 3. Sort chronologically (DD.MM.YYYY)
+        uniqueDates.sort((a, b) => {
+            const [d1, m1, y1] = a.split('.');
+            const [d2, m2, y2] = b.split('.');
+            return new Date(y1, m1 - 1, d1) - new Date(y2, m2 - 1, d2);
+        });
+
+        // 4. Target the oldest dates for deletion
+        const datesToDelete = new Set(uniqueDates.slice(0, uniqueDates.length - MAX_DAYS_TO_KEEP));
+        console.log(`🧹 Basic User Auto-Pruning: Deleting ${datesToDelete.size} oldest exam days to save quota.`);
+
+        // 5. Prune IndexedDB (Students)
+        const keptStudents = dbData.filter(s => !datesToDelete.has(s.Date));
+        await saveExamDataIDB(keptStudents, true); // true = skip cloud sync loop
+
+        // 6. Prune LocalStorage Allotments (Frees the 5MB Quota)
+        const lsKeys = ['examRoomAllotment', 'examScribeAllotment', 'examInvigilatorMapping', 'examAbsenteeList', 'examQPCodes'];
+        lsKeys.forEach(key => {
+            const lsStr = localStorage.getItem(key);
+            if (!lsStr) return;
+            try {
+                const parsed = JSON.parse(lsStr);
+                let isModified = false;
+                
+                Object.keys(parsed).forEach(sessionKey => {
+                    const datePart = sessionKey.split('|')[0].trim();
+                    if (datesToDelete.has(datePart)) {
+                        delete parsed[sessionKey];
+                        isModified = true;
+                    }
+                });
+
+                if (isModified) localStorage.setItem(key, JSON.stringify(parsed));
+            } catch(e) { }
+        });
+
+    } catch (e) {
+        console.error("Auto-prune error:", e);
+    }
 }
 
 // ==========================================
