@@ -3730,12 +3730,12 @@ if (toggleButton && sidebar) {
 // --- CORE: Get Exam Name (Simplified) ---
     // Previously used dates to guess name. Now strictly relies on Data Tagging.
     // This is kept for backward compatibility to prevent crashes.
-/** ✅ FIXED: Dynamically extract Exam Name from current session data **/
+/** ✅ FIXED: Corrected variable name to allStudentData **/
 function getExamName(date, time, stream) {
-    if (!allStudents || allStudents.length === 0) return "";
+    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
     
     // 1. Filter students for this specific session
-    const sessionStudents = allStudents.filter(s => 
+    const sessionStudents = allStudentData.filter(s => 
         s.Date === date && 
         s.Time === time && 
         (s.Stream || "Regular") === stream
@@ -3744,11 +3744,10 @@ function getExamName(date, time, stream) {
     if (sessionStudents.length === 0) return "";
 
     // 2. Extract the Exam Name tagged during upload
-    // We take the most frequent one to handle multi-session edge cases
     const names = sessionStudents.map(s => s.examName).filter(Boolean);
     if (names.length === 0) return "";
     
-    // Return the first one (most common for the session)
+    // Return the first valid one found for the session
     return names[0];
 }
 
