@@ -7204,16 +7204,63 @@ window.printDutyNotification = function (key) {
                 .btn { padding: 10px 20px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; margin: 0 5px; }
                 .btn-download { background-color: #2563eb; color: white; }
                 p { color: #555; font-size: 14px; margin-top: 10px;}
+                
+                /* New Preview Styles */
+                .preview-page { 
+                    width: 210mm; min-height: 297mm; padding: 15mm; 
+                    margin: 20px auto; background: white; 
+                    box-shadow: 0 0 10px rgba(0,0,0,0.1); text-align: left; 
+                    color: #000; position: relative; font-size: 11pt;
+                }
+                .preview-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 5px; margin-bottom: 15px; position: relative; }
+                .preview-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 9pt; }
+                .preview-table th, .preview-table td { border: 1px solid #000; padding: 4px; text-align: left; }
+                .preview-table th { background: #f0f0f0; }
+                .justified { text-align: justify; line-height: 1.5; margin: 15px 0; }
+                @media print { #controls { display: none; } body { background: white; padding: 0; margin: 0; } .preview-page { box-shadow: none; margin: 0; width: 100%; border: 0; } }
             </style>
+
         </head>
-        <body>
+                <body>
             <div id="controls">
                 <h2>Native Vector PDF Ready</h2>
                 <button class="btn btn-download" onclick="downloadVectorPDF()">⬇️ Instantly Download PDF</button>
                 <p>Click the button to generate a crisp, selectable, single-page native PDF.</p>
             </div>
-            
+
+            <div id="preview-page" class="preview-page">
+                <div class="preview-header">
+                    <img src="CollegeLogo.png" style="width: 50px; display: block; margin: 0 auto 5px;">
+                    <h1 style="font-size: 15pt; margin: 0;">GOVERNMENT VICTORIA COLLEGE, PALAKKAD</h1>
+                    <p style="font-size: 8pt; margin: 2px 0;">Kerala, India, PIN 678001 | Affiliation: University of Calicut</p>
+                    <p style="font-size: 8pt; margin: 2px 0;">Phone: 0491 2576773 | Email: victoriapkd@gmail.com</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10pt; margin-bottom: 15px;">
+                    <div>Chief Superintendent</div>
+                    <div style="text-align: right;">No: EXAM/${dayDiff}${sessionCode}<br>Date: ${new Date().toLocaleDateString('en-GB')}</div>
+                </div>
+
+                <div class="justified">
+                    The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. 
+                </div>
+
+                <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 8px; text-align: center; font-weight: bold; font-size: 9pt;">
+                    EXAM: ${dateStr}   |   SESSION: ${sessionCode}   |   REPORT BY: ${reportTime}
+                </div>
+
+                <table class="preview-table">
+                    <thead>
+                        <tr><th>No</th><th>Name & Dept</th><th>Mobile</th></tr>
+                    </thead>
+                    <tbody id="preview-table-body"></tbody>
+                </table>
+
+                <div style="margin-top: 40px; text-align: right; font-weight: bold;">Chief Superintendent</div>
+            </div>
+
             <script>
+
                 function downloadVectorPDF() {
                     const btn = document.querySelector('.btn-download');
                     btn.textContent = "Generating Vector PDF...";
@@ -7313,7 +7360,21 @@ window.printDutyNotification = function (key) {
                         setTimeout(() => { btn.textContent = "⬇️ Instantly Download PDF"; btn.disabled = false; }, 2000);
                     }, 300);
                 }
+
+                // Populate HTML table on load
+                (function render() {
+                    const staff = ${staffListJson};
+                    const tbody = document.getElementById('preview-table-body');
+                    staff.forEach(s => {
+                        tbody.innerHTML += `<tr>
+                            <td style="text-align: center;">\${s.no}</td>
+                            <td><b>\${s.name}</b><br><small>\${s.dept}</small></td>
+                            <td style="text-align: center;">\${s.phone}</td>
+                        </tr>`;
+                    });
+                })();
             <\/script>
+
         </body>
         </html>
     `);
