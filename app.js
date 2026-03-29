@@ -15420,7 +15420,8 @@ if (btnSessionReschedule) {
     
 
     // 2. Handle Swap Interaction
-    window.handleSwapClick = function (roomName) {
+   window.handleSwapClick = async function (roomName) {
+
         if (swapSourceRoom === roomName) {
             // Clicked same room -> Cancel Swap
             swapSourceRoom = null;
@@ -15714,7 +15715,8 @@ if (btnSessionReschedule) {
     }
 
     // 7. Unassign All Invigilators
-    window.unassignAllInvigilators = function () {
+    window.unassignAllInvigilators = async function () {
+
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
