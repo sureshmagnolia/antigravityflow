@@ -1358,7 +1358,7 @@ function renderStaffTable() {
 function renderStaffRankList(myEmail) {
     // 1. Calculate and Sort
     const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
-    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+    slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
     const targetStamp = new Date(slotTargetDateStr).getTime();
 
     const rankedStaff = staffData
