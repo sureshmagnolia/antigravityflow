@@ -7227,19 +7227,21 @@ window.printDutyNotification = function (key) {
                 // Add College Logo (Relative to your root)
                         try {
                             // Positioning: x=12, y=8, w=15, h=15 (Adjust if needed)
-                            doc.addImage("CollegeLogo.png", "PNG", 12, 8, 15, 15);
+                            doc.addImage("CollegeLogo.png", "PNG", 97.5, 5, 15, 15);
                         } catch (e) {
                             console.warn("Logo failed to load:", e);
                         }
 
                         doc.setFont("times", "bold");
                         doc.setFontSize(14);
-                        doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 12, { align: "center" });
-                        doc.setFontSize(8);
-                        doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 16, { align: "center" });
-                        doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 20, { align: "center" });
-                        doc.setLineWidth(0.3);
-                        doc.line(10, 22, 200, 22);
+    // Shifted down to accommodate the top-center logo
+    doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 25, { align: "center" });
+    doc.setFontSize(8);
+    doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 29, { align: "center" });
+    doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 33, { align: "center" });
+    doc.setLineWidth(0.3);
+    doc.line(10, 35, 200, 35); // Horizontal line moved down to y=35
+
 
                         doc.setFontSize(10);
                         doc.text("Chief Superintendent, University Examinations", 10, 27);
