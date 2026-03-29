@@ -247,7 +247,7 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
-        if (typeof syncDataToCloud === 'function') {
+        
             await syncDataToCloud('slots');
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} records older than 30 days.`);
@@ -13984,7 +13984,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
                         // Sync (THE FIX: Force sync settings & allocation)
                         // REPLACE line 8591 with:
-                        if (typeof syncDataToCloud === 'function') {
+                        
                         await syncDataToCloud('settings');
                         await syncDataToCloud('allocation'); // In case scribe list is in backup
                         await syncDataToCloud('ops');        // In case QP codes are in backup
@@ -15461,20 +15461,13 @@ if (btnSessionReschedule) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
         
-        // Sync (Added Session Sync)
+               // Sync (Added Session Sync)
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff');
             if (typeof syncSessionToCloud === 'function') {
                 await syncSessionToCloud(sessionKey);
             }
         }
-
-            
-            if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
-            }
-        }
-
 
         // Reset UI
         swapSourceRoom = null;
@@ -15483,6 +15476,7 @@ if (btnSessionReschedule) {
         // Optional Feedback
         // alert("Swapped successfully!"); 
     }
+
 
     // 4. Open Modal (Populates List)
     window.openInvigModal = function (roomName) {
