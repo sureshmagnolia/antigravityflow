@@ -15197,13 +15197,6 @@ if (btnSessionReschedule) {
         const list = document.getElementById('invigilator-list-container');
         const sessionKey = allotmentSessionSelect.value; 
 
-        // --- VISIBILITY GATE FOR BASIC USERS ---
-        if (!window.currentCollegeId) {
-            if (section) section.classList.add('hidden');
-            return;
-        }
-        // ---------------------------------------
-
         
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
