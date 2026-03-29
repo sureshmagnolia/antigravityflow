@@ -15426,7 +15426,8 @@ if (btnSessionReschedule) {
             swapSourceRoom = null;
         } else if (swapSourceRoom) {
             // Clicked different room -> Perform Swap
-            performSwap(swapSourceRoom, roomName);
+        await performSwap(swapSourceRoom, roomName);
+
             return; // performSwap calls render
         } else {
             // Start Swap Mode
@@ -15436,7 +15437,7 @@ if (btnSessionReschedule) {
     }
 
     // 3. Execute Swap Logic
-    window.performSwap = function (roomA, roomB) {
+        window.performSwap = async function (roomA, roomB) {
         const sessionKey = allotmentSessionSelect.value;
         const invigNameA = currentInvigMapping[roomA];
         const invigNameB = currentInvigMapping[roomB];
@@ -15458,7 +15459,15 @@ if (btnSessionReschedule) {
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
+        
+        // Sync (Added Session Mapping Sync)
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('staff');
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(sessionKey);
+            }
+        }
+
 
         // Reset UI
         swapSourceRoom = null;
