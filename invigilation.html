@@ -387,24 +387,36 @@
             <div id="tab-content-attendance" class="hidden space-y-6">
 
                 <div class="glass-panel p-4 sm:p-6">
-<!-- ✅ NEW: Department Completion Notification Tool -->
-<div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center gap-4 mb-6 shadow-sm">
-    <div class="flex-1">
-        <h4 class="text-sm font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
-            📧 Department Duty Completion
+<!-- ✅ MODERNIZED: Department Completion Notification Tool -->
+<div class="bg-gradient-to-r from-indigo-50 to-white p-5 rounded-2xl border border-indigo-100 flex flex-col lg:flex-row items-center gap-6 mb-8 shadow-sm">
+    <div class="flex-1 border-b lg:border-b-0 lg:border-r border-indigo-100 pb-4 lg:pb-0 lg:pr-6 text-center lg:text-left">
+        <h4 class="text-sm font-black text-indigo-900 uppercase tracking-widest flex items-center justify-center lg:justify-start gap-2 mb-1">
+            <span class="text-lg">📧</span> Department Completion Reports
         </h4>
-        <p class="text-[10px] text-indigo-600 font-medium">Send professional completion intimations to All HODs for a specific date.</p>
+        <p class="text-[10px] text-indigo-500 font-bold uppercase tracking-tight">Consolidated daily duty reports for HODs</p>
     </div>
-    <div class="flex items-center gap-2 w-full sm:w-auto">
-        <select id="dept-completion-session-select" class="p-2 border border-indigo-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner bg-white min-w-[200px]">
-            <option value="">-- Select Completed Session --</option>
-        </select>
-        <button onclick="triggerDeptCompletionNotification()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-md transition flex items-center gap-2 whitespace-nowrap">
-            Notify HODs
+    
+    <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+        <!-- Modern Custom Dropdown -->
+        <div class="relative w-full sm:w-auto">
+            <select id="dept-completion-session-select" 
+                class="appearance-none w-full sm:min-w-[240px] bg-white border-2 border-indigo-50 hover:border-indigo-200 text-indigo-950 px-4 py-3 rounded-xl text-xs font-black shadow-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all cursor-pointer">
+                <option value="">-- Select Completed Session --</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-indigo-400">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+        </div>
+
+        <button onclick="triggerDeptCompletionNotification()" 
+            class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-6 py-3 rounded-xl text-xs font-black shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+            <span>🚀</span> Notify HODs
         </button>
     </div>
-
 </div>
+
 
                     <div class="flex flex-col gap-4 mb-6">
                         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
