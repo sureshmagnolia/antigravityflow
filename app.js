@@ -3744,7 +3744,9 @@ function getExamName(date, time, stream) {
     if (sessionStudents.length === 0) return "";
 
     // 2. Extract the Exam Name tagged during upload
-    const names = sessionStudents.map(s => s.examName).filter(Boolean);
+    // ✅ FIXED: Look for both "Exam Name" (CSV/PDF) and "examName" (Internal)
+    const names = sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean);
+
     if (names.length === 0) return "";
     
     // Return the first valid one found for the session
