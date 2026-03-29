@@ -15734,6 +15734,7 @@ if (btnSessionReschedule) {
 
         const [date, time] = sessionKey.split(' | ');
         const serialMap = getRoomSerialMap(sessionKey);
+        const examName = getExamName(date, time, "Regular");
 
         // 1. Load Data
         const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
@@ -15990,10 +15991,11 @@ if (displayLoc) {
             <title>Invigilation List - ${date}</title>
             <style>
                 body { font-family: 'Arial', sans-serif; padding: 20px; }
-                .header { text-align: center; margin-bottom: 20px; }
+                .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #000; padding-bottom: 10px; }
                 .header h1 { margin: 0; font-size: 16pt; text-transform: uppercase; font-weight: bold; }
-                .header h2 { margin: 5px 0 0; font-size: 14pt; font-weight: bold; }
-                .header h3 { margin: 5px 0 0; font-size: 12pt; }
+                .header h2 { margin: 3px 0; font-size: 14pt; font-weight: bold; color: #333; }
+                .header h3 { margin: 2px 0; font-size: 12pt; font-weight: normal; }
+
                 
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 10pt; }
                 th { background: #eee; border: 1px solid #000; padding: 8px; text-align: center; font-weight: bold; }
