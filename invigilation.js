@@ -7368,11 +7368,13 @@ window.printDutyNotification = function (key) {
                     const staff = ${staffListJson};
                     const tbody = document.getElementById('preview-table-body');
                     staff.forEach(s => {
+                        // 🔥 BOTH backticks must have a \ before them!
                         tbody.innerHTML += \`<tr>
                             <td style="text-align: center;">\${s.no}</td>
                             <td><b>\${s.name}</b><br><small>\${s.dept}</small></td>
                             <td style="text-align: center;">\${s.phone}</td>
-                        </tr>`;
+                        </tr>\`;
+;
                     });
                 })();
             <\/script>
