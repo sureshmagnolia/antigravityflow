@@ -5266,31 +5266,34 @@ function getExamName(date, time, stream) {
                 const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
                 const studentsPage2 = session.students.slice(20);
 
-                const getHeader = (pageNum) => {
+                                const getHeader = (pageNum) => {
                     if (pageNum === 1) {
                         return `
-                        <div class="print-header-group" style="position: relative; margin-bottom: 5px;">
+                        <div class="print-header-group" style="position: relative; text-align: center; margin-bottom: 5px;">
                             <div style="position: absolute; top: 0; right: 0; font-weight: bold; font-size: 11pt; border: 1px solid #000; padding: 2px 6px;">
                                 ${pageStream}
                             </div>
                             <div style="position: absolute; top: 0; left: 0; font-weight: bold; font-size: 12pt;">
                                 Page ${pageNum}
                             </div>
-                            <h1>${currentCollegeName}</h1> 
-                            ${examNameHtml}
-                            <h2>${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
+                            <h1 style="margin-bottom: 2px; text-transform: uppercase;">${currentCollegeName}</h1> 
+                            <!-- ✅ Center aligned Exam Name -->
+                            <div style="font-size: 14pt; font-weight: bold; margin: 2px 0;">${examName}</div>
+                            <h2 style="margin: 2px 0;">Hall: ${serialNo} &nbsp;|&nbsp; ${session.Date} &nbsp;|&nbsp; ${session.Time}</h2>
                             ${locationHtml} 
                         </div>`;
                     } else {
                         return `
                         <div class="print-header-group" style="margin-bottom: 5px; border-bottom: 1px dashed #ccc; padding-bottom: 2px;">
-                            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 10pt; color: #444;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 10pt; color: #444;">
                                 <span>Hall: ${serialNo} (${session.Room})</span>
-                                <span>Page 2 - ${pageStream}</span>
+                                <span style="font-size: 11pt; color: #000;">${examName}</span> <!-- ✅ Added to Page 2 -->
+                                <span>Page ${pageNum} - ${pageStream}</span>
                             </div>
                         </div>`;
                     }
                 };
+
 
                 const tableHeader = `
                 <table class="print-table" style="border-collapse: collapse; width: 100%;">
