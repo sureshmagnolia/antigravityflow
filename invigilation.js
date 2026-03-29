@@ -9800,6 +9800,65 @@ window.adminMarkUnavailable = function(key, email) {
     window.openModal('unavailable-modal');
 };
 
+// --- ADMIN: God Access Unavailability Search ---
+window.handleAdminUnavailSearch = function(query) {
+    const resultsDiv = document.getElementById('admin-unavail-results');
+    const hiddenEmail = document.getElementById('admin-unavail-email');
+    
+    if (query.length < 2) {
+        resultsDiv.classList.add('hidden');
+        return;
+    }
+
+    // Filter ANY staff (God access)
+    const matches = staffData.filter(s => 
+        (s.name.toLowerCase().includes(query.toLowerCase()) || 
+         s.dept.toLowerCase().includes(query.toLowerCase())) &&
+         s.status !== 'archived'
+    ).slice(0, 10); // Limit to top 10
+
+    resultsDiv.innerHTML = '';
+    if (matches.length === 0) {
+        resultsDiv.innerHTML = '<div class="p-2 text-[10px] text-gray-400 italic">No matches.</div>';
+    } else {
+        matches.forEach(s => {
+            const div = document.createElement('div');
+            div.className = "p-2 hover:bg-red-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors";
+            div.innerHTML = `<div class="font-black text-gray-800 text-[11px]">\${s.name}</div>
+                             <div class="text-[9px] text-gray-500 uppercase">\${s.dept}</div>`;
+            div.onclick = () => {
+                document.getElementById('admin-unavail-search').value = s.name;
+                hiddenEmail.value = s.email;
+                resultsDiv.classList.add('hidden');
+            };
+            resultsDiv.appendChild(div);
+        });
+    }
+    resultsDiv.classList.remove('hidden');
+};
+
+window.adminManualMarkUnavailable = function() {
+    const email = document.getElementById('admin-unavail-email').value;
+    const name = document.getElementById('admin-unavail-search').value;
+    const key = document.getElementById('manual-session-key').value;
+
+    if (!email) return alert("Please select a staff member from the search results first.");
+
+    // Check if they are already in the 'selected' list
+    const slot = invigilationSlots[key] || { assigned: [] };
+    if (slot.assigned.includes(email)) {
+        if (!confirm("This faculty member is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
+            return;
+        }
+    }
+
+    // Trigger existing admin mark logic
+    // Clear the search for next time
+    document.getElementById('admin-unavail-search').value = "";
+    document.getElementById('admin-unavail-email').value = "";
+    
+    window.adminMarkUnavailable(key, email);
+};
 
 
 // 1. Missing Generator for Department Emails
