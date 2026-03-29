@@ -802,6 +802,10 @@ function updateAdminUI() {
     populateDepartmentSelect();
 
     renderStaffTable();
+    if (typeof window.updateCompletionSessionDropdown === 'function') {
+        window.updateCompletionSessionDropdown();
+    }
+
 }
 // --- HELPER: Get First Name ---
 function getFirstName(fullName) {
@@ -3403,6 +3407,11 @@ function populateAttendanceSessions() {
         opt.textContent = `${mark}${key}`;
         ui.attSessionSelect.appendChild(opt);
     });
+    // ✅ NEW: Keep the Completion Dropdown in sync
+    if (typeof window.updateCompletionSessionDropdown === 'function') {
+        window.updateCompletionSessionDropdown();
+    }
+
 }
 
 window.loadSessionAttendance = function () {
