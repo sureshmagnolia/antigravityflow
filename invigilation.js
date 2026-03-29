@@ -1139,8 +1139,9 @@ function renderSlotsGridAdmin() {
                         </button>
                     </div>
 
-                    <div class="grid grid-cols-5 gap-1.5 mt-2">
+                    <div class="grid grid-cols-6 gap-1 mt-2">
                         <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold transition shadow-sm" title="Direct Add Staff">+ Add</button>
+                        <button onclick="directUnavailStaff('${key}')" class="bg-red-50 text-red-700 border border-red-200 rounded py-1 hover:bg-red-100 text-[10px] font-bold transition shadow-sm" title="Mark Staff Unavailable">⛔ Excuse</button>
                         <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
                          <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
                          <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
@@ -9801,65 +9802,36 @@ window.adminMarkUnavailable = function(key, email) {
 };
 
 // --- ADMIN: God Access Unavailability Search ---
-window.handleAdminUnavailSearch = function(query) {
-    const resultsDiv = document.getElementById('admin-unavail-results');
-    const hiddenEmail = document.getElementById('admin-unavail-email');
+// --- ADMIN: God Access Unavailability Search (Quick Prompt) ---
+window.directUnavailStaff = async function(key) {
+    const slot = invigilationSlots[key];
+    if (!slot) return alert("Error: Slot data not found.");
+
+    const rawInput = prompt("Enter the Name or Email of the faculty to Mark Unavailable / Excuse:");
+    if (!rawInput) return;
     
-    if (query.length < 2) {
-        resultsDiv.classList.add('hidden');
-        return;
+    const query = rawInput.toLowerCase().trim();
+    let staff = staffData.find(s => s.email.toLowerCase() === query);
+    if (!staff) staff = staffData.find(s => s.name.toLowerCase() === query);
+    if (!staff) staff = staffData.find(s => s.name.toLowerCase().includes(query));
+
+    if (!staff) {
+        return alert("❌ Could not find any staff matching '" + rawInput + "'.");
     }
 
-    // Filter ANY staff (God access)
-    const matches = staffData.filter(s => 
-        (s.name.toLowerCase().includes(query.toLowerCase()) || 
-         s.dept.toLowerCase().includes(query.toLowerCase())) &&
-         s.status !== 'archived'
-    ).slice(0, 10); // Limit to top 10
-
-    resultsDiv.innerHTML = '';
-    if (matches.length === 0) {
-        resultsDiv.innerHTML = '<div class="p-2 text-[10px] text-gray-400 italic">No matches.</div>';
-    } else {
-        matches.forEach(s => {
-            const div = document.createElement('div');
-            div.className = "p-2 hover:bg-red-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors";
-            div.innerHTML = `<div class="font-black text-gray-800 text-[11px]">${s.name}</div>
-                             <div class="text-[9px] text-gray-500 uppercase">${s.dept}</div>`;
-
-            div.onclick = () => {
-                document.getElementById('admin-unavail-search').value = s.name;
-                hiddenEmail.value = s.email;
-                resultsDiv.classList.add('hidden');
-            };
-            resultsDiv.appendChild(div);
-        });
-    }
-    resultsDiv.classList.remove('hidden');
-};
-
-window.adminManualMarkUnavailable = function() {
-    const email = document.getElementById('admin-unavail-email').value;
-    const name = document.getElementById('admin-unavail-search').value;
-    const key = document.getElementById('manual-session-key').value;
-
-    if (!email) return alert("Please select a staff member from the search results first.");
-
-    // Check if they are already in the 'selected' list
-    const slot = invigilationSlots[key] || { assigned: [] };
-    if (slot.assigned.includes(email)) {
-        if (!confirm("This faculty member is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
+    // Check if they are currently assigned
+    if (slot.assigned.includes(staff.email)) {
+        if (!confirm("⚠️ " + staff.name + " is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
             return;
         }
     }
 
-    // Trigger existing admin mark logic
-    // Clear the search for next time
-    document.getElementById('admin-unavail-search').value = "";
-    document.getElementById('admin-unavail-email').value = "";
-    
-    window.adminMarkUnavailable(key, email);
+    // Trigger existing mark logic
+    window.adminMarkUnavailable(key, staff.email);
 };
+
+
+
 
 
 // 1. Missing Generator for Department Emails
