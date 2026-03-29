@@ -15734,7 +15734,6 @@ if (btnSessionReschedule) {
 
         const [date, time] = sessionKey.split(' | ');
         const serialMap = getRoomSerialMap(sessionKey);
-        const examName = getExamName(date, time, "Regular");
 
         // 1. Load Data
         const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
