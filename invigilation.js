@@ -7290,27 +7290,28 @@ window.printDutyNotification = function (key) {
     doc.line(10, 35, 200, 35); // Horizontal line moved down to y=35
 
 
-                        doc.setFontSize(10);
-                        // Moved down to y=42 to clear the college address
+                    doc.setFontSize(10);
                         doc.text("Chief Superintendent, University Examinations", 10, 42);
                         doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 42, { align: "right" });
                         doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 46, { align: "right" });
 
-
-                    // Justified Letter Text
+                        // Justified Letter Text
                         doc.setFont("times", "normal");
                         const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
-                    // splitTextToSize helps multi-line wrapping with justification
+                        
                         const splitText = doc.splitTextToSize(letterText, 190);
-                        doc.text(splitText, 10, 38, { maxWidth: 190, align: "justify" });
-
+                        // 🔥 Shifted to y=52
+                        doc.text(splitText, 10, 52, { maxWidth: 190, align: "justify" });
 
                         doc.setDrawColor(0);
                         doc.setFillColor(245, 245, 245);
-                        doc.rect(10, 49, 190, 7, "FD");
+                        // 🔥 Shifted to y=64
+                        doc.rect(10, 64, 190, 7, "FD");
                         doc.setFont("times", "bold");
                         doc.setFontSize(9);
-                        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 53.5, { align: "center" });
+                        // 🔥 Shifted to y=68.5
+                        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 68.5, { align: "center" });
+
 
                         let rowsPerCol = Math.ceil(staffList.length / cols);
                         let headRow = [];
@@ -7341,7 +7342,7 @@ window.printDutyNotification = function (key) {
                         }
 
                         doc.autoTable({
-                            startY: 58,
+                            startY: 73,
                             head: [headRow],
                             body: tableRows,
                             theme: "grid",
