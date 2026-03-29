@@ -6706,8 +6706,7 @@ window.openManualAllocationModal = function (key) {
 
     // --- START OF NEW CODE ---
     // Check for active roles EXCL, Principal, CS, SAS
-    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
-    
+   
     staffData.forEach(s => {
         if (s.roleHistory && Array.isArray(s.roleHistory)) {
             s.roleHistory.forEach(r => {
