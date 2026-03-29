@@ -387,6 +387,21 @@
             <div id="tab-content-attendance" class="hidden space-y-6">
 
                 <div class="glass-panel p-4 sm:p-6">
+<!-- ✅ NEW: Department Completion Notification Tool -->
+<div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center gap-4 mb-6 shadow-sm">
+    <div class="flex-1">
+        <h4 class="text-sm font-black text-indigo-900 uppercase tracking-widest flex items-center gap-2">
+            📧 Department Duty Completion
+        </h4>
+        <p class="text-[10px] text-indigo-600 font-medium">Send professional completion intimations to All HODs for a specific date.</p>
+    </div>
+    <div class="flex items-center gap-2 w-full sm:w-auto">
+        <input type="date" id="dept-completion-date" class="p-2 border border-indigo-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner bg-white">
+        <button onclick="triggerDeptCompletionNotification()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-md transition flex items-center gap-2 whitespace-nowrap">
+            Notify HODs
+        </button>
+    </div>
+</div>
 
                     <div class="flex flex-col gap-4 mb-6">
                         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
