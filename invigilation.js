@@ -9846,11 +9846,12 @@ window.filterDirectUnavailStaff = function() {
     } else {
        matches.forEach(s => {
            dropdown.innerHTML += `
-               <div onclick="selectDirectUnavailStaff('\${s.email}', '\${s.name.replace(/'/g, "\\'")}')" class="p-2.5 hover:bg-red-50 border-b border-gray-50 cursor-pointer transition flex items-center justify-between group">
-                   <span class="font-bold text-gray-800 text-xs group-hover:text-red-700">\${s.name}</span>
-                   <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">\${s.dept}</span>
+               <div onclick="selectDirectUnavailStaff('${s.email}', '${s.name.replace(/'/g, "\\'")}')" class="p-2.5 hover:bg-red-50 border-b border-gray-50 cursor-pointer transition flex items-center justify-between group">
+                   <span class="font-bold text-gray-800 text-xs group-hover:text-red-700">${s.name}</span>
+                   <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">${s.dept}</span>
                </div>`;
        });
+
     }
     dropdown.classList.remove('hidden');
 };
