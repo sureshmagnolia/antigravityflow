@@ -6618,9 +6618,27 @@ window.openManualAllocationModal = function (key) {
         });
     });
 
+    const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
+    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+    const targetStamp = new Date(slotTargetDateStr).getTime();
+
     const rankedStaff = staffData
-        .filter(s => s.status !== 'archived')
+        .filter(s => {
+            if (s.status === 'archived') return false;
+            
+            // 🔥 REMOVE ADMIN ROLES FROM SELECTION LIST
+            if (s.roleHistory && Array.isArray(s.roleHistory)) {
+                const isExempt = s.roleHistory.some(r => {
+                    const startStamp = new Date(r.start).getTime();
+                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                });
+                if (isExempt) return false; 
+            }
+            return true;
+        })
         .map(s => {
+
             const slotDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
             let done = 0, target = 0, pending = 0;
             
