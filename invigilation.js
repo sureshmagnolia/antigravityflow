@@ -9824,8 +9824,9 @@ window.handleAdminUnavailSearch = function(query) {
         matches.forEach(s => {
             const div = document.createElement('div');
             div.className = "p-2 hover:bg-red-50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors";
-            div.innerHTML = `<div class="font-black text-gray-800 text-[11px]">\${s.name}</div>
-                             <div class="text-[9px] text-gray-500 uppercase">\${s.dept}</div>`;
+            div.innerHTML = `<div class="font-black text-gray-800 text-[11px]">${s.name}</div>
+                             <div class="text-[9px] text-gray-500 uppercase">${s.dept}</div>`;
+
             div.onclick = () => {
                 document.getElementById('admin-unavail-search').value = s.name;
                 hiddenEmail.value = s.email;
