@@ -3384,6 +3384,7 @@ window.openDutyNormsModal = function () {
 };
 
 /** ✅ NEW: Populate Completion Session Dropdown (Properly Placed Outside) **/
+/** ✅ MODERNIZED: Populate Completion Session Dropdown (Date-Wise Sorting) **/
 window.updateCompletionSessionDropdown = function() {
     const select = document.getElementById('dept-completion-session-select');
     if (!select) return;
@@ -3391,10 +3392,14 @@ window.updateCompletionSessionDropdown = function() {
     const currentVal = select.value;
     select.innerHTML = '<option value="">-- Select Completed Session --</option>';
 
+    // Filter sessions that have attendance and sort them by date (Descending)
     const completedSessionKeys = Object.keys(invigilationSlots).filter(key => {
         const slot = invigilationSlots[key];
         return slot.attendance && slot.attendance.length > 0;
-    }).sort((a, b) => b.localeCompare(a));
+    }).sort((a, b) => {
+        // --- Date-Wise Sorting (Descending) ---
+        return parseDate(b) - parseDate(a); 
+    });
 
     if (completedSessionKeys.length === 0) {
         select.innerHTML = '<option value="">No completed records found</option>';
@@ -3404,12 +3409,15 @@ window.updateCompletionSessionDropdown = function() {
     completedSessionKeys.forEach(key => {
         const opt = document.createElement('option');
         opt.value = key;
-        opt.textContent = key; 
+        // Text format: "✅ DD.MM.YYYY | HH:MM AM/PM"
+        opt.textContent = `✅ ${key}`; 
         select.appendChild(opt);
     });
 
     if (currentVal) select.value = currentVal;
 };
+
+
 window.updateCompletionSessionDropdown();
 
 
