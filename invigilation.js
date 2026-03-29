@@ -7291,9 +7291,11 @@ window.printDutyNotification = function (key) {
 
 
                         doc.setFontSize(10);
-                        doc.text("Chief Superintendent, University Examinations", 10, 27);
-                        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 27, { align: "right" });
-                        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 31, { align: "right" });
+                        // Moved down to y=42 to clear the college address
+                        doc.text("Chief Superintendent, University Examinations", 10, 42);
+                        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 42, { align: "right" });
+                        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 46, { align: "right" });
+
 
                     // Justified Letter Text
                         doc.setFont("times", "normal");
