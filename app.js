@@ -15544,7 +15544,7 @@ if (btnSessionReschedule) {
     }
 
     // 5. Save Assignment (And Close Modal)
-    window.saveInvigAssignment = function (room, name) {
+    window.saveInvigAssignment = async function (room, name) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
@@ -15622,7 +15622,17 @@ if (btnSessionReschedule) {
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
         // Sync
-        if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
+        // Sync (Added Slots and Session Mapping Sync)
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('staff');
+            await syncDataToCloud('slots'); // Sync the pool change
+            
+            // Sync the specific room-to-person mapping (Crucial for other PCs)
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(sessionKey);
+            }
+        }
+
 
         // Hide Modal
         document.getElementById('invigilator-select-modal').classList.add('hidden');
@@ -18060,10 +18070,10 @@ window.downloadInvigilationListPDF = async function () {
         input.oninput = (e) => renderList(e.target.value);
     };
 
-    // --- NEW: Execute Replace ---
-    window.replaceInvigilator = function(room, name) {
+    window.replaceInvigilator = async function(room, name) {
         if(!confirm(`Confirm replace with ${name}?`)) return;
-        window.saveInvigAssignment(room, name); // Reuse existing save logic
+        await window.saveInvigAssignment(room, name); // Wait for sync
+
         
         // Reset Modal Title
         const subtitle = document.getElementById('invig-modal-subtitle');
