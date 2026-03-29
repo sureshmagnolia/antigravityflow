@@ -15460,9 +15460,15 @@ if (btnSessionReschedule) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
         
-        // Sync (Added Session Mapping Sync)
+        // Sync (Added Session Sync)
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff');
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(sessionKey);
+            }
+        }
+
+            
             if (typeof syncSessionToCloud === 'function') {
                 await syncSessionToCloud(sessionKey);
             }
@@ -15726,7 +15732,15 @@ if (btnSessionReschedule) {
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
             // Sync to Cloud
-            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
+                   // Sync (Added Sessions and Slots Sync)
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('staff');
+            await syncDataToCloud('slots'); // Pool updates
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(sessionKey); // Room mapping updates
+            }
+        }
+
 
             // Refresh UI
             renderInvigilationPanel();
