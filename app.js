@@ -13981,20 +13981,19 @@ window.handlePythonExtraction = async function (jsonString) {
                         if (typeof loadRoomConfig === 'function') loadRoomConfig();
                         if (typeof loadStreamConfig === 'function') loadStreamConfig();
                         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                        if (typeof renderExamNameSettings === 'function') renderExamNameSettings(); // Refresh UI
+                     
+                if (typeof renderExamNameSettings === 'function') renderExamNameSettings(); // Refresh UI
 
-                        // Sync (THE FIX: Force sync settings & allocation)
-                        // REPLACE line 8591 with:
-                        
+                        // Sync (Force sync settings & allocation)
                         await syncDataToCloud('settings');
                         await syncDataToCloud('allocation'); // In case scribe list is in backup
                         await syncDataToCloud('ops');        // In case QP codes are in backup
-                        }
 
                         alert("Settings updated and synced!");
                     } else {
                         alert("No valid settings found in this file.");
                     }
+
 
                 } catch (err) {
                     console.error(err);
