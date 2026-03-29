@@ -2240,13 +2240,23 @@ function generateDayWisePDF() {
             y += 10;
             doc.setFontSize(16); doc.text(collegeName, w/2, y, {align:'center'});
             y += 7;
-            doc.setFontSize(14); doc.text(title, w/2, y, {align:'center'});
+
+            // ✅ INSERTED: Dynamically fetch and display the Exam Name
+            const examName = getExamName(date, time, stream);
+            if (examName) {
+                doc.setFontSize(13); doc.setFont("helvetica", "bold");
+                doc.text(examName, w/2, y, {align:'center'});
+                y += 6; // Shift subsequent lines down
+            }
+
+            doc.setFontSize(12); doc.text(title, w/2, y, {align:'center'});
             y += 6;
             doc.setFontSize(11); doc.setFont("helvetica", "normal");
             doc.text(`${date} | ${time}`, w/2, y, {align:'center'});
             
             return y + 8; 
         };
+
 
         const drawColumnHeader = (x, y) => {
             doc.setFillColor(220); // Grey
@@ -3720,11 +3730,28 @@ if (toggleButton && sidebar) {
 // --- CORE: Get Exam Name (Simplified) ---
     // Previously used dates to guess name. Now strictly relies on Data Tagging.
     // This is kept for backward compatibility to prevent crashes.
-    function getExamName(date, time, stream) {
-        // Logic moved to "Data Tagging" during upload.
-        // Returns empty string so reports fall back to the tag inside student data.
-        return ""; 
-    }
+/** ✅ FIXED: Dynamically extract Exam Name from current session data **/
+function getExamName(date, time, stream) {
+    if (!allStudents || allStudents.length === 0) return "";
+    
+    // 1. Filter students for this specific session
+    const sessionStudents = allStudents.filter(s => 
+        s.Date === date && 
+        s.Time === time && 
+        (s.Stream || "Regular") === stream
+    );
+
+    if (sessionStudents.length === 0) return "";
+
+    // 2. Extract the Exam Name tagged during upload
+    // We take the most frequent one to handle multi-session edge cases
+    const names = sessionStudents.map(s => s.examName).filter(Boolean);
+    if (names.length === 0) return "";
+    
+    // Return the first one (most common for the session)
+    return names[0];
+}
+
     
 
     // --- UI ELEMENTS ---
@@ -5073,7 +5100,8 @@ if (toggleButton && sidebar) {
                 const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
                 const examName = getExamName(session.Date, session.Time, pageStream);
-                const examNameHtml = examName ? `<h2 style="font-size:14pt; font-weight:bold; margin:2px 0;">${examName}</h2>` : "";
+                const examNameHtml = examName ? `<h2 class="print-exam-name" style="font-size:14pt; font-weight:bold; margin:2px 0; text-align:center;">${examName}</h2>` : "";
+
 
                 // NEW: Get Invigilator Name
                 const invigMap = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
