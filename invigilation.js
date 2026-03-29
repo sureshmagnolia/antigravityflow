@@ -1357,9 +1357,27 @@ function renderStaffTable() {
 
 function renderStaffRankList(myEmail) {
     // 1. Calculate and Sort
+    const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
+    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+    const targetStamp = new Date(slotTargetDateStr).getTime();
+
     const rankedStaff = staffData
-        .filter(s => s.status !== 'archived')
+        .filter(s => {
+            if (s.status === 'archived') return false;
+            
+            // Check if user has an Exempt Role active on this date
+            if (s.roleHistory && Array.isArray(s.roleHistory)) {
+                const isExempt = s.roleHistory.some(r => {
+                    const startStamp = new Date(r.start).getTime();
+                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                });
+                if (isExempt) return false; // Hide them completely from selection
+            }
+            return true;
+        })
         .map(s => {
+
             const target = calculateStaffTarget(s);
             const done = getDutiesDoneCount(s.email);
             const pending = target - done;
@@ -6639,17 +6657,12 @@ window.openManualAllocationModal = function (key) {
     if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
 
     const assignedSet = new Set(slot.assigned || []);
-    let preFilledCount = 0;
-    rankedStaff.forEach(s => { if(assignedSet.has(s.email)) preFilledCount++; });
-    let slotsToAutoFill = Math.max(0, requiredCount - preFilledCount);
-
+    
+    // Only mark as checked if they are ALREADY in the saved assigned list
     rankedStaff.forEach(s => {
         s.isChecked = assignedSet.has(s.email);
-        if (!s.isChecked && slotsToAutoFill > 0 && !isUserUnavailable(slot, s.email, key)) {
-            s.isChecked = true;
-            slotsToAutoFill--;
-        }
     });
+
 
     window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
     renderManualCards();
