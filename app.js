@@ -247,11 +247,12 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
-        
+        if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('slots');
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} records older than 30 days.`);
     } else {
+
         console.log("✅ [System] Data is clean. No old records found.");
     }
 }
