@@ -1182,6 +1182,7 @@ async function updateLocalSlotsFromStudents() {
                     let allQPCodes = {};
                     let allAbsentees = {};
                     let allScribeAllotments = {};
+                    let allInvigMap = {};
 
                     sessionSnap.forEach(doc => {
                         const s = doc.data();
@@ -1347,6 +1348,10 @@ async function deleteSessionFromCloud(sessionKey) {
         // Scribes
         const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
         const sessionScribes = allScribes[sessionKey] || {};
+               // Invigilator Mapping (The Missing Part!)
+        const allInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+        const sessionInvigMap = allInvigMapping[sessionKey] || {};
+
 
         // 2. Construct Payload
         const sessionDoc = {
@@ -1358,6 +1363,7 @@ async function deleteSessionFromCloud(sessionKey) {
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
+            invigilatorMapping: sessionInvigMap, // <--- ADD THIS LINE
             meta: { 
                 studentCount: students.length, 
                 lastUpdated: new Date().toISOString() 
