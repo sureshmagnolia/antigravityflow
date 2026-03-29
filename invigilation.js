@@ -3371,31 +3371,30 @@ window.openDutyNormsModal = function () {
             const textClass = isExempt ? "text-green-700" : "text-gray-700";
             const countDisplay = isExempt ? "EXEMPT" : `<b>${target}</b> / mo`;
 
-            container.innerHTML += `
+                        container.innerHTML += `
                 <div class="flex justify-between items-center text-xs p-2.5 rounded border ${bgClass} mb-1.5">
                     <span class="${textClass} font-bold">${role}</span>
                     <span class="text-gray-600 ${isExempt ? 'font-bold text-green-600 text-[10px]' : ''}">${countDisplay}</span>
                 </div>
             `;
-       
-        // --- NEW: Populate Completion Session Dropdown ---
+        });
+    }
+
+    window.openModal('norms-modal');
+};
+
+/** ✅ NEW: Populate Completion Session Dropdown (Properly Placed Outside) **/
 window.updateCompletionSessionDropdown = function() {
     const select = document.getElementById('dept-completion-session-select');
     if (!select) return;
 
-    // Save current selection
     const currentVal = select.value;
     select.innerHTML = '<option value="">-- Select Completed Session --</option>';
 
-    // Filter sessions that have at least one marked attendance
     const completedSessionKeys = Object.keys(invigilationSlots).filter(key => {
         const slot = invigilationSlots[key];
         return slot.attendance && slot.attendance.length > 0;
-    }).sort((a, b) => {
-        // Simple string sort for keys like "28.03.2026 | 09:30 AM" works fairly well, 
-        // but sorting by actual date is better if needed.
-        return b.localeCompare(a); 
-    });
+    }).sort((a, b) => b.localeCompare(a));
 
     if (completedSessionKeys.length === 0) {
         select.innerHTML = '<option value="">No completed records found</option>';
@@ -3412,12 +3411,7 @@ window.updateCompletionSessionDropdown = function() {
     if (currentVal) select.value = currentVal;
 };
 window.updateCompletionSessionDropdown();
-        
-        });
-    }
 
-    window.openModal('norms-modal');
-}
 
 // --- ATTENDANCE MARKING LOGIC ---
 
