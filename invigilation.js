@@ -3639,7 +3639,7 @@ window.saveAttendance = async function () {
     logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
 
     await syncSlotsToCloud();
-
+    window.updateCompletionSessionDropdown();
     populateAttendanceSessions();
     renderStaffTable();
     alert("Attendance & Supervision Saved!");
@@ -9160,51 +9160,44 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     list.innerHTML = html;
 };
 
-// --- NEW: Trigger Daily Completion Notification ---
+// --- REVISED: Trigger Completion Notification from Selected Session ---
 window.triggerDeptCompletionNotification = function() {
-    const dateInput = document.getElementById('dept-completion-date');
-    if (!dateInput || !dateInput.value) return alert("Please select a date first.");
+    const sessionSelect = document.getElementById('dept-completion-session-select');
+    const sessionKey = sessionSelect ? sessionSelect.value : "";
     
-    const [y, m, d] = dateInput.value.split('-');
-    const dateStr = `${d}.${m}.${y}`;
+    if (!sessionKey) return alert("Please select a completed session from the dropdown.");
+    
+    const slot = invigilationSlots[sessionKey];
+    const [dateStr, timeStr] = sessionKey.split(' | ');
 
     const list = document.getElementById('notif-list-container');
     const subtitle = document.getElementById('notif-modal-subtitle');
     const title = document.getElementById('notif-modal-title');
 
     if (title) title.textContent = "HOD Completion Report";
-    if (subtitle) subtitle.textContent = `Duty Completion List for ${dateStr}`;
+    if (subtitle) subtitle.textContent = `Duty Completion: ${sessionKey}`;
     
     window.openModal('notification-modal');
     list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
 
     const rawDeptDuties = {}; 
     window.currentDeptEmailQueue = []; 
-    
-    Object.keys(invigilationSlots).forEach(key => {
-        if (!key.startsWith(dateStr)) return;
-        const slot = invigilationSlots[key];
-        const [dStr, tStr] = key.split(' | ');
-        const isAN = (tStr.includes("PM") || tStr.startsWith("12:"));
-        const session = isAN ? "AN" : "FN";
 
-        if (slot.attendance && slot.attendance.length > 0) {
-            slot.attendance.forEach(email => {
-                const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
-                const dept = staff ? (staff.dept || "Unassigned") : "Unassigned";
-                const name = staff ? staff.name : getNameFromEmail(email);
-                if (!rawDeptDuties[dept]) rawDeptDuties[dept] = [];
-                rawDeptDuties[dept].push({ name, date: dStr, session, time: tStr });
-            });
-        }
-    });
+    if (slot.attendance && slot.attendance.length > 0) {
+        const isAN = (timeStr.includes("PM") || timeStr.startsWith("12:"));
+        const sessionLabel = isAN ? "AN" : "FN";
 
-    const depts = Object.keys(rawDeptDuties).sort();
-    if (depts.length === 0) {
-        list.innerHTML = `<div class="text-center text-gray-400 py-10">No attendance records verified for ${dateStr}.</div>`;
-        return;
+        slot.attendance.forEach(email => {
+            const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+            const dept = staff ? (staff.dept || "Unassigned") : "Unassigned";
+            const name = staff ? staff.name : getNameFromEmail(email);
+            
+            if (!rawDeptDuties[dept]) rawDeptDuties[dept] = [];
+            rawDeptDuties[dept].push({ name, date: dateStr, session: sessionLabel, time: timeStr });
+        });
     }
 
+    const depts = Object.keys(rawDeptDuties).sort();
     depts.forEach((dept, index) => {
         const entries = rawDeptDuties[dept];
         const facultyMap = {};
@@ -9228,36 +9221,31 @@ window.triggerDeptCompletionNotification = function() {
         });
     });
 
-    renderDeptNotificationList(); // Reusing existing UI renderer
+    renderDeptNotificationList(); 
 }
 
-// Ensure the UI renderer is accessible
+// Ensure the UI renderer is accessible (Optional: paste if not already there)
 function renderDeptNotificationList() {
     const list = document.getElementById('notif-list-container');
+    if (!list) return;
     let html = `<div class="flex flex-col gap-3 mb-4 sticky top-0 bg-white z-10 pt-2 pb-4 border-b">
         <button id="btn-bulk-dept-send" onclick="sendBulkDeptEmails()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
             🚀 Send All Reports to HODs
         </button>
-        <div id="dept-progress-bar" class="hidden mt-3 w-full bg-gray-200 rounded-full h-2.5">
-            <div id="dept-progress-fill" class="bg-teal-600 h-2.5 rounded-full" style="width: 0%"></div>
-        </div>
     </div><div class="space-y-3">`;
 
     window.currentDeptEmailQueue.forEach((item) => {
-        const noEmail = !item.email;
         html += `<div class="bg-white border p-3 rounded-lg shadow-sm flex justify-between items-center">
             <div>
                 <div class="font-bold text-gray-800 text-sm">${item.dept}</div>
                 <div class="text-[10px] text-gray-500">${item.count} Faculty Completed</div>
-                <div class="text-[9px] ${noEmail ? 'text-red-500' : 'text-teal-600'}">${noEmail ? 'HOD Email Missing' : item.email}</div>
+                <div class="text-[9px] ${!item.email ? 'text-red-500' : 'text-teal-600'}">${!item.email ? 'HOD Email Missing' : item.email}</div>
             </div>
-            <button id="${item.btnId}" onclick="sendSingleDeptEmail(${item.id})" ${noEmail ? 'disabled' : ''} class="bg-teal-50 text-teal-700 border px-3 py-1.5 rounded text-xs font-bold transition">Send</button>
+            <button id="${item.btnId}" onclick="sendSingleDeptEmail(${item.id})" ${!item.email ? 'disabled' : ''} class="bg-teal-50 text-teal-700 border px-3 py-1.5 rounded text-xs font-bold transition">Send</button>
         </div>`;
     });
     list.innerHTML = html + `</div>`;
 }
-
-
 
 
 // --- HELPER: Generate Weekly WhatsApp (Professional + Exchange Link) ---
@@ -10287,5 +10275,39 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
+// --- NEW: Populate Completion Session Dropdown ---
+window.updateCompletionSessionDropdown = function() {
+    const select = document.getElementById('dept-completion-session-select');
+    if (!select) return;
+
+    // Save current selection
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Select Completed Session --</option>';
+
+    // Filter sessions that have at least one marked attendance
+    const completedSessionKeys = Object.keys(invigilationSlots).filter(key => {
+        const slot = invigilationSlots[key];
+        return slot.attendance && slot.attendance.length > 0;
+    }).sort((a, b) => {
+        // Simple string sort for keys like "28.03.2026 | 09:30 AM" works fairly well, 
+        // but sorting by actual date is better if needed.
+        return b.localeCompare(a); 
+    });
+
+    if (completedSessionKeys.length === 0) {
+        select.innerHTML = '<option value="">No completed records found</option>';
+        return;
+    }
+
+    completedSessionKeys.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key; 
+        select.appendChild(opt);
+    });
+
+    if (currentVal) select.value = currentVal;
+};
+window.updateCompletionSessionDropdown();
 
 
