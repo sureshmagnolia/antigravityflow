@@ -17892,11 +17892,22 @@ window.downloadInvigilationListPDF = async function () {
     const doc = new jsPDF();
     
     doc.setFontSize(14);
-    doc.text(localStorage.getItem('examCollegeName') || "GOVERNMENT VICTORIA COLLEGE", 105, 15, { align: "center" });
+    doc.text(localStorage.getItem('examCollegeName') || "GOVERNMENT VICTORIA COLLEGE", 105, 12, { align: "center" });
+    
+    // ✅ ADDED: Dynamically fetch and display the Exam Name for this session
+    const pageExamName = getExamName(date, time, "Regular");
+    if (pageExamName) {
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(pageExamName, 105, 19, { align: "center" });
+    }
+
     doc.setFontSize(11);
-    doc.text("Invigilation Duty List", 105, 22, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.text("Invigilation Duty List", 105, 26, { align: "center" });
     doc.setFontSize(10);
-    doc.text(`Date: ${date}  |  Session: ${time}`, 105, 28, { align: "center" });
+    doc.text(`Date: ${date}  |  Session: ${time}`, 105, 32, { align: "center" });
+
 
     doc.autoTable({
         head: [['Sl', 'Hall / Location', 'Invigilator', 'RNBB', 'Asgd', 'Used', 'Retd', 'Remarks', 'Sign']],
