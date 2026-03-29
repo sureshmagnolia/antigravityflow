@@ -318,11 +318,9 @@ let staffUnsub = null;
 let slotsUnsub = null;
 let hasUnsavedScribes = false; // NEW FLAG
 // --- MIXING ENGINE STATE (Session-Level Pre-Split) ---
-let mixingPartA = [];        // First portion of full session student list
-let mixingPartB = [];        // Second portion
-let mixingPointerA = 0;      // How many taken from Part A so far
-let mixingPointerB = 0;      // How many taken from Part B so far
+let mixingParts = {};        // Per-stream: { 'Regular': {partA,partB,pA,pB}, 'Distance': {...} }
 let mixingActiveStrategy = 'none'; // The strategy locked in for this session
+let mixingPartA = [], mixingPartB = [], mixingPointerA = 0, mixingPointerB = 0; // legacy aliases
 // -----------------------------------------------------
 
 
@@ -9494,45 +9492,45 @@ window.real_populate_qp_code_session_dropdown = function () {
     // --- NEW: Pre-splits the session student list into Part A and Part B ---
     // Call this whenever a new session is loaded OR strategy radio changes.
     function precomputeSessionParts(sessionKey, strategy) {
-        mixingActiveStrategy = strategy;
+            mixingActiveStrategy = strategy;
+        mixingParts = {};  // Reset all per-stream data
 
-        if (strategy === 'none' || !sessionKey) {
-            mixingPartA = [];
-            mixingPartB = [];
-            mixingPointerA = 0;
-            mixingPointerB = 0;
-            return;
-        }
+        if (strategy === 'none' || !sessionKey) return;
 
         const [date, time] = sessionKey.split(' | ');
 
-        // 1. Get ALL students for this session in the original sorted order
-        //    (course-alphabetical, then register number — same as current sort)
-        const sessionStudents = allStudentData
-            .filter(s => s.Date === date && s.Time === time)
-            .sort((a, b) => {
-                if (a.Stream !== b.Stream) return a.Stream.localeCompare(b.Stream);
-                if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                const rA = (a['Register Number'] || '').toString();
-                const rB = (b['Register Number'] || '').toString();
-                return rA.localeCompare(rB);
-            });
+        // Get all students for this session
+        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-        // 2. Calculate split point based on strategy
-        const total = sessionStudents.length;
-        const splitAt = (strategy === 'ratio_2_1')
-            ? Math.round(total * (2 / 3))
-            : Math.round(total * 0.5); // ratio_1_1
+        // Get every distinct stream present in this session
+        const streams = [...new Set(sessionStudents.map(s => s.Stream || 'Regular'))];
 
-        // 3. Divide into two parts
-        mixingPartA = sessionStudents.slice(0, splitAt);
-        mixingPartB = sessionStudents.slice(splitAt);
+        // For EACH stream, build its own independent Part A and Part B
+        streams.forEach(stream => {
+            const streamStudents = sessionStudents
+                .filter(s => (s.Stream || 'Regular') === stream)
+                .sort((a, b) => {
+                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                    const rA = (a['Register Number'] || '').toString().trim();
+                    const rB = (b['Register Number'] || '').toString().trim();
+                    return rA.localeCompare(rB);
+                });
 
-        // 4. Reset pointers to the beginning
-        mixingPointerA = 0;
-        mixingPointerB = 0;
+            const total = streamStudents.length;
+            const splitAt = (strategy === 'ratio_2_1')
+                ? Math.round(total * (2 / 3))
+                : Math.round(total * 0.5); // ratio_1_1
 
-        console.log(`?? Session Parts Pre-computed: Part A=${mixingPartA.length}, Part B=${mixingPartB.length}`);
+            mixingParts[stream] = {
+                partA: streamStudents.slice(0, splitAt),
+                partB: streamStudents.slice(splitAt),
+                pA: 0,
+                pB: 0
+            };
+
+            console.log(`🎯 [${stream}] Pre-split: A=${mixingParts[stream].partA.length}, B=${mixingParts[stream].partB.length}`);
+        });
+
     }
     // -------------------------------------------------------------------
 
@@ -10013,56 +10011,53 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
        
-        // --- MIXING ENGINE: Pre-Split Queue Strategy ---
+        // --- MIXING ENGINE: Per-Stream Pre-Split Queue Strategy ---
         let limit = parseInt(capacity) || 30;
         let newStudents = [];
 
-        if ((mixingActiveStrategy === 'ratio_1_1' || mixingActiveStrategy === 'ratio_2_1') &&
-             mixingPartA.length > 0) {
+        const streamPart = mixingParts[targetStream]; // This stream's own independent queues
 
-            // Calculate how many to take from each queue for this room
+        // ── GUARD 1: Last room — all remaining fit in this room ──────────────
+        // If the total unallotted candidates for this stream fit within this
+        // room's capacity, skip mixing and take ALL of them. No scramble.
+        if (candidates.length <= limit) {
+            newStudents = candidates.slice();
+
+        // ── GUARD 2: Only one course in this stream ───────────────────────────
+        // partB will be empty if all students belong to a single course.
+        // Mixing is meaningless — fall back to standard fill.
+        } else if (!streamPart || streamPart.partB.length === 0) {
+            newStudents = candidates.slice(0, limit);
+
+        // ── MIXING ENGINE ─────────────────────────────────────────────────────
+        } else if (mixingActiveStrategy === 'ratio_1_1' || mixingActiveStrategy === 'ratio_2_1') {
+
             const ratio = (mixingActiveStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
             let takeA = Math.round(limit * ratio);
             let takeB = limit - takeA;
 
-            // Take from the pre-split queues using pointers (stream-filtered)
-            // Stream filtering: only take students matching targetStream
-            const streamA = mixingPartA.slice(mixingPointerA)
-                .filter(s => (s.Stream || 'Regular') === targetStream)
-                .slice(0, takeA);
-            const streamB = mixingPartB.slice(mixingPointerB)
-                .filter(s => (s.Stream || 'Regular') === targetStream)
-                .slice(0, takeB);
+            // Take from THIS stream's own Part A and Part B using its own pointers
+            const sliceA = streamPart.partA.slice(streamPart.pA, streamPart.pA + takeA);
+            const sliceB = streamPart.partB.slice(streamPart.pB, streamPart.pB + takeB);
 
-            newStudents = [...streamA, ...streamB];
-
-            // Advance the global pointers by how many raw items we consumed
-            // (scan forward past already-allotted or wrong-stream items)
-            let consumedA = 0, consumedB = 0;
-            for (let i = mixingPointerA; i < mixingPartA.length && consumedA < streamA.length; i++) {
-                if ((mixingPartA[i].Stream || 'Regular') === targetStream) consumedA++;
-                mixingPointerA = i + 1;
-            }
-            for (let i = mixingPointerB; i < mixingPartB.length && consumedB < streamB.length; i++) {
-                if ((mixingPartB[i].Stream || 'Regular') === targetStream) consumedB++;
-                mixingPointerB = i + 1;
-            }
-
-            // Safety: if queues exhausted, fill remainder from unallotted candidates
-            if (newStudents.length < limit) {
-                const pickedIds = new Set(newStudents.map(s => s['Register Number']));
-                for (const s of candidates) {
-                    if (newStudents.length >= limit) break;
-                    if (!pickedIds.has(s['Register Number'])) newStudents.push(s);
-                }
+            // ── GUARD 3: Partial last room — one course nearly exhausted ──────
+            // If either slice is shorter than requested, mixing can't be done
+            // cleanly. Take all remaining candidates as-is. No scramble.
+            if (sliceA.length < takeA || sliceB.length < takeB) {
+                newStudents = candidates.slice(0, candidates.length);
+            } else {
+                // Normal mixed room: combine Part A and Part B, advance pointers
+                newStudents = [...sliceA, ...sliceB];
+                streamPart.pA += sliceA.length;
+                streamPart.pB += sliceB.length;
             }
 
         } else {
-            // Standard (No Mix): original behaviour preserved exactly
-            if (candidates.length <= 33) limit = candidates.length;
+            // No Mix selected: standard fill, original behaviour preserved
             newStudents = candidates.slice(0, limit);
         }
         // -----------------------------------------------
+
 
 
         if (newStudents.length === 0) {
