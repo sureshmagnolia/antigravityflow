@@ -15719,7 +15719,6 @@ if (btnSessionReschedule) {
 
     // 7. Unassign All Invigilators
     window.unassignAllInvigilators = async function () {
-
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
@@ -15737,7 +15736,6 @@ if (btnSessionReschedule) {
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
             // Sync to Cloud
-                     // Sync to Cloud
             if (typeof syncDataToCloud === 'function') {
                 await syncDataToCloud('staff');
                 await syncDataToCloud('slots'); 
@@ -15746,14 +15744,12 @@ if (btnSessionReschedule) {
                 }
             }
 
-        }
-
-
             // Refresh UI
             renderInvigilationPanel();
             alert("All invigilator assignments cleared for this session.");
         }
-    }
+    };
+
 
     // --- Helper: Fetch Active Official for Date ---
     function getOfficialForDate(roleName, dateObj) {
