@@ -9801,35 +9801,84 @@ window.adminMarkUnavailable = function(key, email) {
     window.openModal('unavailable-modal');
 };
 
-// --- ADMIN: God Access Unavailability Search ---
+
 // --- ADMIN: God Access Unavailability Search (Quick Prompt) ---
-window.directUnavailStaff = async function(key) {
+// --- ADMIN: God Access Unavailability Search (Professional Modal) ---
+window.directUnavailStaff = function(key) {
     const slot = invigilationSlots[key];
     if (!slot) return alert("Error: Slot data not found.");
 
-    const rawInput = prompt("Enter the Name or Email of the faculty to Mark Unavailable / Excuse:");
-    if (!rawInput) return;
+    // Initialize Modal State
+    document.getElementById('direct-unavail-slot-key').innerText = key;
+    document.getElementById('direct-unavail-search-input').value = "";
+    document.getElementById('direct-unavail-hidden-email').value = "";
+    document.getElementById('direct-unavail-dropdown').classList.add('hidden');
     
-    const query = rawInput.toLowerCase().trim();
-    let staff = staffData.find(s => s.email.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase().includes(query));
+    // Save state globally for the modal
+    window.directUnavailState = {
+        slotKey: key,
+    };
 
-    if (!staff) {
-        return alert("❌ Could not find any staff matching '" + rawInput + "'.");
+    window.openModal('direct-unavail-modal');
+};
+
+
+window.filterDirectUnavailStaff = function() {
+    const input = document.getElementById('direct-unavail-search-input');
+    const dropdown = document.getElementById('direct-unavail-dropdown');
+    const hidden = document.getElementById('direct-unavail-hidden-email');
+    const query = input.value.toLowerCase().trim();
+
+    if (query.length < 2) {
+        dropdown.classList.add('hidden');
+        return;
     }
 
-    // Check if they are currently assigned
-    if (slot.assigned.includes(staff.email)) {
-        if (!confirm("⚠️ " + staff.name + " is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
+    // Filter ALL staff (God access)
+    let matches = staffData.filter(s => 
+        (s.name.toLowerCase().includes(query) || s.dept.toLowerCase().includes(query)) &&
+        s.status !== 'archived'
+    ).slice(0, 10);
+
+    dropdown.innerHTML = '';
+    if (matches.length === 0) {
+       dropdown.innerHTML = `<div class="p-3 text-[10px] text-gray-400 italic text-center">No matching staff found.</div>`;
+    } else {
+       matches.forEach(s => {
+           dropdown.innerHTML += `
+               <div onclick="selectDirectUnavailStaff('\${s.email}', '\${s.name.replace(/'/g, "\\'")}')" class="p-2.5 hover:bg-red-50 border-b border-gray-50 cursor-pointer transition flex items-center justify-between group">
+                   <span class="font-bold text-gray-800 text-xs group-hover:text-red-700">\${s.name}</span>
+                   <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">\${s.dept}</span>
+               </div>`;
+       });
+    }
+    dropdown.classList.remove('hidden');
+};
+
+window.selectDirectUnavailStaff = function(email, name) {
+    document.getElementById('direct-unavail-search-input').value = name;
+    document.getElementById('direct-unavail-hidden-email').value = email;
+    document.getElementById('direct-unavail-dropdown').classList.add('hidden');
+};
+
+window.confirmDirectUnavail = function() {
+    const key = window.directUnavailState.slotKey;
+    const email = document.getElementById('direct-unavail-hidden-email').value;
+    const name = document.getElementById('direct-unavail-search-input').value;
+    
+    if (!key || !email) return alert("Please search and select a faculty member from the autocomplete list first.");
+
+    const slot = invigilationSlots[key];
+    if (slot && slot.assigned.includes(email)) {
+        if (!confirm("⚠️ " + name + " is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
             return;
         }
     }
 
-    // Trigger existing mark logic
-    window.adminMarkUnavailable(key, staff.email);
+    // Close search modal and trigger standard reason modal
+    window.closeModal('direct-unavail-modal');
+    window.adminMarkUnavailable(key, email);
 };
-
 
 
 
