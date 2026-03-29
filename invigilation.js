@@ -3377,6 +3377,42 @@ window.openDutyNormsModal = function () {
                     <span class="text-gray-600 ${isExempt ? 'font-bold text-green-600 text-[10px]' : ''}">${countDisplay}</span>
                 </div>
             `;
+       
+        // --- NEW: Populate Completion Session Dropdown ---
+window.updateCompletionSessionDropdown = function() {
+    const select = document.getElementById('dept-completion-session-select');
+    if (!select) return;
+
+    // Save current selection
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Select Completed Session --</option>';
+
+    // Filter sessions that have at least one marked attendance
+    const completedSessionKeys = Object.keys(invigilationSlots).filter(key => {
+        const slot = invigilationSlots[key];
+        return slot.attendance && slot.attendance.length > 0;
+    }).sort((a, b) => {
+        // Simple string sort for keys like "28.03.2026 | 09:30 AM" works fairly well, 
+        // but sorting by actual date is better if needed.
+        return b.localeCompare(a); 
+    });
+
+    if (completedSessionKeys.length === 0) {
+        select.innerHTML = '<option value="">No completed records found</option>';
+        return;
+    }
+
+    completedSessionKeys.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key; 
+        select.appendChild(opt);
+    });
+
+    if (currentVal) select.value = currentVal;
+};
+window.updateCompletionSessionDropdown();
+        
         });
     }
 
@@ -10284,39 +10320,6 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
-// --- NEW: Populate Completion Session Dropdown ---
-window.updateCompletionSessionDropdown = function() {
-    const select = document.getElementById('dept-completion-session-select');
-    if (!select) return;
 
-    // Save current selection
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">-- Select Completed Session --</option>';
-
-    // Filter sessions that have at least one marked attendance
-    const completedSessionKeys = Object.keys(invigilationSlots).filter(key => {
-        const slot = invigilationSlots[key];
-        return slot.attendance && slot.attendance.length > 0;
-    }).sort((a, b) => {
-        // Simple string sort for keys like "28.03.2026 | 09:30 AM" works fairly well, 
-        // but sorting by actual date is better if needed.
-        return b.localeCompare(a); 
-    });
-
-    if (completedSessionKeys.length === 0) {
-        select.innerHTML = '<option value="">No completed records found</option>';
-        return;
-    }
-
-    completedSessionKeys.forEach(key => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = key; 
-        select.appendChild(opt);
-    });
-
-    if (currentVal) select.value = currentVal;
-};
-window.updateCompletionSessionDropdown();
 
 
