@@ -13849,6 +13849,9 @@ window.handlePythonExtraction = async function (jsonString) {
 
                 // --- A. LOCAL WIPE (Browser) ---
                 keysToWipe.forEach(key => localStorage.removeItem(key));
+                                // ✅ ADDED: Wipe the student database (IndexedDB)
+                if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]); 
+
 
                 // --- B. CLOUD WIPE (Firebase) ---
                 if (currentCollegeId) {
