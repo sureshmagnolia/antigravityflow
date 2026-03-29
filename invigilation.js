@@ -5813,6 +5813,58 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
     </div>
     `;
 }
+
+// --- NEW: Daily Completion Email Template ---
+function generateDepartmentCompletionEmail(deptName, facultyData, dateStr) {
+    const collegeName = (typeof collegeData !== 'undefined' ? collegeData.examCollegeName : "") || "Government Victoria College";
+    let rows = "";
+    
+    facultyData.sort((a,b) => a.name.localeCompare(b.name)).forEach((f, idx) => {
+        const bg = idx % 2 === 0 ? "#ffffff" : "#f9fafb";
+        f.duties.forEach((d, dIdx) => {
+            const nameCell = (dIdx === 0) ? `<td rowspan="${f.duties.length}" style="padding: 10px; border: 1px solid #ddd; font-weight: bold; vertical-align: top; background-color: ${bg};">${f.name}</td>` : "";
+            rows += `
+            <tr style="background-color: ${bg};">
+                ${nameCell}
+                <td style="padding: 10px; border: 1px solid #ddd;">${d.session}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; color: #555;">${d.time}</td>
+            </tr>`;
+        });
+    });
+
+    return `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
+            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 45px; margin-bottom: 5px;">
+            <h2 style="margin: 0; font-size: 16px; text-transform: uppercase;">${collegeName}</h2>
+            <p style="margin: 5px 0 0; font-size: 12px; opacity: 0.9;">Duty Completion Report (Daily)</p>
+        </div>
+        <div style="padding: 25px;">
+            <p>Dear Head of Department (<b>${deptName}</b>),</p>
+            <p>This is to inform you that the following faculty members from your department have <b>successfully completed</b> their assigned invigilation duties for <b>${dateStr}</b>:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #f3f4f6; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #ddd;">Faculty Name</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Session</th>
+                        <th style="padding: 10px; border: 1px solid #ddd;">Time</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <p style="font-size: 13px; color: #6b7280; line-height: 1.6;">
+                The duty participation has been recorded in the central attendance register. No further action is required from the department.
+            </p>
+        </div>
+        <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-top: 1px solid #e5e7eb;">
+            <p style="margin: 0; font-size: 11px; color: #9ca3af;">Exam Cell, ${collegeName}</p>
+        </div>
+    </div>`;
+}
+
+
+
+
 window.toggleStaffListLock = function () {
     isStaffListLocked = !isStaffListLocked;
     const btn = document.getElementById('btn-staff-list-lock');
@@ -9108,6 +9160,102 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     list.innerHTML = html;
 };
 
+// --- NEW: Trigger Daily Completion Notification ---
+window.triggerDeptCompletionNotification = function() {
+    const dateInput = document.getElementById('dept-completion-date');
+    if (!dateInput || !dateInput.value) return alert("Please select a date first.");
+    
+    const [y, m, d] = dateInput.value.split('-');
+    const dateStr = `${d}.${m}.${y}`;
+
+    const list = document.getElementById('notif-list-container');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+    const title = document.getElementById('notif-modal-title');
+
+    if (title) title.textContent = "HOD Completion Report";
+    if (subtitle) subtitle.textContent = `Duty Completion List for ${dateStr}`;
+    
+    window.openModal('notification-modal');
+    list.innerHTML = '<div class="text-center py-8"><span class="animate-spin text-2xl">⏳</span></div>';
+
+    const rawDeptDuties = {}; 
+    window.currentDeptEmailQueue = []; 
+    
+    Object.keys(invigilationSlots).forEach(key => {
+        if (!key.startsWith(dateStr)) return;
+        const slot = invigilationSlots[key];
+        const [dStr, tStr] = key.split(' | ');
+        const isAN = (tStr.includes("PM") || tStr.startsWith("12:"));
+        const session = isAN ? "AN" : "FN";
+
+        if (slot.attendance && slot.attendance.length > 0) {
+            slot.attendance.forEach(email => {
+                const staff = staffData.find(s => s.email.toLowerCase() === email.toLowerCase());
+                const dept = staff ? (staff.dept || "Unassigned") : "Unassigned";
+                const name = staff ? staff.name : getNameFromEmail(email);
+                if (!rawDeptDuties[dept]) rawDeptDuties[dept] = [];
+                rawDeptDuties[dept].push({ name, date: dStr, session, time: tStr });
+            });
+        }
+    });
+
+    const depts = Object.keys(rawDeptDuties).sort();
+    if (depts.length === 0) {
+        list.innerHTML = `<div class="text-center text-gray-400 py-10">No attendance records verified for ${dateStr}.</div>`;
+        return;
+    }
+
+    depts.forEach((dept, index) => {
+        const entries = rawDeptDuties[dept];
+        const facultyMap = {};
+        entries.forEach(e => {
+            if (!facultyMap[e.name]) facultyMap[e.name] = { name: e.name, duties: [] };
+            facultyMap[e.name].duties.push({ session: e.session, time: e.time });
+        });
+
+        let hodEmail = "";
+        if (typeof departmentsConfig !== 'undefined') {
+            const deptCfg = departmentsConfig.find(d => (typeof d === 'object' ? d.name : d) === dept);
+            if (deptCfg && deptCfg.email) hodEmail = deptCfg.email;
+        }
+
+        const htmlBody = generateDepartmentCompletionEmail(dept, Object.values(facultyMap), dateStr);
+        window.currentDeptEmailQueue.push({
+            id: index, dept: dept, email: hodEmail, 
+            subject: `Invigilation Completion Report: ${dept} - ${dateStr}`,
+            body: htmlBody, count: Object.keys(facultyMap).length,
+            status: 'pending', btnId: `btn-dept-${index}`, statusId: `status-dept-${index}`
+        });
+    });
+
+    renderDeptNotificationList(); // Reusing existing UI renderer
+}
+
+// Ensure the UI renderer is accessible
+function renderDeptNotificationList() {
+    const list = document.getElementById('notif-list-container');
+    let html = `<div class="flex flex-col gap-3 mb-4 sticky top-0 bg-white z-10 pt-2 pb-4 border-b">
+        <button id="btn-bulk-dept-send" onclick="sendBulkDeptEmails()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-lg shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+            🚀 Send All Reports to HODs
+        </button>
+        <div id="dept-progress-bar" class="hidden mt-3 w-full bg-gray-200 rounded-full h-2.5">
+            <div id="dept-progress-fill" class="bg-teal-600 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
+    </div><div class="space-y-3">`;
+
+    window.currentDeptEmailQueue.forEach((item) => {
+        const noEmail = !item.email;
+        html += `<div class="bg-white border p-3 rounded-lg shadow-sm flex justify-between items-center">
+            <div>
+                <div class="font-bold text-gray-800 text-sm">${item.dept}</div>
+                <div class="text-[10px] text-gray-500">${item.count} Faculty Completed</div>
+                <div class="text-[9px] ${noEmail ? 'text-red-500' : 'text-teal-600'}">${noEmail ? 'HOD Email Missing' : item.email}</div>
+            </div>
+            <button id="${item.btnId}" onclick="sendSingleDeptEmail(${item.id})" ${noEmail ? 'disabled' : ''} class="bg-teal-50 text-teal-700 border px-3 py-1.5 rounded text-xs font-bold transition">Send</button>
+        </div>`;
+    });
+    list.innerHTML = html + `</div>`;
+}
 
 
 
