@@ -7207,6 +7207,13 @@ window.printDutyNotification = function (key) {
                         const doc = new jsPDF('p', 'mm', 'a4');
                         const staffList = ${staffListJson};
                         const cols = ${cols};
+                // Add College Logo (Relative to your root)
+                        try {
+                            // Positioning: x=12, y=8, w=15, h=15 (Adjust if needed)
+                            doc.addImage("CollegeLogo.png", "PNG", 12, 8, 15, 15);
+                        } catch (e) {
+                            console.warn("Logo failed to load:", e);
+                        }
 
                         doc.setFont("times", "bold");
                         doc.setFontSize(14);
@@ -7222,10 +7229,13 @@ window.printDutyNotification = function (key) {
                         doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 27, { align: "right" });
                         doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 31, { align: "right" });
 
+                    // Justified Letter Text
                         doc.setFont("times", "normal");
-                        doc.text("The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations.", 10, 38);
-                        doc.text("Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the exam.", 10, 42);
-                        doc.text("In case of any inconvenience, invigilators must arrange for a substitute and inform the office accordingly.", 10, 46);
+                        const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
+                    // splitTextToSize helps multi-line wrapping with justification
+                        const splitText = doc.splitTextToSize(letterText, 190);
+                        doc.text(splitText, 10, 38, { maxWidth: 190, align: "justify" });
+
 
                         doc.setDrawColor(0);
                         doc.setFillColor(245, 245, 245);
