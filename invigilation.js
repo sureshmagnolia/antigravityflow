@@ -397,6 +397,24 @@ if (adminView && !adminView.classList.contains('hidden')) {
             }
         });
     }
+    // --- 4. SESSION DATA LISTENER (Live Updates) ---
+    const sessionsRef = collection(db, "colleges", collegeId, "sessions");
+    if (sessionsUnsubscribe) sessionsUnsubscribe(); 
+    
+    sessionsUnsubscribe = onSnapshot(sessionsRef, (snap) => {
+        if (!snap.empty) {
+            console.log("📡 Staff Portal: Session Data Updated Live.");
+            if (isAdmin) {
+                renderAdminTodayStats();
+                populateAttendanceSessions();
+                renderSlotsGridAdmin();
+            } else if (currentUser) {
+                const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                if (me) initStaffDashboard(me);
+            }
+        }
+    });
+
 }
 
 // Helper to apply config (Shared by Cache & Live)
