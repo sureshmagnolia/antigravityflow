@@ -317,6 +317,7 @@ let opsUnsub = null;
 let allocUnsub = null;
 let staffUnsub = null;
 let slotsUnsub = null;
+let sessionsUnsub = null; // [NEW] For real-time session updates
 let hasUnsavedScribes = false; // NEW FLAG
 // --- MIXING ENGINE STATE (Session-Level Pre-Split) ---
 let mixingParts = {};        // Per-stream: { 'Regular': {partA,partB,pA,pB}, 'Distance': {...} }
@@ -1065,6 +1066,7 @@ async function updateLocalSlotsFromStudents() {
         if (allocUnsub) allocUnsub();
         if (staffUnsub) staffUnsub();
         if (slotsUnsub) slotsUnsub();
+        if (sessionsUnsub) sessionsUnsub();
         const syncLocal = (dataObj) => {
             if (!dataObj) return;
             Object.keys(dataObj).forEach(key => {
@@ -1170,49 +1172,56 @@ async function updateLocalSlotsFromStudents() {
             try {
 
                 // A. TRY V2 (Modular Sessions) FIRST
+                                // A. TRY V2 (Modular Sessions) - REAL-TIME LISTENER
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-                const sessionSnap = await getDocs(sessionsRef);
+                
+                // [NEW] Use onSnapshot for live global synchronization
+                if (sessionsUnsub) sessionsUnsub(); // Cleanup existing
+                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
+                    if (!sessionSnap.empty) {
+                        console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
 
-                if (!sessionSnap.empty) {
-                    console.log(`✅ V2 DETECTED: Loading ${sessionSnap.size} session documents...`);
+                        let allStudents = [];
+                        let allAllotments = {};
+                        let allQPCodes = {};
+                        let allAbsentees = {};
+                        let allScribeAllotments = {};
 
-                    // Reconstruct Monolithic Data from Modules
-                    let allStudents = [];
-                    let allAllotments = {};
-                    let allQPCodes = {};
-                    let allAbsentees = {};
-                    let allScribeAllotments = {};
-                    let allInvigMap = {};
+                        sessionSnap.forEach(doc => {
+                            const s = doc.data();
+                            const sessionKey = `${s.date} | ${s.time}`;
 
-                    sessionSnap.forEach(doc => {
-                        const s = doc.data();
-                        // Recreate the standard "Date | Time" key used by the app logic
-                        // (We trust the 'date' and 'time' fields inside the doc)
-                        const sessionKey = `${s.date} | ${s.time}`;
+                            if (s.students) allStudents.push(...s.students);
+                            if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
+                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
+                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
+                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                        });
 
-                        if (s.students) allStudents.push(...s.students);
-                        if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
-                        if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
-                        if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                        if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                    });
+                        // Sort Students for consistency
+                        allStudents.sort((a, b) => {
+                            const d1 = a.Date.split('.').reverse().join('');
+                            const d2 = b.Date.split('.').reverse().join('');
+                            if (d1 !== d2) return d1.localeCompare(d2);
+                            return a.Time.localeCompare(b.Time);
+                        });
 
-                    // Sort Students for consistency
-                    allStudents.sort((a, b) => {
-                        const d1 = a.Date.split('.').reverse().join('');
-                        const d2 = b.Date.split('.').reverse().join('');
-                        if (d1 !== d2) return d1.localeCompare(d2);
-                        return a.Time.localeCompare(b.Time);
-                    });
+                        // Update Memory and DB
+                        allStudentData = allStudents;
+                        await saveExamDataIDB(allStudents);
+                        localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
+                        localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
+                        localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
+                        localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
 
-                    // Save to Local Storage (Hydrate App Memory)
-                    await saveExamDataIDB(allStudents);
-                    localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
-                    localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
-                    localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
-                    localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
-
-                    updateSyncStatus("Synced (V2)", "success");
+                        updateSyncStatus("Synced (Live)", "success");
+                        
+                        // Refresh UI Components
+                        if (typeof updateDashboard === 'function') updateDashboard();
+                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        
+                    }
+                });
 
                 } else {
                     // B. FALLBACK TO V1 (Legacy Chunks)
