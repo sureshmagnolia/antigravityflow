@@ -16142,7 +16142,7 @@ if (displayLoc) {
         }
 
         const [date, time] = currentSessionKey.split(' | ');
-        const collegeName = collegeData.examCollegeName || "Exam Allotment System";
+        const collegeName = localStorage.getItem('examCollegeName') || "Exam Allotment System";
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
         
         let totalStudents = 0;
