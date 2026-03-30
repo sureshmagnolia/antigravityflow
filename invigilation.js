@@ -101,6 +101,7 @@ let cloudUnsubscribe = null;
 let slotsUnsubscribe = null;
 let staffUnsubscribe = null;
 let allocUnsubscribe = null; // For invigilation mapping
+let sessionsUnsubscribe = null; // <--- ADD THIS LINE
 let advanceUnavailability = {}; // Stores { "DD.MM.YYYY": { FN: [], AN: [] } }
 let globalDutyTarget = 2; // Default
 let guestGlobalTarget = 2; // Default (Guest Lecturer Base)
