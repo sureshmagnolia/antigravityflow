@@ -1356,10 +1356,15 @@ function renderStaffTable() {
     });
 }
 
-function renderStaffRankList(myEmail) {
+function renderStaffRankList(myEmail, targetDate = new Date()) {
+
     // 1. Calculate and Sort
     const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
-    slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+        // Ensure targetDate is a valid Date object
+    if (!(targetDate instanceof Date) || isNaN(targetDate)) targetDate = new Date();
+
+    const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
     const targetStamp = new Date(slotTargetDateStr).getTime();
 
     const rankedStaff = staffData
