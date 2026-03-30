@@ -9830,14 +9830,21 @@ window.real_populate_qp_code_session_dropdown = function () {
                         <h4 class="font-bold text-gray-800 text-base">
                             ${room.roomName} ${location}
                         </h4>
+
                         <div class="flex gap-2 mt-1 items-center">
                             <span class="text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}">
                                 ${streamName}
                             </span>
                             <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex items-center">
                                 ${room.students.length} / ${room.capacity} Students ${capBadge}
+                                ${room.students.length > 30 ? `
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-bold ml-1">
+                                        Leftover Grace
+                                    </span>
+                                ` : ''}
                             </span>
                         </div>
+
                     </div>
                 </div>
                 
