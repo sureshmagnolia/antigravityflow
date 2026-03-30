@@ -1223,7 +1223,9 @@ async function updateLocalSlotsFromStudents() {
                     }
                 });
 
-                } else {
+                // Check for V1 Fallback if sessions collection doesn't exist
+                const sessionSnapCheck = await getDocs(sessionsRef);
+                if (sessionSnapCheck.empty) {
                     // B. FALLBACK TO V1 (Legacy Chunks)
                     console.log("⚠️ V2 EMPTY. Falling back to V1 Chunks...");
 
