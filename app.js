@@ -1226,11 +1226,15 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
                         
-                        // 🔄 REFRESH INVIGILATION PANEL (Fixes Swap Sync)
+                        // 🔄 REAL-TIME UI REFRESH (Rooms & Invigilators)
+                        if (typeof updateAllotmentDisplay === 'function') {
+                            updateAllotmentDisplay(); 
+                        }
                         if (typeof renderInvigilationPanel === 'function') {
                             renderInvigilationPanel();
                         }
                     }
+
 
                 });
 
