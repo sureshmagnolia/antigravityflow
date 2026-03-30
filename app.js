@@ -1186,6 +1186,8 @@ async function updateLocalSlotsFromStudents() {
                         let allQPCodes = {};
                         let allAbsentees = {};
                         let allScribeAllotments = {};
+                        let allInvigMapping = {}; // [NEW] Track staff assignments live
+
 
                         sessionSnap.forEach(doc => {
                             const s = doc.data();
@@ -1196,6 +1198,8 @@ async function updateLocalSlotsFromStudents() {
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+
                         });
 
                         // Sort Students for consistency
@@ -1213,6 +1217,8 @@ async function updateLocalSlotsFromStudents() {
                         localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
                         localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
                         localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                        localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+
 
                         updateSyncStatus("Synced (Live)", "success");
                         
