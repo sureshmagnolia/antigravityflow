@@ -10073,11 +10073,15 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const streamPart = mixingParts[targetStream]; // This stream's own independent queues
 
-        // ── GUARD 1: Last room — all remaining fit in this room ──────────────
-        // If the total unallotted candidates for this stream fit within this
-        // room's capacity, skip mixing and take ALL of them. No scramble.
-        if (candidates.length <= limit) {
+        // ── GUARD 1: Last room / Leftover Logic (V1 Feature Restored) ───────
+        // If unallotted students are 33 or below, allot them all to this room
+        // even if the capacity is standard (30), to avoid a stray 1 or 2 students.
+        const leftoverThreshold = Math.max(limit, 33); 
+        
+        if (candidates.length <= leftoverThreshold) {
             newStudents = candidates.slice();
+            console.log(`💡 Leftover Guard: Allotting all ${candidates.length} students to this room.`);
+
 
         // ── GUARD 2: Only one course in this stream ───────────────────────────
         // partB will be empty if all students belong to a single course.
