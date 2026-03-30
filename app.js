@@ -16246,96 +16246,6 @@ if (displayLoc) {
                     if (changed) {
                         localStorage.setItem(keyName, JSON.stringify(newData));
                     }
-    window.printAllotmentSummary = function () {
-        if (!currentSessionKey || currentSessionAllotment.length === 0) {
-            alert("Please allot rooms before printing the summary.");
-            return;
-        }
-
-        const [date, time] = currentSessionKey.split(' | ');
-        const collegeName = collegeData.examCollegeName || "Exam Allotment System";
-        const roomSerialMap = getRoomSerialMap(currentSessionKey);
-        
-        let totalStudents = 0;
-        const rowsHtml = currentSessionAllotment.map(room => {
-            const serial = roomSerialMap[room.roomName] || '-';
-            const roomInfo = currentRoomConfig[room.roomName];
-            const loc = (roomInfo && roomInfo.location) ? roomInfo.location : '-';
-            const stream = room.stream || "Regular";
-            const count = room.students.length;
-            totalStudents += count;
-
-            return `
-                <tr>
-                    <td style="text-align: center;">${serial}</td>
-                    <td>${room.roomName}</td>
-                    <td>${loc}</td>
-                    <td style="text-align: center;">${stream}</td>
-                    <td style="text-align: center; font-weight: bold;">${count}</td>
-                </tr>
-            `;
-        }).join('');
-
-        const summaryHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Room Allotment Summary - ${date}</title>
-                <style>
-                    @page { size: A4; margin: 15mm; }
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; line-height: 1.4; }
-                    .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 15px; margin-bottom: 25px; }
-                    .header h1 { margin: 0; font-size: 18pt; text-transform: uppercase; letter-spacing: 1px; }
-                    .header h2 { margin: 5px 0; font-size: 14pt; color: #555; }
-                    .header .meta { margin-top: 10px; font-size: 11pt; font-weight: bold; color: #000; }
-                    
-                    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                    th { background-color: #f2f2f2; border: 1px solid #333; padding: 10px; font-size: 10pt; text-transform: uppercase; }
-                    td { border: 1px solid #333; padding: 8px 10px; font-size: 10pt; }
-                    
-                    .footer { margin-top: 30px; text-align: right; font-weight: bold; font-size: 12pt; border-top: 1px solid #eee; padding-top: 10px; }
-                    .print-btn { background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
-                    @media print { .print-btn { display: none; } }
-                </style>
-            </head>
-            <body>
-                <div style="text-align: right;"><button class="print-btn" onclick="window.print()">Print Report</button></div>
-                
-                <div class="header">
-                    <h1>${collegeName}</h1>
-                    <h2>Room Allotment Summary</h2>
-                    <div class="meta">Date: ${date} &nbsp; | &nbsp; Session: ${time}</div>
-                </div>
-
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 8%;">S.No</th>
-                            <th style="width: 25%;">Room Name</th>
-                            <th style="width: 30%;">Location</th>
-                            <th style="width: 20%;">Stream</th>
-                            <th style="width: 17%;">Students</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rowsHtml}
-                    </tbody>
-                </table>
-
-                <div class="footer">
-                    Total Allotted Students: ${totalStudents}
-                </div>
-
-                <script>window.onload = function() { setTimeout(() => window.print(), 800); };<\/script>
-            </body>
-            </html>
-        `;
-
-        const printWin = window.open('', '_blank');
-        printWin.document.write(summaryHtml);
-        printWin.document.close();
-    };
-
                 };
 
                 // Run Fixers
@@ -18372,5 +18282,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
 
