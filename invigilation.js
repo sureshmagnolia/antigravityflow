@@ -404,6 +404,23 @@ if (adminView && !adminView.classList.contains('hidden')) {
     sessionsUnsubscribe = onSnapshot(sessionsRef, (snap) => {
         if (!snap.empty) {
             console.log("📡 Staff Portal: Session Data Updated Live.");
+
+            // 🔄 SYNC INCOMING DATA TO LOCAL STORAGE (Crucial Link)
+            snap.docs.forEach(doc => {
+                const data = doc.data();
+                const sKey = `${data.date} | ${data.time}`;
+                
+                // Update Local Invigilator Mapping
+                const allInvig = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+                allInvig[sKey] = data.invigilatorMapping || {};
+                localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvig));
+                
+                // Update Local Room Allotment (For Capacity/Stats)
+                const allRooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                allRooms[sKey] = data.roomAllotment || [];
+                localStorage.setItem('examRoomAllotment', JSON.stringify(allRooms));
+            });
+
             if (isAdmin) {
                 renderAdminTodayStats();
                 populateAttendanceSessions();
