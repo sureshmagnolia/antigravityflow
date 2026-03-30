@@ -1220,13 +1220,18 @@ async function updateLocalSlotsFromStudents() {
                         localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
 
-                        updateSyncStatus("Synced (Live)", "success");
+                updateSyncStatus("Synced (Live)", "success");
                         
                         // Refresh UI Components
                         if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
                         
+                        // 🔄 REFRESH INVIGILATION PANEL (Fixes Swap Sync)
+                        if (typeof renderInvigilationPanel === 'function') {
+                            renderInvigilationPanel();
+                        }
                     }
+
                 });
 
                 // Check for V1 Fallback if sessions collection doesn't exist
