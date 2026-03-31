@@ -273,6 +273,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
     updateSyncStatus("Downloading Past Exam Archive...", "neutral");
     try {
         const { getDoc, doc, db } = window.firebase;
+        
         console.log(`📡 Fetching historical data for ID: [${sessionIdStr}]`);
 
         const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
@@ -3822,11 +3823,12 @@ if (toggleButton && sidebar) {
         if (!timeStr) return "FN"; // Default
         const t = timeStr.toUpperCase().trim();
 
-        // Logic: PM or 12:xx or 13:xx+ implies AN. Everything else is FN.
-        if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") ||
-            t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:") || t.startsWith("16:")) {
-            return "AN";
-        }
+            // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
+            if (t.includes("PM") || t.includes("AN") || t.startsWith("12:") || t.startsWith("12.") || 
+                t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
+                sessionType = "AN";
+            }
+
         return "FN";
     }
 
@@ -11166,7 +11168,20 @@ window.real_disable_all_report_buttons = function (disabled) {
 
         if (currentEditSession) {
             const [date, time] = currentEditSession.split(' | ');
-            const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+                const sessionStudents = allStudentData.filter(s => {
+                const dateMatch = s.Date === date.trim();
+                let timeMatch = s.Time === time.trim();
+                
+                // Smart fallback for FN/AN vs Clock Time
+                if (!timeMatch) {
+                    const isAN = time.trim() === "AN" || time.includes("PM");
+                    const sTime = s.Time.toUpperCase();
+                    const sIsAN = sTime.includes("PM") || sTime.includes("AN") || sTime.startsWith("12:") || sTime.startsWith("13:");
+                    timeMatch = (isAN === sIsAN);
+                }
+                return dateMatch && timeMatch;
+            });
+
 
             // --- NEW: Update and Show Badge Count ---
             if (opsCountBadge) {
