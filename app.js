@@ -279,11 +279,10 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
             allStudentData = [...allStudentData, ...studentDoc.data().students];
             jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
             await saveExamDataIDB(allStudentData);
-            // Refresh ALL dropdowns so every tab sees the new session data
-            if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
-            if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
-            if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
+            // Do NOT rebuild dropdowns here — selections would be lost.
+            // Each tab's change handler is responsible for rendering after this returns.
             updateSyncStatus("Past Exam Ready!", "success");
+
 
         } else {
              updateSyncStatus("Error: No Master Data Found", "error");
@@ -8247,7 +8246,11 @@ window.real_populate_session_dropdown = function () {
   
    
 
-  sessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(sessionSelect.value);
+    sessionSelect.addEventListener('change', async () => {
+        const savedSession = sessionSelect.value;
+        await window.fetchHeavyDataOnDemand(savedSession);
+        sessionSelect.value = savedSession;
+
         const sessionKey = sessionSelect.value;
         if (sessionKey) {
             absenteeSearchSection.classList.remove('hidden');
@@ -8741,7 +8744,11 @@ window.real_populate_qp_code_session_dropdown = function () {
     
 
     // Event listener for the QP Code session dropdown
-  sessionSelectQP.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(sessionSelectQP.value);
+  sessionSelectQP.addEventListener('change', async () => {
+        const savedSession = sessionSelectQP.value;
+        await window.fetchHeavyDataOnDemand(savedSession);
+        sessionSelectQP.value = savedSession;
+
         const sessionKey = sessionSelectQP.value;
         if (sessionKey) {
             qpEntrySection.classList.remove('hidden');
@@ -10273,7 +10280,11 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // Event Listeners for Room Allotment
     if (allotmentSessionSelect) {
-        allotmentSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(allotmentSessionSelect.value);
+        allotmentSessionSelect.addEventListener('change', async () => {
+        const savedSession = allotmentSessionSelect.value;
+        await window.fetchHeavyDataOnDemand(savedSession);
+        allotmentSessionSelect.value = savedSession;
+
             const sessionKey = allotmentSessionSelect.value;
 
             // 1. Reset Dirty Flag (New session loaded fresh)
@@ -11091,11 +11102,12 @@ window.real_disable_all_report_buttons = function (disabled) {
     const modalCancelBtn = document.getElementById('modal-cancel-student');
 
     // 1. Session selection (Updated: Splits Course by Stream)
-    editSessionSelect.addEventListener('change', async () => {
-        const savedSession = editSessionSelect.value; // Save BEFORE async call resets dropdown
+       editSessionSelect.addEventListener('change', async () => {
+        const savedSession = editSessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
-        editSessionSelect.value = savedSession;       // Restore selection after dropdown rebuild
-        currentEditSession = savedSession;            // Use saved value, not the cleared dropdown
+        editSessionSelect.value = savedSession;
+        currentEditSession = savedSession;
+
 
         const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
 
@@ -12460,7 +12472,11 @@ Are you sure you want to update these records?
     searchModeGlobalRadio.addEventListener('change', toggleSearchMode);
 
     // 1. Listen for session change (Session Mode Only)
-   searchSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(searchSessionSelect.value);
+      searchSessionSelect.addEventListener('change', async () => {
+        const savedSession = searchSessionSelect.value;
+        await window.fetchHeavyDataOnDemand(savedSession);
+        searchSessionSelect.value = savedSession;
+
         const sessionKey = searchSessionSelect.value;
         studentSearchInput.value = '';
         studentSearchAutocomplete.classList.add('hidden');
