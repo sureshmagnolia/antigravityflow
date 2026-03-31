@@ -277,9 +277,14 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         
         if (studentDoc.exists() && studentDoc.data().students) {
             allStudentData = [...allStudentData, ...studentDoc.data().students];
-            jsonDataStore.innerHTML = JSON.stringify(allStudentData); // ← ADD THIS
-            await saveExamDataIDB(allStudentData); // Save permanently to UI Cache
+            jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
+            await saveExamDataIDB(allStudentData);
+            // Refresh ALL dropdowns so every tab sees the new session data
+            if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
+            if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
+            if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
             updateSyncStatus("Past Exam Ready!", "success");
+
         } else {
              updateSyncStatus("Error: No Master Data Found", "error");
         }
@@ -8671,7 +8676,10 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             const previousSelection = sessionSelectQP.value;
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+            const knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            knownRegistry.forEach(k => sessions.add(k));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
+
 
 
             sessionSelectQP.innerHTML = '<option value="">-- Select a Session --</option>';
@@ -9587,7 +9595,10 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             const previousSelection = allotmentSessionSelect.value;
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+            const knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            knownRegistry.forEach(k => sessions.add(k));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
+
 
             allotmentSessionSelect.innerHTML = '<option value="">-- Select a Session --</option>';
             // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
