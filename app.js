@@ -1261,6 +1261,12 @@ async function updateLocalSlotsFromStudents() {
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                         });
+                        // Store a lightweight registry of ALL known sessions for dropdowns
+                        const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
+                            const sd = d.data(); return `${sd.date} | ${sd.time}`;
+                        }));
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
+
 
                         // Wait for any allowed pre-fetches to finish safely
                         if (missingStudentsPromises.length > 0) {
@@ -8151,7 +8157,11 @@ window.real_populate_session_dropdown = function () {
             updateUniqueStudentList();
 
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+            // Merge with registry of all known sessions from Firebase metadata
+            const knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            knownRegistry.forEach(k => sessions.add(k));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
+
 
             // Clear Options
             [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
