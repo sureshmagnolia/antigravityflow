@@ -1259,12 +1259,6 @@ async function updateLocalSlotsFromStudents() {
                                     missingStudentsPromises.push(fetchPromise);
                                 }
                             }
-                        // Store a lightweight registry of ALL known sessions for dropdowns
-                        const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
-                            const sd = d.data(); return `${sd.date} | ${sd.time}`;
-                        }));
-                        localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
-
                             // Load ALL metadata continuously, regardless of date
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
@@ -1272,6 +1266,8 @@ async function updateLocalSlotsFromStudents() {
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                         });
+                       if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+                        });  ← forEach closes here
                         // Store a lightweight registry of ALL known sessions for dropdowns
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
