@@ -11091,8 +11091,12 @@ window.real_disable_all_report_buttons = function (disabled) {
     const modalCancelBtn = document.getElementById('modal-cancel-student');
 
     // 1. Session selection (Updated: Splits Course by Stream)
-    editSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(editSessionSelect.value);
-        currentEditSession = editSessionSelect.value;
+    editSessionSelect.addEventListener('change', async () => {
+        const savedSession = editSessionSelect.value; // Save BEFORE async call resets dropdown
+        await window.fetchHeavyDataOnDemand(savedSession);
+        editSessionSelect.value = savedSession;       // Restore selection after dropdown rebuild
+        currentEditSession = savedSession;            // Use saved value, not the cleared dropdown
+
         const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
 
         // --- NEW: Select the badge element ---
