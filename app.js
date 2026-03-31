@@ -8668,10 +8668,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
             }
-            if (allStudentData.length === 0) {
+            const knownRegistry_qp = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            if (allStudentData.length === 0 && knownRegistry_qp.length === 0) {
                 disable_qpcode_tab(true);
                 return;
             }
+            if (knownRegistry_qp.length > 0) disable_qpcode_tab(false);
+
 
             const previousSelection = sessionSelectQP.value;
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
@@ -9587,10 +9590,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (allStudentData.length === 0) {
                 allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
             }
-            if (allStudentData.length === 0) {
+            const knownRegistry_room = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            if (allStudentData.length === 0 && knownRegistry_room.length === 0) {
                 disable_room_allotment_tab(true);
                 return;
             }
+            if (knownRegistry_room.length > 0) disable_room_allotment_tab(false);
+
 
             const previousSelection = allotmentSessionSelect.value;
             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
