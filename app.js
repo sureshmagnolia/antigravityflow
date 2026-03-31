@@ -3834,7 +3834,7 @@ if (toggleButton && sidebar) {
 
         return "FN";
 
-
+}
     // Helper to convert Date+Session to a strictly comparable number (YYYYMMDDS)
     function getSessionValue(dateStr, sessionType) {
         if (!dateStr) return 0;
