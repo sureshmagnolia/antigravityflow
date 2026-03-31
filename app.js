@@ -257,6 +257,35 @@ async function autoCleanPastGhostData() {
     }
 }
 
+// ⚡ ON-DEMAND PAST EXAM FETCH ENGINE
+window.fetchHeavyDataOnDemand = async function(sessionKey) {
+    if (!sessionKey || !window.currentCollegeId) return;
+    
+    const [date, time] = sessionKey.split(' | ');
+    // Skip if we already downloaded it previously
+    const hasLocals = allStudentData.some(s => s.Date === date.trim() && s.Time === time.trim());
+    if (hasLocals) return; 
+
+    // Generate accurate ID
+    let sessionIdStr = date.trim() + "_" + time.trim();
+    sessionIdStr = sessionIdStr.replace(/[^a-zA-Z0-9_]/g, ""); 
+    
+    updateSyncStatus("Downloading Past Exam Archive...", "neutral");
+    try {
+        const { getDoc, doc, db } = window.firebase;
+        const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
+        
+        if (studentDoc.exists() && studentDoc.data().students) {
+            allStudentData = [...allStudentData, ...studentDoc.data().students];
+            await saveExamDataIDB(allStudentData); // Save permanently to UI Cache
+            updateSyncStatus("Past Exam Ready!", "success");
+        } else {
+             updateSyncStatus("Error: No Master Data Found", "error");
+        }
+    } catch (e) {
+        console.error("Fetch past exam heavy data error:", e);
+    }
+};
 
 
 // Smart Trigger (Safe to be at the top)
@@ -1175,8 +1204,14 @@ async function updateLocalSlotsFromStudents() {
                                 // A. TRY V2 (Modular Sessions) - REAL-TIME LISTENER
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
                 
-                // [NEW] Use onSnapshot for live global synchronization
+                      // [NEW] Use onSnapshot for live global synchronization
                 if (sessionsUnsub) sessionsUnsub(); // Cleanup existing
+                
+                // Get timestamp for Today's Midnight
+                const todayMidnight = new Date();
+                todayMidnight.setHours(0, 0, 0, 0);
+                const midnightObj = todayMidnight.getTime();
+
                 sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
                     if (!sessionSnap.empty) {
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
@@ -1188,7 +1223,6 @@ async function updateLocalSlotsFromStudents() {
                         let allScribeAllotments = {};
                         let allInvigMapping = {}; 
 
-                        // NEW: Tools for fetching missing heavy data
                         const { getDoc } = window.firebase;
                         let missingStudentsPromises = [];
                         const localDB = await loadExamDataIDB() || [];
@@ -1197,15 +1231,17 @@ async function updateLocalSlotsFromStudents() {
                             const s = docSnap.data();
                             const sessionKey = `${s.date} | ${s.time}`;
 
-                            // Determine if we need to fetch students from the hidden sub-collection
+                            // Check if this exam is happening Today or in the Future
+                            const examTimestamp = (s.meta && s.meta.timestamp) ? s.meta.timestamp : new Date(s.date.split('.').reverse().join('-')).getTime();
+                            const isTodayOrFuture = examTimestamp >= midnightObj;
+
                             if (s.students) {
-                                // Fallback for old exams saved before this optimization
-                                allStudents.push(...s.students);
-                            } else if (s.meta && s.meta.studentCount > 0) {
-                                // Check if we already have these students saved in our local cache
+                                allStudents.push(...s.students); // Support for old legacy DB states
+                            } else if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
+                                // AUTO-FETCH heavy data ONLY IF Today or Future
                                 const haveLocals = localDB.some(stu => stu.Date === s.date && stu.Time === s.time);
                                 if (!haveLocals) {
-                                    console.log(`📥 Fetching master student list for ${sessionKey}...`);
+                                    console.log(`📥 Prefetching Future/Today students for ${sessionKey}...`);
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
                                         .then(studentDoc => {
                                             if (studentDoc.exists() && studentDoc.data().students) {
@@ -1216,6 +1252,7 @@ async function updateLocalSlotsFromStudents() {
                                 }
                             }
                             
+                            // Load ALL metadata continuously, regardless of date
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
@@ -1223,23 +1260,21 @@ async function updateLocalSlotsFromStudents() {
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                         });
 
-                        // Wait safely for any new student records to download
+                        // Wait for any allowed pre-fetches to finish safely
                         if (missingStudentsPromises.length > 0) {
                             await Promise.all(missingStudentsPromises);
                         }
 
-                        // Safely merge new students with your local database
+                        // Safely combine heavy data updates
                         let mergedStudents = [...localDB];
                         if (allStudents.length > 0) {
                             allStudents.forEach(stu => {
-                                // Prevent duplicates
                                 if (!mergedStudents.find(existing => existing['Register Number'] === stu['Register Number'] && existing.Date === stu.Date)) {
                                     mergedStudents.push(stu);
                                 }
                             });
                         }
 
-                        // Sort Students for consistency
                         mergedStudents.sort((a, b) => {
                             const d1 = a.Date.split('.').reverse().join('');
                             const d2 = b.Date.split('.').reverse().join('');
@@ -1247,9 +1282,9 @@ async function updateLocalSlotsFromStudents() {
                             return a.Time.localeCompare(b.Time);
                         });
 
-                        // Update Memory and DB with strictly the merged version
                         allStudentData = mergedStudents;
                         await saveExamDataIDB(mergedStudents);
+
 
                         
                         localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
@@ -8204,7 +8239,7 @@ window.real_populate_session_dropdown = function () {
   
    
 
-    sessionSelect.addEventListener('change', () => {
+  sessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(sessionSelect.value);
         const sessionKey = sessionSelect.value;
         if (sessionKey) {
             absenteeSearchSection.classList.remove('hidden');
@@ -8692,7 +8727,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     
 
     // Event listener for the QP Code session dropdown
-    sessionSelectQP.addEventListener('change', () => {
+  sessionSelectQP.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(sessionSelectQP.value);
         const sessionKey = sessionSelectQP.value;
         if (sessionKey) {
             qpEntrySection.classList.remove('hidden');
@@ -10218,7 +10253,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // Event Listeners for Room Allotment
     if (allotmentSessionSelect) {
-        allotmentSessionSelect.addEventListener('change', () => {
+        allotmentSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(allotmentSessionSelect.value);
             const sessionKey = allotmentSessionSelect.value;
 
             // 1. Reset Dirty Flag (New session loaded fresh)
@@ -11036,7 +11071,7 @@ window.real_disable_all_report_buttons = function (disabled) {
     const modalCancelBtn = document.getElementById('modal-cancel-student');
 
     // 1. Session selection (Updated: Splits Course by Stream)
-    editSessionSelect.addEventListener('change', () => {
+    editSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(editSessionSelect.value);
         currentEditSession = editSessionSelect.value;
         const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
 
@@ -12401,7 +12436,7 @@ Are you sure you want to update these records?
     searchModeGlobalRadio.addEventListener('change', toggleSearchMode);
 
     // 1. Listen for session change (Session Mode Only)
-    searchSessionSelect.addEventListener('change', () => {
+   searchSessionSelect.addEventListener('change', async () => { await window.fetchHeavyDataOnDemand(searchSessionSelect.value);
         const sessionKey = searchSessionSelect.value;
         studentSearchInput.value = '';
         studentSearchAutocomplete.classList.add('hidden');
