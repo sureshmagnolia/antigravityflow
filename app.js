@@ -1186,33 +1186,72 @@ async function updateLocalSlotsFromStudents() {
                         let allQPCodes = {};
                         let allAbsentees = {};
                         let allScribeAllotments = {};
-                        let allInvigMapping = {}; // [NEW] Track staff assignments live
+                        let allInvigMapping = {}; 
 
+                        // NEW: Tools for fetching missing heavy data
+                        const { getDoc } = window.firebase;
+                        let missingStudentsPromises = [];
+                        const localDB = await loadExamDataIDB() || [];
 
-                        sessionSnap.forEach(doc => {
-                            const s = doc.data();
+                        sessionSnap.forEach(docSnap => {
+                            const s = docSnap.data();
                             const sessionKey = `${s.date} | ${s.time}`;
 
-                            if (s.students) allStudents.push(...s.students);
+                            // Determine if we need to fetch students from the hidden sub-collection
+                            if (s.students) {
+                                // Fallback for old exams saved before this optimization
+                                allStudents.push(...s.students);
+                            } else if (s.meta && s.meta.studentCount > 0) {
+                                // Check if we already have these students saved in our local cache
+                                const haveLocals = localDB.some(stu => stu.Date === s.date && stu.Time === s.time);
+                                if (!haveLocals) {
+                                    console.log(`📥 Fetching master student list for ${sessionKey}...`);
+                                    const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
+                                        .then(studentDoc => {
+                                            if (studentDoc.exists() && studentDoc.data().students) {
+                                                allStudents.push(...studentDoc.data().students);
+                                            }
+                                        });
+                                    missingStudentsPromises.push(fetchPromise);
+                                }
+                            }
+                            
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
-
                         });
 
+                        // Wait safely for any new student records to download
+                        if (missingStudentsPromises.length > 0) {
+                            await Promise.all(missingStudentsPromises);
+                        }
+
+                        // Safely merge new students with your local database
+                        let mergedStudents = [...localDB];
+                        if (allStudents.length > 0) {
+                            allStudents.forEach(stu => {
+                                // Prevent duplicates
+                                if (!mergedStudents.find(existing => existing['Register Number'] === stu['Register Number'] && existing.Date === stu.Date)) {
+                                    mergedStudents.push(stu);
+                                }
+                            });
+                        }
+
                         // Sort Students for consistency
-                        allStudents.sort((a, b) => {
+                        mergedStudents.sort((a, b) => {
                             const d1 = a.Date.split('.').reverse().join('');
                             const d2 = b.Date.split('.').reverse().join('');
                             if (d1 !== d2) return d1.localeCompare(d2);
                             return a.Time.localeCompare(b.Time);
                         });
 
-                        // Update Memory and DB
-                        allStudentData = allStudents;
-                        await saveExamDataIDB(allStudents);
+                        // Update Memory and DB with strictly the merged version
+                        allStudentData = mergedStudents;
+                        await saveExamDataIDB(mergedStudents);
+
+                        
                         localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
                         localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
                         localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
@@ -1379,28 +1418,39 @@ async function deleteSessionFromCloud(sessionKey) {
         const sessionInvigMap = allInvigMapping[sessionKey] || {};
 
 
-        // 2. Construct Payload
+    // 2. Construct Payload
         const sessionDoc = {
             id: sessionId,
             date: cleanDate,
             time: cleanTime,
-            students: students,
+            // students: students, // REMOVED TO SAVE EGRESS COSTS
             roomAllotment: sessionAllotment,
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
-            invigilatorMapping: sessionInvigMap, // <--- ADD THIS LINE
+            invigilatorMapping: sessionInvigMap, 
             meta: { 
                 studentCount: students.length, 
                 lastUpdated: new Date().toISOString() 
             }
         };
 
+        // --- NEW: Heavy Array Sub-Collection ---
+        const sessionStudentsDoc = {
+            students: students,
+            lastUpdated: new Date().toISOString() 
+        };
+
         // 3. Write to Firestore (Modular Write)
         try {
-            // FIX: Use 'currentCollegeId' directly here too
+            // Write tiny metadata to real-time listener collection
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
+            
+            // Write massive array to 'rest' collection
+            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+
             updateSyncStatus("Saved (V2)", "success");
+
             
             // Recalculate Invigilation Slots
             if (typeof updateLocalSlotsFromStudents === 'function') {
