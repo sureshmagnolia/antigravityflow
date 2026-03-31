@@ -1238,10 +1238,11 @@ async function updateLocalSlotsFromStudents() {
                             if (s.students) {
                                 allStudents.push(...s.students); // Support for old legacy DB states
                             } else if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
-                                // AUTO-FETCH heavy data ONLY IF Today or Future
-                                const haveLocals = localDB.some(stu => stu.Date === s.date && stu.Time === s.time);
-                                if (!haveLocals) {
-                                    console.log(`📥 Prefetching Future/Today students for ${sessionKey}...`);
+                                // AUTO-FETCH heavy data if missing OR if a new CSV was uploaded
+                                const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
+                                if (localCount !== s.meta.studentCount) {
+                                    console.log(`🔄 CSV Update Detected! Downloading fresh master student list for ${sessionKey}...`);
+
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
                                         .then(studentDoc => {
                                             if (studentDoc.exists() && studentDoc.data().students) {
@@ -1268,12 +1269,16 @@ async function updateLocalSlotsFromStudents() {
                         // Safely combine heavy data updates
                         let mergedStudents = [...localDB];
                         if (allStudents.length > 0) {
-                            allStudents.forEach(stu => {
-                                if (!mergedStudents.find(existing => existing['Register Number'] === stu['Register Number'] && existing.Date === stu.Date)) {
-                                    mergedStudents.push(stu);
-                                }
-                            });
+                            // Identify which exams just got fresh downloads
+                            const freshlyDownloadedSessions = new Set(allStudents.map(s => `${s.Date}|${s.Time}`));
+                            
+                            // Purge the old local cache ONLY for those specific exams to prevent infinite loops
+                            mergedStudents = localDB.filter(existing => !freshlyDownloadedSessions.has(`${existing.Date}|${existing.Time}`));
+                            
+                            // Insert the pristine master copies
+                            mergedStudents.push(...allStudents);
                         }
+
 
                         mergedStudents.sort((a, b) => {
                             const d1 = a.Date.split('.').reverse().join('');
