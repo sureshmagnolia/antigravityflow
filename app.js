@@ -1383,33 +1383,33 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 
 // --- PHASE 4: MODULAR WRITE HELPERS ---
 
-    function generateSessionId(sessionKey) {
+     function generateSessionId(sessionKey) {
         try {
-            // sessionKey format: "DD.MM.YYYY | HH:MM AM"
-            const [dateStr, timeStr] = sessionKey.split('|');
-            if(!dateStr || !timeStr) return "UNKNOWN_SESSION";
-
-            const [d, m, y] = dateStr.trim().split('.');
+            const parts = sessionKey.split('|');
+            if (parts.length < 2) return "UNKNOWN_SESSION";
+            
+            // Normalize Date: remove . / - and extract D, M, Y
+            const dateStr = parts[0].trim();
+            const dateParts = dateStr.split(/[./-]/);
+            if (dateParts.length < 3) return "ERROR_ID";
+            const [d, m, y] = dateParts;
             const isoDate = `${y}-${m}-${d}`;
 
-            const t = timeStr.trim().toUpperCase();
+            // Normalize Time: Detect AN/FN
+            const t = parts[1].trim().toUpperCase();
             let sessionType = "FN";
-            // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
             if (t.includes("PM") || t.includes("AN") || 
-                t.startsWith("12:") || t.startsWith("12.") || 
-                t.startsWith("13:") || t.startsWith("14:") || 
-                t.startsWith("15:") || t.startsWith("16:")) {
+                t.startsWith("12:") || t.startsWith("13:") || 
+                t.startsWith("14:") || t.startsWith("15:") || t.startsWith("16:")) {
                 sessionType = "AN";
             }
-
-
-            
             return `${isoDate}_${sessionType}`;
         } catch (e) {
-            console.error("Session ID Gen Error:", sessionKey);
-            return "ERROR_ID";
+            console.error("ID Gen Error:", e);
+            return "ERROR";
         }
     }
+
 
 async function deleteSessionFromCloud(sessionKey) {
     if (!currentCollegeId || !navigator.onLine) return;
