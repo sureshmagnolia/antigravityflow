@@ -11171,21 +11171,26 @@ window.real_disable_all_report_buttons = function (disabled) {
         const bulkContainer = document.getElementById('bulk-course-update-container');
         if (bulkContainer) bulkContainer.classList.add('hidden');
 
-        if (currentEditSession) {
-            const [date, time] = currentEditSession.split(' | ');
-                const sessionStudents = allStudentData.filter(s => {
-                const dateMatch = s.Date === date.trim();
-                let timeMatch = s.Time === time.trim();
+                if (currentEditSession) {
+            const [dateRaw, timeRaw] = currentEditSession.split(' | ');
+            // Normalize target date: "31.10.2025" -> "31102025"
+            const targetDateNorm = dateRaw.trim().replace(/[./-]/g, ''); 
+            
+            const sessionStudents = allStudentData.filter(s => {
+                // Normalize student date for comparison
+                const studentDateNorm = (s.Date || "").replace(/[./-]/g, '');
+                const dateMatch = studentDateNorm === targetDateNorm;
                 
-                // Smart fallback for FN/AN vs Clock Time
+                let timeMatch = s.Time === timeRaw.trim();
                 if (!timeMatch) {
-                    const isAN = time.trim() === "AN" || time.includes("PM");
-                    const sTime = s.Time.toUpperCase();
+                    const isAN = timeRaw.includes("AN") || timeRaw.includes("PM") || timeRaw.startsWith("12:") || timeRaw.startsWith("13:");
+                    const sTime = (s.Time || "").toUpperCase();
                     const sIsAN = sTime.includes("PM") || sTime.includes("AN") || sTime.startsWith("12:") || sTime.startsWith("13:") || sTime.startsWith("14:") || sTime.startsWith("15:") || sTime.startsWith("16:");
                     timeMatch = (isAN === sIsAN);
                 }
                 return dateMatch && timeMatch;
             });
+
 
 
             // --- NEW: Update and Show Badge Count ---
