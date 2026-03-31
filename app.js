@@ -3826,11 +3826,11 @@ if (toggleButton && sidebar) {
             // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
             if (t.includes("PM") || t.includes("AN") || t.startsWith("12:") || t.startsWith("12.") || 
                 t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
-                sessionType = "AN";
+                return "AN";
             }
 
         return "FN";
-    }
+
 
     // Helper to convert Date+Session to a strictly comparable number (YYYYMMDDS)
     function getSessionValue(dateStr, sessionType) {
