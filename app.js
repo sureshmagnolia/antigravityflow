@@ -1238,12 +1238,13 @@ async function updateLocalSlotsFromStudents() {
                             if (s.students) {
                                 allStudents.push(...s.students); // Support for old legacy DB states
                             } else if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
-                                // AUTO-FETCH heavy data if missing OR if a new CSV was uploaded
+                                // AUTO-FETCH heavy data ONLY IF Today or Future
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
                                 if (localCount !== s.meta.studentCount) {
                                     console.log(`🔄 CSV Update Detected! Downloading fresh master student list for ${sessionKey}...`);
-
+                                    updateSyncStatus(`Syncing Student Data...`, "neutral"); // <-- NEW RIBBON ALERT
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
+
                                         .then(studentDoc => {
                                             if (studentDoc.exists() && studentDoc.data().students) {
                                                 allStudents.push(...studentDoc.data().students);
@@ -1290,9 +1291,13 @@ async function updateLocalSlotsFromStudents() {
                         allStudentData = mergedStudents;
                         await saveExamDataIDB(mergedStudents);
 
-
+                        // NEW: Notify the user that heavy data finished downloading
+                        if (missingStudentsPromises.length > 0) {
+                            updateSyncStatus("Student List Updated Live!", "success");
+                        }
                         
                         localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
+
                         localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
                         localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
                         localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
@@ -1483,13 +1488,13 @@ async function deleteSessionFromCloud(sessionKey) {
 
         // 3. Write to Firestore (Modular Write)
         try {
-            // Write tiny metadata to real-time listener collection
+            updateSyncStatus("Saving Metadata...", "neutral"); // <-- NEW RIBBON ALERT
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             
-            // Write massive array to 'rest' collection
+            updateSyncStatus("Uploading Master Student List...", "neutral"); // <-- NEW RIBBON ALERT
             await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
 
-            updateSyncStatus("Saved (V2)", "success");
+            updateSyncStatus("All Data Synced!", "success"); // <-- UPDATED SUCCESS MESSAGE
 
             
             // Recalculate Invigilation Slots
