@@ -277,6 +277,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         
         if (studentDoc.exists() && studentDoc.data().students) {
             allStudentData = [...allStudentData, ...studentDoc.data().students];
+            jsonDataStore.innerHTML = JSON.stringify(allStudentData); // ← ADD THIS
             await saveExamDataIDB(allStudentData); // Save permanently to UI Cache
             updateSyncStatus("Past Exam Ready!", "success");
         } else {
