@@ -1266,9 +1266,7 @@ async function updateLocalSlotsFromStudents() {
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                         });
-                       if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
-                        });  ← forEach closes here
-                        // Store a lightweight registry of ALL known sessions for dropdowns
+                      // Store a lightweight registry of ALL known sessions for dropdowns
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
