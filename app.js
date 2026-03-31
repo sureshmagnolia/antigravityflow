@@ -11135,18 +11135,6 @@ window.real_disable_all_report_buttons = function (disabled) {
         editSessionSelect.value = savedSession;
         currentEditSession = savedSession;
 
-        
-        // --- 🔄 CRITICAL SYNC: Refresh the local variable from the Store ---
-        if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
-        }
-        // -----------------------------------------------------------------
-
-        editSessionSelect.value = savedSession;
-        currentEditSession = savedSession;
-
-
-
         const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
 
         // --- NEW: Select the badge element ---
