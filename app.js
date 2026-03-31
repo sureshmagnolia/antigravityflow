@@ -266,9 +266,9 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
     const hasLocals = allStudentData.some(s => s.Date === date.trim() && s.Time === time.trim());
     if (hasLocals) return; 
 
-    // Generate accurate ID
-    let sessionIdStr = date.trim() + "_" + time.trim();
-    sessionIdStr = sessionIdStr.replace(/[^a-zA-Z0-9_]/g, ""); 
+    // Generate accurate ID using the same function as syncSessionToCloud
+    const sessionIdStr = generateSessionId(sessionKey);
+
     
     updateSyncStatus("Downloading Past Exam Archive...", "neutral");
     try {
