@@ -1271,6 +1271,11 @@ async function updateLocalSlotsFromStudents() {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
                         localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
+                        // Immediately push session list to all dropdowns from metadata
+                        if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
+                        if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
+                        if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
+
 
 
                         // Wait for any allowed pre-fetches to finish safely
