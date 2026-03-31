@@ -273,6 +273,8 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
     updateSyncStatus("Downloading Past Exam Archive...", "neutral");
     try {
         const { getDoc, doc, db } = window.firebase;
+        console.log(`📡 Fetching historical data for ID: [${sessionIdStr}]`);
+
         const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
         
         if (studentDoc.exists() && studentDoc.data().students) {
@@ -1391,11 +1393,13 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 
             const t = timeStr.trim().toUpperCase();
             let sessionType = "FN";
-            // Logic: PM or 12:xx or 13:xx+ implies AN.
-            if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.") || 
+            // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
+            if (t.includes("PM") || t.includes("AN") || t.startsWith("12:") || t.startsWith("12.") || 
                 t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
                 sessionType = "AN";
             }
+
+            
             return `${isoDate}_${sessionType}`;
         } catch (e) {
             console.error("Session ID Gen Error:", sessionKey);
