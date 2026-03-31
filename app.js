@@ -18355,7 +18355,18 @@ function verifyAppPassword() {
 
 // Attach Event Listeners on Load
 document.addEventListener('DOMContentLoaded', () => {
-    // --- NEW: Auto-bypass if already entered today ---
+    // --- App Security Toggle Logic ---
+    const toggleAppPassword = document.getElementById('toggle-app-password');
+    const isPasswordEnabled = localStorage.getItem('appPasswordEnabled') === 'true'; // Default is false
+
+    if (toggleAppPassword) {
+        toggleAppPassword.checked = isPasswordEnabled;
+        toggleAppPassword.addEventListener('change', (e) => {
+            localStorage.setItem('appPasswordEnabled', e.target.checked);
+        });
+    }
+
+    // --- Auto-bypass if password is off OR already entered today ---
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -18364,7 +18375,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const savedToken = localStorage.getItem('appDailyPasscodeToken');
     
-    if (savedToken === currentToken) {
+    if (!isPasswordEnabled || savedToken === currentToken) {
         // Automatically remove the lock screen before the user sees it
         const lockScreen = document.getElementById('password-lock-screen');
         if (lockScreen) lockScreen.remove();
@@ -18381,4 +18392,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
 
