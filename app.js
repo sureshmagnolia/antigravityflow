@@ -1352,32 +1352,10 @@ async function updateLocalSlotsFromStudents() {
                 updateSyncStatus("Error", "error");
             }
 
-// --- ADD THIS BLOCK FOR STORAGE RECOVERY ---
-try {
-const existingData = await loadExamDataIDB();
-if (existingData.length === 0 && currentUser && currentCollegeId) {
-    updateSyncStatus("Checking Storage...", "neutral");
-    try {
-        const { storage, ref, getDownloadURL } = window.firebase;
-        const storageRef = ref(storage, `colleges/${currentCollegeId}/data/examBaseData.json`);
-        const url = await getDownloadURL(storageRef);
-        const response = await fetch(url);
-        const cloudData = await response.json();
-        if (cloudData && cloudData.length > 0) {
-            await saveExamDataIDB(cloudData, true); // true = skip redundant upload
-            updateSyncStatus("Cloud Data Restored", "success");
-        }
-    } catch (e) {
-        console.log("No cloud storage backup found.");
-    }
-}
-} catch (idbErr) {
-    console.warn("IDB check failed, continuing:", idbErr);
-} finally {
-    // Final UI Load — guaranteed to run even if IDB fails
-    loadInitialData();
-    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-}
+// Final UI Load — guaranteed to run
+loadInitialData();
+if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+
 };
 
 
