@@ -1410,6 +1410,36 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         }
     }
 
+    // --- NEW: Universal Student Matcher (Handles all date/time formats) ---
+    window.getStudentsForSession = function(allData, targetDate, targetTime) {
+        if (!allData || !targetDate || !targetTime) return [];
+        
+        const dateRaw = targetDate.trim().replace(/[./-]/g, '');
+        const timeRaw = targetTime.trim().toUpperCase();
+
+        return allData.filter(s => {
+            // 1. Normalize Date
+            const studentDateNorm = (s.Date || "").replace(/[./-]/g, '');
+            const dateMatch = studentDateNorm === dateRaw;
+            
+            // 2. Smart Time Match
+            let timeMatch = s.Time === timeRaw;
+            if (!timeMatch) {
+                const isAN = timeRaw.includes("AN") || timeRaw.includes("PM") || 
+                             timeRaw.startsWith("12:") || timeRaw.startsWith("13:");
+                const sTime = (s.Time || "").toUpperCase();
+                const sIsAN = sTime.includes("PM") || sTime.includes("AN") || 
+                              sTime.startsWith("12:") || sTime.startsWith("13:") || 
+                              sTime.startsWith("14:") || sTime.startsWith("15:") || 
+                              sTime.startsWith("16:");
+                timeMatch = (isAN === sIsAN);
+            }
+            return dateMatch && timeMatch;
+        });
+    };
+
+
+    
 
 async function deleteSessionFromCloud(sessionKey) {
     if (!currentCollegeId || !navigator.onLine) return;
@@ -8305,7 +8335,7 @@ window.real_populate_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
 
         // Filter students for this session
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const sessionStudents = window.getStudentsForSession(allStudentData, date, time);
 
         // Filter by search query
         const matches = sessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
@@ -9702,7 +9732,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
 
         // Get all students for this session
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const sessionStudents = window.getStudentsForSession(allStudentData, date, time);
 
         // Get every distinct stream present in this session
         const streams = [...new Set(sessionStudents.map(s => s.Stream || 'Regular'))];
@@ -12545,7 +12575,7 @@ Are you sure you want to update these records?
 
         if (sessionKey) {
             const [date, time] = sessionKey.split(' | ');
-            searchSessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+            searchSessionStudents = window.getStudentsForSession(allStudentData, date, time);
             studentSearchSection.classList.remove('hidden');
             studentSearchInput.disabled = false;
             studentSearchStatus.textContent = `Loaded ${searchSessionStudents.length} students for this session.`;
