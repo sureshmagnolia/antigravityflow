@@ -3827,8 +3827,10 @@ if (toggleButton && sidebar) {
         const t = timeStr.toUpperCase().trim();
 
             // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
-            if (t.includes("PM") || t.includes("AN") || t.startsWith("12:") || t.startsWith("12.") || 
-                t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
+                if (t.includes("PM") || t.includes("AN") || 
+                t.startsWith("12:") || t.startsWith("12.") || 
+                t.startsWith("13:") || t.startsWith("14:") || 
+                t.startsWith("15:") || t.startsWith("16:")) {
                 return "AN";
             }
 
