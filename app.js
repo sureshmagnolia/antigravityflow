@@ -11203,23 +11203,8 @@ window.real_disable_all_report_buttons = function (disabled) {
 
                 if (currentEditSession) {
             const [dateRaw, timeRaw] = currentEditSession.split(' | ');
-            // Normalize target date: "31.10.2025" -> "31102025"
-            const targetDateNorm = dateRaw.trim().replace(/[./-]/g, ''); 
-            
-            const sessionStudents = allStudentData.filter(s => {
-                // Normalize student date for comparison
-                const studentDateNorm = (s.Date || "").replace(/[./-]/g, '');
-                const dateMatch = studentDateNorm === targetDateNorm;
-                
-                let timeMatch = s.Time === timeRaw.trim();
-                if (!timeMatch) {
-                    const isAN = timeRaw.includes("AN") || timeRaw.includes("PM") || timeRaw.startsWith("12:") || timeRaw.startsWith("13:");
-                    const sTime = (s.Time || "").toUpperCase();
-                    const sIsAN = sTime.includes("PM") || sTime.includes("AN") || sTime.startsWith("12:") || sTime.startsWith("13:") || sTime.startsWith("14:") || sTime.startsWith("15:") || sTime.startsWith("16:");
-                    timeMatch = (isAN === sIsAN);
-                }
-                return dateMatch && timeMatch;
-            });
+            const sessionStudents = window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim());
+
 
 
 
