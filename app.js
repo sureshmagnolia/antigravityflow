@@ -1395,10 +1395,13 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
             const t = timeStr.trim().toUpperCase();
             let sessionType = "FN";
             // Logic: Includes 'PM' or 'AN' or starts with Afternoon hours implies AN.
-            if (t.includes("PM") || t.includes("AN") || t.startsWith("12:") || t.startsWith("12.") || 
-                t.startsWith("13:") || t.startsWith("14:") || t.startsWith("15:")) {
+            if (t.includes("PM") || t.includes("AN") || 
+                t.startsWith("12:") || t.startsWith("12.") || 
+                t.startsWith("13:") || t.startsWith("14:") || 
+                t.startsWith("15:") || t.startsWith("16:")) {
                 sessionType = "AN";
             }
+
 
             
             return `${isoDate}_${sessionType}`;
@@ -11176,7 +11179,7 @@ window.real_disable_all_report_buttons = function (disabled) {
                 if (!timeMatch) {
                     const isAN = time.trim() === "AN" || time.includes("PM");
                     const sTime = s.Time.toUpperCase();
-                    const sIsAN = sTime.includes("PM") || sTime.includes("AN") || sTime.startsWith("12:") || sTime.startsWith("13:");
+                    const sIsAN = sTime.includes("PM") || sTime.includes("AN") || sTime.startsWith("12:") || sTime.startsWith("13:") || sTime.startsWith("14:") || sTime.startsWith("15:") || sTime.startsWith("16:");
                     timeMatch = (isAN === sIsAN);
                 }
                 return dateMatch && timeMatch;
