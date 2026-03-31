@@ -8246,10 +8246,17 @@ window.real_populate_session_dropdown = function () {
   
    
 
-    sessionSelect.addEventListener('change', async () => {
+        sessionSelect.addEventListener('change', async () => {
         const savedSession = sessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+
+        // Sync local list from store
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+
         sessionSelect.value = savedSession;
+
 
         const sessionKey = sessionSelect.value;
         if (sessionKey) {
@@ -8744,10 +8751,17 @@ window.real_populate_qp_code_session_dropdown = function () {
     
 
     // Event listener for the QP Code session dropdown
-  sessionSelectQP.addEventListener('change', async () => {
+     sessionSelectQP.addEventListener('change', async () => {
         const savedSession = sessionSelectQP.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+
+        // Sync local list from store
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+
         sessionSelectQP.value = savedSession;
+
 
         const sessionKey = sessionSelectQP.value;
         if (sessionKey) {
@@ -10283,7 +10297,14 @@ window.real_populate_qp_code_session_dropdown = function () {
         allotmentSessionSelect.addEventListener('change', async () => {
         const savedSession = allotmentSessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+
+        // Sync local list from store
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+
         allotmentSessionSelect.value = savedSession;
+
 
             const sessionKey = allotmentSessionSelect.value;
 
@@ -11105,8 +11126,25 @@ window.real_disable_all_report_buttons = function (disabled) {
        editSessionSelect.addEventListener('change', async () => {
         const savedSession = editSessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+
+        // Sync local list from store
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+
         editSessionSelect.value = savedSession;
         currentEditSession = savedSession;
+
+        
+        // --- 🔄 CRITICAL SYNC: Refresh the local variable from the Store ---
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+        // -----------------------------------------------------------------
+
+        editSessionSelect.value = savedSession;
+        currentEditSession = savedSession;
+
 
 
         const sessionOpsContainer = document.getElementById('bulk-session-ops-container');
@@ -12475,7 +12513,14 @@ Are you sure you want to update these records?
       searchSessionSelect.addEventListener('change', async () => {
         const savedSession = searchSessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+
+        // Sync local list from store
+        if (typeof jsonDataStore !== 'undefined') {
+            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+        }
+
         searchSessionSelect.value = savedSession;
+
 
         const sessionKey = searchSessionSelect.value;
         studentSearchInput.value = '';
