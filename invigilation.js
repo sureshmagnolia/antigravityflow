@@ -1916,14 +1916,17 @@ window.openDayDetail = function (dateStr, email) {
             let staffListHtml = '';
             if (slot.assigned.length > 0) {
                 const listItems = slot.assigned.map(st => {
-                    const s = staffData.find(sd => sd.email === st);
-                    if (!s) return '';
-                    const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
-                    const statusIcon = isExchanging ? "⏳" : "✅";
-                    
-                    // Fixed: Removed Reference to reserveBadge
-                    return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span></div>`;
-                }).join('');
+    const s = staffData.find(sd => sd.email === st);
+    if (!s) return '';
+    const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
+    const statusIcon = isExchanging ? "⏳" : "✅";
+    const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
+    const callBtn = (phone && st !== email) 
+        ? `<a href="tel:${phone}" class="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded hover:bg-green-100 transition" title="Call ${s.name}">📞 Call</a>`
+        : '';
+    return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span>${callBtn}</div>`;
+}).join('');
+
                 
                 staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
             }
