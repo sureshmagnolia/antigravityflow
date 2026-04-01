@@ -1252,15 +1252,19 @@ async function updateLocalSlotsFromStudents() {
                         // Safely combine heavy data updates
                         let mergedStudents = [...localDB];
                         if (allStudents.length > 0) {
-                            // Identify which exams just got fresh downloads
-                            const freshlyDownloadedSessions = new Set(allStudents.map(s => `${s.Date}|${s.Time}`));
+                            // --- 📡 NEW: Helper for normalized session keys (Ignores dots, slashes, dashes) ---
+                            const normKey = (d, t) => `${(d || "").replace(/[./-]/g, '')}_${(t || "").trim()}`;
                             
-                            // Purge the old local cache ONLY for those specific exams to prevent infinite loops
-                            mergedStudents = localDB.filter(existing => !freshlyDownloadedSessions.has(`${existing.Date}|${existing.Time}`));
+                            // Identify which sessions just got fresh downloads using normalized keys
+                            const freshlyDownloadedSessions = new Set(allStudents.map(s => normKey(s.Date, s.Time)));
+                            
+                            // Purge old local matches using normalized keys (Ensures 31.03 matches 31/03)
+                            mergedStudents = localDB.filter(existing => !freshlyDownloadedSessions.has(normKey(existing.Date, existing.Time)));
                             
                             // Insert the pristine master copies
                             mergedStudents.push(...allStudents);
                         }
+
 
 
                         mergedStudents.sort((a, b) => {
