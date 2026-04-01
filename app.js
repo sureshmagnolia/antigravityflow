@@ -1274,7 +1274,22 @@ async function updateLocalSlotsFromStudents() {
                             return a.Time.localeCompare(b.Time);
                         });
 
+                        // --- 🛡️ FINAL SAFETY NET: Global Deduplication (Cleans up all 1917+ duplicates) ---
+                        const uniqueMap = new Map();
+                        mergedStudents.forEach(s => {
+                            const dNorm = (s.Date || "").replace(/[./-]/g, '');
+                            const tNorm = (s.Time || "").trim();
+                            const uKey = `${s['Register Number'] || s['Reg No']}_${dNorm}_${tNorm}`;
+                            // This ensures only ONE unique entry per student, per session is kept
+                            if (!uniqueMap.has(uKey)) {
+                                uniqueMap.set(uKey, s);
+                            }
+                        });
+                        mergedStudents = Array.from(uniqueMap.values());
+                        // ------------------------------------------------------------------------------
+
                         allStudentData = mergedStudents;
+
                         await saveExamDataIDB(mergedStudents);
 
                         // NEW: Notify the user that heavy data finished downloading
