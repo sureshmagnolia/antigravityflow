@@ -1921,10 +1921,13 @@ window.openDayDetail = function (dateStr, email) {
     const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
     const statusIcon = isExchanging ? "⏳" : "✅";
     const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
-    const callBtn = (phone && st !== email) 
-        ? `<a href="tel:${phone}" class="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded hover:bg-green-100 transition" title="Call ${s.name}">📞 Call</a>`
-        : '';
-    return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span>${callBtn}</div>`;
+      const contactBtns = (phone && st !== email) ? `
+          <div class="flex items-center gap-1 shrink-0">
+              <a href="tel:${phone}" class="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded hover:bg-green-100 transition" title="Call ${s.name}">📞 Call</a>
+              <a href="https://wa.me/91${phone}" target="_blank" class="flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition" title="WhatsApp ${s.name}">💬 Chat</a>
+          </div>` : '';
+      return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span>${contactBtns}</div>`;
+
 }).join('');
 
                 
