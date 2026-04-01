@@ -305,7 +305,7 @@ async function finalizeAppLoad() {
 }
 
 let currentUser = null;
-let currentCollegeId = null; // The shared document ID
+window.currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
 let cloudSyncUnsubscribe = null; // [NEW] To track the active listener
