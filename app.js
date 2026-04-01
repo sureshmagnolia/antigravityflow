@@ -1274,18 +1274,27 @@ async function updateLocalSlotsFromStudents() {
                             return a.Time.localeCompare(b.Time);
                         });
 
-                        // --- 🛡️ FINAL SAFETY NET: Global Deduplication (Cleans up all 1917+ duplicates) ---
+                        // --- 🛡️ IMPROVED SAFETY NET: Global Deduplication (Cleans up all duplicates) ---
                         const uniqueMap = new Map();
                         mergedStudents.forEach(s => {
+                            // 1. Find the Register Number (handles different CSV/Excel column names)
+                            const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || s['RegisterNo'] || "").toString().trim();
+                            
+                            // 2. Normalize Session (ignoring dots vs slashes)
                             const dNorm = (s.Date || "").replace(/[./-]/g, '');
-                            const tNorm = (s.Time || "").trim();
-                            const uKey = `${s['Register Number'] || s['Reg No']}_${dNorm}_${tNorm}`;
-                            // This ensures only ONE unique entry per student, per session is kept
-                            if (!uniqueMap.has(uKey)) {
+                            const tNorm = (s.Time || "").trim().toUpperCase();
+                            
+                            // 3. Create a truly unique key for this student in this session
+                            const uKey = `${regNo}_${dNorm}_${tNorm}`;
+                            
+                            // Only keep the student if we haven't seen this specific combination yet
+                            if (regNo && !uniqueMap.has(uKey)) {
                                 uniqueMap.set(uKey, s);
                             }
                         });
                         mergedStudents = Array.from(uniqueMap.values());
+                        // ------------------------------------------------------------------------------
+
                         // ------------------------------------------------------------------------------
 
                         allStudentData = mergedStudents;
