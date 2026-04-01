@@ -8327,44 +8327,45 @@ window.real_populate_session_dropdown = function () {
             });
             if(reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
 
-           // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
+                      // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
             const now = new Date();
-            const todayStr = now.toLocaleDateString('en-GB').replace(/\//g, '.'); // DD.MM.YYYY
-            const nowTime = now.getTime(); // Current timestamp
+            const todayStr = formatDateToCSV(now); // Reliable Helper (DD.MM.YYYY)
+            const nowTime = now.getTime();
             let activeTodaySession = null;
             let nextUpcomingSession = null;
-            let minDiff = Infinity; // For finding the nearest future session
+            let minDiff = Infinity;
+
             allStudentSessions.forEach(session => {
-                // Populate Options
                 const opt = `<option value="${session}">${session}</option>`;
-                sessionSelect.innerHTML += opt;
-                if(reportsSessionSelect) reportsSessionSelect.innerHTML += opt;
-                if(editSessionSelect) editSessionSelect.innerHTML += opt;
-                if(searchSessionSelect) searchSessionSelect.innerHTML += opt;
-                // 1. Parse Session Date & Time
+                [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+                    if (el) el.innerHTML += opt;
+                });
+
                 const [datePart, timePart] = session.split('|').map(s => s.trim());
                 if (!datePart || !timePart) return;
-                // Parse Date (DD.MM.YYYY)
+
                 const [dd, mm, yyyy] = datePart.split('.');
-                const [timeStr, period] = timePart.split(' '); // "9:30 AM" -> ["9:30", "AM"]
+                const [timeStr, period] = timePart.split(' ');
                 let [hours, minutes] = timeStr.split(':').map(Number);
                 if (period && period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
                 if (period && period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+
                 const sessionStart = new Date(yyyy, mm - 1, dd, hours, minutes);
-                const sessionEndWindow = new Date(sessionStart.getTime() + (60 * 60 * 1000)); // Start + 1 Hr
-                // 2. Logic: Is this "Today's Active Session"? (Now < Start + 1 Hr)
+                // EXTENDED: Keep "Today" session active for 7 hours from start (covers full exam duration)
+                const sessionEndWindow = new Date(sessionStart.getTime() + (7 * 60 * 60 * 1000));
+
                 if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
                      if (!activeTodaySession) activeTodaySession = session; 
                 }
-                // 3. Logic: Find "Next Upcoming Session" (Earliest Future Session)
+
                 const diff = sessionStart.getTime() - nowTime;
                 if (diff > 0 && diff < minDiff) { 
                     minDiff = diff;
                     nextUpcomingSession = session;
                 }
             });
-            // PRIORITY: 1. Active Today -> 2. Next Upcoming -> 3. First in List
             let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
+
 
             
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
