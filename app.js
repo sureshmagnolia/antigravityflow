@@ -4699,7 +4699,45 @@ function getExamName(date, time, stream) {
 
         const monthData = {};
 
+        // --- 📡 NEW: Scan Metadata Registry for Historical Sessions ---
+        const registryRaw = localStorage.getItem('examAllKnownSessions');
+        if (registryRaw) {
+            const registry = JSON.parse(registryRaw);
+            const targetMonthStr = String(month + 1).padStart(2, '0');
+            const targetYearStr = String(year);
+
+            registry.forEach(sessionKey => {
+                const [dateRaw, timeRaw] = sessionKey.split(' | ');
+                // Support both dots and slashes
+                const dParts = dateRaw.trim().split(/[./-]/);
+                if (dParts.length < 3) return;
+                const [d, m, y] = dParts;
+                
+                if (m === targetMonthStr && y === targetYearStr) {
+                    const dayKey = parseInt(d);
+                    const tNorm = timeRaw.toUpperCase();
+                    // Match the logic in common helpers
+                    const isPM = tNorm.includes("PM") || tNorm.includes("AN") || 
+                                 tNorm.startsWith("12:") || tNorm.startsWith("13:");
+                    const sessionKeyId = isPM ? 'pm' : 'am';
+
+                    if (!monthData[dayKey]) {
+                        monthData[dayKey] = {
+                            am: { students: 0, regCount: 0, othCount: 0, scribeCount: 0, isMetadata: true },
+                            pm: { students: 0, regCount: 0, othCount: 0, scribeCount: 0, isMetadata: true }
+                        };
+                    }
+                    // If no real students yet, mark as active so the red bubble appears
+                    if (monthData[dayKey][sessionKeyId].students === 0) {
+                        monthData[dayKey][sessionKeyId].students = "—"; // Indicator for 'Known via Metadata'
+                    }
+                }
+            });
+        }
+
+        // Keep your existing allStudentData scan...
         if (allStudentData && allStudentData.length > 0) {
+
             const targetMonthStr = String(month + 1).padStart(2, '0');
             const targetYearStr = String(year);
 
