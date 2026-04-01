@@ -10319,11 +10319,26 @@ window.saveManualAllocation = async function () {
     const state = window.manualState;
     if (!state || !state.key) return;
 
-    const key = state.key;
+        const key = state.key;
     const newAssigned = state.rankedStaff.filter(s => s.isChecked).map(s => s.email);
 
     if (!invigilationSlots[key]) return;
+
+    // --- BUG FIX: Clean up exchange requests for removed invigilators ---
+    const oldAssigned = invigilationSlots[key].assigned || [];
+    const removedEmails = oldAssigned.filter(e => !newAssigned.includes(e));
+
+    if (removedEmails.length > 0 && invigilationSlots[key].exchangeRequests) {
+        invigilationSlots[key].exchangeRequests = invigilationSlots[key].exchangeRequests
+            .filter(e => !removedEmails.includes(e));
+        if (removedEmails.length > 0) {
+            logActivity("Admin Removed (Exchange Cleared)", `Exchange request(s) auto-cleared for ${removedEmails.map(e => getNameFromEmail(e)).join(', ')} in slot ${key}.`);
+        }
+    }
+    // -----------------------------------------------------------------
+
     invigilationSlots[key].assigned = newAssigned;
+
 
     try {
         await syncSlotsToCloud();
