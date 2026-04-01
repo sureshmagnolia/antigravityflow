@@ -56,6 +56,15 @@
                 
                 // B. FETCH SESSIONS (V2 Modular)
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
+          
+                // --- FETCH NETWORK TIME ---
+                let offset = 0;
+                try {
+                    const tResp = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
+                    const tData = await tResp.json();
+                    offset = new Date(tData.datetime).getTime() - Date.now();
+                } catch(e) { console.warn("Network time failed, using device clock."); }
+                window.getExamsNow = () => new Date(Date.now() + offset);
 
                 const [settingsSnap, sessionsSnap] = await Promise.all([
                     getDoc(settingsRef),
@@ -178,7 +187,8 @@
             if (myExams.length > 0) {
                 found = true;
                 localStorage.setItem('myExamRegNo', regNo);
-                const now = new Date();
+                const now = window.getExamsNow ? window.getExamsNow() : new Date();
+
 
                 myExams.forEach(exam => {
                     // --- TIME LOCK LOGIC (45 Mins Before) ---
