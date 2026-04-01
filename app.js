@@ -4806,9 +4806,15 @@ function getExamName(date, time, stream) {
                     };
 
                     const stats = monthData[dayKey][sessionKey];
+                    
+                    // --- 🛠️ FIX: Clean the '—' placeholder back to 0 before we do math ---
+                    if (stats.students === "—") {
+                        stats.students = 0;
+                    }
                     stats.students++;
 
                     if (scribeRegNos.has(s['Register Number'])) {
+
                         stats.scribeCount++;
                     } else {
                         if (!s.Stream || s.Stream === "Regular") stats.regCount++;
@@ -4862,8 +4868,8 @@ function getExamName(date, time, stream) {
             }
 
             if (data) {
-                const hasFN = data.am.students > 0;
-                const hasAN = data.pm.students > 0;
+               const hasFN = data.am.students > 0 || data.am.students === "—";
+                const hasAN = data.pm.students > 0 || data.pm.students === "—";
 
                 if (hasFN || hasAN) {
                     circleClass = "w-8 h-8 text-sm md:w-20 md:h-20 md:text-3xl rounded-full flex flex-col items-center justify-center relative font-bold text-red-900 border border-red-200 overflow-hidden shadow-sm";
