@@ -119,51 +119,56 @@
                 const timeStr = session.time;
 
                 // 1. DATE CHECK: Skip past exams
-                // We construct a date object for the exam day (at 00:00) to compare with todayMidnight
                 const examDayStart = parseSessionTime(dateStr, "00:00 AM");
                 if (examDayStart < todayMidnight) {
                     return; // Skip this session (it's in the past)
                 }
-                
+
                 // 2. FIND STUDENT
-                const studentRecord = session.students ? session.students.find(s => s['Register Number'] === regNo) : null;
+                // First try session.students (old format). If not found,
+                // we will try to get it from roomAllotment below (new format).
+                let studentRecord = session.students
+                    ? session.students.find(s => s['Register Number'] === regNo)
+                    : null;
 
-                if (studentRecord) {
-                    if (!studentName) studentName = studentRecord.Name;
+                let studentRoom = "Not Allotted";
+                let seatNumber = "-";
+                let isScribeRoom = false;
 
-                    let studentRoom = "Not Allotted";
-                    let seatNumber = "-";
-                    let isScribeRoom = false;
-
-                    // Check Regular Allotment
-                    if (session.roomAllotment) {
-                        for (const room of session.roomAllotment) {
-                            const index = room.students.findIndex(s => 
-                                (typeof s === 'object' ? s['Register Number'] : s) === regNo
-                            );
-                            if (index !== -1) {
-                                studentRoom = room.roomName;
-                                seatNumber = index + 1;
-                                break;
+                // 3. Check Regular Allotment
+                if (session.roomAllotment) {
+                    for (const room of session.roomAllotment) {
+                        const index = room.students.findIndex(s =>
+                            (typeof s === 'object' ? s['Register Number'] : s) === regNo
+                        );
+                        if (index !== -1) {
+                            studentRoom = room.roomName;
+                            seatNumber = index + 1;
+                            // NEW: if student record not found above, get it from here
+                            if (!studentRecord && typeof room.students[index] === 'object') {
+                                studentRecord = room.students[index];
                             }
+                            break;
                         }
                     }
+                }
 
-                    // Check Scribe Allotment
-                    if (session.scribeAllotment && session.scribeAllotment[regNo]) {
-                        studentRoom = session.scribeAllotment[regNo];
-                        isScribeRoom = true;
-                        seatNumber = "Scribe";
-                    }
+                // 4. Check Scribe Allotment
+                if (session.scribeAllotment && session.scribeAllotment[regNo]) {
+                    studentRoom = session.scribeAllotment[regNo];
+                    isScribeRoom = true;
+                    seatNumber = "Scribe";
+                }
 
-                    if (studentRoom !== "Not Allotted") {
-                        myExams.push({
-                            dateStr, timeStr, studentRoom, seatNumber, 
-                            paperName: studentRecord.Course, 
-                            isScribeRoom,
-                            fullDate: parseSessionTime(dateStr, timeStr)
-                        });
-                    }
+                // 5. Save result only if student was found AND has a room
+                if (studentRecord && studentRoom !== "Not Allotted") {
+                    if (!studentName) studentName = studentRecord.Name;
+                    myExams.push({
+                        dateStr, timeStr, studentRoom, seatNumber,
+                        paperName: studentRecord.Course,
+                        isScribeRoom,
+                        fullDate: parseSessionTime(dateStr, timeStr)
+                    });
                 }
             });
 
