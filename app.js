@@ -1285,12 +1285,22 @@ async function updateLocalSlotsFromStudents() {
                         localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
                         localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
-
                 updateSyncStatus("Synced (Live)", "success");
                         
+                        // --- 🔓 UNLOCK TABS ON FIRST DATA LOAD ---
+                        if (allStudentData && allStudentData.length > 0) {
+                            if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
+                            if (typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
+                            if (typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
+                            if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
+                            if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
+                        }
+
                         // Refresh UI Components
                         if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+
                         
                         // 🔄 REAL-TIME UI REFRESH (Rooms & Invigilators)
                         if (typeof updateAllotmentDisplay === 'function') {
