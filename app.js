@@ -257,43 +257,7 @@ async function autoCleanPastGhostData() {
     }
 }
 
-// ⚡ ON-DEMAND PAST EXAM FETCH ENGINE
-window.fetchHeavyDataOnDemand = async function(sessionKey) {
-    if (!sessionKey || !window.currentCollegeId) return;
-    
-    const [date, time] = sessionKey.split(' | ');
-    // Skip if we already downloaded it previously
-    const hasLocals = allStudentData.some(s => s.Date === date.trim() && s.Time === time.trim());
-    if (hasLocals) return; 
 
-    // Generate accurate ID using the same function as syncSessionToCloud
-    const sessionIdStr = generateSessionId(sessionKey);
-
-    
-    updateSyncStatus("Downloading Past Exam Archive...", "neutral");
-    try {
-        const { getDoc, doc, db } = window.firebase;
-        
-        console.log(`📡 Fetching historical data for ID: [${sessionIdStr}]`);
-
-        const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
-        
-        if (studentDoc.exists() && studentDoc.data().students) {
-            allStudentData = [...allStudentData, ...studentDoc.data().students];
-            jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
-            await saveExamDataIDB(allStudentData);
-            // Do NOT rebuild dropdowns here — selections would be lost.
-            // Each tab's change handler is responsible for rendering after this returns.
-            updateSyncStatus("Past Exam Ready!", "success");
-
-
-        } else {
-             updateSyncStatus("Error: No Master Data Found", "error");
-        }
-    } catch (e) {
-        console.error("Fetch past exam heavy data error:", e);
-    }
-};
 
 
 // Smart Trigger (Safe to be at the top)
@@ -1380,6 +1344,45 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
         fetchHeavyData();
     }
 
+
+// ⚡ ON-DEMAND PAST EXAM FETCH ENGINE
+window.fetchHeavyDataOnDemand = async function(sessionKey) {
+    if (!sessionKey || !window.currentCollegeId) return;
+    
+    const [date, time] = sessionKey.split(' | ');
+    // Skip if we already downloaded it previously
+    const hasLocals = allStudentData.some(s => s.Date === date.trim() && s.Time === time.trim());
+    if (hasLocals) return; 
+
+    // Generate accurate ID using the same function as syncSessionToCloud
+    const sessionIdStr = generateSessionId(sessionKey);
+
+    
+    updateSyncStatus("Downloading Past Exam Archive...", "neutral");
+    try {
+        const { getDoc, doc, db } = window.firebase;
+        
+        console.log(`📡 Fetching historical data for ID: [${sessionIdStr}]`);
+
+        const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
+        
+        if (studentDoc.exists() && studentDoc.data().students) {
+            allStudentData = [...allStudentData, ...studentDoc.data().students];
+            jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
+            await saveExamDataIDB(allStudentData);
+            // Do NOT rebuild dropdowns here — selections would be lost.
+            // Each tab's change handler is responsible for rendering after this returns.
+            updateSyncStatus("Past Exam Ready!", "success");
+
+
+        } else {
+             updateSyncStatus("Error: No Master Data Found", "error");
+        }
+    } catch (e) {
+        console.error("Fetch past exam heavy data error:", e);
+    }
+};
+    
 
 // --- PHASE 4: MODULAR WRITE HELPERS ---
 
