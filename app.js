@@ -4861,7 +4861,7 @@ function getExamName(date, time, stream) {
                                 <span class="md:hidden">FN</span>
                                 <span class="hidden md:inline">Morning (FN)</span>
                             </strong>
-                            <span class='text-gray-900 font-bold text-xs'>${data.am.students}</span>
+                            <span class='text-gray-900 font-bold text-xs'>${data.am.students === "—" ? "Past Session (Click to Load)" : data.am.students}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1.5 rounded border border-gray-100">
                             <div class="flex justify-between text-xs font-bold text-gray-700">
@@ -4894,7 +4894,7 @@ function getExamName(date, time, stream) {
                                 <span class="md:hidden">AN</span>
                                 <span class="hidden md:inline">Afternoon (AN)</span>
                             </strong>
-                            <span class='text-gray-900 font-bold text-xs'>${data.pm.students}</span>
+                           <span class='text-gray-900 font-bold text-xs'>${data.pm.students === "—" ? "Past Session (Click to Load)" : data.pm.students}</span>
                         </div>
                         <div class="mt-1 bg-gray-50 p-1.5 rounded border border-gray-100">
                             <div class="flex justify-between text-xs font-bold text-gray-700">
