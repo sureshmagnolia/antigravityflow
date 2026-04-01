@@ -529,13 +529,15 @@ async function migrateFromLocalStorage() {
         try {
             const dataArray = JSON.parse(oldData);
             // Save to IDB
-            await openExamDB().then(db => {
-                return new Promise(resolve => {
-                const tx = db.transaction(IDB_STORE, 'readwrite');
-                tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
-                tx.oncomplete = () => { db.close(); resolve(); };
+            await new Promise(resolve => {
+                const req = indexedDB.open(IDB_NAME, 1);
+                req.onsuccess = e => {
+                    const db = e.target.result;
+                    const tx = db.transaction(IDB_STORE, 'readwrite');
+                    tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
+                    tx.oncomplete = () => { db.close(); resolve(); };
+                };
             });
-        });
             // 🚨 CRITICAL: Remove from localStorage to free up the 5MB quota
             localStorage.removeItem(BASE_DATA_KEY);
             console.log("✅ Migration complete. localStorage freed.");
@@ -18700,5 +18702,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
 
