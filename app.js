@@ -8334,6 +8334,9 @@ window.real_populate_session_dropdown = function () {
             let activeTodaySession = null;
             let nextUpcomingSession = null;
             let minDiff = Infinity;
+            let mostRecentPastSession = null;
+            let minPastDiff = Infinity;
+
 
             allStudentSessions.forEach(session => {
                 const opt = `<option value="${session}">${session}</option>`;
@@ -8363,8 +8366,15 @@ window.real_populate_session_dropdown = function () {
                     minDiff = diff;
                     nextUpcomingSession = session;
                 }
+                const pastDiff = nowTime - sessionStart.getTime();
+                if (pastDiff > 0 && pastDiff < minPastDiff) {
+                    minPastDiff = pastDiff;
+                    mostRecentPastSession = session;
+                }
+
             });
-            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
+            let defaultSession = activeTodaySession || nextUpcomingSession || mostRecentPastSession || allStudentSessions[0] || "";
+
 
 
             
@@ -8857,6 +8867,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             let activeTodaySession = null;
             let nextUpcomingSession = null;
             let minDiff = Infinity;
+            let mostRecentPastSession = null;
+            let minPastDiff = Infinity;
+
             allStudentSessions.forEach(session => {
                 sessionSelectQP.innerHTML += `<option value="${session}">${session}</option>`;
                 // 1. Parse
@@ -8877,8 +8890,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                     minDiff = diff;
                     nextUpcomingSession = session;
                 }
+                const pastDiff = nowTime - sessionStart.getTime();
+                if (pastDiff > 0 && pastDiff < minPastDiff) {
+                    minPastDiff = pastDiff;
+                    mostRecentPastSession = session;
+                }
+
             });
-            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
+            let defaultSession = activeTodaySession || nextUpcomingSession || mostRecentPastSession || allStudentSessions[0] || "";
+
 
 
 
@@ -9789,6 +9809,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             let activeTodaySession = null;
             let nextUpcomingSession = null;
             let minDiff = Infinity;
+            let mostRecentPastSession = null;
+            let minPastDiff = Infinity;
+
             allStudentSessions.forEach(session => {
                 allotmentSessionSelect.innerHTML += `<option value="${session}">${session}</option>`;
                 // 1. Parse
@@ -9809,8 +9832,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                     minDiff = diff;
                     nextUpcomingSession = session;
                 }
+                const pastDiff = nowTime - sessionStart.getTime();
+                if (pastDiff > 0 && pastDiff < minPastDiff) {
+                    minPastDiff = pastDiff;
+                    mostRecentPastSession = session;
+                }
+
             });
-            let defaultSession = activeTodaySession || nextUpcomingSession || allStudentSessions[0] || "";
+            let defaultSession = activeTodaySession || nextUpcomingSession || mostRecentPastSession || allStudentSessions[0] || "";
+
             
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
