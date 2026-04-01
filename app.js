@@ -1392,7 +1392,6 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
     // Generate accurate ID using the same function as syncSessionToCloud
     const sessionIdStr = generateSessionId(sessionKey);
 
-    
     updateSyncStatus("Downloading Past Exam Archive...", "neutral");
     try {
         const { getDoc, doc, db } = window.firebase;
@@ -1402,13 +1401,39 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         const studentDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionIdStr));
         
         if (studentDoc.exists() && studentDoc.data().students) {
-            allStudentData = [...allStudentData, ...studentDoc.data().students];
+            
+            // --- 🛡️ NEW: DEDUPLICATION SHIELD to block parallel-click bugs ---
+            const freshStudents = studentDoc.data().students;
+            
+            const getSmartSessionKey = (d, t) => {
+                const dNorm = (d || "").replace(/[./-]/g, '');
+                const tUpper = (t || "").toUpperCase();
+                const isAN = tUpper.includes("PM") || tUpper.includes("AN") || 
+                             tUpper.startsWith("12:") || tUpper.startsWith("13:") || 
+                             tUpper.startsWith("14:") || tUpper.startsWith("15:") ||
+                             tUpper.startsWith("16:");
+                return `${dNorm}_${isAN ? 'AFTERNOON' : 'MORNING'}`;
+            };
+
+            const uniqueMap = new Map();
+            [...allStudentData, ...freshStudents].forEach(s => {
+                const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || "").toString().trim();
+                const uKey = `${regNo}_${getSmartSessionKey(s.Date, s.Time)}`;
+                
+                if (regNo && !uniqueMap.has(uKey)) {
+                    uniqueMap.set(uKey, s);
+                }
+            });
+            
+            allStudentData = Array.from(uniqueMap.values());
+            // -----------------------------------------------------------------
+
             jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
             await saveExamDataIDB(allStudentData);
+            
             // Do NOT rebuild dropdowns here — selections would be lost.
             // Each tab's change handler is responsible for rendering after this returns.
             updateSyncStatus("Past Exam Ready!", "success");
-
 
         } else {
              updateSyncStatus("Error: No Master Data Found", "error");
@@ -1417,6 +1442,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         console.error("Fetch past exam heavy data error:", e);
     }
 };
+
     
 
 // --- PHASE 4: MODULAR WRITE HELPERS ---
