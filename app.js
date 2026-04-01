@@ -1249,24 +1249,32 @@ async function updateLocalSlotsFromStudents() {
                             await Promise.all(missingStudentsPromises);
                         }
 
-                        // Safely combine heavy data updates
+                              // 📡 1. START MERGE
                         let mergedStudents = [...localDB];
+                        
+                        // --- 🧬 INTERNAL HELPER: Normalizes Session Keys (e.g. 10:00 AM matches FN) ---
+                        const getSmartSessionKey = (d, t) => {
+                            const dNorm = (d || "").replace(/[./-]/g, '');
+                            const tUpper = (t || "").toUpperCase();
+                            const isAN = tUpper.includes("PM") || tUpper.includes("AN") || 
+                                         tUpper.startsWith("12:") || tUpper.startsWith("13:") || 
+                                         tUpper.startsWith("14:") || tUpper.startsWith("15:") ||
+                                         tUpper.startsWith("16:");
+                            return `${dNorm}_${isAN ? 'AFTERNOON' : 'MORNING'}`;
+                        };
+
                         if (allStudents.length > 0) {
-                            // --- 📡 NEW: Helper for normalized session keys (Ignores dots, slashes, dashes) ---
-                            const normKey = (d, t) => `${(d || "").replace(/[./-]/g, '')}_${(t || "").trim()}`;
+                            // Identify sessions freshly downloaded
+                            const freshSessions = new Set(allStudents.map(s => getSmartSessionKey(s.Date, s.Time)));
                             
-                            // Identify which sessions just got fresh downloads using normalized keys
-                            const freshlyDownloadedSessions = new Set(allStudents.map(s => normKey(s.Date, s.Time)));
+                            // Purge existing local copies for those sessions
+                            mergedStudents = localDB.filter(existing => !freshSessions.has(getSmartSessionKey(existing.Date, existing.Time)));
                             
-                            // Purge old local matches using normalized keys (Ensures 31.03 matches 31/03)
-                            mergedStudents = localDB.filter(existing => !freshlyDownloadedSessions.has(normKey(existing.Date, existing.Time)));
-                            
-                            // Insert the pristine master copies
+                            // Add the fresh downloads
                             mergedStudents.push(...allStudents);
                         }
 
-
-
+                        // 📋 2. SORTING
                         mergedStudents.sort((a, b) => {
                             const d1 = a.Date.split('.').reverse().join('');
                             const d2 = b.Date.split('.').reverse().join('');
@@ -1274,46 +1282,35 @@ async function updateLocalSlotsFromStudents() {
                             return a.Time.localeCompare(b.Time);
                         });
 
-                        // --- 🛡️ IMPROVED SAFETY NET: Global Deduplication (Cleans up all duplicates) ---
+                        // 🛡️ 3. GLOBAL DEDUPLICATION (Safety Net for 1917+ records)
                         const uniqueMap = new Map();
                         mergedStudents.forEach(s => {
-                            // 1. Find the Register Number (handles different CSV/Excel column names)
-                            const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || s['RegisterNo'] || "").toString().trim();
+                            const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || "").toString().trim();
+                            const uKey = `${regNo}_${getSmartSessionKey(s.Date, s.Time)}`;
                             
-                            // 2. Normalize Session (ignoring dots vs slashes)
-                            const dNorm = (s.Date || "").replace(/[./-]/g, '');
-                            const tNorm = (s.Time || "").trim().toUpperCase();
-                            
-                            // 3. Create a truly unique key for this student in this session
-                            const uKey = `${regNo}_${dNorm}_${tNorm}`;
-                            
-                            // Only keep the student if we haven't seen this specific combination yet
                             if (regNo && !uniqueMap.has(uKey)) {
                                 uniqueMap.set(uKey, s);
                             }
                         });
                         mergedStudents = Array.from(uniqueMap.values());
-                        // ------------------------------------------------------------------------------
 
-                        // ------------------------------------------------------------------------------
-
+                        // 💾 4. UPDATE GLOBAL STORE
                         allStudentData = mergedStudents;
-
                         await saveExamDataIDB(mergedStudents);
 
-                        // NEW: Notify the user that heavy data finished downloading
+                        // 🔄 5. REFRESH STATUS
                         if (missingStudentsPromises.length > 0) {
                             updateSyncStatus("Student List Updated Live!", "success");
                         }
                         
                         localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
-
                         localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
                         localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
                         localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
                         localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
-                updateSyncStatus("Synced (Live)", "success");
+                        updateSyncStatus("Synced (Live)", "success");
+
                         
                         // --- 🔓 UNLOCK TABS ON FIRST DATA LOAD ---
                         if (allStudentData && allStudentData.length > 0) {
