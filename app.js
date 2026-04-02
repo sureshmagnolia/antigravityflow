@@ -14695,13 +14695,15 @@ async function loadInitialData() {
                     groupKey = `Period: ${sStr} to ${eStr}`;
                 }
                 
-                if (!billGroups[groupKey]) billGroups[groupKey] = {};
+            if (!billGroups[groupKey]) billGroups[groupKey] = {};
                 billGroups[groupKey][sessionKey] = {
                     date: dateStr.trim(),
                     time: timeStr.trim(),
-                    normalCount: meta.normalCount || 0,
+                    // FALLBACK: Use total studentCount if specific counts aren't migrated yet
+                    normalCount: meta.normalCount !== undefined ? meta.normalCount : (meta.studentCount || 0),
                     scribeCount: meta.scribeCount || 0
                 };
+
             });
 
 
