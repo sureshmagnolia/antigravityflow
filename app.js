@@ -1185,13 +1185,9 @@ async function updateLocalSlotsFromStudents() {
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
 
-                // --> NEW: 30-Day Cutoff Boundary
-                const cutoffDate = new Date();
-                cutoffDate.setDate(cutoffDate.getDate() - 30);
-                const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
+                // --> All sessions listener (heavy data protected by isTodayOrFuture guard below)
+                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
 
-                // --> NEW: Listen to 'q' instead of 'sessionsRef'
-                sessionsUnsub = onSnapshot(q, async (sessionSnap) => {
 
 
                     if (!sessionSnap.empty) {
@@ -1239,9 +1235,21 @@ async function updateLocalSlotsFromStudents() {
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+                    // --- HISTORICAL META STORE FOR BILLING ENGINE ---
+                        const allHistoricalMeta = {};
+                        sessionSnap.forEach(docSnap => {
+                            const sd = docSnap.data();
+                            const sk = `${sd.date} | ${sd.time}`;
+                            if (sd.meta) allHistoricalMeta[sk] = {
+                                studentCount: sd.meta.studentCount || 0,
+                                normalCount: sd.meta.normalCount || 0,
+                                scribeCount: sd.meta.scribeCount || 0,
+                                examTimestamp: sd.meta.examTimestamp || 0
+                            };
                         });
-                      // Store a lightweight registry of ALL known sessions for dropdowns
+                        localStorage.setItem('examHistoricalMeta', JSON.stringify(allHistoricalMeta));
+                        // -------------------------------------------------
+
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
@@ -1581,11 +1589,22 @@ async function deleteSessionFromCloud(sessionKey) {
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
             invigilatorMapping: sessionInvigMap, 
-            meta: { 
-                studentCount: students.length, 
+        meta: { 
+                studentCount: students.length,
+                normalCount: students.filter(s => {
+                    const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+                    const scribeRegNos = new Set(scribeListRaw.map(x => x.regNo));
+                    return !scribeRegNos.has(s['Register Number']);
+                }).length,
+                scribeCount: students.filter(s => {
+                    const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+                    const scribeRegNos = new Set(scribeListRaw.map(x => x.regNo));
+                    return scribeRegNos.has(s['Register Number']);
+                }).length,
                 lastUpdated: new Date().toISOString(),
                 examTimestamp: new Date(cleanDate.split('.').reverse().join('-')).getTime()
             }
+
 
         };
 
@@ -14627,49 +14646,38 @@ async function loadInitialData() {
             const startDateInput = document.getElementById('bill-start-date').valueAsDate;
             const endDateInput = document.getElementById('bill-end-date').valueAsDate;
 
-            filteredData.forEach(s => {
+                        // --- NEW: Build billGroups from lightweight metadata instead of heavy student arrays ---
+            const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+            
+            Object.entries(historicalMeta).forEach(([sessionKey, meta]) => {
+                const [dateStr, timeStr] = sessionKey.split(' | ');
+                
                 if (mode === 'period' && (startDateInput || endDateInput)) {
-                    const sDate = parseDate(s.Date);
+                    const sDate = parseDate(dateStr.trim());
                     if (startDateInput && sDate < startDateInput) return;
                     if (endDateInput && sDate > endDateInput) return;
                 }
-
-                const sessionKey = `${s.Date} | ${s.Time}`;
+                
                 let groupKey = "Consolidated Bill";
-
-               if (mode === 'exam') {
-                        // Get the Exam Name
-                        // FIX: Check the student record ('s') for the updated name first!
-                        const foundName = s['Exam Name'] || getExamName(s.Date, s.Time, s.Stream) || "Unknown / Other Exams";
-
-                        // *** FILTER LOGIC ***
-                        if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) {
-                            return; // Skip if it doesn't match selected exam
-                        }
-                        groupKey = foundName;
-                    } else {
+                if (mode === 'exam') {
+                    const foundName = getExamName(dateStr.trim(), timeStr.trim(), selectedStream) || "Unknown / Other Exams";
+                    if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) return;
+                    groupKey = foundName;
+                } else {
                     const sStr = document.getElementById('bill-start-date').value || "Start";
                     const eStr = document.getElementById('bill-end-date').value || "End";
                     groupKey = `Period: ${sStr} to ${eStr}`;
                 }
-
+                
                 if (!billGroups[groupKey]) billGroups[groupKey] = {};
-
-                if (!billGroups[groupKey][sessionKey]) {
-                    billGroups[groupKey][sessionKey] = {
-                        date: s.Date, time: s.Time, normalCount: 0, scribeCount: 0
-                    };
-                }
-
-                const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-                const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-
-                if (scribeRegNos.has(s['Register Number'])) {
-                    billGroups[groupKey][sessionKey].scribeCount++;
-                } else {
-                    billGroups[groupKey][sessionKey].normalCount++;
-                }
+                billGroups[groupKey][sessionKey] = {
+                    date: dateStr.trim(),
+                    time: timeStr.trim(),
+                    normalCount: meta.normalCount || 0,
+                    scribeCount: meta.scribeCount || 0
+                };
             });
+
 
             // C. Process Groups
             const outputContainer = document.getElementById('remuneration-output');
