@@ -1234,8 +1234,25 @@ async function updateLocalSlotsFromStudents() {
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
+                            
+                            
+                            
+
+                        const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
+                            const sd = d.data(); return `${sd.date} | ${sd.time}`;
+                        }));
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
+                        // Immediately push session list to all dropdowns from metadata
+                        if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
+                        if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
+                        if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
+
+
+
                             if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                    // --- HISTORICAL META STORE FOR BILLING ENGINE ---
+                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+                        });
+                        // --- HISTORICAL META STORE FOR BILLING ENGINE ---
                         const allHistoricalMeta = {};
                         sessionSnap.forEach(docSnap => {
                             const sd = docSnap.data();
@@ -1250,16 +1267,7 @@ async function updateLocalSlotsFromStudents() {
                         localStorage.setItem('examHistoricalMeta', JSON.stringify(allHistoricalMeta));
                         // -------------------------------------------------
 
-                        const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
-                            const sd = d.data(); return `${sd.date} | ${sd.time}`;
-                        }));
-                        localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
-                        // Immediately push session list to all dropdowns from metadata
-                        if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
-                        if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
-                        if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
-
-
+                            
 
                         // Wait for any allowed pre-fetches to finish safely
                         if (missingStudentsPromises.length > 0) {
