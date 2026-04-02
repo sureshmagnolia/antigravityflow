@@ -9632,11 +9632,31 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return;
             }
 
-            masterDownloadBtn.textContent = "Gathering Data...";
+        masterDownloadBtn.textContent = "Gathering Data...";
             masterDownloadBtn.disabled = true;
+
+            // --- FETCH ALL HISTORICAL STUDENT DATA BEFORE EXPORTING ---
+            const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+            const allKnownSessions = Object.keys(historicalMeta);
+            let fetchCount = 0;
+
+            for (const sessionKey of allKnownSessions) {
+                const [d, t] = sessionKey.split(' | ');
+                const alreadyLoaded = allStudentData.some(s => s.Date === d.trim() && s.Time === t.trim());
+                if (!alreadyLoaded) {
+                    fetchCount++;
+                    masterDownloadBtn.textContent = `Fetching session ${fetchCount}/${allKnownSessions.length}...`;
+                    await window.fetchHeavyDataOnDemand(sessionKey);
+                    // Small breathing space to prevent network congestion
+                    await new Promise(r => setTimeout(r, 300));
+                }
+            }
+            masterDownloadBtn.textContent = "Building CSV...";
+            // ----------------------------------------------------------
 
             // Allow UI to update
             await new Promise(r => setTimeout(r, 50));
+
 
             try {
                 // 1. Load ALL Context Data
