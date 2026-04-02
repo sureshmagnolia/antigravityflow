@@ -398,11 +398,17 @@ if (adminView && !adminView.classList.contains('hidden')) {
             }
         });
     }
-    // --- 4. SESSION DATA LISTENER (Live Updates) ---
+       // --- 4. SESSION DATA LISTENER (Live Updates) ---
     const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-    if (sessionsUnsubscribe) sessionsUnsubscribe(); 
-    
-    sessionsUnsubscribe = onSnapshot(sessionsRef, (snap) => {
+    if (sessionsUnsubscribe) sessionsUnsubscribe();
+
+    const { query, where } = window.firebase;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 30);
+    const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
+
+    sessionsUnsubscribe = onSnapshot(q, (snap) => {
+
         if (!snap.empty) {
             console.log("📡 Staff Portal: Session Data Updated Live.");
 
@@ -8524,13 +8530,13 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
         }, { merge: true });
     };
 
+
     sendHeartbeat('online');
-    setInterval(() => {
-        if (document.visibilityState === 'visible') sendHeartbeat('online');
-    }, 5 * 60 * 1000); 
+    // Removed setInterval to prevent endless background Firestore writes
 
     window.addEventListener('beforeunload', () => sendHeartbeat('offline'));
     document.addEventListener('visibilitychange', () => {
+
         if (document.visibilityState === 'hidden') sendHeartbeat('idle');
         else sendHeartbeat('online');
     });
