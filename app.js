@@ -1231,13 +1231,13 @@ async function updateLocalSlotsFromStudents() {
                                 }
                             }
                             // Load ALL metadata continuously, regardless of date
+
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                            
-                            
-                            
-
+                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+                        });
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
@@ -1249,9 +1249,7 @@ async function updateLocalSlotsFromStudents() {
 
 
 
-                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
-                        });
+                            
                         // --- HISTORICAL META STORE FOR BILLING ENGINE ---
                         const allHistoricalMeta = {};
                         sessionSnap.forEach(docSnap => {
