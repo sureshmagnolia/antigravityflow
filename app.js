@@ -1191,7 +1191,7 @@ async function updateLocalSlotsFromStudents() {
                 const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
 
                 // --> NEW: Listen to 'q' instead of 'sessionsRef'
-                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
+                sessionsUnsub = onSnapshot(q, async (sessionSnap) => {
 
 
                     if (!sessionSnap.empty) {
@@ -1343,10 +1343,13 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof renderInvigilationPanel === 'function') {
                             renderInvigilationPanel();
                         }
+                    } else {
+                        // SAFETY NET: If the filter legitimately returns 0 items, clear the "Connecting..." banner anyway!
+                        updateSyncStatus("Synced (Live)", "success");
                     }
 
-
                 });
+
 
                 // Check for V1 Fallback if sessions collection doesn't exist
                 const sessionSnapCheck = await getDocs(sessionsRef);
