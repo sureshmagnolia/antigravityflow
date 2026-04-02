@@ -1048,7 +1048,8 @@ async function updateLocalSlotsFromStudents() {
         }
         updateLoaderProgress(50, "Connecting to Cloud Server...");
         updateSyncStatus("Connecting...", "neutral");
-        const { db, doc, onSnapshot, collection, getDocs, query, orderBy } = window.firebase;
+        const { db, doc, onSnapshot, collection, getDocs, query, orderBy, where } = window.firebase;
+
 
         // --- PASTE START ---
         const connectionTimeout = setTimeout(() => {
@@ -1179,12 +1180,19 @@ async function updateLocalSlotsFromStudents() {
                       // [NEW] Use onSnapshot for live global synchronization
                 if (sessionsUnsub) sessionsUnsub(); // Cleanup existing
                 
-                // Get timestamp for Today's Midnight
+            // Get timestamp for Today's Midnight
                 const todayMidnight = new Date();
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
 
-                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
+                // --> NEW: 30-Day Cutoff Boundary
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - 30);
+                const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
+
+                // --> NEW: Listen to 'q' instead of 'sessionsRef'
+                sessionsUnsub = onSnapshot(q, async (sessionSnap) => {
+
                     if (!sessionSnap.empty) {
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
 
@@ -1571,8 +1579,10 @@ async function deleteSessionFromCloud(sessionKey) {
             invigilatorMapping: sessionInvigMap, 
             meta: { 
                 studentCount: students.length, 
-                lastUpdated: new Date().toISOString() 
+                lastUpdated: new Date().toISOString(),
+                examTimestamp: new Date(cleanDate.split('.').reverse().join('-')).getTime()
             }
+
         };
 
         // --- NEW: Heavy Array Sub-Collection ---
