@@ -1191,7 +1191,8 @@ async function updateLocalSlotsFromStudents() {
                 const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
 
                 // --> NEW: Listen to 'q' instead of 'sessionsRef'
-                sessionsUnsub = onSnapshot(q, async (sessionSnap) => {
+                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
+
 
                     if (!sessionSnap.empty) {
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
