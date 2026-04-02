@@ -407,7 +407,8 @@ if (adminView && !adminView.classList.contains('hidden')) {
     cutoffDate.setDate(cutoffDate.getDate() - 30);
     const q = query(sessionsRef, where("meta.examTimestamp", ">=", cutoffDate.getTime()));
 
-    sessionsUnsubscribe = onSnapshot(q, (snap) => {
+    sessionsUnsubscribe = onSnapshot(sessionsRef, (snap) => {
+
 
         if (!snap.empty) {
             console.log("📡 Staff Portal: Session Data Updated Live.");
