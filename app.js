@@ -14218,7 +14218,8 @@ window.handlePythonExtraction = async function (jsonString) {
             nukeBtn.disabled = true;
 
             try {
-                const { db, doc, writeBatch, updateDoc, collection, getDocs } = window.firebase;
+                const { db, doc, writeBatch, updateDoc, collection, getDocs, deleteDoc } = window.firebase;
+
                 
                 // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
                 // List 1: Student Data & Operations (Target of DATA mode)
@@ -14286,10 +14287,19 @@ window.handlePythonExtraction = async function (jsonString) {
                     // Update Main Document (Selective Erase)
                     batch.update(mainRef, updatePayload);
 
-                    // 3. Delete Data Chunks (Always wipe chunks in both modes)
-                    const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-                    const chunkSnaps = await getDocs(dataColRef);
-                    chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+                    // --- 🔥 NEW: V2 DESTRUCTION LOGIC 🔥 ---
+                    updateSyncStatus("Vaporizing live session databases...", "neutral");
+                    const sessionsColRef = collection(db, "colleges", currentCollegeId, "sessions");
+                    const studentsColRef = collection(db, "colleges", currentCollegeId, "session_students");
+                    
+                    // Nuke all 59+ sessions (Outside the batch to prevent 500-limit errors)
+                    const sSnap = await getDocs(sessionsColRef);
+                    for (const sDoc of sSnap.docs) { await deleteDoc(sDoc.ref); }
+                    
+                    const stuSnap = await getDocs(studentsColRef);
+                    for (const stuDoc of stuSnap.docs) { await deleteDoc(stuDoc.ref); }
+                    // ----------------------------------------
+
 
                     await batch.commit();
                 }
