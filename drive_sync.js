@@ -238,6 +238,26 @@ async function syncData() {
         }
 
         const folderId = await getBackupFolder();
+
+        // --- FETCH ALL HISTORICAL STUDENT DATA BEFORE BACKING UP ---
+        if (window.fetchHeavyDataOnDemand) {
+            const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+            const allKnownSessions = Object.keys(historicalMeta);
+            let fetchCount = 0;
+            for (const sessionKey of allKnownSessions) {
+                const [d, t] = sessionKey.split(' | ');
+                const alreadyLoaded = (await loadExamDataIDB()).some(s => s.Date === d.trim() && s.Time === t.trim());
+                if (!alreadyLoaded) {
+                    fetchCount++;
+                    btn.innerHTML = `⏳ Fetching session ${fetchCount}/${allKnownSessions.length}...`;
+                    await window.fetchHeavyDataOnDemand(sessionKey);
+                    await new Promise(r => setTimeout(r, 300));
+                }
+            }
+        }
+        btn.innerHTML = "⏳ Building backup...";
+        // -----------------------------------------------------------
+
         const localData = {};
         for (const k of DATA_KEYS) {
         if (k === 'examBaseData') {
