@@ -313,10 +313,11 @@ async function manageRetention(folderId) {
         orderBy: 'createdTime desc',
         fields: 'files(id)'
     });
-    if (res.result.files.length > 5) {
-        for (const f of res.result.files.slice(5)) await gapi.client.drive.files.delete({ fileId: f.id });
+    if (res.result.files.length > 100) {
+        for (const f of res.result.files.slice(100)) await gapi.client.drive.files.delete({ fileId: f.id });
     }
 }
+
 
 // --- RESTORE UI ---
 
