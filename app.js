@@ -14673,20 +14673,25 @@ async function loadInitialData() {
             const endDateInput = document.getElementById('bill-end-date').valueAsDate;
 
                         // --- NEW: Build billGroups from lightweight metadata instead of heavy student arrays ---
-            const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
-            
-            Object.entries(historicalMeta).forEach(([sessionKey, meta]) => {
-                const [dateStr, timeStr] = sessionKey.split(' | ');
+                        // --- FIX: Build billGroups from filteredData to properly segregate streams ---
+            const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+            const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+
+            filteredData.forEach(s => {
+                const sDateVal = s.Date ? s.Date.trim() : "";
+                const sTimeVal = s.Time ? s.Time.trim() : "";
+                const sessionKey = `${sDateVal} | ${sTimeVal}`;
                 
                 if (mode === 'period' && (startDateInput || endDateInput)) {
-                    const sDate = parseDate(dateStr.trim());
+                    if (!sDateVal) return;
+                    const sDate = parseDate(sDateVal);
                     if (startDateInput && sDate < startDateInput) return;
                     if (endDateInput && sDate > endDateInput) return;
                 }
                 
                 let groupKey = "Consolidated Bill";
                 if (mode === 'exam') {
-                    const foundName = getExamName(dateStr.trim(), timeStr.trim(), selectedStream) || "Unknown / Other Exams";
+                    const foundName = getExamName(sDateVal, sTimeVal, selectedStream) || "Unknown / Other Exams";
                     if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) return;
                     groupKey = foundName;
                 } else {
@@ -14695,16 +14700,25 @@ async function loadInitialData() {
                     groupKey = `Period: ${sStr} to ${eStr}`;
                 }
                 
-            if (!billGroups[groupKey]) billGroups[groupKey] = {};
-                billGroups[groupKey][sessionKey] = {
-                    date: dateStr.trim(),
-                    time: timeStr.trim(),
-                    // FALLBACK: Use total studentCount if specific counts aren't migrated yet
-                    normalCount: meta.normalCount !== undefined ? meta.normalCount : (meta.studentCount || 0),
-                    scribeCount: meta.scribeCount || 0
-                };
+                if (!billGroups[groupKey]) billGroups[groupKey] = {};
+                
+                if (!billGroups[groupKey][sessionKey]) {
+                    billGroups[groupKey][sessionKey] = {
+                        date: sDateVal,
+                        time: sTimeVal,
+                        normalCount: 0,
+                        scribeCount: 0
+                    };
+                }
 
+                // Increment counts precisely for the matched students
+                if (scribeRegNos.has(s['Register Number'])) {
+                    billGroups[groupKey][sessionKey].scribeCount++;
+                } else {
+                    billGroups[groupKey][sessionKey].normalCount++;
+                }
             });
+
 
 
             // C. Process Groups
