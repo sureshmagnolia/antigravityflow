@@ -309,14 +309,27 @@ async function syncData() {
 
 async function manageRetention(folderId) {
     const res = await gapi.client.drive.files.list({
-        q: `'${folderId}' in parents and trashed=false`, // Fixed Q
+        q: `'${folderId}' in parents and trashed=false`, 
         orderBy: 'createdTime desc',
-        fields: 'files(id)'
+        fields: 'files(id, size)' // <-- Crucial: Added 'size' field
     });
-    if (res.result.files.length > 100) {
-        for (const f of res.result.files.slice(100)) await gapi.client.drive.files.delete({ fileId: f.id });
+    
+    const MAX_SIZE_BYTES = 100 * 1024 * 1024; // Exactly 100 MB
+    let currentTotalSize = 0;
+    
+    for (const f of res.result.files) {
+        const fileSize = f.size ? parseInt(f.size, 10) : 0; 
+        
+        // If adding this file pushes total beyond 100 MB, delete the file
+        // (The 'currentTotalSize > 0' check ensures we never delete the very first/newest backup by accident)
+        if (currentTotalSize + fileSize > MAX_SIZE_BYTES && currentTotalSize > 0) {
+            await gapi.client.drive.files.delete({ fileId: f.id });
+        } else {
+            currentTotalSize += fileSize;
+        }
     }
 }
+
 
 
 // --- RESTORE UI ---
