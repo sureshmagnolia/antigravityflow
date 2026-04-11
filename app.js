@@ -1624,20 +1624,24 @@ async function deleteSessionFromCloud(sessionKey) {
         try {
             updateSyncStatus("Generating Session File...", "neutral"); 
             
-            // --- NEW WEB APP HYBRID SYNC ---
+     // --- NEW WEB APP HYBRID SYNC ---
+            await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
+            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+
             const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
             await fetch(GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify({
                     secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026",
                     action: "saveHeavyData",
-                    filename: `session_${sessionId}.json`, // Save each session as an isolated file!
+                    filename: `session_${sessionId}.json`,
                     payload: JSON.stringify({
                         sessionData: sessionDoc,
                         studentData: sessionStudentsDoc
                     })
                 })
             });
+
 
             updateSyncStatus("All Data Synced!", "success"); 
 
@@ -1692,7 +1696,10 @@ async function deleteSessionFromCloud(sessionKey) {
                     lastUpdated: timestamp
                 };
                 
+                await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
+
                 // --- NEW WEB APP HYBRID SYNC ---
+
                 const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
                 const response = await fetch(GAS_URL, {
                     method: 'POST',
@@ -1719,6 +1726,9 @@ async function deleteSessionFromCloud(sessionKey) {
                     examQPCodes: get('examQPCodes')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
+                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
+
             }
 
             // 3. ALLOCATION (Scribes)
@@ -1728,6 +1738,9 @@ async function deleteSessionFromCloud(sessionKey) {
                     examScribeAllotment: get('examScribeAllotment')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
+                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
+
             }
 
             // 4. STAFF (Invigilators)
@@ -1758,7 +1771,11 @@ async function deleteSessionFromCloud(sessionKey) {
                 contentType: 'application/json'
                     });
                 console.log("📁 Heavy Data (examBaseData) synced to Firebase Storage.");
+                    
+                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
                     }
+
                 }
 
             
