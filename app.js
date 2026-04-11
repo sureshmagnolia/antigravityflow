@@ -1668,7 +1668,7 @@ async function deleteSessionFromCloud(sessionKey) {
         try {
             const get = (k) => localStorage.getItem(k);
 
-            // 1. SETTINGS (Global Config)
+        // 1. SETTINGS (Global Config)
             if (targetSection === 'settings') {
                 const data = {
                     examCollegeName: get('examCollegeName'),
@@ -1679,8 +1679,26 @@ async function deleteSessionFromCloud(sessionKey) {
                     examRemunerationConfig: get('examRemunerationConfig'),
                     lastUpdated: timestamp
                 };
-                await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
+                
+                // --- NEW WEB APP HYBRID SYNC ---
+                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026",
+                        action: "patchSettings",
+                        payload: data
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.status !== "success") {
+                    console.error("GAS Sync Error:", result.message);
+                    throw new Error(result.message);
+                }
+                // --- END WEB APP HYBRID SYNC ---
             }
+
 
             // 2. OPERATIONS (Global Lists)
             else if (targetSection === 'ops') {
