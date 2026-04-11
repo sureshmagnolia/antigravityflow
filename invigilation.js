@@ -10205,10 +10205,12 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
         return {
             ...s,
-            pending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+            regularPending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
+            vacationPending: (vacationDutyTarget || 0) - getVacationDutiesDoneCount(s.email),
             weeklyLoad: {}
         };
     });
+
 
     Object.keys(invigilationSlots).forEach(k => {
         const d = parseDate(k);
@@ -10245,10 +10247,16 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
             if (s && s.dept) slotDeptCounts[s.dept] = (slotDeptCounts[s.dept] || 0) + 1;
         });
 
+        // Check if this specific slot is considered a Vacation duty
+        const slotIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const isVacDate = isDateInVacation(date) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotIso));
+
         for (let i = 0; i < needed; i++) {
             const candidates = eligibleStaff.map(s => {
-                let score = s.pending * 100;
+                let activePending = isVacDate ? s.vacationPending : s.regularPending;
+                let score = Math.max(0, activePending) * 100;
                 let warnings = [];
+
 
                 if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
 
@@ -10277,7 +10285,9 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
             if (candidates.length > 0) {
                 const choice = candidates[0];
                 slot.assigned.push(choice.staff.email);
-                choice.staff.pending--;
+                if (isVacDate) choice.staff.vacationPending--;
+                else choice.staff.regularPending--;
+
                 if (!choice.staff.weeklyLoad[currentWeekKey]) choice.staff.weeklyLoad[currentWeekKey] = 0;
                 choice.staff.weeklyLoad[currentWeekKey]++;
                 slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
