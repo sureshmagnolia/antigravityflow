@@ -13,7 +13,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
@@ -27,7 +27,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        window.firebase = { db, doc, getDoc, collection, getDocs }; 
+        window.firebase = { db, doc, getDoc, collection, getDocs, query, where }; 
 
         const urlParams = new URLSearchParams(window.location.search);
         let collegeId = urlParams.get('id');
@@ -54,10 +54,7 @@
                 // A. FETCH SETTINGS
                 const settingsRef = doc(db, "colleges", collegeId, "system_data", "settings");
                 
-                // B. FETCH SESSIONS (V2 Modular)
-                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-          
-                // --- FETCH NETWORK TIME ---
+                // --- FETCH NETWORK TIME FIRST ---
                 let offset = 0;
                 try {
                     const tResp = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
@@ -66,10 +63,20 @@
                 } catch(e) { console.warn("Network time failed, using device clock."); }
                 window.getExamsNow = () => new Date(Date.now() + offset);
 
+                // Build exactly today's date in 'DD.MM.YYYY' format
+                const now = window.getExamsNow();
+                const todayString = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+
+                // B. FETCH SESSIONS (V2 Modular) - FILTERED FOR TODAY ONLY
+                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
+                const todayQuery = query(sessionsRef, where("date", "==", todayString));
+
                 const [settingsSnap, sessionsSnap] = await Promise.all([
                     getDoc(settingsRef),
-                    getDocs(sessionsRef)
+                    getDocs(todayQuery) // Only fetches arrays matching today string!
                 ]);
+
+                
 
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
