@@ -558,8 +558,10 @@ function getVacationDutiesDoneCount(email) {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
         
-        // Count if in standard vacation range OR manually marked as an Extra Date
-        const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(key);
+        // Clean format conversion to catch manually added extra dates
+        const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(isoDate);
+
         if (isDateInVacation(dateObj) || isExtraDutyDate) {
 
             // Check if attended (or assigned if no attendance data yet)
