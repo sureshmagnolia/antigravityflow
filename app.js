@@ -1620,15 +1620,27 @@ async function deleteSessionFromCloud(sessionKey) {
             lastUpdated: new Date().toISOString() 
         };
 
-        // 3. Write to Firestore (Modular Write)
+             // 3. Write to Web App API
         try {
-            updateSyncStatus("Saving Metadata...", "neutral"); // <-- NEW RIBBON ALERT
-            await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
+            updateSyncStatus("Generating Session File...", "neutral"); 
             
-            updateSyncStatus("Uploading Master Student List...", "neutral"); // <-- NEW RIBBON ALERT
-            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+            // --- NEW WEB APP HYBRID SYNC ---
+            const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+            await fetch(GAS_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026",
+                    action: "saveHeavyData",
+                    filename: `session_${sessionId}.json`, // Save each session as an isolated file!
+                    payload: JSON.stringify({
+                        sessionData: sessionDoc,
+                        studentData: sessionStudentsDoc
+                    })
+                })
+            });
 
-            updateSyncStatus("All Data Synced!", "success"); // <-- UPDATED SUCCESS MESSAGE
+            updateSyncStatus("All Data Synced!", "success"); 
+
 
             
             // Recalculate Invigilation Slots
