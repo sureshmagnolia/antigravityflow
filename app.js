@@ -18855,3 +18855,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+window.syncSessionToCloud = syncSessionToCloud;
+
