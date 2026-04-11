@@ -18853,7 +18853,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') verifyAppPassword(); 
         });
     }
+
+    // --- EXPORT TO WINDOW SO CONSOLE SCRIPTS CAN REACH THEM ---
+    window.syncSessionToCloud = syncSessionToCloud;
+    window.syncDataToCloud = syncDataToCloud;
 });
 
-window.syncSessionToCloud = syncSessionToCloud;
 
