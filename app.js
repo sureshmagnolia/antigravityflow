@@ -1594,7 +1594,7 @@ async function deleteSessionFromCloud(sessionKey) {
             id: sessionId,
             date: cleanDate,
             time: cleanTime,
-            // students: students, // REMOVED TO SAVE EGRESS COSTS
+            students: students, // REMOVED TO SAVE EGRESS COSTS
             roomAllotment: sessionAllotment,
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
