@@ -13,7 +13,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, doc, getDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
@@ -79,48 +79,38 @@
                     }
                 }
 
-                // Plan A: Google Apps Script (Limitless Bandwidth)
-                let gasSuccess = false;
+                               // NEW: Cheap lookup from public_seating collection
                 allSessions = [];
-                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
-                
-                try {
-                    // Abort Controller enforces a strict 6-second timeout before failover
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 6000);
-                    
-                    const gasRes = await fetch(GAS_URL, {
-                        method: 'POST',
-                        signal: controller.signal,
-                        body: JSON.stringify({
-                            action: "getTodaySessions",
-                            dateString: todayString
-                        })
-                    });
-                    clearTimeout(timeoutId);
+                const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
+                if (indexSnap.exists()) {
+                    const indexData = indexSnap.data();
+                    const sessions = indexData.sessions || {};
 
-                    const gasJSON = await gasRes.json();
-                    if (gasJSON.status === "success" && gasJSON.data) {
-                        allSessions = gasJSON.data;
-                        gasSuccess = true;
-                        console.log("🟢 Loaded Heavy Data safely routed via Google Drive");
-                    }
-                } catch (e) {
-                    console.warn("🟠 Google API Timeout. Failing over to Firebase Bandwidth...");
-                }
+                    // Find today's session doc IDs only
+                    const todayDocIds = Object.entries(sessions)
+                        .filter(([label]) => label.startsWith(todayString))
+                        .map(([, s]) => s.docId);
 
-                // Plan B: Firebase Fallback
-                if (!gasSuccess) {
-                    const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-                    const todayQuery = query(sessionsRef, where("date", "==", todayString));
-                    const sessionsSnap = await getDocs(todayQuery);
-                    
-                    if (!sessionsSnap.empty) {
-                        sessionsSnap.forEach(doc => {
-                            allSessions.push(doc.data());
-                        });
+                    for (const docId of todayDocIds) {
+                        const sSnap = await getDoc(doc(db, 'public_seating', docId));
+                        if (sSnap.exists()) {
+                            const d = sSnap.data();
+                            // Reshape into format student.html already understands
+                            const [datePart, timePart] = d.sessionLabel.split(' | ');
+                            allSessions.push({
+                                date: datePart.trim(),
+                                time: timePart ? timePart.trim() : '',
+                                roomAllotment: Object.entries(d.students || {}).reduce((acc, [regNo, info]) => {
+                                    let room = acc.find(r => r.roomName === info.room);
+                                    if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
+                                    room.students.push({ 'Register Number': regNo, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
+                                    return acc;
+                                }, [])
+                            });
+                        }
                     }
                 }
+
 
                 // Render check
                 if (allSessions.length > 0) {
