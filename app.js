@@ -19172,9 +19172,10 @@ window.syncSessionToCloud = syncSessionToCloud;
 // These are defined outside DOMContentLoaded so they are
 // guaranteed to be registered even if earlier code errors.
 // =======================================================
-function openBatchArchiveModal() {
+window.openBatchArchiveModal = function() {
     try {
         const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+
         const listDiv = document.getElementById('batch-archive-checkbox-list');
 
         if (!listDiv) {
@@ -19216,14 +19217,15 @@ function openBatchArchiveModal() {
     }
 }
 
-function closeBatchArchiveModal() {
+window.closeBatchArchiveModal = function() {
     const modal = document.getElementById('batch-archive-modal');
     if (modal) modal.classList.add('hidden');
-}
+};
 
-function toggleAllArchiveCheckboxes(check) {
+window.toggleAllArchiveCheckboxes = function(check) {
     document.querySelectorAll('.archive-session-cb').forEach(cb => cb.checked = check);
-}
+};
+
 
 
 
