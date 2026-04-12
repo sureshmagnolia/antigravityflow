@@ -1478,32 +1478,12 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
 
 // --- PHASE 4: MODULAR WRITE HELPERS ---
 
-     function generateSessionId(sessionKey) {
-        try {
-            const parts = sessionKey.split('|');
-            if (parts.length < 2) return "UNKNOWN_SESSION";
-            
-            // Normalize Date: remove . / - and extract D, M, Y
-            const dateStr = parts[0].trim();
-            const dateParts = dateStr.split(/[./-]/);
-            if (dateParts.length < 3) return "ERROR_ID";
-            const [d, m, y] = dateParts;
-            const isoDate = `${y}-${m}-${d}`;
-
-            // Normalize Time: Detect AN/FN
-            const t = parts[1].trim().toUpperCase();
-            let sessionType = "FN";
-            if (t.includes("PM") || t.includes("AN") || 
-                t.startsWith("12:") || t.startsWith("13:") || 
-                t.startsWith("14:") || t.startsWith("15:") || t.startsWith("16:")) {
-                sessionType = "AN";
-            }
-            return `${isoDate}_${sessionType}`;
-        } catch (e) {
-            console.error("ID Gen Error:", e);
-            return "ERROR";
-        }
+    function generateSessionId(sessionKey) {
+        // Reverted to Exact Time format: "DD.MM.YYYY | HH:MM AM"
+        // This ensures compatibility with Google Drive Backups and prevents AN/FN duplicates
+        return sessionKey;
     }
+
 
     // --- NEW: Universal Student Matcher (Handles all date/time formats) ---
     window.getStudentsForSession = function(allData, targetDate, targetTime) {
