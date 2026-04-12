@@ -4,7 +4,12 @@
 
 const BASE_DATA_KEY = 'examBaseData';
 
+// --- HYBRID CLOUD BACKEND CONSTANTS ---
+const HYBRID_GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+const HYBRID_SECRET = "EXAMFLOW_PRO_SECURE_KEY_2026";
+
 // Fail-safe constants (Avoids conflict with drive_sync.js)
+
 if (typeof IDB_NAME === 'undefined') {
     window.IDB_NAME = 'AntigravityDB';
     window.IDB_STORE = 'examStore';
@@ -1626,14 +1631,14 @@ async function deleteSessionFromCloud(sessionKey) {
             
      // --- NEW WEB APP HYBRID SYNC ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
-            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+            // 🚫 DELETED: session_students Firebase upload (to save cost)
 
-            const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
-            await fetch(GAS_URL, {
+            await fetch(HYBRID_GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify({
-                    secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026",
+                    secretKey: HYBRID_SECRET,
                     action: "saveHeavyData",
+
                     filename: `session_${sessionId}.json`,
                     payload: JSON.stringify({
                         sessionData: sessionDoc,
@@ -1700,7 +1705,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
                 // --- NEW WEB APP HYBRID SYNC ---
 
-                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                // using global HYBRID_GAS_URL
                 const response = await fetch(GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -1726,7 +1731,8 @@ async function deleteSessionFromCloud(sessionKey) {
                     examQPCodes: get('examQPCodes')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
-                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+           // using global HYBRID_GAS_URL
+
                 await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
 
             }
@@ -1738,7 +1744,8 @@ async function deleteSessionFromCloud(sessionKey) {
                     examScribeAllotment: get('examScribeAllotment')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
-                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+            // using global HYBRID_GAS_URL
+
                 await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
 
             }
@@ -1765,15 +1772,11 @@ async function deleteSessionFromCloud(sessionKey) {
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
                 if (students && students.length > 0) {
-                    const { storage, ref, uploadString } = window.firebase;
-                    const storageRef = ref(storage, `colleges/${cid}/data/examBaseData.json`);
-                    await uploadString(storageRef, JSON.stringify(students), 'raw', {
-                contentType: 'application/json'
-                    });
-                console.log("📁 Heavy Data (examBaseData) synced to Firebase Storage.");
+                // 🚫 DELETED: Firebase Storage uploadString (to save bandwidth cost)
+                console.log("📁 Heavy Data (examBaseData) routing securely to Google Drive...");
                     
-                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
-                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
+                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: HYBRID_SECRET, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
+
                     }
 
                 }
