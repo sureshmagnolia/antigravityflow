@@ -1634,8 +1634,10 @@ async function deleteSessionFromCloud(sessionKey) {
             // 🚫 DELETED: session_students Firebase upload (to save cost)
 
            const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-            await fetch(HYBRID_GAS_URL, {
+
+            fetch(HYBRID_GAS_URL, {
                 method: 'POST',
+                mode: 'no-cors',
                 body: JSON.stringify({
                     token: secureToken,
                     action: "saveHeavyData",
@@ -1709,11 +1711,13 @@ async function deleteSessionFromCloud(sessionKey) {
 
                 // using global HYBRID_GAS_URL
                 const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                const response = await fetch(HYBRID_GAS_URL, {
+                fetch(HYBRID_GAS_URL, {
                     method: 'POST',
+                    mode: 'no-cors',
                     body: JSON.stringify({
                         token: secureToken,
                         action: "patchSettings",
+
                         payload: data
                     })
                 });
@@ -1738,7 +1742,7 @@ async function deleteSessionFromCloud(sessionKey) {
            // using global HYBRID_GAS_URL
 
                 const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
+                                fetch(HYBRID_GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
 
 
             }
@@ -1785,7 +1789,7 @@ async function deleteSessionFromCloud(sessionKey) {
                 console.log("📁 Heavy Data (examBaseData) routing securely to Google Drive...");
                     
                 const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
+                                fetch(HYBRID_GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ token: secureToken, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
 
 
                     }
