@@ -1,62 +1,73 @@
 /**
- * ExamFlow Google Apps Script Backend
- * Used for storing heavy Historical Data off Firebase to save quotas.
- * 
- * Instructions:
- * 1. Go to script.google.com and create a new project.
- * 2. Paste this code.
- * 3. Click Deploy -> New Deployment -> "Web App".
- * 4. Execute as "Me", Who has access: "Anyone".
- * 5. Update GAS_URL in app.js with the given endpoint.
+ * ExamFlow Google Apps Script Backend (SECURED JWT VERSION)
  */
 
-const SECRET_KEY = "EXAMFLOW_PRO_SECURE_KEY_2026";
+const FIREBASE_WEB_API_KEY = "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM"; 
 const FOLDER_NAME = "ExamFlow_Heavy_Data";
+
+// SECURITY WHITELIST: Array of authorized Firebase UIDs
+const ALLOWED_ADMIN_UIDS = [
+  "YOUR_FIREBASE_UID_HERE" // <-- Replace this with your exact UID
+];
 
 function doPost(e) {
   try {
     const request = JSON.parse(e.postData.contents);
+    const action = request.action;
+    const providedToken = request.token;
     
-    // Auth Check
-    if (request.secretKey !== SECRET_KEY) {
-      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unauthorized" }))
-        .setMimeType(ContentService.MimeType.JSON)
-        .setHeaders(getCorsHeaders());
+    // 1. Verify Cryptographic Token via Google Identity Servers
+    const apiUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`;
+    const tokenCheckResponse = UrlFetchApp.fetch(apiUrl, {
+       method: 'post',
+       contentType: 'application/json',
+       payload: JSON.stringify({ idToken: providedToken }),
+       muteHttpExceptions: true
+    });
+    
+    const verificationData = JSON.parse(tokenCheckResponse.getContentText());
+    
+    // 2. Reject if token is expired, fake, or malformed
+    if (verificationData.error) {
+       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Cryptographic handhshake failed. Token invalid." }))
+         .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
     }
     
-    const action = request.action;
+    // 3. Extract the mathematically verified UID
+    const verifiedUID = verificationData.users[0].localId;
+    
+    // 4. Reject if UID is not in the Admin Whitelist
+    if (!ALLOWED_ADMIN_UIDS.includes(verifiedUID)) {
+       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: `UID ${verifiedUID} is not an authorized administrator.` }))
+         .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
+    }
+
+    // --- AUTHENTICATED: PROCEED WITH FILE OPERATIONS ---
     const folder = getOrCreateFolder(FOLDER_NAME);
     
     if (action === "saveHeavyData") {
        saveJsonToFolder(folder, request.filename, request.payload);
-       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "File saved to Drive." }))
-         .setMimeType(ContentService.MimeType.JSON)
-         .setHeaders(getCorsHeaders());
+       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "File securely saved to Drive." }))
+         .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
     }
     
     if (action === "patchSettings") {
        saveJsonToFolder(folder, "system_settings.json", JSON.stringify(request.payload));
-       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Settings backed up." }))
-         .setMimeType(ContentService.MimeType.JSON)
-         .setHeaders(getCorsHeaders());
+       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Settings securely backed up." }))
+         .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
     }
 
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unknown action" }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders(getCorsHeaders());
+      .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() }))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders(getCorsHeaders());
+      .setMimeType(ContentService.MimeType.JSON).setHeaders(getCorsHeaders());
   }
 }
 
-// Ensure CORS allows browsers to ping this API directly
 function doOptions(e) {
-  return ContentService.createTextOutput("")
-    .setMimeType(ContentService.MimeType.TEXT)
-    .setHeaders(getCorsHeaders());
+  return ContentService.createTextOutput("").setMimeType(ContentService.MimeType.TEXT).setHeaders(getCorsHeaders());
 }
 
 function getCorsHeaders() {
@@ -70,17 +81,12 @@ function getCorsHeaders() {
 
 function getOrCreateFolder(folderName) {
   const folders = DriveApp.getFoldersByName(folderName);
-  if (folders.hasNext()) {
-    return folders.next();
-  } else {
-    return DriveApp.createFolder(folderName);
-  }
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(folderName);
 }
 
 function saveJsonToFolder(folder, filename, content) {
   const files = folder.getFilesByName(filename);
-  while (files.hasNext()) {
-    files.next().setTrashed(true);
-  }
+  while (files.hasNext()) files.next().setTrashed(true);
   folder.createFile(filename, content, MimeType.PLAIN_TEXT);
 }
