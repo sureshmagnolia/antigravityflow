@@ -123,7 +123,7 @@
                 statusEl.textContent = ""; 
                 document.getElementById('search-section').classList.remove('hidden');
 
-                const savedRegNo = localStorage.getItem('myExamRegNo');
+            const savedRegNo = localStorage.getItem('myExamRegNo');
                 if (savedRegNo) {
                     document.getElementById('reg-input').value = savedRegNo;
                 }
@@ -131,7 +131,11 @@
                 console.error("Load Error:", error);
                 statusEl.textContent = "Minimal mode active.";
             }
+            // 🛠️ Debug Tool: Make vars visible to console
+            window.indexCache = indexCache;
+            window.allSessions = allSessions;
         }
+
 
 
             window.searchStudent = async function() {
