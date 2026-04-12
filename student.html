@@ -67,17 +67,9 @@
                 const now = window.getExamsNow();
                 const todayString = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
 
-                // B. FETCH SESSIONS (V2 Modular) - FILTERED FOR TODAY ONLY
-                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-                const todayQuery = query(sessionsRef, where("date", "==", todayString));
-
-                const [settingsSnap, sessionsSnap] = await Promise.all([
-                    getDoc(settingsRef),
-                    getDocs(todayQuery) // Only fetches arrays matching today string!
-                ]);
-
+                             // B. FETCH SESSIONS - HYBRID ARCHITECTURE (Google Drive -> Firebase Fallback)
+                const settingsSnap = await getDoc(settingsRef);
                 
-
                 if (settingsSnap.exists()) {
                     const settings = settingsSnap.data();
                     collegeName = settings.examCollegeName || "Exam Centre";
@@ -87,11 +79,52 @@
                     }
                 }
 
-                if (!sessionsSnap.empty) {
-                    allSessions = [];
-                    sessionsSnap.forEach(doc => {
-                        allSessions.push(doc.data());
+                // Plan A: Google Apps Script (Limitless Bandwidth)
+                let gasSuccess = false;
+                allSessions = [];
+                const GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+                
+                try {
+                    // Abort Controller enforces a strict 6-second timeout before failover
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 6000);
+                    
+                    const gasRes = await fetch(GAS_URL, {
+                        method: 'POST',
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            action: "getTodaySessions",
+                            dateString: todayString
+                        })
                     });
+                    clearTimeout(timeoutId);
+
+                    const gasJSON = await gasRes.json();
+                    if (gasJSON.status === "success" && gasJSON.data) {
+                        allSessions = gasJSON.data;
+                        gasSuccess = true;
+                        console.log("🟢 Loaded Heavy Data safely routed via Google Drive");
+                    }
+                } catch (e) {
+                    console.warn("🟠 Google API Timeout. Failing over to Firebase Bandwidth...");
+                }
+
+                // Plan B: Firebase Fallback
+                if (!gasSuccess) {
+                    const sessionsRef = collection(db, "colleges", collegeId, "sessions");
+                    const todayQuery = query(sessionsRef, where("date", "==", todayString));
+                    const sessionsSnap = await getDocs(todayQuery);
+                    
+                    if (!sessionsSnap.empty) {
+                        sessionsSnap.forEach(doc => {
+                            allSessions.push(doc.data());
+                        });
+                    }
+                }
+
+                // Render check
+                if (allSessions.length > 0) {
+
 
                     statusEl.textContent = ""; 
                     document.getElementById('search-section').classList.remove('hidden');
