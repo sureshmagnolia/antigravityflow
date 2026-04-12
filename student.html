@@ -180,14 +180,10 @@
             if (d) {
                 allSessions.push({
                     date: dPart.trim(), time: tPart.trim(),
-                    roomAllotment: Object.entries(d.students || {}).reduce((acc, [reg, info]) => {
-                        let room = acc.find(r => r.roomName === info.room);
-                        if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
-                        room.students.push({ 'Register Number': reg, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
-                        return acc;
-                    }, [])
+                    studentMap: d.students || {} // Store flat map for instant lookup
                 });
             }
+
         } else {
             // Add minimal locked info to show the countdown but NO room data
             allSessions.push({ date: dPart.trim(), time: tPart.trim(), isLockedByGate: true, fullDate: sessionTime });
@@ -213,17 +209,13 @@
                 let seatNumber = "-";
                 let isScribeRoom = false;
 
-                if (session.roomAllotment) {
-                    for (const room of session.roomAllotment) {
-                        const index = room.students.findIndex(s => (typeof s === 'object' ? s['Register Number'] : s) === regNo);
-                        if (index !== -1) {
-                            studentRoom = room.roomName;
-                            seatNumber = index + 1;
-                            if (typeof room.students[index] === 'object') studentRecord = room.students[index];
-                            break;
-                        }
-                    }
+            // ⚡ INSTANT LOOKUP (Cost-Effective)
+                if (session.studentMap && session.studentMap[regNo]) {
+                    studentRecord = session.studentMap[regNo];
+                    studentRoom = studentRecord.room;
+                    seatNumber = studentRecord.seat;
                 }
+
                 if (session.scribeAllotment && session.scribeAllotment[regNo]) {
                     studentRoom = session.scribeAllotment[regNo];
                     isScribeRoom = true;
@@ -238,13 +230,14 @@ if (session.isLockedByGate) {
     });
 } else if (studentRecord && studentRoom !== "Not Allotted") {
 
-                    if (!studentName) studentName = studentRecord.Name;
+                    if (!studentName) studentName = studentRecord.name || "";
                     myExams.push({
                         dateStr, timeStr, studentRoom, seatNumber,
-                        paperName: studentRecord.Course,
+                        paperName: studentRecord.course || "", 
                         isScribeRoom,
                         fullDate: parseSessionTime(dateStr, timeStr)
                     });
+
                 }
             });
 
