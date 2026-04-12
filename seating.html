@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exam Room Seating – Student Lookup</title>
+  <meta name="description" content="Find your exam room and seating arrangement. Enter your register number to see your assigned room." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0d14;
+      --surface: #111622;
+      --surface2: #1a2035;
+      --border: rgba(255,255,255,0.07);
+      --accent: #4f8ef7;
+      --accent2: #7c5cfc;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --text: #e8edf5;
+      --muted: #6b7a99;
+      --radius: 16px;
+      --shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      width: 100%;
+      background: linear-gradient(135deg, #0d1526 0%, #111a33 50%, #120d26 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 48px 24px 40px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(79,142,247,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(79,142,247,0.12);
+      border: 1px solid rgba(79,142,247,0.25);
+      padding: 6px 16px; border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+      color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero-badge::before { content: '🎓'; }
+    .hero-college {
+      font-size: clamp(22px, 4vw, 34px);
+      font-weight: 800; color: #fff;
+      line-height: 1.2; margin-bottom: 10px;
+    }
+    .hero-sub {
+      font-size: 15px; color: var(--muted); font-weight: 400;
+    }
+    .hero-stats {
+      display: flex; gap: 24px; justify-content: center; flex-wrap: wrap;
+      margin-top: 28px;
+    }
+    .stat-pill {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      padding: 8px 20px; border-radius: 999px;
+      font-size: 13px; color: var(--muted);
+    }
+    .stat-pill span { color: var(--text); font-weight: 600; }
+
+    /* ── SEARCH ── */
+    .search-wrap {
+      width: 100%; max-width: 600px;
+      padding: 32px 20px 0;
+    }
+    .search-label {
+      display: block; font-size: 13px; font-weight: 500;
+      color: var(--muted); margin-bottom: 10px; text-align: center;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .search-box {
+      display: flex; gap: 10px;
+    }
+    .search-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 18px; font-family: 'Inter', sans-serif;
+      color: var(--text); font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .search-input::placeholder { font-weight: 400; font-size: 14px; letter-spacing: 0; color: var(--muted); text-transform: none; }
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79,142,247,0.15);
+    }
+    .search-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 12px;
+      padding: 14px 24px; cursor: pointer;
+      font-size: 18px; font-weight: 700;
+      color: #fff; transition: transform 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .search-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .search-btn:active { transform: translateY(0); }
+    .search-hint {
+      text-align: center; font-size: 12px;
+      color: var(--muted); margin-top: 10px;
+    }
+
+    /* ── RESULTS AREA ── */
+    .results-area {
+      width: 100%; max-width: 680px;
+      padding: 28px 20px 60px;
+    }
+
+    /* Loading spinner */
+    .spinner-wrap {
+      text-align: center; padding: 60px 0;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Not found */
+    .not-found {
+      text-align: center; padding: 60px 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .not-found .icon { font-size: 48px; margin-bottom: 16px; }
+    .not-found h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .not-found p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    /* Result found */
+    .result-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 20px;
+    }
+    .result-name {
+      font-size: 22px; font-weight: 800;
+      background: linear-gradient(90deg, #fff 0%, #a5b8f0 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .result-reg {
+      font-size: 13px; color: var(--muted); font-weight: 500; margin-top: 2px;
+    }
+    .verified-badge {
+      margin-left: auto;
+      background: rgba(34,197,94,0.12);
+      border: 1px solid rgba(34,197,94,0.25);
+      color: var(--success); font-size: 12px; font-weight: 600;
+      padding: 4px 12px; border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    /* Session card */
+    .session-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+      transition: border-color 0.2s, transform 0.2s;
+      animation: slideIn 0.3s ease forwards;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .session-card:hover { border-color: rgba(79,142,247,0.3); transform: translateY(-2px); }
+    .card-header {
+      padding: 16px 20px;
+      background: linear-gradient(90deg, rgba(79,142,247,0.08) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .date-block {
+      background: var(--accent);
+      border-radius: 10px; padding: 8px 14px;
+      text-align: center; min-width: 56px;
+      line-height: 1;
+    }
+    .date-block .day { font-size: 22px; font-weight: 800; color: #fff; }
+    .date-block .mon { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; }
+    .session-meta { flex: 1; }
+    .session-meta .time { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .session-meta .exam-name { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+
+    .card-body { padding: 20px; }
+    .room-display {
+      display: flex; align-items: center; gap: 16px;
+      background: rgba(79,142,247,0.08);
+      border: 1.5px solid rgba(79,142,247,0.2);
+      border-radius: 12px; padding: 16px 20px;
+      margin-bottom: 14px;
+    }
+    .room-icon { font-size: 28px; }
+    .room-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    .room-name { font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1; }
+    .course-tag {
+      display: inline-block;
+      background: rgba(124,92,252,0.12);
+      border: 1px solid rgba(124,92,252,0.2);
+      color: #b09ef8; font-size: 12px; font-weight: 500;
+      padding: 5px 14px; border-radius: 999px;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* Loading state pills */
+    .loading-state {
+      padding: 40px 0; text-align: center;
+    }
+    .loading-state p { color: var(--muted); font-size: 14px; margin-top: 12px; }
+
+    /* Welcome state */
+    .welcome-state {
+      text-align: center; padding: 60px 24px;
+    }
+    .welcome-state .big-icon { font-size: 64px; margin-bottom: 20px; }
+    .welcome-state h2 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+    .welcome-state p { color: var(--muted); font-size: 14px; line-height: 1.7; max-width: 360px; margin: 0 auto; }
+
+    /* Footer */
+    footer {
+      width: 100%; padding: 20px;
+      text-align: center; color: var(--muted); font-size: 12px;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+
+    @media (max-width: 480px) {
+      .search-box { flex-direction: column; }
+      .search-btn { width: 100%; }
+      .hero { padding: 36px 16px 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HERO SECTION -->
+  <div class="hero">
+    <div class="hero-badge">Exam Seating Arrangement</div>
+    <div class="hero-college" id="college-name">Loading...</div>
+    <div class="hero-sub">Enter your Register Number to find your exam room</div>
+    <div class="hero-stats">
+      <div class="stat-pill">Sessions: <span id="stat-sessions">–</span></div>
+      <div class="stat-pill">Students: <span id="stat-students">–</span></div>
+      <div class="stat-pill" id="stat-last-wrap">Last Updated: <span id="stat-updated">–</span></div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-wrap">
+    <label class="search-label" for="reg-input">Register Number</label>
+    <div class="search-box">
+      <input id="reg-input" class="search-input" type="text"
+        placeholder="e.g. VPAXSBO001"
+        autocomplete="off" spellcheck="false"
+        maxlength="20" />
+      <button class="search-btn" id="search-btn" onclick="doSearch()">🔍 Find</button>
+    </div>
+    <p class="search-hint">Your register number is printed on your Hall Ticket</p>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results-area" id="results-area">
+    <div class="welcome-state">
+      <div class="big-icon">🏫</div>
+      <h2>Find Your Exam Room</h2>
+      <p>Enter your register number above and we'll show you exactly which room you've been assigned to, for every exam session.</p>
+    </div>
+  </div>
+
+  <footer>
+    Powered by ExamFlow &nbsp;|&nbsp; Data is read-only and publicly available
+  </footer>
+
+  <script>
+    // ── Firebase Config ──
+    const firebaseConfig = {
+      apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
+      authDomain: "examflow-de08f.firebaseapp.com",
+      projectId: "examflow-de08f",
+      storageBucket: "examflow-de08f.appspot.com",
+      messagingSenderId: "455083136484",
+      appId: "1:455083136484:web:4e2e88af6a00c80a77f2b0"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ── Config ──
+    // College ID can be passed as URL param: ?college=XXX
+    const params = new URLSearchParams(location.search);
+    const COLLEGE_ID = params.get('college') || 'VuNPiQvJoeqpi0KaYM82';
+
+    // ── State ──
+    let allSessionData = {};   // { sessionLabel: { students: {...}, sessionLabel, ... } }
+    let totalStudents = 0;
+    let indexLoaded = false;
+
+    // ── Load index doc on startup ──
+    async function loadIndex() {
+      try {
+        const indexSnap = await db.collection('public_seating').doc(COLLEGE_ID).get();
+        if (!indexSnap.exists) {
+          document.getElementById('college-name').textContent = 'Exam Seating';
+          return;
+        }
+        const index = indexSnap.data();
+        document.getElementById('college-name').textContent = index.collegeName || 'Exam Seating';
+
+        const sessions = index.sessions || {};
+        const sessionCount = Object.keys(sessions).length;
+        document.getElementById('stat-sessions').textContent = sessionCount;
+
+        // Count total students
+        let total = 0;
+        Object.values(sessions).forEach(s => total += (s.studentCount || 0));
+        totalStudents = total;
+        document.getElementById('stat-students').textContent = total.toLocaleString();
+
+        // Updated date
+        if (index.updatedAt) {
+          const d = new Date(index.updatedAt);
+          document.getElementById('stat-updated').textContent = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+
+        // Pre-load all session documents in background
+        const docIds = Object.values(sessions).map(s => s.docId).filter(Boolean);
+        loadAllSessions(docIds);
+
+        indexLoaded = true;
+      } catch (err) {
+        console.error('Failed to load index:', err);
+        document.getElementById('college-name').textContent = 'Exam Seating';
+      }
+    }
+
+    async function loadAllSessions(docIds) {
+      const promises = docIds.map(docId =>
+        db.collection('public_seating').doc(docId).get()
+          .then(snap => { if (snap.exists) allSessionData[snap.data().sessionLabel] = snap.data(); })
+          .catch(() => {})
+      );
+      await Promise.all(promises);
+    }
+
+    // ── Search ──
+    function doSearch() {
+      const raw = document.getElementById('reg-input').value.trim().toUpperCase();
+      if (!raw) return;
+
+      showLoading();
+
+      // Allow brief time for session data to finish loading
+      setTimeout(() => searchInData(raw), 300);
+    }
+
+    function searchInData(regNo) {
+      const found = [];
+
+      Object.values(allSessionData).forEach(session => {
+        const student = session.students && session.students[regNo];
+        if (student) {
+          found.push({ ...student, sessionLabel: session.sessionLabel });
+        }
+      });
+
+      // Sort found sessions by date descending (most recent first)
+      found.sort((a, b) => {
+        const da = parseSessionDate(a.sessionLabel);
+        const db2 = parseSessionDate(b.sessionLabel);
+        return db2 - da;
+      });
+
+      renderResults(regNo, found);
+    }
+
+    function parseSessionDate(label) {
+      // "01.04.2026 | 10:00 AM"
+      try {
+        const datePart = label.split('|')[0].trim(); // "01.04.2026"
+        const [d, m, y] = datePart.split('.');
+        return new Date(`${y}-${m}-${d}`);
+      } catch { return new Date(0); }
+    }
+
+    function showLoading() {
+      document.getElementById('results-area').innerHTML = `
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Searching...</p>
+        </div>`;
+    }
+
+    function renderResults(regNo, found) {
+      const area = document.getElementById('results-area');
+
+      if (found.length === 0) {
+        area.innerHTML = `
+          <div class="not-found">
+            <div class="icon">🔍</div>
+            <h3>Register Number Not Found</h3>
+            <p>We couldn't find <strong>${regNo}</strong> in our records.<br>
+               Please double-check your register number as it appears on your Hall Ticket.<br><br>
+               If you believe this is an error, please contact the Exam Branch.</p>
+          </div>`;
+        return;
+      }
+
+      const studentName = found[0].name;
+      const sessionWord = found.length === 1 ? 'session' : 'sessions';
+
+      let html = `
+        <div class="result-header">
+          <div>
+            <div class="result-name">${studentName}</div>
+            <div class="result-reg">${regNo} &nbsp;·&nbsp; ${found.length} ${sessionWord} found</div>
+          </div>
+          <div class="verified-badge">✓ Verified</div>
+        </div>`;
+
+      found.forEach((item, i) => {
+        const d = parseSessionDate(item.sessionLabel);
+        const day = d.toLocaleDateString('en-IN', { day: '2-digit' });
+        const mon = d.toLocaleDateString('en-IN', { month: 'short' });
+        const year = d.toLocaleDateString('en-IN', { year: 'numeric' });
+        const timePart = item.sessionLabel.includes('|') ? item.sessionLabel.split('|')[1].trim() : '';
+
+        html += `
+          <div class="session-card" style="animation-delay: ${i * 0.07}s">
+            <div class="card-header">
+              <div class="date-block">
+                <div class="day">${day}</div>
+                <div class="mon">${mon} ${year}</div>
+              </div>
+              <div class="session-meta">
+                <div class="time">🕙 ${timePart}</div>
+                <div class="exam-name">${item.examName || 'Examination'}</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="room-display">
+                <div class="room-icon">🏛️</div>
+                <div>
+                  <div class="room-label">Your Room</div>
+                  <div class="room-name">${item.room}</div>
+                </div>
+              </div>
+              ${item.course ? `<span class="course-tag" title="${item.course}">📚 ${item.course}</span>` : ''}
+            </div>
+          </div>`;
+      });
+
+      area.innerHTML = html;
+    }
+
+    // ── Key bindings ──
+    document.getElementById('reg-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+
+    // ── Init ──
+    loadIndex();
+  </script>
+</body>
+</html>
