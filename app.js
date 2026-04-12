@@ -15691,10 +15691,11 @@ window.openBatchArchiveModal = function() {
             `).join('');
         }
 
-        const modal = document.getElementById('batch-archive-modal');
+           const modal = document.getElementById('batch-archive-modal');
         if (modal) {
-            console.log("✨ Archive Modal: Showing modal element.");
+            console.log("✨ Archive Modal: Forcing visibility...");
             modal.classList.remove('hidden');
+            modal.style.display = 'flex'; // Force display flex just in case
         } else {
             console.error("❌ Archive Modal: Element '#batch-archive-modal' not found in DOM!");
             alert("Critical Error: Modal UI not found. Check if index.html was updated correctly.");
