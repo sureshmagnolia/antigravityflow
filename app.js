@@ -1722,13 +1722,8 @@ async function deleteSessionFromCloud(sessionKey) {
                     })
                 });
 
-                
-                const result = await response.json();
-                if (result.status !== "success") {
-                    console.error("GAS Sync Error:", result.message);
-                    throw new Error(result.message);
-                }
-                // --- END WEB APP HYBRID SYNC ---
+                               // --- END WEB APP HYBRID SYNC (fire-and-forget, no response needed) ---
+
             }
 
 
