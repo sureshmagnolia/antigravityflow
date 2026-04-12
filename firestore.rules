@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- HELPER FUNCTIONS ---
+    function isSuperAdmin() {
+      return request.auth.token.email == 'sureshmagnolia@gmail.com';
+    }
+
+    // Use this to check permissions from DEEP inside sub-collections
+    function getCollegeData(collegeId) {
+      return get(/databases/$(database)/documents/colleges/$(collegeId)).data;
+    }
+
+    function isCollegeAdmin_ViaGet(collegeId) {
+      let data = getCollegeData(collegeId);
+      return data.keys().hasAny(['allowedUsers']) && 
+             request.auth.token.email in data.allowedUsers;
+    }
+
+    function isCollegeStaff_ViaGet(collegeId) {
+       let data = getCollegeData(collegeId);
+       return data.keys().hasAny(['staffAccessList']) && 
+              request.auth.token.email in data.staffAccessList;
+    }
+
+    // --- 1. MAIN COLLEGE DOCUMENT ---
+    match /colleges/{collegeId} {
+      
+      // READ/WRITE for the College Document itself
+      allow read, write: if request.auth != null && (
+          isSuperAdmin() || 
+          (resource == null) || // Allow creation
+          
+          // Check Admin List (Directly on the document - No 'get' cost)
+          (resource.data.keys().hasAny(['allowedUsers']) && 
+           request.auth.token.email in resource.data.allowedUsers) ||
+           
+          // Check Staff List
+          (resource.data.keys().hasAny(['staffAccessList']) && 
+           request.auth.token.email in resource.data.staffAccessList)
+      );
+
+      // --- 2. SPECIFIC SUB-COLLECTIONS (High Priority) ---
+      
+      // Live Presence (Allow UID match for "Earlier Login" types)
+      match /live_presence/{docId} {
+         allow read: if request.auth != null; 
+         allow write: if request.auth != null && (
+            isSuperAdmin() || 
+            isCollegeAdmin_ViaGet(collegeId) || 
+            request.auth.token.email == docId || 
+            request.auth.uid == docId // Allow write if Doc ID matches User ID
+         );
+      }
+
+      // Invigilation Module Data & Settings
+      match /system_data/{docName} {
+         // MODIFIED: Allow PUBLIC READ for 'settings', Auth required for others
+         allow read: if (docName == 'settings') || (
+            request.auth != null && (
+                isSuperAdmin() || isCollegeAdmin_ViaGet(collegeId) || isCollegeStaff_ViaGet(collegeId)
+            )
+         );
+         
+         allow write: if request.auth != null && (
+            isSuperAdmin() || isCollegeAdmin_ViaGet(collegeId) || 
+            (isCollegeStaff_ViaGet(collegeId) && (docName == 'slots' || docName == 'staff'))
+         );
+      }
+
+      // --- NEW: Modular Sessions (Migration Phase 1) ---
+      match /sessions/{sessionId} {
+         // MODIFIED: Allow PUBLIC READ for Student Portal
+         allow read: if true;
+
+         // Write Restricted to Admins
+         allow write: if request.auth != null && (
+             isSuperAdmin() || 
+             isCollegeAdmin_ViaGet(collegeId)
+         );
+      }
+
+      // --- 3. CATCH-ALL RESTORATION (Legacy Support) ---
+      // This allows access to ANY other sub-collection (like 'data' chunks) 
+      // just like your old rules did.
+      match /{otherCollection}/{docId} {
+         allow read, write: if request.auth != null && (
+             isSuperAdmin() || 
+             isCollegeAdmin_ViaGet(collegeId) || 
+             isCollegeStaff_ViaGet(collegeId)
+         );
+      }
+    }
+
+    // --- PUBLIC & GLOBAL ---
+    
+    match /public_seating/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null && (
+        isSuperAdmin() || 
+        // Allow if the Document ID matches the College ID (Main Seating File)
+        isCollegeAdmin_ViaGet(docId) ||
+        // Allow if the data payload contains the valid College ID (Auxiliary Files like _names)
+        (request.resource.data.keys().hasAny(['collegeId']) && isCollegeAdmin_ViaGet(request.resource.data.collegeId))
+      );
+    }
+    
+    match /global/whitelist {
+      allow read: if request.auth != null;
+      allow write: if isSuperAdmin(); 
+    }
+  }
+}
