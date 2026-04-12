@@ -15649,30 +15649,49 @@ if (btnSessionReschedule) {
     }
 
      
-    // --- BATCH ARCHIVE LOGIC ---
     window.openBatchArchiveModal = function() {
-        const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        const listDiv = document.getElementById('batch-archive-checkbox-list');
-        if (!listDiv) return;
-        
-        if (known.length === 0) {
-            listDiv.innerHTML = `<p class="text-sm text-gray-500 italic p-4 text-center">No sessions available to archive.</p>`;
-        } else {
-            // Sort by descending date
-            known.sort((a, b) => {
-                const dateA = parseInt(a.split('.')[2] + a.split('.')[1] + a.split('.')[0]); 
-                const dateB = parseInt(b.split('.')[2] + b.split('.')[1] + b.split('.')[0]);
-                return dateB - dateA;
-            });
-            listDiv.innerHTML = known.map(sk => `
-                <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
-                    <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                    <span class="text-sm font-bold text-gray-700">${sk}</span>
-                </label>
-            `).join('');
+        try {
+            const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const listDiv = document.getElementById('batch-archive-checkbox-list');
+            
+            if (!listDiv) {
+                alert("Error: Batch Archive list container not found in HTML.");
+                return;
+            }
+            
+            if (!Array.isArray(known) || known.length === 0) {
+                listDiv.innerHTML = `<p class="text-sm text-gray-500 italic p-4 text-center">No sessions available to archive.</p>`;
+            } else {
+                // Safely sort by descending date (prevents crashes from corrupt memory data)
+                known.sort((a, b) => {
+                    try {
+                        if (!a || !b || typeof a !== 'string' || typeof b !== 'string') return 0;
+                        const dateA = parseInt((a.split('.')[2] || "").substring(0,4) + (a.split('.')[1] || "") + (a.split('.')[0] || "")); 
+                        const dateB = parseInt((b.split('.')[2] || "").substring(0,4) + (b.split('.')[1] || "") + (b.split('.')[0] || ""));
+                        return (dateB || 0) - (dateA || 0);
+                    } catch(e) { return 0; }
+                });
+                
+                listDiv.innerHTML = known.filter(sk => sk).map(sk => `
+                    <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
+                        <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                        <span class="text-sm font-bold text-gray-700">${sk}</span>
+                    </label>
+                `).join('');
+            }
+            
+            const modal = document.getElementById('batch-archive-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            } else {
+                alert("Error: Modal UI (batch-archive-modal) not found in index.html!");
+            }
+        } catch (error) {
+            alert("Critical Error opening modal: " + error.message);
+            console.error("Batch Archive Error:", error);
         }
-        document.getElementById('batch-archive-modal').classList.remove('hidden');
     };
+
 
     window.closeBatchArchiveModal = function() {
         document.getElementById('batch-archive-modal').classList.add('hidden');
