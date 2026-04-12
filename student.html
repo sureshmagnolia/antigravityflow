@@ -27,7 +27,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        window.firebase = { db, doc, getDoc }; 
+      //  window.firebase = { db, doc, getDoc }; 
 
         const urlParams = new URLSearchParams(window.location.search);
         let collegeId = urlParams.get('id');
@@ -105,7 +105,7 @@
                 const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
                 const now = Date.now();
 
-                if (cachedIndex && (now - cachedIndex.timestamp < 3600000)) { 
+               if (cachedIndex && (now - cachedIndex.timestamp < 300000)) { 
                     indexCache = cachedIndex.data;
                     collegeName = indexCache.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
@@ -158,33 +158,44 @@
             const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
             
             if (allSessions.length === 0 && indexCache) {
-                statusEl.textContent = "Fetching today's seating...";
-                const sessions = indexCache.sessions || {};
-                const todayDocIds = Object.entries(sessions)
-                    .filter(([label]) => label.startsWith(todayString))
-                    .map(([, s]) => s.docId);
+    statusEl.textContent = "Verifying sessions...";
+    const sessions = indexCache.sessions || {};
+    const now = window.getExamsNow ? window.getExamsNow() : new Date();
 
-                for (const docId of todayDocIds) {
-                    if (!sessionCache[docId]) {
-                        const sSnap = await getDoc(doc(db, 'public_seating', docId));
-                        if (sSnap.exists()) sessionCache[docId] = sSnap.data();
-                    }
-                    const d = sessionCache[docId];
-                    if (d) {
-                        const [datePart, timePart] = d.sessionLabel.split(' | ');
-                        allSessions.push({
-                            date: datePart.trim(), time: timePart ? timePart.trim() : '',
-                            roomAllotment: Object.entries(d.students || {}).reduce((acc, [reg, info]) => {
-                                let room = acc.find(r => r.roomName === info.room);
-                                if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
-                                room.students.push({ 'Register Number': reg, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
-                                return acc;
-                            }, [])
-                        });
-                    }
-                }
-                statusEl.textContent = "";
+    for (const [label, sInfo] of Object.entries(sessions)) {
+        if (!label.startsWith(todayString)) continue;
+
+        const [dPart, tPart] = label.split(' | ');
+        const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
+        const unlockTime = new Date(sessionTime.getTime() - (45 * 60 * 1000));
+
+        // SECURITY GATE: Only fetch document if within 45 minutes
+        if (now >= unlockTime) {
+            const docId = sInfo.docId;
+            if (!sessionCache[docId]) {
+                const sSnap = await getDoc(doc(db, 'public_seating', docId));
+                if (sSnap.exists()) sessionCache[docId] = sSnap.data();
             }
+            const d = sessionCache[docId];
+            if (d) {
+                allSessions.push({
+                    date: dPart.trim(), time: tPart.trim(),
+                    roomAllotment: Object.entries(d.students || {}).reduce((acc, [reg, info]) => {
+                        let room = acc.find(r => r.roomName === info.room);
+                        if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
+                        room.students.push({ 'Register Number': reg, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
+                        return acc;
+                    }, [])
+                });
+            }
+        } else {
+            // Add minimal locked info to show the countdown but NO room data
+            allSessions.push({ date: dPart.trim(), time: tPart.trim(), isLockedByGate: true, fullDate: sessionTime });
+        }
+    }
+    statusEl.textContent = "";
+}
+
 
             let studentName = "";
             let myExams = [];
@@ -218,7 +229,15 @@
                     isScribeRoom = true;
                     seatNumber = "Scribe";
                 }
-                if (studentRecord && studentRoom !== "Not Allotted") {
+if (session.isLockedByGate) {
+    // Show locked state for sessions we haven't even downloaded yet
+    myExams.push({
+        dateStr: session.date, timeStr: session.time, fullDate: session.fullDate,
+        isLockedByGate: true, 
+        paperName: "Available 45m before exam" 
+    });
+} else if (studentRecord && studentRoom !== "Not Allotted") {
+
                     if (!studentName) studentName = studentRecord.Name;
                     myExams.push({
                         dateStr, timeStr, studentRoom, seatNumber,
@@ -314,16 +333,21 @@
             document.getElementById('reg-input').focus();
         };
 
-        function parseSessionTime(dateStr, timeStr) {
-            try {
-                const [d, m, y] = dateStr.split('.');
-                let [time, modifier] = timeStr.split(' ');
-                let [hours, minutes] = time.split(':');
-                if (hours === '12') hours = '00';
-                if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
-                return new Date(y, m - 1, d, hours, minutes);
-            } catch(e) { return new Date(); }
-        }
+function parseSessionTime(dateStr, timeStr) {
+    try {
+        const [d, m, y] = dateStr.split('.').map(Number);
+        let [time, modifier] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        
+        if (modifier === 'PM' && hours < 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+        
+        return new Date(y, m - 1, d, hours, minutes);
+    } catch(e) { 
+        console.error("Time Parse Error:", e);
+        return new Date(); 
+    }
+}
 
         loadData();
     </script>
