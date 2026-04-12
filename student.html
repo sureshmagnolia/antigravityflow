@@ -55,15 +55,27 @@
             statusEl.textContent = "Loading Live Exam Data...";
             
             try {
-            let offset = 0;
+                let networkTimeAtLoad = null;
+                let performanceAtLoad = performance.now();
+
                 try {
                     const tResp = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
                     const tData = await tResp.json();
-                    offset = new Date(tData.datetime).getTime() - Date.now();
-                    console.log("🕒 Network time synchronized (Offset: " + offset + "ms)");
-                } catch(e) { console.warn("Network time failed, falling back to device clock."); }
+                    networkTimeAtLoad = new Date(tData.datetime).getTime();
+                    performanceAtLoad = performance.now(); 
+                    console.log("🕒 Tamper-proof time synced with server.");
+                } catch(e) { 
+                    console.warn("Network time failed, using device clock."); 
+                }
                 
-                window.getExamsNow = () => new Date(Date.now() + offset);
+                window.getExamsNow = () => {
+                    if (networkTimeAtLoad) {
+                        const elapsedSinceSync = performance.now() - performanceAtLoad;
+                        return new Date(networkTimeAtLoad + elapsedSinceSync);
+                    }
+                    return new Date(); 
+                };
+
 
 
                 // ⚡ Check Local Cache for Index (Cost Saver)
