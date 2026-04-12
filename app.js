@@ -6,7 +6,7 @@ const BASE_DATA_KEY = 'examBaseData';
 
 // --- HYBRID CLOUD BACKEND CONSTANTS ---
 const HYBRID_GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
-const HYBRID_SECRET = "EXAMFLOW_PRO_SECURE_KEY_2026";
+
 
 // Fail-safe constants (Avoids conflict with drive_sync.js)
 
@@ -1633,11 +1633,13 @@ async function deleteSessionFromCloud(sessionKey) {
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             // 🚫 DELETED: session_students Firebase upload (to save cost)
 
+            const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
             await fetch(HYBRID_GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify({
-                    secretKey: HYBRID_SECRET,
+                    token: secureToken,
                     action: "saveHeavyData",
+
 
                     filename: `session_${sessionId}.json`,
                     payload: JSON.stringify({
@@ -1706,14 +1708,16 @@ async function deleteSessionFromCloud(sessionKey) {
                 // --- NEW WEB APP HYBRID SYNC ---
 
                 // using global HYBRID_GAS_URL
-                const response = await fetch(GAS_URL, {
+                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                const response = await fetch(HYBRID_GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({
-                        secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026",
+                        token: secureToken,
                         action: "patchSettings",
                         payload: data
                     })
                 });
+
                 
                 const result = await response.json();
                 if (result.status !== "success") {
@@ -1733,7 +1737,9 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
            // using global HYBRID_GAS_URL
 
-                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
+                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
+
 
             }
 
@@ -1746,7 +1752,9 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
             // using global HYBRID_GAS_URL
 
-                await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: "EXAMFLOW_PRO_SECURE_KEY_2026", action: "patchSettings", payload: data }) });
+                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
+
 
             }
 
@@ -1775,7 +1783,9 @@ async function deleteSessionFromCloud(sessionKey) {
                 // 🚫 DELETED: Firebase Storage uploadString (to save bandwidth cost)
                 console.log("📁 Heavy Data (examBaseData) routing securely to Google Drive...");
                     
-                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ secretKey: HYBRID_SECRET, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
+                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
+
 
                     }
 
