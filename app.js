@@ -1331,13 +1331,14 @@ async function updateLocalSlotsFromStudents() {
                             updateSyncStatus("Student List Updated Live!", "success");
                         }
                         
-                        localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
-                        localStorage.setItem('examQPCodes', JSON.stringify(allQPCodes));
-                        localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
-                        localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
-                        localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+                        safeSetItem('examRoomAllotment', JSON.stringify(allAllotments));
+                        safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
+                        safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
+                        safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                        safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
                         updateSyncStatus("Synced (Live)", "success");
+
 
                         
                         // --- 🔓 UNLOCK TABS ON FIRST DATA LOAD ---
@@ -1941,8 +1942,61 @@ async function deleteSessionFromCloud(sessionKey) {
         const hh = String(h).padStart(2, '0');
         return `${hh}:${m} ${ampm}`;
     }
+    // 🛡️ MEMORY SHIELD: Surgically deletes one session's local metadata
+    window.freeUpStorage = function(sessionKey) {
+        if(!confirm(`Clear local metadata for: ${sessionKey}?`)) return;
+        ['examRoomAllotment', 'examQPCodes', 'examAbsenteeList', 'examScribeAllotment', 'examInvigilatorMapping'].forEach(globalKey => {
+            try {
+                let dataBlock = JSON.parse(localStorage.getItem(globalKey) || '{}');
+                if (dataBlock[sessionKey]) {
+                    delete dataBlock[sessionKey];
+                    localStorage.setItem(globalKey, JSON.stringify(dataBlock));
+                }
+            } catch(e) {}
+        });
+        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        known = known.filter(k => k !== sessionKey);
+        try { localStorage.setItem('examAllKnownSessions', JSON.stringify(known)); } catch(e) {}
+        alert(`Cleared "${sessionKey}". Try saving again.`);
+        document.getElementById('quota-exceeded-modal').classList.add('hidden');
+    };
+
+    // 🛡️ MEMORY SHIELD: Safe wrapper for localStorage writes
+    function safeSetItem(key, dataString) {
+        try {
+            localStorage.setItem(key, dataString);
+        } catch (e) {
+            if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
+                console.error('CRITICAL: LocalStorage Quota Exceeded!');
+                const modal = document.getElementById('quota-exceeded-modal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    const listEl = document.getElementById('quota-session-list');
+                    let knownSessions = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                    // Sort: oldest sessions last, present them first for deletion
+                    knownSessions.sort((a, b) => {
+                        const d1 = new Date(a.split(' | ')[0].split('.').reverse().join('-'));
+                        const d2 = new Date(b.split(' | ')[0].split('.').reverse().join('-'));
+                        return d1 - d2; // ascending = oldest first
+                    });
+                    const oldest = knownSessions.slice(0, 7); // show oldest 7
+                    listEl.innerHTML = oldest.length > 0 ? oldest.map(sk => `
+                        <div class="flex justify-between items-center p-2 bg-white rounded border border-gray-200">
+                            <span class="text-sm font-semibold text-gray-700">${sk}</span>
+                            <button onclick="window.freeUpStorage('${sk.replace(/'/g, "\\'")}')" class="text-xs bg-red-100 hover:bg-red-200 text-red-700 font-bold px-3 py-1 rounded border border-red-200 transition">Delete</button>
+                        </div>`).join('') 
+                        : '<p class="text-sm text-gray-500 p-2">No sessions found. Please use the system reset option.</p>';
+                }
+            } else {
+                console.error('Storage Error:', e);
+            }
+        }
+    }
+
     // Helper for status UI (Updates Desktop & Mobile)
     function updateSyncStatus(status, type) {
+
+    
         // 1. Desktop Status (Text)
         const syncStatusDisplay = document.getElementById('sync-status');
         if (syncStatusDisplay) {
