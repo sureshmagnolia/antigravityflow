@@ -55,7 +55,16 @@
             statusEl.textContent = "Loading Live Exam Data...";
             
             try {
-                window.getExamsNow = () => new Date(); 
+            let offset = 0;
+                try {
+                    const tResp = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
+                    const tData = await tResp.json();
+                    offset = new Date(tData.datetime).getTime() - Date.now();
+                    console.log("🕒 Network time synchronized (Offset: " + offset + "ms)");
+                } catch(e) { console.warn("Network time failed, falling back to device clock."); }
+                
+                window.getExamsNow = () => new Date(Date.now() + offset);
+
 
                 // ⚡ Check Local Cache for Index (Cost Saver)
                 const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
