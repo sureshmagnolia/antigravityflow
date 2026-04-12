@@ -1633,7 +1633,7 @@ async function deleteSessionFromCloud(sessionKey) {
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             // 🚫 DELETED: session_students Firebase upload (to save cost)
 
-            const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+           const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
             await fetch(HYBRID_GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -1708,7 +1708,7 @@ async function deleteSessionFromCloud(sessionKey) {
                 // --- NEW WEB APP HYBRID SYNC ---
 
                 // using global HYBRID_GAS_URL
-                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
                 const response = await fetch(HYBRID_GAS_URL, {
                     method: 'POST',
                     body: JSON.stringify({
@@ -1737,7 +1737,7 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
            // using global HYBRID_GAS_URL
 
-                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
                 await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
 
 
@@ -1752,7 +1752,8 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
             // using global HYBRID_GAS_URL
 
-                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
+
                 await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
 
 
@@ -1783,7 +1784,7 @@ async function deleteSessionFromCloud(sessionKey) {
                 // 🚫 DELETED: Firebase Storage uploadString (to save bandwidth cost)
                 console.log("📁 Heavy Data (examBaseData) routing securely to Google Drive...");
                     
-                const secureToken = await window.firebase.auth().currentUser.getIdToken(true);
+                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
                 await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
 
 
