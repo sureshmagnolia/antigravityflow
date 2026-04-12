@@ -41,8 +41,11 @@
         let roomConfigs = {};
         let collegeName = "Exam Centre";
         let sessionCache = {}; 
+        let indexCache = null; 
+        let activeIntervals = [];
         const CACHE_KEY_INDEX = "seating_index_cache";
         const CACHE_KEY_SESSIONS = "seating_sessions_data";
+
 
 
                async function loadData() {
@@ -111,7 +114,10 @@
         }
 
 
-                window.searchStudent = async function() {
+            window.searchStudent = async function() {
+            activeIntervals.forEach(clearInterval);
+            activeIntervals = [];
+
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
             const resultContainer = document.getElementById('result-container');
@@ -235,16 +241,34 @@
                                 </div>
                                 <p class="text-[10px] text-green-600 mt-5 font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide">Seating Live</p>
                             </div>`;
-                    } else {
-                        const diffMs = unlockTime - now;
-                        const diffMins = Math.ceil(diffMs / (1000 * 60));
+                        } else {
+                        const timerId = `timer-${myExams.indexOf(exam)}`;
                         content += `
                             <div class="text-center py-6 bg-gray-50 rounded-lg border border-gray-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-gray-400 mx-auto mb-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                 <p class="text-sm text-gray-700 font-bold">Seating Info Locked</p>
-                                <p class="text-xs text-gray-500 mt-1">Reveals 45m before exam</p>
+                                <p class="text-xs text-gray-500 mt-1">Reveals in <span id="${timerId}" class="font-mono font-bold text-red-500 bg-red-50 px-1 rounded border border-red-100">--:--</span></p>
+                                <p class="text-[10px] text-gray-400 mt-2">(Available 45m before exam)</p>
                             </div>`;
+                        
+                        const interval = setInterval(() => {
+                            const nowTick = window.getExamsNow();
+                            const diff = unlockTime - nowTick;
+                            if (diff <= 0) {
+                                clearInterval(interval);
+                                searchStudent(); 
+                            } else {
+                                const el = document.getElementById(timerId);
+                                if (el) {
+                                    const mins = Math.floor(diff / 60000);
+                                    const secs = Math.floor((diff % 60000) / 1000);
+                                    el.textContent = `${mins}m ${secs}s`;
+                                }
+                            }
+                        }, 1000);
+                        activeIntervals.push(interval);
                     }
+
                     card.innerHTML = content;
                     resultContainer.appendChild(card);
                 });
