@@ -40,8 +40,12 @@
         let allSessions = []; 
         let roomConfigs = {};
         let collegeName = "Exam Centre";
+        let sessionCache = {}; 
+        const CACHE_KEY_INDEX = "seating_index_cache";
+        const CACHE_KEY_SESSIONS = "seating_sessions_data";
 
-        async function loadData() {
+
+               async function loadData() {
             const statusEl = document.getElementById('status');
             if (!collegeId) {
                 statusEl.innerHTML = `<span class="text-red-500">Error: Invalid Link. Please contact office.</span>`;
@@ -51,146 +55,118 @@
             statusEl.textContent = "Loading Live Exam Data...";
             
             try {
+                window.getExamsNow = () => new Date(); 
 
-                
-                // --- FETCH NETWORK TIME FIRST ---
-                let offset = 0;
-                try {
-                    const tResp = await fetch('https://worldtimeapi.org/api/timezone/Asia/Kolkata');
-                    const tData = await tResp.json();
-                    offset = new Date(tData.datetime).getTime() - Date.now();
-                } catch(e) { console.warn("Network time failed, using device clock."); }
-                window.getExamsNow = () => new Date(Date.now() + offset);
+                // ⚡ Check Local Cache for Index (Cost Saver)
+                const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
+                const now = Date.now();
 
-                // Build exactly today's date in 'DD.MM.YYYY' format
-                const now = window.getExamsNow();
-                const todayString = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
-
-
-                               // NEW: Cheap lookup from public_seating collection
-                allSessions = [];
-                const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
-                if (indexSnap.exists()) {
-                    const indexData = indexSnap.data();
-                    collegeName = indexData.collegeName || "Exam Centre";
+                if (cachedIndex && (now - cachedIndex.timestamp < 3600000)) { 
+                    indexCache = cachedIndex.data;
+                    collegeName = indexCache.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
-
-                    const sessions = indexData.sessions || {};
-
-                    // Find today's session doc IDs only
-                    const todayDocIds = Object.entries(sessions)
-                        .filter(([label]) => label.startsWith(todayString))
-                        .map(([, s]) => s.docId);
-
-                    for (const docId of todayDocIds) {
-                        const sSnap = await getDoc(doc(db, 'public_seating', docId));
-                        if (sSnap.exists()) {
-                            const d = sSnap.data();
-                            // Reshape into format student.html already understands
-                            const [datePart, timePart] = d.sessionLabel.split(' | ');
-                            allSessions.push({
-                                date: datePart.trim(),
-                                time: timePart ? timePart.trim() : '',
-                                roomAllotment: Object.entries(d.students || {}).reduce((acc, [regNo, info]) => {
-                                    let room = acc.find(r => r.roomName === info.room);
-                                    if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
-                                    room.students.push({ 'Register Number': regNo, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
-                                    return acc;
-                                }, [])
-                            });
-                        }
-                    }
-                }
-
-
-                // Render check
-                if (allSessions.length > 0) {
-
-
-                    statusEl.textContent = ""; 
-                    document.getElementById('search-section').classList.remove('hidden');
-
-                    const savedRegNo = localStorage.getItem('myExamRegNo');
-                    if (savedRegNo) {
-                        document.getElementById('reg-input').value = savedRegNo;
-                        setTimeout(() => window.searchStudent(), 300); 
-                    }
+                    console.log("⚡ Index loaded from cache");
                 } else {
-                    statusEl.textContent = "No active exam sessions found.";
+                    const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
+                    if (indexSnap.exists()) {
+                        indexCache = indexSnap.data();
+                        localStorage.setItem(CACHE_KEY_INDEX, JSON.stringify({ timestamp: now, data: indexCache }));
+                        collegeName = indexCache.collegeName || "Exam Centre";
+                        document.getElementById('college-name').textContent = collegeName;
+                    }
                 }
 
+                statusEl.textContent = ""; 
+                document.getElementById('search-section').classList.remove('hidden');
+
+                const savedRegNo = localStorage.getItem('myExamRegNo');
+                if (savedRegNo) {
+                    document.getElementById('reg-input').value = savedRegNo;
+                }
             } catch (error) {
                 console.error("Load Error:", error);
-                statusEl.innerHTML = `<span class="text-red-500">Connection failed. Check Internet or Link.</span>`;
+                statusEl.textContent = "Minimal mode active.";
             }
         }
 
-        window.searchStudent = function() {
+
+                window.searchStudent = async function() {
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
             const resultContainer = document.getElementById('result-container');
+            const statusEl = document.getElementById('status');
             resultContainer.innerHTML = '';
-
+            
             if (regNo.length < 2) {
                 alert("Please enter a valid Register Number.");
                 return;
             }
 
-            let found = false;
+            // --- ⚡ LAZY LOAD TODAY'S DATA (Only when Find is clicked) ---
+            const nowTotal = new Date();
+            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
+            
+            if (allSessions.length === 0 && indexCache) {
+                statusEl.textContent = "Fetching today's seating...";
+                const sessions = indexCache.sessions || {};
+                const todayDocIds = Object.entries(sessions)
+                    .filter(([label]) => label.startsWith(todayString))
+                    .map(([, s]) => s.docId);
+
+                for (const docId of todayDocIds) {
+                    if (!sessionCache[docId]) {
+                        const sSnap = await getDoc(doc(db, 'public_seating', docId));
+                        if (sSnap.exists()) sessionCache[docId] = sSnap.data();
+                    }
+                    const d = sessionCache[docId];
+                    if (d) {
+                        const [datePart, timePart] = d.sessionLabel.split(' | ');
+                        allSessions.push({
+                            date: datePart.trim(), time: timePart ? timePart.trim() : '',
+                            roomAllotment: Object.entries(d.students || {}).reduce((acc, [reg, info]) => {
+                                let room = acc.find(r => r.roomName === info.room);
+                                if (!room) { room = { roomName: info.room, students: [] }; acc.push(room); }
+                                room.students.push({ 'Register Number': reg, 'Name': info.name, 'Course': info.course, 'Exam Name': info.examName });
+                                return acc;
+                            }, [])
+                        });
+                    }
+                }
+                statusEl.textContent = "";
+            }
+
             let studentName = "";
             let myExams = [];
-
-            // --- FILTER: Only show Upcoming Exams ---
             const todayMidnight = new Date();
             todayMidnight.setHours(0, 0, 0, 0);
 
             allSessions.forEach(session => {
                 const dateStr = session.date;
                 const timeStr = session.time;
-
-                // 1. DATE CHECK: Skip past exams
                 const examDayStart = parseSessionTime(dateStr, "00:00 AM");
-                if (examDayStart < todayMidnight) {
-                    return; // Skip this session (it's in the past)
-                }
+                if (examDayStart < todayMidnight) return;
 
-                // 2. FIND STUDENT
-                // First try session.students (old format). If not found,
-                // we will try to get it from roomAllotment below (new format).
-                let studentRecord = session.students
-                    ? session.students.find(s => s['Register Number'] === regNo)
-                    : null;
-
+                let studentRecord = null;
                 let studentRoom = "Not Allotted";
                 let seatNumber = "-";
                 let isScribeRoom = false;
 
-                // 3. Check Regular Allotment
                 if (session.roomAllotment) {
                     for (const room of session.roomAllotment) {
-                        const index = room.students.findIndex(s =>
-                            (typeof s === 'object' ? s['Register Number'] : s) === regNo
-                        );
+                        const index = room.students.findIndex(s => (typeof s === 'object' ? s['Register Number'] : s) === regNo);
                         if (index !== -1) {
                             studentRoom = room.roomName;
                             seatNumber = index + 1;
-                            // NEW: if student record not found above, get it from here
-                            if (!studentRecord && typeof room.students[index] === 'object') {
-                                studentRecord = room.students[index];
-                            }
+                            if (typeof room.students[index] === 'object') studentRecord = room.students[index];
                             break;
                         }
                     }
                 }
-
-                // 4. Check Scribe Allotment
                 if (session.scribeAllotment && session.scribeAllotment[regNo]) {
                     studentRoom = session.scribeAllotment[regNo];
                     isScribeRoom = true;
                     seatNumber = "Scribe";
                 }
-
-                // 5. Save result only if student was found AND has a room
                 if (studentRecord && studentRoom !== "Not Allotted") {
                     if (!studentName) studentName = studentRecord.Name;
                     myExams.push({
@@ -202,121 +178,65 @@
                 }
             });
 
-            // Sort by Date/Time
             myExams.sort((a, b) => a.fullDate - b.fullDate);
 
             if (myExams.length > 0) {
-                found = true;
                 localStorage.setItem('myExamRegNo', regNo);
                 const now = window.getExamsNow ? window.getExamsNow() : new Date();
-
-
                 myExams.forEach(exam => {
-                    // --- TIME LOCK LOGIC (45 Mins Before) ---
                     const unlockTime = new Date(exam.fullDate.getTime() - (45 * 60 * 1000));
-                    
-                    const roomInfo = roomConfigs[exam.studentRoom] || {};
-                    const displayLocation = (roomInfo.location && roomInfo.location.trim() !== "") 
-                                            ? roomInfo.location 
-                                            : exam.studentRoom;
-                    
-                    const scribeTag = exam.isScribeRoom 
-                        ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>` 
-                        : "";
-
+                    const scribeTag = exam.isScribeRoom ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>` : "";
                     const card = document.createElement('div');
                     card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100 mb-5 animate-fade-in";
-                    
-                    // HEADER (Always Visible)
                     let content = `
                         <div class="border-b border-gray-200 pb-3 mb-3">
                             <div class="text-center mb-3">
                                 <div class="text-lg font-black text-gray-800 leading-tight">${studentName}</div>
                                 <div class="text-xs font-bold text-indigo-500 font-mono">${regNo}</div>
                             </div>
-                            
                             <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg mb-3">
                                 <div class="text-[10px] text-blue-400 uppercase font-bold tracking-wider mb-1">Subject / Paper</div>
                                 <div class="text-sm font-bold text-blue-900 leading-snug">${exam.paperName}</div>
                             </div>
-
                             <div class="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
-                                <div class="flex flex-col">
-                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Date</span>
-                                    <span class="font-bold text-gray-800 text-sm">${exam.dateStr}</span>
-                                </div>
-                                <div class="flex flex-col text-right">
-                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Time</span>
-                                    <span class="font-bold text-indigo-600 text-sm">${exam.timeStr}</span>
-                                </div>
+                                <div class="flex flex-col"><span class="text-[10px] text-gray-500 uppercase font-bold">Date</span><span class="font-bold text-gray-800 text-sm">${exam.dateStr}</span></div>
+                                <div class="flex flex-col text-right"><span class="text-[10px] text-gray-500 uppercase font-bold">Time</span><span class="font-bold text-indigo-600 text-sm">${exam.timeStr}</span></div>
                             </div>
-                        </div>
-                    `;
-
-                    // BODY (Conditional based on Time Lock)
+                        </div>`;
                     if (now >= unlockTime) {
-                        // UNLOCKED: Show Seat & Room
                         content += `
                             <div class="text-center py-2">
-                                <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">
-                                    Allotted Hall ${scribeTag}
-                                </p>
-                                
-                                <div class="text-2xl font-black text-gray-900 leading-tight mb-5 px-2">${displayLocation}</div>
-                                
+                                <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">Allotted Hall ${scribeTag}</p>
+                                <div class="text-2xl font-black text-gray-900 leading-tight mb-5 px-2">${exam.studentRoom}</div>
                                 <div class="inline-block bg-indigo-50 rounded-xl px-8 py-4 border border-indigo-100 shadow-inner">
                                      <span class="block text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">Your Seat Number</span>
                                      <span class="block text-5xl font-black text-indigo-600">${exam.seatNumber === "Scribe" ? "Spl" : "#" + exam.seatNumber}</span>
                                 </div>
-                                
-                                <p class="text-[10px] text-green-600 mt-5 font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide">
-                                    <span class="relative flex h-2.5 w-2.5">
-                                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                                    </span>
-                                    Seating Live
-                                </p>
-                            </div>
-                        `;
+                                <p class="text-[10px] text-green-600 mt-5 font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide">Seating Live</p>
+                            </div>`;
                     } else {
-                        // LOCKED: Show Countdown
                         const diffMs = unlockTime - now;
                         const diffMins = Math.ceil(diffMs / (1000 * 60));
-                        let timeDisplay = `${diffMins} mins`;
-                        if (diffMins > 60) timeDisplay = `${Math.ceil(diffMins / 60)} hours`;
-                        if (diffMins > 1440) timeDisplay = `${Math.ceil(diffMins / 1440)} days`;
-
                         content += `
                             <div class="text-center py-6 bg-gray-50 rounded-lg border border-gray-100">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-gray-400 mx-auto mb-3">
-                                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-10 h-10 text-gray-400 mx-auto mb-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25 2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                                 <p class="text-sm text-gray-700 font-bold">Seating Info Locked</p>
-                                <p class="text-xs text-gray-500 mt-1">Reveals in <span class="font-mono font-bold text-red-500 bg-red-50 px-1 rounded border border-red-100">${timeDisplay}</span></p>
-                                <p class="text-[10px] text-gray-400 mt-2">(Available 45m before exam)</p>
-                            </div>
-                        `;
+                                <p class="text-xs text-gray-500 mt-1">Reveals 45m before exam</p>
+                            </div>`;
                     }
                     card.innerHTML = content;
                     resultContainer.appendChild(card);
                 });
+            } else {
+                resultContainer.innerHTML = `<div class="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200"><p class="text-gray-800 font-bold text-lg">No Upcoming Exams</p><p class="text-gray-500 text-sm mt-1">Status: Past/Unassigned</p></div>`;
             }
 
-            if (!found) {
-                resultContainer.innerHTML = `
-                    <div class="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200">
-                        <p class="text-gray-800 font-bold text-lg">No Upcoming Exams</p>
-                        <p class="text-gray-500 text-sm mt-1">for register number <span class="font-mono font-bold text-black">${regNo}</span></p>
-                        <p class="text-xs text-gray-400 mt-2">Past exams are hidden.</p>
-                    </div>
-                `;
-            } else {
-                const clearBtn = document.createElement('div');
-                clearBtn.innerHTML = `<button onclick="clearSavedData()" class="text-xs text-gray-400 underline mt-6 hover:text-gray-600 transition">Not you? Clear & Search</button>`;
-                clearBtn.className = "text-center";
-                resultContainer.appendChild(clearBtn);
-            }
+            const clearBtn = document.createElement('div');
+            clearBtn.innerHTML = `<button onclick="clearSavedData()" class="text-xs text-gray-400 underline mt-6 hover:text-gray-600 transition">Clear & Search</button>`;
+            clearBtn.className = "text-center";
+            resultContainer.appendChild(clearBtn);
         };
+
 
         window.clearSavedData = function() {
             localStorage.removeItem('myExamRegNo');
