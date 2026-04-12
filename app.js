@@ -1651,6 +1651,56 @@ async function deleteSessionFromCloud(sessionKey) {
     }
 
 
+    // --- PUBLIC SEATING PORTAL PUBLISHER ---
+    async function publishSeatingToPublic(sessionKey, roomAllotment, scribeAllotment) {
+        try {
+            const { db, doc, setDoc, getDoc } = window.firebase;
+            const cid = currentCollegeId;
+
+            // Build flat { regNo: { room, seat, name, course } } from allotment array
+            const studentMap = {};
+            (roomAllotment || []).forEach(room => {
+                (room.students || []).forEach((s, idx) => {
+                    const reg = (typeof s === 'object' ? s['Register Number'] : s);
+                    if (reg) {
+                        studentMap[reg] = {
+                            room: room.roomName,
+                            seat: idx + 1,
+                            name: (typeof s === 'object' ? s['Name'] : '') || '',
+                            course: (typeof s === 'object' ? s['Course'] : '') || '',
+                        };
+                    }
+                });
+            });
+            // Add scribe allotments
+            Object.entries(scribeAllotment || {}).forEach(([reg, scribeRoom]) => {
+                if (studentMap[reg]) studentMap[reg].room = scribeRoom;
+                else studentMap[reg] = { room: scribeRoom, seat: 'Scribe', name: '', course: '' };
+            });
+
+            const docId = `${cid}_${generateSessionId(sessionKey)}`;
+
+            // Write session seating doc to public_seating
+            await setDoc(doc(db, 'public_seating', docId), { students: studentMap });
+
+            // Update index doc so student.html can discover this session
+            const indexRef = doc(db, 'public_seating', cid);
+            const existingSnap = await getDoc(indexRef);
+            const existingData = existingSnap.exists() ? existingSnap.data() : {};
+            const existingSessions = existingData.sessions || {};
+            existingSessions[sessionKey] = { docId };
+
+            await setDoc(indexRef, {
+                collegeName: (collegeData && collegeData.examCollegeName) || '',
+                sessions: existingSessions
+            });
+
+            console.log(`✅ Public seating published for ${sessionKey}`);
+        } catch (e) {
+            console.error('Public Seating Publish Error:', e);
+        }
+    }
+
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
     async function syncDataToCloud(targetSection) {
@@ -1662,6 +1712,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
         if (!currentUser || !currentCollegeId || isSyncing) return;
         if (!navigator.onLine) return updateSyncStatus("Offline", "error");
+
 
         isSyncing = true;
         updateSyncStatus(`Saving ${targetSection}...`, "neutral");
@@ -10706,8 +10757,14 @@ if (saveScribeBtn) {
                 syncSessionToCloud(currentSessionKey);
             }
 
+            // 3b. 🚀 Publish Seating to Public Portal
+            if (currentCollegeId) {
+                publishSeatingToPublic(currentSessionKey, currentSessionAllotment, currentScribeAllotment);
+            }
+
             // 4. Reset Dirty Flag
             hasUnsavedAllotment = false;
+
 
             // 5. UI Feedback
             roomAllotmentStatus.textContent = 'Allotment Saved Successfully!';
