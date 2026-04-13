@@ -1493,9 +1493,36 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
             // Each tab's change handler is responsible for rendering after this returns.
             updateSyncStatus("Past Exam Ready!", "success");
 
-        } else {
+           } else {
+             // --- PLAN B FALLBACK: Try fetching from GAS for historical records ---
+             console.log("⚠️ Firebase empty. Attempting Plan B (GAS Fallback)...");
+             updateSyncStatus("Checking Backup (GAS)...", "neutral");
+             
+             const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
+             const gasResponse = await fetch(HYBRID_GAS_URL, {
+                 method: 'POST',
+                 body: JSON.stringify({
+                     token: secureToken,
+                     action: "loadSessionStudents",
+                     filename: `session_${sessionIdStr}.json`
+                 })
+             });
+             
+             const gasData = await gasResponse.json();
+             if (gasData && gasData.payload) {
+                 const parsed = JSON.parse(gasData.payload);
+                 const students = parsed.studentData ? parsed.studentData.students : parsed.students;
+                 if (students) {
+                     // Add logic to merge and save (similar to the Firebase block above)
+                     allStudentData = [...allStudentData, ...students];
+                     await saveExamDataIDB(allStudentData);
+                     updateSyncStatus("Restored from Backup!", "success");
+                     return;
+                 }
+             }
              updateSyncStatus("Error: No Master Data Found", "error");
         }
+
     } catch (e) {
         console.error("Fetch past exam heavy data error:", e);
     }
@@ -1638,9 +1665,12 @@ async function deleteSessionFromCloud(sessionKey) {
             
      // --- NEW WEB APP HYBRID SYNC ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
-            // 🚫 DELETED: session_students Firebase upload (to save cost)
+            
+            // --- PLAN A: Primary Student Record in Firebase ---
+            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
 
            const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
+
 
             fetch(HYBRID_GAS_URL, {
                 method: 'POST',
