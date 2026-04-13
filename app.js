@@ -5028,15 +5028,16 @@ function getExamName(date, time, stream) {
             }
         }
 
-        // --- 4. POPULATE SMART DATE DROPDOWN ---
-        // Include both local dates AND known historical dates from archive
+          // --- 4. POPULATE SMART DATE DROPDOWN ---
+        // Clean out undefined/null dates to prevent sorting crashes!
+        const validLocalDates = allStudentData.map(s => s.Date).filter(d => Boolean(d));
         const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
-        const historicalDates = Object.keys(historicalMeta).map(key => key.split(' | ')[0].trim());
-        const uniqueDaysSet = new Set([...allStudentData.map(s => s.Date), ...historicalDates]);
+        const historicalDates = Object.keys(historicalMeta).map(key => key.split(' | ')[0].trim()).filter(d => Boolean(d));
+        const uniqueDaysSet = new Set([...validLocalDates, ...historicalDates]);
 
         const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
-            const d1 = a.split('.').reverse().join('');
-            const d2 = b.split('.').reverse().join('');
+            const d1 = String(a).split('.').reverse().join('');
+            const d2 = String(b).split('.').reverse().join('');
             return d1.localeCompare(d2);
         });
 
@@ -5050,6 +5051,46 @@ function getExamName(date, time, stream) {
                 dateSelect.appendChild(option);
             });
             if (currentVal) dateSelect.value = currentVal;
+
+            // --- ☁️ ASYNC CLOUD STORAGE SCANNER (Bypasses Firestore Metadata) ---
+            if (window.firebase && window.currentCollegeId && navigator.onLine) {
+                const { storage, ref, listAll } = window.firebase;
+                const storageFolderRef = ref(storage, `historical_sessions/${window.currentCollegeId}/`);
+                
+                listAll(storageFolderRef).then(fileList => {
+                    let newDatesAdded = false;
+                    fileList.items.forEach(itemRef => {
+                        const fileName = itemRef.name;
+                        if (fileName && fileName.endsWith('.json')) {
+                            const dateStr = fileName.replace('.json', '');
+                            // If this date isn't already in the dropdown, add it dynamically!
+                            if (!uniqueDaysSet.has(dateStr)) {
+                                uniqueDaysSet.add(dateStr);
+                                const option = document.createElement('option');
+                                option.value = dateStr;
+                                option.textContent = dateStr + " (Archived)";
+                                dateSelect.appendChild(option);
+                                newDatesAdded = true;
+                            }
+                        }
+                    });
+                    
+                    // Re-sort the dropdown alphabetically if new dates were injected
+                    if (newDatesAdded) {
+                        const allOptions = Array.from(dateSelect.options).slice(1);
+                        allOptions.sort((a,b) => {
+                           const d1 = a.value.split('.').reverse().join('');
+                           const d2 = b.value.split('.').reverse().join('');
+                           return d1.localeCompare(d2);
+                        });
+                        dateSelect.innerHTML = '<option value="">-- Select a Date --</option>';
+                        allOptions.forEach(opt => dateSelect.appendChild(opt));
+                        if(currentVal) dateSelect.value = currentVal;
+                    }
+                }).catch(e => console.warn("Cloud archive scan missing or empty:", e));
+            }
+            // -------------------------------------------------------------------
+
                         dateSelect.onchange = async (e) => {
                 const selectedDate = e.target.value;
                 if (!selectedDate) {
