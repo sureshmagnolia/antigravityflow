@@ -1936,9 +1936,10 @@ async function deleteSessionFromCloud(sessionKey) {
             const existingSnap = await getDoc(indexRef);
             const existingData = existingSnap.exists() ? existingSnap.data() : {};
             const existingSessions = existingData.sessions || {};
-            existingSessions[sessionKey] = { docId };
+            existingSessions[sessionKey] = { docId, lastUpdated: Date.now() }; // ⏰ Add modification stamp
 
             await setDoc(indexRef, {
+
                 collegeName: (collegeData && collegeData.examCollegeName) || '',
                 sessions: existingSessions
             });
