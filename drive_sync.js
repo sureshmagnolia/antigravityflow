@@ -40,7 +40,7 @@ function loadExamDataIDB() {
         });
     });
 }
-function saveExamDataIDB(dataArray) {
+function saveExamDataIDB(dataArray, skipCloudSync = false) {
     return openExamDB().then(db => {
         return new Promise((resolve, reject) => {
             const tx = db.transaction(IDB_STORE, 'readwrite');
@@ -50,6 +50,7 @@ function saveExamDataIDB(dataArray) {
         });
     });
 }
+
 
 
 // --- INITIALIZATION ---
