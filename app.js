@@ -1169,8 +1169,36 @@ async function updateLocalSlotsFromStudents() {
         });
 
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
-        const fetchHeavyData = async () => {
+                const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
+
+            // --- 🏠 SCR5 PATTERN: LOAD LOCAL DATA IMMEDIATELY ---
+            const localStudents = await loadExamDataIDB() || [];
+            if (localStudents.length > 0) {
+                allStudentData = localStudents;
+                console.log(`🏠 Local Students found: ${allStudentData.length}. Initializing UI...`);
+                // Force unlock tabs so user can see data while cloud connects
+                if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
+                if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
+                if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+            }
+
+            // --- ☁️ STORAGE MODE (New Stabilization) ---
+            try {
+                const { storage, ref, getDownloadURL } = window.firebase;
+                updateSyncStatus("Checking Storage...", "neutral");
+                const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
+                const url = await getDownloadURL(storageRef);
+                const response = await fetch(url);
+                const students = await response.json();
+                if (students && students.length > 0) {
+                    allStudentData = students;
+                    await saveExamDataIDB(students);
+                    updateSyncStatus("Synced (Storage)", "success");
+                    return; 
+                }
+            } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
+
 
             // --- [NEW] TRY FIREBASE STORAGE FIRST (Stable Master List) ---
             try {
@@ -1411,7 +1439,9 @@ async function updateLocalSlotsFromStudents() {
                         // Refresh UI Components
                         if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-                        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        else if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+
 
                         
                         // 🔄 REAL-TIME UI REFRESH (Rooms & Invigilators)
@@ -1421,10 +1451,17 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof renderInvigilationPanel === 'function') {
                             renderInvigilationPanel();
                         }
-                    } else {
-                        // SAFETY NET: If the filter legitimately returns 0 items, clear the "Connecting..." banner anyway!
+                            } else {
+                        // SCR5 LOGIC: If Cloud is empty, populate UI from local data
+                        console.log("⚠️ Cloud sessions empty. Reverting to Local Metadata...");
+                        if (allStudentData.length > 0) {
+                            const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+                            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                            if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        }
                         updateSyncStatus("Synced (Live)", "success");
                     }
+
 
                 });
 
