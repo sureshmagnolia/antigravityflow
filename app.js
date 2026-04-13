@@ -15664,9 +15664,18 @@ window.generateBatchArchive = async function() {
         let allArchiveData = [];
         const collegeName = localStorage.getItem('collegeName') || 'ExamFlow Project';
 
+        // Use the globally loaded data. If not yet ready, read fresh from IDB
+        let sourceStudentData = allStudentData;
+        if (!sourceStudentData || sourceStudentData.length === 0) {
+            console.warn("⚠️ Archive: allStudentData empty, reading fresh from IDB...");
+            sourceStudentData = await loadExamDataIDB() || [];
+        }
+        console.log("📦 Archive: Using", sourceStudentData.length, "student records.");
+
         checked.forEach(sessionKey => {
             const [date, time] = sessionKey.split(' | ');
-            const students = allStudentData.filter(s => s.Date === date.trim() && s.Time === time.trim());
+            const students = sourceStudentData.filter(s => s.Date === date.trim() && s.Time === time.trim());
+
             const rooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}')[sessionKey] || {};
             const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
             const absentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}')[sessionKey] || {};
@@ -15736,6 +15745,7 @@ window.generateBatchArchive = async function() {
                 <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
                 <p class="text-sm font-bold text-gray-500">EXAM BATCH ARCHIVE DATABASE</p>
                 <p class="text-xs text-gray-400 mt-1">Generated on: \${new Date().toLocaleString()}</p>
+
             </div>
             <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
