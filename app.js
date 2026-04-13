@@ -15738,7 +15738,18 @@ window.generateBatchArchive = async function() {
 <head>
     <title>Exam Archive Database</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>@media print { .no-print { display: none !important; } } body { font-family: 'Inter', sans-serif; }</style>
+    <style>
+    @media print { .no-print { display: none !important; } }
+    body { font-family: 'Inter', sans-serif; }
+    table { border-collapse: collapse; }
+    th, td { word-break: break-word; }
+    @media (max-width: 640px) {
+        table thead { display: none; }
+        table tr { display: block; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; padding: 8px; background: white; }
+        table td { display: flex; justify-content: space-between; padding: 4px 6px; font-size: 12px; border: none; border-bottom: 1px solid #f3f4f6; }
+        table td::before { content: attr(data-label); font-weight: 700; color: #6b7280; margin-right: 8px; white-space: nowrap; }
+    }
+</style>
 </head>
 <body class="bg-gray-50 p-4 sm:p-6 min-h-screen">
     <div class="max-w-[90rem] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
@@ -15749,7 +15760,12 @@ window.generateBatchArchive = async function() {
                 <p class="text-xs text-gray-400 mt-1">Generated on: ${new Date().toLocaleString()}</p>
 
             </div>
-            <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
+            <button onclick="downloadCSV()" class="no-print bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-green-800 transition flex items-center gap-2">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+    Download CSV
+</button>
+<button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
+
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
                 Print List
             </button>
@@ -15792,7 +15808,7 @@ window.generateBatchArchive = async function() {
         </div>
 
         <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
-            <table class="w-full text-left border-collapse whitespace-nowrap">
+            <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr class="bg-gray-900 text-white text-[11px] uppercase tracking-wider font-bold">
                         <th class="p-3">Session Key</th>
@@ -15846,7 +15862,18 @@ window.generateBatchArchive = async function() {
                 noResults.classList.add('hidden');
                 tbody.innerHTML = filtered.map(s => \`
                     <tr class="border-b border-gray-100 hover:bg-indigo-50/50 transition \${s.status === 'ABSENT' ? 'bg-red-50/80 hover:bg-red-100' : ''}">
-                        <td class="p-3 text-[10px] font-bold text-gray-500">\${s.sessionKey}</td>
+<tr class="border-b border-gray-100 hover:bg-indigo-50/50 transition \${s.status === 'ABSENT' ? 'bg-red-50/80 hover:bg-red-100' : ''}">
+    <td data-label="Session" class="p-3 text-[10px] font-bold text-gray-500">\${s.sessionKey}</td>
+    <td data-label="Course" class="p-3 text-[11px] uppercase tracking-wide text-indigo-700 font-bold">\${s.course}</td>
+    <td data-label="QP" class="p-3 font-black text-rose-600">\${s.qpCode}</td>
+    <td data-label="Reg No" class="p-3 font-mono font-bold text-gray-900">\${s.regNo}</td>
+    <td data-label="Name" class="p-3 uppercase text-gray-800">\${s.name}</td>
+    <td data-label="Stream" class="p-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">\${s.stream}</span></td>
+    <td data-label="Hall & Seat" class="p-3"><span class="inline-block bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded text-xs border border-gray-300 shadow-sm">\${s.room}</span> <span class="text-xs text-gray-500 font-medium">#\${s.seat}</span></td>
+    <td data-label="Invigilator" class="p-3 text-xs italic text-gray-600">\${s.invigilator}</td>
+    <td data-label="Status" class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-bold shadow-sm \${s.status === 'ABSENT' ? 'bg-red-600 text-white' : 'bg-green-100 text-green-800 border border-green-200'}">\${s.status}</span></td>
+</tr>
+
                         <td class="p-3 text-[11px] uppercase tracking-wide text-indigo-700 font-bold">\${s.course}</td>
                         <td class="p-3 font-black text-rose-600">\${s.qpCode}</td>
                         <td class="p-3 font-mono font-bold text-gray-900">\${s.regNo}</td>
@@ -15867,8 +15894,20 @@ window.generateBatchArchive = async function() {
         searchInput.addEventListener('input', render);
         sessionFilter.addEventListener('change', render);
 
+        function downloadCSV() {
+            const headers = ['Session','Course','QP','Register No','Name','Stream','Room','Seat','Invigilator','Status'];
+            const rows = data.map(s => [
+                s.sessionKey, s.course, s.qpCode, s.regNo, s.name, s.stream, s.room, s.seat, s.invigilator, s.status
+            ].map(v => '"' + String(v || '').replace(/"/g, '""') + '"').join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+            a.download = 'ExamArchive.csv';
+            a.click();
+        }
+
         render();
-    </script>
+    <\/script>
 </body>
 </html>`;
 
