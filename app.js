@@ -285,9 +285,10 @@ async function autoCleanPastGhostData() {
                     }
                     sessionDate.setHours(0, 0, 0, 0);
 
-                    // If exam is strictly older than 30 days
-                    if (sessionDate < cutoffDate) {
-                        console.log(`🔥 Auto-Incinerating 30-Day Old Cloud Session: ${sessionKey}`);
+                    // Public Seating Only: If the exam happened before today (i.e. yesterday or older)
+                    if (sessionDate < today) {
+                        console.log(`🔥 Auto-Incinerating Expired Public Seating: ${sessionKey}`);
+
                     // 1. Delete the heavy public seating chunk ONLY
                         if (sInfo.docId) {
                             await deleteDoc(doc(db, 'public_seating', sInfo.docId));
