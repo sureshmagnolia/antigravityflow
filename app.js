@@ -1076,7 +1076,14 @@ async function updateLocalSlotsFromStudents() {
         if (sessionsUnsub) sessionsUnsub();
         const syncLocal = (dataObj) => {
             if (!dataObj) return;
+            const now = Date.now();
             Object.keys(dataObj).forEach(key => {
+                // GUARD: If we saved this key locally in the last 10 seconds, ignore the stale cloud update
+                const lastLocalSave = localSyncPriority[key] || 0;
+                if (now - lastLocalSave < 10000) {
+                    console.warn(`🛡️ Sync Guard: Ignored stale cloud update for ${key} (Local priority active)`);
+                    return;
+                }
                 if (dataObj[key]) localStorage.setItem(key, dataObj[key]);
             });
         };
@@ -2030,7 +2037,7 @@ async function deleteSessionFromCloud(sessionKey) {
     let allStudentSessions = []; // Holds unique sessions
     let currentAbsenteeList = [];
     let selectedStudent = null;
-
+    const localSyncPriority = {}; // Track timestamps for "Local-First" data protection
     // --- (V58) Global var for QP Code data ---
     let qpCodeMap = {};
     // --- NEW GLOBAL VARIABLE ---
@@ -16639,10 +16646,13 @@ window.toggleAllArchiveCheckboxes = function(check) {
         window.renderInvigilationPanel();
     }
 
-    // 6. Auto-Assign
-    window.autoAssignInvigilators = function () {
+      window.autoAssignInvigilators = async function () {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
+
+        // Ensure we have latest local data before starting
+        const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+        currentInvigMapping = allMappings[sessionKey] || {};
 
         const invigSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
@@ -16652,24 +16662,19 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
         const availableStaff = [...slot.assigned];
         const usedNames = new Set(Object.values(currentInvigMapping));
-
         let changeCount = 0;
 
-        // 1. Build Full Room List
         const allRoomNames = new Set();
         if (currentSessionAllotment) currentSessionAllotment.forEach(r => allRoomNames.add(r.roomName));
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const sessionScribeMap = allScribeAllotments[sessionKey] || {};
         Object.values(sessionScribeMap).forEach(r => allRoomNames.add(r));
 
-        // 2. Sort by Serial
         const serialMap = getRoomSerialMap(sessionKey);
         const sortedRooms = Array.from(allRoomNames).sort((a, b) => (serialMap[a] || 999) - (serialMap[b] || 999));
 
-        // 3. Assign
         sortedRooms.forEach(roomName => {
             if (!currentInvigMapping[roomName]) {
-                // Find a free staff
                 const freeEmail = availableStaff.find(e => {
                     const name = (staffData.find(s => s.email === e) || {}).name || e;
                     return !usedNames.has(name);
@@ -16685,16 +16690,25 @@ window.toggleAllArchiveCheckboxes = function(check) {
         });
 
         if (changeCount > 0) {
-            const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
             allMappings[sessionKey] = currentInvigMapping;
             localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
-            if (typeof syncDataToCloud === 'function') syncDataToCloud('staff');
+            
+            // Mark as local priority to prevent overwrite
+            localSyncPriority[INVIG_MAPPING_KEY] = Date.now();
+            
+            updateSyncStatus("Saving...", "neutral");
+            if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('staff');
+            }
+            
             renderInvigilationPanel();
+            updateSyncStatus("Saved", "success");
             alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
             alert("No additional free staff found to assign.");
         }
     }
+
 
     // 7. Unassign All Invigilators
     window.unassignAllInvigilators = async function () {
