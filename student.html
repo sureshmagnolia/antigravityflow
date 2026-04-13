@@ -120,11 +120,26 @@
                     }
                 }
 
+                // --- 🛡️ UI LOCK GATE: Check if there are ANY exams today ---
+                const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();
+                const todayStr = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
+                
+                const sessionsObj = indexCache ? (indexCache.sessions || {}) : {};
+                const hasExamsToday = Object.keys(sessionsObj).some(key => key.startsWith(todayStr));
+
+                if (!hasExamsToday) {
+                    statusEl.innerHTML = `<span class="bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-bold text-sm border border-gray-200">No Exams Scheduled Today</span>`;
+                    // 🛑 Abort instantly. The search box remains universally hidden.
+                    return; 
+                }
+                // -----------------------------------------------------------
+
                 statusEl.textContent = ""; 
                 document.getElementById('search-section').classList.remove('hidden');
 
-            const savedRegNo = localStorage.getItem('myExamRegNo');
+                const savedRegNo = localStorage.getItem('myExamRegNo');
                 if (savedRegNo) {
+
                     // Populate the box with their saved number
                     document.getElementById('reg-input').value = savedRegNo;
                     // 🚀 Auto-Trigger the search immediately upon load
