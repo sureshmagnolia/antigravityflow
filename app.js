@@ -1763,22 +1763,9 @@ async function deleteSessionFromCloud(sessionKey) {
                 
                 await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
 
-                // --- NEW WEB APP HYBRID SYNC ---
+              
+                // 🚫 DELETED: Shadow Mirror to GAS
 
-                // using global HYBRID_GAS_URL
-                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                fetch(HYBRID_GAS_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({
-                        token: secureToken,
-                        action: "patchSettings",
-
-                        payload: data
-                    })
-                });
-
-                               // --- END WEB APP HYBRID SYNC (fire-and-forget, no response needed) ---
 
             }
 
@@ -1790,13 +1777,9 @@ async function deleteSessionFromCloud(sessionKey) {
                     examQPCodes: get('examQPCodes')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
-           // using global HYBRID_GAS_URL
-
-                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                                fetch(HYBRID_GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
-
-
+                // 🚫 DELETED: Shadow Mirror to GAS
             }
+
 
             // 3. ALLOCATION (Scribes)
             else if (targetSection === 'allocation') {
@@ -1805,14 +1788,9 @@ async function deleteSessionFromCloud(sessionKey) {
                     examScribeAllotment: get('examScribeAllotment')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
-            // using global HYBRID_GAS_URL
-
-                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-
-                await fetch(HYBRID_GAS_URL, { method: 'POST', body: JSON.stringify({ token: secureToken, action: "patchSettings", payload: data }) });
-
-
+                         // 🚫 DELETED: Shadow Mirror to GAS
             }
+
 
             // 4. STAFF (Invigilators)
             else if (targetSection === 'staff') {
@@ -1851,16 +1829,15 @@ async function deleteSessionFromCloud(sessionKey) {
                             timestamp: timestamp
                         };
                         await setDoc(doc(db, "colleges", cid, "base_data_v2", `chunk_${i}`), chunkDoc);
-                    }
+        }
+                }
+            }
 
-                    // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
-
-
-            
-
+            // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
             updateSyncStatus("Saved", "success");
 
         } catch (e) {
+
             console.error("Sync Failed:", e);
             updateSyncStatus("Save Error", "error");
         } finally {
