@@ -15744,7 +15744,7 @@ window.generateBatchArchive = async function() {
             <div>
                 <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
                 <p class="text-sm font-bold text-gray-500">EXAM BATCH ARCHIVE DATABASE</p>
-                <p class="text-xs text-gray-400 mt-1">Generated on: \${new Date().toLocaleString()}</p>
+                <p class="text-xs text-gray-400 mt-1">Generated on: ${new Date().toLocaleString()}</p>
 
             </div>
             <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
@@ -15756,11 +15756,11 @@ window.generateBatchArchive = async function() {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 no-print">
             <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm">
                 <span class="text-xs font-bold text-indigo-500 uppercase tracking-widest">Sessions included</span>
-               <p class="text-3xl font-black text-indigo-900">\${checked.length}</p>
+               <p class="text-3xl font-black text-indigo-900">${checked.length}</p>
             </div>
             <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
                 <span class="text-xs font-bold text-blue-500 uppercase tracking-widest">Total Students</span>
-                <p id="stat-total" class="text-3xl font-black text-blue-900">\${allArchiveData.length}</p>
+               <p id="stat-total" class="text-3xl font-black text-blue-900">${allArchiveData.length}</p>
             </div>
             <div class="p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
                 <span class="text-xs font-bold text-green-500 uppercase tracking-widest">Present</span>
@@ -15809,7 +15809,7 @@ window.generateBatchArchive = async function() {
     </div>
 
     <script>
-        const data = \${JSON.stringify(allArchiveData)};
+        const data = ${JSON.stringify(allArchiveData)};
         const tbody = document.getElementById('tableBody');
         const searchInput = document.getElementById('searchInput');
         const sessionFilter = document.getElementById('sessionFilter');
