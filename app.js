@@ -15842,11 +15842,13 @@ window.generateBatchArchive = async function() {
             const filtered = data.filter(s => {
                 const matchSession = sessionKey === "" || s.sessionKey === sessionKey;
                 const matchQuery = 
-                    s.regNo.toLowerCase().includes(query) || 
-                    s.name.toLowerCase().includes(query) || 
-                    s.course.toLowerCase().includes(query) ||
-                    s.room.toLowerCase().includes(query) ||
-                    s.qpCode.toLowerCase().includes(query);
+                    (s.regNo||'').toLowerCase().includes(query) || 
+                    (s.name||'').toLowerCase().includes(query) || 
+                    (s.course||'').toLowerCase().includes(query) ||
+                    (s.room||'').toLowerCase().includes(query) ||
+                    (s.qpCode||'').toLowerCase().includes(query) ||
+                    (s.stream||'').toLowerCase().includes(query);
+
                 return matchSession && matchQuery;
             });
             
