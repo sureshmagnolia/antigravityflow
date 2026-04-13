@@ -172,7 +172,11 @@
                 return;
             }
 
+            // 💾 UNCONDITIONAL SAVE: Lock it in memory immediately, even on holidays
+            localStorage.setItem('myExamRegNo', regNo);
+
             // --- ⚡ LAZY LOAD TODAY'S DATA (Only when Find is clicked) ---
+
             const nowTotal = new Date();
             const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
             
