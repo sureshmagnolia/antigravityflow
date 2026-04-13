@@ -16010,8 +16010,12 @@ window.openBatchArchiveModal = function() {
 window.closeBatchArchiveModal = function() {
     console.log("🚪 Archive Modal: Closing...");
     const modal = document.getElementById('batch-archive-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.setProperty('display', 'none', 'important');
+    }
 };
+
 
 
 
