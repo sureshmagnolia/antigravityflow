@@ -720,3 +720,146 @@ window.startHistoricalMigration = async function() {
     reader.readAsText(file);
 };
 
+
+// ==========================================
+// ☁️ ONE-CLICK: ARCHIVE ALL PAST SESSIONS TO CLOUD
+// ==========================================
+window.archiveAllToCloud = async function() {
+    if (!window.currentCollegeId) {
+        alert("Cloud Archive requires Firebase Login.");
+        return;
+    }
+    if (!navigator.onLine) {
+        alert("You are offline. Please connect to the internet first.");
+        return;
+    }
+
+    const { storage, ref, uploadString, getDownloadURL } = window.firebase;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Load all student data from IDB
+    const allStudents = await loadExamDataIDB();
+    if (!allStudents || allStudents.length === 0) {
+        alert("No student data found in your local database.");
+        return;
+    }
+
+    // Group students by date — only PAST sessions
+    const groupedByDate = {};
+    allStudents.forEach(s => {
+        const d = s.Date ? s.Date.trim() : null;
+        if (!d) return;
+        const parts = d.split('.');
+        const sessionDate = new Date(parts[2], parts[1] - 1, parts[0]);
+        sessionDate.setHours(0, 0, 0, 0);
+        if (sessionDate >= today) return; // Skip future/today sessions
+        if (!groupedByDate[d]) groupedByDate[d] = [];
+        groupedByDate[d].push(s);
+    });
+
+    const uniqueDates = Object.keys(groupedByDate);
+    if (uniqueDates.length === 0) {
+        alert("No past sessions found to archive.");
+        return;
+    }
+
+    if (!confirm(`Found ${uniqueDates.length} past session date(s) in your local database.\n\nThis will upload them all to Firebase Storage as cold archive.\n\nProceed?`)) return;
+
+    // Load aux data from localStorage
+    const rawRoomAllotment      = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
+    const rawInvigMapping       = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+    const rawScribeAllotment    = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+    const rawQPCodes            = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+    const rawAbsentees          = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+
+    const filterByDate = (obj, dateKey) => {
+        const result = {};
+        Object.keys(obj).forEach(k => { if (k.startsWith(dateKey)) result[k] = obj[k]; });
+        return result;
+    };
+
+    let successCount = 0;
+    const btn = document.querySelector('button[onclick="window.archiveAllToCloud()"]');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) btn.disabled = true;
+
+    for (let i = 0; i < uniqueDates.length; i++) {
+        const dateKey = uniqueDates[i];
+        if (btn) btn.innerHTML = `Uploading ${i + 1} / ${uniqueDates.length}...`;
+
+        const datePackage = {
+            students:           groupedByDate[dateKey],
+            roomAllotment:      filterByDate(rawRoomAllotment, dateKey),
+            invigilatorMapping: filterByDate(rawInvigMapping, dateKey),
+            scribeAllotment:    filterByDate(rawScribeAllotment, dateKey),
+            qpCodes:            filterByDate(rawQPCodes, dateKey),
+            absentees:          filterByDate(rawAbsentees, dateKey)
+        };
+
+        const fileRef = ref(storage, `historical_sessions/${window.currentCollegeId}/${dateKey}.json`);
+        await uploadString(fileRef, JSON.stringify(datePackage), 'raw', { contentType: 'application/json' });
+        successCount++;
+    }
+
+    if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
+    alert(`✅ Done! Successfully archived ${successCount} date(s) to Firebase Storage.`);
+};
+
+
+// ==========================================
+// 🗑️ DELETE FROM CLOUD ARCHIVE
+// ==========================================
+window.openCloudDeleteModal = async function() {
+    if (!window.currentCollegeId) {
+        alert("This requires Firebase Login.");
+        return;
+    }
+
+    const modal = document.getElementById('cloud-delete-modal');
+    const listDiv = document.getElementById('cloud-delete-list');
+    modal.classList.remove('hidden');
+    listDiv.innerHTML = '<p class="text-gray-400 italic">Scanning Firebase Storage...</p>';
+
+    try {
+        const { storage, ref, listAll, deleteObject } = window.firebase;
+        const folderRef = ref(storage, `historical_sessions/${window.currentCollegeId}/`);
+        const result = await listAll(folderRef);
+
+        if (result.items.length === 0) {
+            listDiv.innerHTML = '<p class="text-gray-400 italic">No archived files found in cloud.</p>';
+            return;
+        }
+
+        listDiv.innerHTML = result.items.map(itemRef => {
+            const name = itemRef.name;
+            const dateLabel = name.replace('.json', '');
+            return `
+                <div class="flex justify-between items-center p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                    <span class="font-bold text-gray-700 text-xs">${dateLabel}</span>
+                    <button onclick="window.deleteCloudFile('${itemRef.fullPath}')" 
+                        class="px-3 py-1 text-[10px] font-bold text-white bg-red-500 hover:bg-red-700 rounded transition">
+                        Delete
+                    </button>
+                </div>`;
+        }).join('');
+
+    } catch (e) {
+        listDiv.innerHTML = `<p class="text-red-500 text-xs">Error: ${e.message}</p>`;
+    }
+};
+
+window.deleteCloudFile = async function(fullPath) {
+    if (!confirm(`Delete this file from cloud?\n\n${fullPath}\n\nThis cannot be undone.`)) return;
+    try {
+        const { storage, ref, deleteObject } = window.firebase;
+        const fileRef = ref(storage, fullPath);
+        await deleteObject(fileRef);
+        // Refresh the list
+        await window.openCloudDeleteModal();
+    } catch (e) {
+        alert("Delete failed: " + e.message);
+    }
+};
+
+
