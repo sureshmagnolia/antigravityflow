@@ -1265,20 +1265,20 @@ async function updateLocalSlotsFromStudents() {
                 const midnightObj = todayMidnight.getTime();
 
                 // --> All sessions listener (heavy data protected by isTodayOrFuture guard below)
+                               // --- 📡 [SCR5 CONTEXT] MODULAR SESSION LISTENER ---
                 sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
-
-
+                    let cloudMetaFound = false;
+                    let allAllotments = {};
+                    let allQPCodes = {};
+                    let allAbsentees = {};
+                    let allScribeAllotments = {};
+                    let allInvigMapping = {};
+                    let allStudents = [];
 
                     if (!sessionSnap.empty) {
+                        cloudMetaFound = true;
                         console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
-
-                        let allStudents = [];
-                        let allAllotments = {};
-                        let allQPCodes = {};
-                        let allAbsentees = {};
-                        let allScribeAllotments = {};
-                        let allInvigMapping = {}; 
-
+                        
                         const { getDoc } = window.firebase;
                         let missingStudentsPromises = [];
                         const localDB = await loadExamDataIDB() || [];
@@ -1286,25 +1286,25 @@ async function updateLocalSlotsFromStudents() {
                         sessionSnap.forEach(docSnap => {
                             const s = docSnap.data();
                             const sessionKey = `${s.date} | ${s.time}`;
-
-                            // Check if this exam is happening Today or in the Future
                             const examTimestamp = (s.meta && s.meta.timestamp) ? s.meta.timestamp : new Date(s.date.split('.').reverse().join('-')).getTime();
                             const isTodayOrFuture = examTimestamp >= midnightObj;
 
-                            if (s.students) {
-                                allStudents.push(...s.students); // Support for old legacy DB states
-                            } else if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
-                                // AUTO-FETCH heavy data ONLY IF Today or Future
+                            // 1. Load Metadata (Lightweight Icons/Calendar)
+                            if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
+                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
+                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
+                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+
+                            // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
+                            if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
                                 if (localCount !== s.meta.studentCount) {
-                                    console.log(`🔄 CSV Update Detected! Downloading fresh master student list for ${sessionKey}...`);
-                                    updateSyncStatus(`Syncing Student Data...`, "neutral"); // <-- NEW RIBBON ALERT
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
                                         .then(async studentDoc => {
                                             if (studentDoc.exists()) {
                                                 const data = studentDoc.data();
                                                 if (data.isChunked) {
-                                                    // HANDLE CHUNKS (New Logic)
                                                     let fullPayload = "";
                                                     for (let i = 0; i < data.totalChunks; i++) {
                                                         const chunkSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${docSnap.id}_chunk_${i}`));
@@ -1312,169 +1312,63 @@ async function updateLocalSlotsFromStudents() {
                                                     }
                                                     const combined = JSON.parse(fullPayload);
                                                     if (combined.students) allStudents.push(...combined.students);
-                                                } else if (data.students) {
-                                                    allStudents.push(...data.students);
-                                                }
+                                                } else if (data.students) { allStudents.push(...data.students); }
                                             }
                                         });
-
                                     missingStudentsPromises.push(fetchPromise);
                                 }
                             }
-                            // Load ALL metadata continuously, regardless of date
-
-                            if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
-                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
-                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                         });
+
                         const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
                         localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
-                        // Immediately push session list to all dropdowns from metadata
-                        if (window.real_populate_session_dropdown) window.real_populate_session_dropdown();
-                        if (window.real_populate_qp_code_session_dropdown) window.real_populate_qp_code_session_dropdown();
-                        if (window.real_populate_room_allotment_session_dropdown) window.real_populate_room_allotment_session_dropdown();
-
-
-
-                            
-                        // --- HISTORICAL META STORE FOR BILLING ENGINE ---
-                        const allHistoricalMeta = {};
-                        sessionSnap.forEach(docSnap => {
-                            const sd = docSnap.data();
-                            const sk = `${sd.date} | ${sd.time}`;
-                            if (sd.meta) allHistoricalMeta[sk] = {
-                                studentCount: sd.meta.studentCount || 0,
-                                normalCount: sd.meta.normalCount || 0,
-                                scribeCount: sd.meta.scribeCount || 0,
-                                examTimestamp: sd.meta.examTimestamp || 0
-                            };
-                        });
-                        localStorage.setItem('examHistoricalMeta', JSON.stringify(allHistoricalMeta));
-                        // -------------------------------------------------
-
-                            
-
-                        // Wait for any allowed pre-fetches to finish safely
-                        if (missingStudentsPromises.length > 0) {
-                            await Promise.all(missingStudentsPromises);
-                        }
-
-                              // 📡 1. START MERGE
-                        let mergedStudents = [...localDB];
                         
-                        // --- 🧬 INTERNAL HELPER: Normalizes Session Keys (e.g. 10:00 AM matches FN) ---
-                        const getSmartSessionKey = (d, t) => {
-                            const dNorm = (d || "").replace(/[./-]/g, '');
-                            const tUpper = (t || "").toUpperCase();
-                            const isAN = tUpper.includes("PM") || tUpper.includes("AN") || 
-                                         tUpper.startsWith("12:") || tUpper.startsWith("13:") || 
-                                         tUpper.startsWith("14:") || tUpper.startsWith("15:") ||
-                                         tUpper.startsWith("16:");
-                            return `${dNorm}_${isAN ? 'AFTERNOON' : 'MORNING'}`;
-                        };
-
+                        if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
+                        
+                        // Merge Students to IDB
                         if (allStudents.length > 0) {
-                            // Identify sessions freshly downloaded
-                            const freshSessions = new Set(allStudents.map(s => getSmartSessionKey(s.Date, s.Time)));
-                            
-                            // Purge existing local copies for those sessions
-                            mergedStudents = localDB.filter(existing => !freshSessions.has(getSmartSessionKey(existing.Date, existing.Time)));
-                            
-                            // Add the fresh downloads
-                            mergedStudents.push(...allStudents);
+                            const merged = [...localDB, ...allStudents];
+                            allStudentData = merged; 
+                            await saveExamDataIDB(merged);
                         }
-
-                        // 📋 2. SORTING
-                        mergedStudents.sort((a, b) => {
-                            const d1 = a.Date.split('.').reverse().join('');
-                            const d2 = b.Date.split('.').reverse().join('');
-                            if (d1 !== d2) return d1.localeCompare(d2);
-                            return a.Time.localeCompare(b.Time);
-                        });
-
-                        // 🛡️ 3. GLOBAL DEDUPLICATION (Safety Net for 1917+ records)
-                        const uniqueMap = new Map();
-                        mergedStudents.forEach(s => {
-                            const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || "").toString().trim();
-                            const uKey = `${regNo}_${getSmartSessionKey(s.Date, s.Time)}`;
-                            
-                            if (regNo && !uniqueMap.has(uKey)) {
-                                uniqueMap.set(uKey, s);
-                            }
-                        });
-                        mergedStudents = Array.from(uniqueMap.values());
-
-                        // 💾 4. UPDATE GLOBAL STORE
-                        allStudentData = mergedStudents;
-                        await saveExamDataIDB(mergedStudents);
-
-                        // 🔄 5. REFRESH STATUS
-                        if (missingStudentsPromises.length > 0) {
-                            updateSyncStatus("Student List Updated Live!", "success");
-                        }
-                        
-                        safeSetItem('examRoomAllotment', JSON.stringify(allAllotments));
-                        safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
-                        safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
-                        safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
-                        safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
-
                     } else {
-                        // SCR5 FALLBACK: Populate dropdowns from local storage if cloud is clean
-                        const knownSessions = JSON.parse(localStorage.getItem('examAllKnownSessions') || "[]");
-                        if (knownSessions.length > 0) {
-                            console.log("📂 Populating dropdowns from Known Sessions list...");
-                            if (typeof window.real_populate_session_dropdown === 'function') window.real_populate_session_dropdown();
-                            if (typeof window.real_populate_qp_code_session_dropdown === 'function') window.real_populate_qp_code_session_dropdown();
-                            if (typeof window.real_populate_room_allotment_session_dropdown === 'function') window.real_populate_room_allotment_session_dropdown();
-                        }
-                        updateSyncStatus("Synced (Live)", "success");
+                        console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
                     }
 
+                    // --- 🏠 UI REFRESH (Works even if cloud is empty) ---
+                    const hasMetadata = cloudMetaFound || Object.keys(allAllotments).length > 0 || (allStudentData && allStudentData.length > 0);
+                    
+                    if (hasMetadata) {
+                        // 1. Unlock Tabs
+                        if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
+                        if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
+                        if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
 
-
-                        
-                        // --- 🔓 UNLOCK TABS (SCR5 Style: Unlock if Metadata exists) ---
-                        const hasMetadata = Object.keys(allAllotments).length > 0;
-                        if (hasMetadata || (allStudentData && allStudentData.length > 0)) {
-                            if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
-                            if (typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
-                            if (typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
-                            if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
-                            if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
-                        }
-
-                        // Refresh UI Components
-                        if (typeof updateDashboard === 'function') updateDashboard();
-                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-                        else if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
-
-
-                        
-                        // 🔄 REAL-TIME UI REFRESH (Rooms & Invigilators)
-                        if (typeof updateAllotmentDisplay === 'function') {
-                            updateAllotmentDisplay(); 
-                        }
-                        if (typeof renderInvigilationPanel === 'function') {
-                            renderInvigilationPanel();
-                        }
-                            } else {
-                        // SCR5 LOGIC: If Cloud is empty, populate UI from local data
-                        console.log("⚠️ Cloud sessions empty. Reverting to Local Metadata...");
-                        if (allStudentData.length > 0) {
+                        // 2. Store Metadata (Safe Sets)
+                        if (cloudMetaFound) {
+                            safeSetItem('examRoomAllotment', JSON.stringify(allAllotments));
+                            safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
+                            safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
+                            safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                            safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+                        } else {
+                            // Local Fallback: Identify sessions from allStudentData if cloud is empty
                             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-                            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
-                            if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                            if (sessions.size > 0 && !localStorage.getItem('examAllKnownSessions')) {
+                                localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                            }
                         }
-                        updateSyncStatus("Synced (Live)", "success");
+
+                        // 3. Refresh Components
+                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        if (typeof updateDashboard === 'function') updateDashboard();
+                        if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
+                        if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                     }
 
-
+                    updateSyncStatus("Synced (Live)", "success");
                 });
 
 
