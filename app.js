@@ -15783,7 +15783,8 @@ window.generateBatchArchive = async function() {
             <div class="shrink-0 w-full md:w-64">
                 <select id="sessionFilter" class="w-full p-3 border-2 border-transparent rounded-lg focus:border-indigo-500 outline-none shadow-sm font-bold tracking-wide text-indigo-900 bg-white cursor-pointer">
                     <option value="">All Sessions Combined</option>
-                    \${checked.map(sk => \`<option value="\${sk}">\${sk}</option>\`).join('')}
+                    ${checked.map(sk => `<option value="${sk}">${sk}</option>`).join('')}
+
                 </select>
             </div>
         </div>
