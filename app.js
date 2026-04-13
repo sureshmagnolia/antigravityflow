@@ -19423,6 +19423,97 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.syncSessionToCloud = syncSessionToCloud;
     window.syncDataToCloud = syncDataToCloud;
+
+// --- 📋 CLIPBOARD QP CODE IMPORTER ---
+window.importQPFromClipboard = async function() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text || text.trim().length === 0) {
+            alert("Clipboard is empty. Please copy QP code data from the university portal first.");
+            return;
+        }
+
+        // --- SMART PARSER: Handles tab-separated, comma-separated, and "code - qp" formats ---
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const parsed = {}; // courseCode → qpCode
+
+        lines.forEach(line => {
+            // Try tab-separated (copied from HTML tables)
+            const tabParts = line.split('\t').map(p => p.trim()).filter(p => p);
+            // Try comma-separated
+            const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
+            // Try " - " separator
+            const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
+
+            let courseCode = null, qpCode = null;
+
+            if (tabParts.length >= 2) {
+                courseCode = tabParts[0];
+                qpCode = tabParts[tabParts.length - 1]; // Last column = QP code
+            } else if (dashParts.length === 2) {
+                courseCode = dashParts[0];
+                qpCode = dashParts[1];
+            } else if (commaParts.length >= 2) {
+                courseCode = commaParts[0];
+                qpCode = commaParts[commaParts.length - 1];
+            }
+
+            if (courseCode && qpCode && qpCode !== courseCode) {
+                parsed[courseCode] = qpCode;
+            }
+        });
+
+        const count = Object.keys(parsed).length;
+        if (count === 0) {
+            alert("Could not detect any QP codes from clipboard.\n\nMake sure you copied the QP code table from the university portal.\n\nExpected format: CourseCode [tab or comma or dash] QP Code");
+            return;
+        }
+
+        // Match parsed codes against the current QP input fields
+        const sessionKey = document.getElementById('session-select-qp')?.value;
+        if (!sessionKey) {
+            alert("Please select a session first.");
+            return;
+        }
+
+        let matched = 0;
+        document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
+            const courseCode = input.dataset.course;
+            // Try exact match first, then partial match
+            if (parsed[courseCode]) {
+                input.value = parsed[courseCode];
+                matched++;
+            } else {
+                // Try partial match (e.g. portal uses "CS101" but app has "Computer Science - CS101")
+                const matchKey = Object.keys(parsed).find(k => courseCode.includes(k) || k.includes(courseCode));
+                if (matchKey) {
+                    input.value = parsed[matchKey];
+                    matched++;
+                }
+            }
+        });
+
+        if (matched > 0) {
+            document.getElementById('qp-code-status').textContent = `✅ ${matched} of ${count} QP codes imported from clipboard. Click Save QP Codes to confirm.`;
+            setTimeout(() => {
+                document.getElementById('save-qp-codes-button')?.click();
+            }, 500); // Auto-save after 500ms
+        } else {
+            alert(`Parsed ${count} QP codes from clipboard, but none matched the current session's courses.\n\nParsed: ${JSON.stringify(parsed, null, 2)}\n\nPlease check the course codes match between the portal and the app.`);
+        }
+
+    } catch (e) {
+        if (e.name === 'NotAllowedError') {
+            alert("Clipboard access denied.\n\nPlease click 'Allow' when the browser asks for clipboard permission, or manually paste your QP codes.");
+        } else {
+            alert("Error reading clipboard: " + e.message);
+        }
+    }
+};
+// --- END CLIPBOARD QP CODE IMPORTER ---
+
+
+    
 });
 
 // =======================================================
