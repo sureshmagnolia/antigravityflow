@@ -307,11 +307,86 @@ async function autoCleanPastGhostData() {
                     console.log(`🧹 Cloud Maintenance: Permanently deleted ${cloudPurgeCount} expired sessions from Firebase to save costs.`);
                 }
             }
-        } catch (e) {
+               } catch (e) {
             console.error("Cloud purge error during maintenance:", e);
         }
     }
+
+    // 5. ☁️ AUTO-ARCHIVE: Move past Firestore session_students → Firebase Storage
+    if (window.firebase && window.currentCollegeId && navigator.onLine) {
+        try {
+            const { db, doc, collection, getDocs, getDoc, deleteDoc, storage, ref, uploadString, getDownloadURL } = window.firebase;
+            const sessionsRef = collection(db, 'colleges', window.currentCollegeId, 'sessions');
+            const sessionSnap = await getDocs(sessionsRef);
+
+            for (const docSnap of sessionSnap.docs) {
+                const s = docSnap.data();
+                if (!s.date) continue;
+
+                // Parse the exam date
+                const dateStr = s.date.trim();
+                let examDate;
+                if (dateStr.includes('.')) {
+                    const [d, m, y] = dateStr.split('.');
+                    examDate = new Date(`${y}-${m}-${d}`);
+                } else {
+                    examDate = new Date(dateStr);
+                }
+                examDate.setHours(0, 0, 0, 0);
+
+                // Only archive PAST sessions (before today)
+                if (examDate >= today) continue;
+
+                const sessionKey = `${s.date} | ${s.time}`;
+                const sessionIdStr = docSnap.id;
+                const storageRef = ref(storage, `historical_sessions/${window.currentCollegeId}/${dateStr}.json`);
+
+                // Check if already archived in Storage — skip if yes
+                let alreadyArchived = false;
+                try {
+                    await getDownloadURL(storageRef);
+                    alreadyArchived = true;
+                } catch (e) { /* Not archived yet */ }
+
+                if (alreadyArchived) continue;
+
+                // Fetch heavy student data from Firestore
+                const studentDoc = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
+                if (!studentDoc.exists()) continue;
+
+                const data = studentDoc.data();
+                let students = [];
+                if (data.isChunked) {
+                    let fullPayload = "";
+                    for (let i = 0; i < data.totalChunks; i++) {
+                        const chunkSnap = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', `${sessionIdStr}_chunk_${i}`));
+                        if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
+                    }
+                    const combined = JSON.parse(fullPayload);
+                    students = combined.students || [];
+                } else {
+                    students = data.students || [];
+                }
+
+                if (students.length === 0) continue;
+
+                // Build archive package (same format as manual migration)
+                const datePackage = { students, date: dateStr, archivedAt: new Date().toISOString() };
+
+                // Upload to Firebase Storage
+                await uploadString(storageRef, JSON.stringify(datePackage), 'raw', { contentType: 'application/json' });
+                console.log(`📦 Auto-Archived: ${sessionKey} → historical_sessions Storage`);
+
+                // Delete heavy Firestore doc to save costs
+                await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
+                console.log(`🗑️ Freed Firestore: Deleted session_students for ${sessionKey}`);
+            }
+        } catch (e) {
+            console.error("Auto-archive error during maintenance:", e);
+        }
+    }
 }
+
 
 
 
