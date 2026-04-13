@@ -35,188 +35,160 @@
         const db = getFirestore(app);
         window.firebase = { db, doc, getDoc, collection, getDocs };
 
+
         const urlParams = new URLSearchParams(window.location.search);
         let collegeId = urlParams.get('id');
 
         if (collegeId && collegeId.includes('/')) {
             const parts = collegeId.split('/');
-            collegeId = parts[parts.length - 1];
+            collegeId = parts[parts.length - 1]; 
         }
 
-        // Global Data Variables
         let allSessions = []; 
-        let roomConfigs = {};
-        let collegeName = "Exam Centre";
+        let sessionCache = {}; 
+        let indexCache = null; 
+        const CACHE_KEY_INDEX = "seating_index_cache";
 
         async function loadData() {
             const statusEl = document.getElementById('status');
-            if (!collegeId) {
-                statusEl.innerHTML = `<span class="text-red-500">Error: Invalid Link. Please contact office.</span>`;
-                return;
-            }
+            if (!collegeId) return;
 
             statusEl.textContent = "Loading Live Exam Data...";
-
+            
             try {
-                // A. FETCH SETTINGS
-                const settingsRef = doc(db, "colleges", collegeId, "system_data", "settings");
-                
-                // B. FETCH SESSIONS (V2 Modular)
-                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
+                // ⚡ Check Local Cache for Index (Uses V2 Smart Cache)
+                const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
+                const now = Date.now();
 
-                const [settingsSnap, sessionsSnap] = await Promise.all([
-                    getDoc(settingsRef),
-                    getDocs(sessionsRef)
-                ]);
-
-                // Process Settings
-                if (settingsSnap.exists()) {
-                    const settings = settingsSnap.data();
-                    collegeName = settings.examCollegeName || "Exam Centre";
-                    document.getElementById('college-name').textContent = collegeName;
-                    
-                    if (settings.examRoomConfig) {
-                        roomConfigs = JSON.parse(settings.examRoomConfig);
-                    }
-                }
-
-                // Process Sessions
-                if (!sessionsSnap.empty) {
-                    allSessions = [];
-                    sessionsSnap.forEach(doc => {
-                        allSessions.push(doc.data());
-                    });
-
-                    statusEl.textContent = "";
-                    document.getElementById('search-section').classList.remove('hidden');
-
-                    const savedRegNo = localStorage.getItem('myExamRegNo');
-                    if (savedRegNo) {
-                        document.getElementById('reg-input').value = savedRegNo;
-                        
-                        // Only auto-search if authorized (prevent premature search before modal)
-                        if (typeof isAuthorized !== 'undefined' && isAuthorized) {
-                            setTimeout(() => window.searchStudent(), 300);
-                        }
-                    }
+               if (cachedIndex && (now - cachedIndex.timestamp < 300000)) { 
+                    indexCache = cachedIndex.data;
+                    document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
                 } else {
-                    statusEl.textContent = "No active exam sessions found.";
+                    const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
+                    if (indexSnap.exists()) {
+                        indexCache = indexSnap.data();
+                        localStorage.setItem(CACHE_KEY_INDEX, JSON.stringify({ timestamp: now, data: indexCache }));
+                        document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
+                    }
                 }
 
+                statusEl.textContent = ""; 
+                document.getElementById('search-section').classList.remove('hidden');
+
+                const savedRegNo = localStorage.getItem('myExamRegNo');
+                if (savedRegNo) {
+                    document.getElementById('reg-input').value = savedRegNo;
+                    // Trigger auto-search if authorization modal has already passed
+                    if (typeof isAuthorized !== 'undefined' && isAuthorized) {
+                         setTimeout(() => searchStudent(), 100);
+                    }
+                }
             } catch (error) {
-                console.error("Load Error:", error);
-                statusEl.innerHTML = `<span class="text-red-500">Connection failed. Check Internet or Link.</span>`;
+                statusEl.textContent = "Database connection failed.";
             }
         }
 
-        window.searchStudent = function () {
+
+        window.searchStudent = async function() {
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
             const resultContainer = document.getElementById('result-container');
+            const statusEl = document.getElementById('status');
             resultContainer.innerHTML = '';
+            
+            if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
 
-            if (regNo.length < 2) {
-                alert("Please enter a valid Register Number.");
-                return;
+            // Unconditionally save it locally
+            localStorage.setItem('myExamRegNo', regNo);
+
+            const nowTotal = new Date();
+            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
+            
+            // Populate sessions from correct V2 Architecture
+            if (allSessions.length === 0 && indexCache) {
+                statusEl.textContent = "Verifying sessions...";
+                const sessions = indexCache.sessions || {};
+
+                for (const [label, sInfo] of Object.entries(sessions)) {
+                    if (!label.startsWith(todayString)) continue;
+
+                    const [dPart, tPart] = label.split(' | ');
+                    const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
+                    
+                    // 🛑 TEST MODE: Bypassing the 45-minute Security Gate to always fetch payload
+                    const docId = sInfo.docId;
+
+                    if (!sessionCache[docId]) {
+                        const sSnap = await getDoc(doc(db, 'public_seating', docId));
+                        if (sSnap.exists()) {
+                            sessionCache[docId] = sSnap.data();
+                        }
+                    }
+                    const d = sessionCache[docId];
+
+                    if (d) {
+                        allSessions.push({
+                            date: dPart.trim(), time: tPart.trim(),
+                            studentMap: d.students || {},
+                            fullDate: sessionTime
+                        });
+                    }
+                }
+                statusEl.textContent = "";
             }
 
-            let found = false;
+
             let studentName = "";
             let myExams = [];
 
-            // --- FILTER: Upcoming Exams Only ---
-            const todayMidnight = new Date();
-            todayMidnight.setHours(0, 0, 0, 0);
-
-            // Iterate Modular Sessions
-                       allSessions.forEach(session => {
-                const dateStr = session.date;
-                const timeStr = session.time;
-
-                // 1. DATE CHECK: Skip past exams
-                const examDayStart = parseSessionTime(dateStr, "00:00 AM");
-                if (examDayStart < todayMidnight) {
-                    return; // Skip this session (it's in the past)
-                }
-
-                // 2. FIND STUDENT
-                // First try session.students (old format). If not found,
-                // we will try to get it from roomAllotment below (new format).
-                let studentRecord = session.students
-                    ? session.students.find(s => s['Register Number'] === regNo)
-                    : null;
-
+            // Execute Instant Hash Dictionary Lookup (O(1)) instead of old V1 Loop
+            allSessions.forEach(session => {
+                let studentRecord = null;
                 let studentRoom = "Not Allotted";
                 let seatNumber = "-";
                 let isScribeRoom = false;
 
-                // 3. Check Regular Allotment
-                if (session.roomAllotment) {
-                    for (const room of session.roomAllotment) {
-                        const index = room.students.findIndex(s =>
-                            (typeof s === 'object' ? s['Register Number'] : s) === regNo
-                        );
-                        if (index !== -1) {
-                            studentRoom = room.roomName;
-                            seatNumber = index + 1;
-                            // NEW: if student record not found above, get it from here
-                            if (!studentRecord && typeof room.students[index] === 'object') {
-                                studentRecord = room.students[index];
-                            }
-                            break;
-                        }
-                    }
+                if (session.studentMap && session.studentMap[regNo]) {
+                    studentRecord = session.studentMap[regNo];
+                    studentRoom = studentRecord.room;
+                    seatNumber = studentRecord.seat;
                 }
 
-                // 4. Check Scribe Allotment
                 if (session.scribeAllotment && session.scribeAllotment[regNo]) {
                     studentRoom = session.scribeAllotment[regNo];
                     isScribeRoom = true;
                     seatNumber = "Scribe";
                 }
 
-                // 5. Save result only if student was found AND has a room
                 if (studentRecord && studentRoom !== "Not Allotted") {
-                    if (!studentName) studentName = studentRecord.Name;
+                    if (!studentName) studentName = studentRecord.name || "";
                     myExams.push({
-                        dateStr, timeStr, studentRoom, seatNumber,
-                        paperName: studentRecord.Course,
+                        dateStr: session.date, timeStr: session.time, studentRoom, seatNumber,
+                        paperName: studentRecord.course || "", 
                         isScribeRoom,
-                        fullDate: parseSessionTime(dateStr, timeStr)
+                        fullDate: session.fullDate
                     });
                 }
             });
 
-
             myExams.sort((a, b) => a.fullDate - b.fullDate);
 
             if (myExams.length > 0) {
-                found = true;
-                localStorage.setItem('myExamRegNo', regNo);
-
                 myExams.forEach(exam => {
-                    // *** TIME LOCK REMOVED FOR TEST MODE *** // We calculate it just to show what *would* happen in student view
-                    const now = new Date();
                     const unlockTime = new Date(exam.fullDate.getTime() - (45 * 60 * 1000));
-                    const isActuallyLocked = now < unlockTime;
+                    const isActuallyLocked = new Date() < unlockTime;
 
-                    const roomInfo = roomConfigs[exam.studentRoom] || {};
-                    const displayLocation = (roomInfo.location && roomInfo.location.trim() !== "")
-                        ? roomInfo.location
-                        : exam.studentRoom;
-
-                    const scribeTag = exam.isScribeRoom
-                        ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>`
-                        : "";
-
-                    // Visual indicator if this exam is technically locked for students
+                    const scribeTag = exam.isScribeRoom ? `<span class="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded border border-orange-200 font-bold ml-2 uppercase">Scribe Room</span>` : "";
+                    
+                    // Provides the visual badge letting Admin know what state the portal is currently in
                     const lockIndicator = isActuallyLocked 
-                        ? `<div class="bg-yellow-50 text-yellow-700 text-[10px] px-2 py-1 rounded mb-3 border border-yellow-200 text-center font-bold">🔒 Hidden for students until 45m prior</div>`
-                        : `<div class="bg-green-50 text-green-700 text-[10px] px-2 py-1 rounded mb-3 border border-green-200 text-center font-bold">🔓 Visible to students</div>`;
+                         ? `<div class="bg-yellow-50 text-yellow-700 text-[10px] px-2 py-1 rounded mb-3 border border-yellow-200 text-center font-bold">🔒 Hidden from students until 45m prior</div>`
+                         : `<div class="bg-green-50 text-green-700 text-[10px] px-2 py-1 rounded mb-3 border border-green-200 text-center font-bold">🔓 Currently visible to students</div>`;
 
                     const card = document.createElement('div');
                     card.className = "bg-white p-5 rounded-xl shadow-lg border border-gray-100 mb-5 animate-fade-in";
-
+                    
+                    // 🛑 TEST MODE: Bypassing the 45-minute Render logic. Always show seating!
                     let content = `
                         ${lockIndicator}
                         <div class="border-b border-gray-200 pb-3 mb-3">
@@ -224,70 +196,38 @@
                                 <div class="text-lg font-black text-gray-800 leading-tight">${studentName}</div>
                                 <div class="text-xs font-bold text-indigo-500 font-mono">${regNo}</div>
                             </div>
-                            
                             <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg mb-3">
-                                <div class="text-[10px] text-blue-400 uppercase font-bold tracking-wider mb-1">Subject</div>
+                                <div class="text-[10px] text-blue-400 uppercase font-bold tracking-wider mb-1">Subject / Paper</div>
                                 <div class="text-sm font-bold text-blue-900 leading-snug">${exam.paperName}</div>
                             </div>
-
                             <div class="flex justify-between items-center bg-gray-50 p-2 rounded-lg">
-                                <div class="flex flex-col">
-                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Date</span>
-                                    <span class="font-bold text-gray-800 text-sm">${exam.dateStr}</span>
-                                </div>
-                                <div class="flex flex-col text-right">
-                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Time</span>
-                                    <span class="font-bold text-indigo-600 text-sm">${exam.timeStr}</span>
-                                </div>
+                                <div class="flex flex-col"><span class="text-[10px] text-gray-500 uppercase font-bold">Date</span><span class="font-bold text-gray-800 text-sm">${exam.dateStr}</span></div>
+                                <div class="flex flex-col text-right"><span class="text-[10px] text-gray-500 uppercase font-bold">Time</span><span class="font-bold text-indigo-600 text-sm">${exam.timeStr}</span></div>
                             </div>
                         </div>
-                    `;
-
-                    // *** ALWAYS RENDER UNLOCKED VIEW ***
-                    content += `
                         <div class="text-center py-2">
-                            <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">
-                                Allotted Hall ${scribeTag}
-                            </p>
-                            
-                            <div class="text-2xl font-black text-gray-900 leading-tight mb-5 px-2">${displayLocation}</div>
-                            
+                            <p class="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2 flex items-center justify-center">Allotted Hall ${scribeTag}</p>
+                            <div class="text-2xl font-black text-gray-900 leading-tight mb-5 px-2">${exam.studentRoom}</div>
                             <div class="inline-block bg-indigo-50 rounded-xl px-8 py-4 border border-indigo-100 shadow-inner">
-                                    <span class="block text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">Your Seat Number</span>
-                                    <span class="block text-5xl font-black text-indigo-600">${exam.seatNumber === "Scribe" ? "Spl" : "#" + exam.seatNumber}</span>
+                                 <span class="block text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">Your Seat Number</span>
+                                 <span class="block text-5xl font-black text-indigo-600">${exam.seatNumber === "Scribe" ? "Spl" : "#" + exam.seatNumber}</span>
                             </div>
-                            
-                            <p class="text-[10px] text-green-600 mt-5 font-bold flex items-center justify-center gap-1.5 uppercase tracking-wide">
-                                <span class="relative flex h-2.5 w-2.5">
-                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                                </span>
-                                Seating Live (Test Mode)
-                            </p>
-                        </div>
-                    `;
+                        </div>`;
 
                     card.innerHTML = content;
                     resultContainer.appendChild(card);
                 });
+            } else {
+                resultContainer.innerHTML = `<div class="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200"><p class="text-gray-800 font-bold text-lg">No Upcoming Exams</p><p class="text-gray-500 text-sm mt-1">Status: Past/Unassigned</p></div>`;
             }
 
-            if (!found) {
-                resultContainer.innerHTML = `
-                    <div class="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200">
-                        <p class="text-gray-800 font-bold text-lg">No Upcoming Exams</p>
-                        <p class="text-gray-500 text-sm mt-1">for register number <span class="font-mono font-bold text-black">${regNo}</span></p>
-                    </div>
-                `;
-            } else {
-                const clearBtn = document.createElement('div');
-                clearBtn.innerHTML = `<button onclick="clearSavedData()" class="text-xs text-gray-400 underline mt-6 hover:text-gray-600 transition">Not you? Clear & Search</button>`;
-                clearBtn.className = "text-center";
-                resultContainer.appendChild(clearBtn);
-            }
+            const clearBtn = document.createElement('div');
+            clearBtn.innerHTML = `<button onclick="clearSavedData()" class="text-xs text-gray-400 underline mt-6 hover:text-gray-600 transition">Clear & Search</button>`;
+            clearBtn.className = "text-center";
+            resultContainer.appendChild(clearBtn);
         };
 
-        window.clearSavedData = function () {
+        window.clearSavedData = function() {
             localStorage.removeItem('myExamRegNo');
             document.getElementById('reg-input').value = '';
             document.getElementById('result-container').innerHTML = '';
@@ -296,16 +236,21 @@
 
         function parseSessionTime(dateStr, timeStr) {
             try {
-                const [d, m, y] = dateStr.split('.');
+                const [d, m, y] = dateStr.split('.').map(Number);
                 let [time, modifier] = timeStr.split(' ');
-                let [hours, minutes] = time.split(':');
-                if (hours === '12') hours = '00';
-                if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+                let [hours, minutes] = time.split(':').map(Number);
+                
+                if (modifier === 'PM' && hours < 12) hours += 12;
+                if (modifier === 'AM' && hours === 12) hours = 0;
+                
                 return new Date(y, m - 1, d, hours, minutes);
             } catch(e) { return new Date(); }
         }
 
         loadData();
+
+
+        
     </script>
 </head>
 
