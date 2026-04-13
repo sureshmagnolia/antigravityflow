@@ -255,7 +255,15 @@ async function syncData() {
                 }
             }
         }
-        btn.innerHTML = "⏳ Building backup...";
+        btn.innerHTML = "⏳ Mirroring to Firebase...";
+        // --- Plan A: Ensure Firebase has the latest Master Chunks ---
+        if (window.syncDataToCloud) {
+            await window.syncDataToCloud('baseData');
+            await window.syncDataToCloud('settings');
+            await window.syncDataToCloud('staff');
+        }
+        btn.innerHTML = "⏳ Building Drive backup...";
+        // -----------------------------------------------------------
         // -----------------------------------------------------------
 
         const localData = {};
