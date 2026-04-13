@@ -14978,6 +14978,23 @@ window.handlePythonExtraction = async function (jsonString) {
 
     // --- V65: Initial Data Load on Startup (Clean Version) ---
 async function loadInitialData() { 
+    // 🧹 EVICT STALE THAWED HISTORICAL RECORDS (Older than 7 days)
+    try {
+        const allCached = await loadExamDataIDB();
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const active = allCached.filter(r => {
+            if (!r._thawedAt) return true; // Keep un-tagged (live data)
+            return new Date(r._thawedAt).getTime() > sevenDaysAgo;
+        });
+        if (active.length < allCached.length) {
+            await saveExamDataIDB(active, true);
+            console.log(`🧹 Evicted ${allCached.length - active.length} stale historical records from IDB.`);
+        }
+    } catch(e) { console.warn("Eviction check failed:", e); }
+
+
+
+    
         try {
             console.log("Loading Local Data...");
             updateHeaderCollegeName(); // <--- ADD THIS LINE HERE
