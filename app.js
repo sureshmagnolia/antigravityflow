@@ -3,6 +3,7 @@
 // to be available when Python loads.
 
 const BASE_DATA_KEY = 'examBaseData';
+let syncQueue = { active: false, sections: new Set() }; // New Sync Manager
 
 // 🚫 DELETED: HYBRID_GAS_URL (Returning to Pure Firebase Architecture)
 
@@ -1697,8 +1698,21 @@ async function deleteSessionFromCloud(sessionKey) {
      // --- NEW WEB APP HYBRID SYNC ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             
-            // --- PLAN A: Primary Student Record in Firebase ---
-            await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+        // --- PLAN A: Primary Student Record (Chunked to handle 800+ students) ---
+            const jsonPayload = JSON.stringify(sessionStudentsDoc);
+            const chunkSize = 1024 * 1024; // 1MB
+            if (jsonPayload.length > chunkSize) {
+                const totalChunks = Math.ceil(jsonPayload.length / chunkSize);
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = jsonPayload.slice(i * chunkSize, (i + 1) * chunkSize);
+                    await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`), { payload: chunk });
+                }
+                // Write a meta doc to tell the loader how many chunks to expect
+                await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), { isChunked: true, totalChunks });
+            } else {
+                await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
+            }
+
 
                      // 🚫 DELETED: Shadow Mirror to GAS
 
@@ -1784,12 +1798,13 @@ async function deleteSessionFromCloud(sessionKey) {
 
         if (!currentUser || !currentCollegeId) return;
 
-        // --- BUSY GUARD: If another sync is running, wait and retry once ---
+        // --- SMART QUEUE: If already syncing, add this section to the "Dirty" list to sync next ---
         if (isSyncing) {
             console.log(`⏳ Sync Busy. Queueing ${targetSection}...`);
-            await new Promise(r => setTimeout(r, 2000));
-            if (isSyncing) return; // Still busy? Give up to avoid deadlock
+            syncQueue.sections.add(targetSection);
+            return;
         }
+
 
         if (!navigator.onLine) return updateSyncStatus("Offline", "error");
 
@@ -1895,9 +1910,17 @@ async function deleteSessionFromCloud(sessionKey) {
 
             console.error("Sync Failed:", e);
             updateSyncStatus("Save Error", "error");
-        } finally {
+    } finally {
             isSyncing = false;
+            // CHECK THE QUEUE: If something was queued while we were busy, process it now.
+            if (syncQueue.sections.size > 0) {
+                const nextTarget = Array.from(syncQueue.sections)[0];
+                syncQueue.sections.delete(nextTarget);
+                console.log(`🔄 Processing Queued Sync: ${nextTarget}`);
+                syncDataToCloud(nextTarget);
+            }
         }
+
     }
    
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
