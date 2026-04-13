@@ -1365,8 +1365,24 @@ async function updateLocalSlotsFromStudents() {
                             const sd = d.data(); return `${sd.date} | ${sd.time}`;
                         }));
                         localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
-                        
+
+                        // --- HISTORICAL META STORE (Enables past date dropdown) ---
+                        const allHistoricalMeta = {};
+                        sessionSnap.forEach(docSnap => {
+                            const sd = docSnap.data();
+                            const sk = `${sd.date} | ${sd.time}`;
+                            if (sd.meta) allHistoricalMeta[sk] = {
+                                studentCount: sd.meta.studentCount || 0,
+                                normalCount: sd.meta.normalCount || 0,
+                                scribeCount: sd.meta.scribeCount || 0,
+                                examTimestamp: sd.meta.examTimestamp || 0
+                            };
+                        });
+                        localStorage.setItem('examHistoricalMeta', JSON.stringify(allHistoricalMeta));
+                        // ----------------------------------------------------------
+
                         if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
+
                         
                         // Merge Students to IDB
                         if (allStudents.length > 0) {
