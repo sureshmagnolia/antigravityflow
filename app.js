@@ -1423,12 +1423,24 @@ async function updateLocalSlotsFromStudents() {
                         safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
                         safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
+                    } else {
+                        // SCR5 FALLBACK: Populate dropdowns from local storage if cloud is clean
+                        const knownSessions = JSON.parse(localStorage.getItem('examAllKnownSessions') || "[]");
+                        if (knownSessions.length > 0) {
+                            console.log("📂 Populating dropdowns from Known Sessions list...");
+                            if (typeof window.real_populate_session_dropdown === 'function') window.real_populate_session_dropdown();
+                            if (typeof window.real_populate_qp_code_session_dropdown === 'function') window.real_populate_qp_code_session_dropdown();
+                            if (typeof window.real_populate_room_allotment_session_dropdown === 'function') window.real_populate_room_allotment_session_dropdown();
+                        }
                         updateSyncStatus("Synced (Live)", "success");
+                    }
+
 
 
                         
-                        // --- 🔓 UNLOCK TABS ON FIRST DATA LOAD ---
-                        if (allStudentData && allStudentData.length > 0) {
+                        // --- 🔓 UNLOCK TABS (SCR5 Style: Unlock if Metadata exists) ---
+                        const hasMetadata = Object.keys(allAllotments).length > 0;
+                        if (hasMetadata || (allStudentData && allStudentData.length > 0)) {
                             if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
                             if (typeof disable_absentee_tab === 'function') disable_absentee_tab(false);
                             if (typeof disable_qpcode_tab === 'function') disable_qpcode_tab(false);
