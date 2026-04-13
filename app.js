@@ -1493,10 +1493,46 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
             // Each tab's change handler is responsible for rendering after this returns.
             updateSyncStatus("Past Exam Ready!", "success");
 
-        } else {
-             // 🛡️ FIREBASE PLAN A ONLY: If data is missing here IT IS MISSING from the cloud.
-             updateSyncStatus("Error: No Master Data Found in Firebase", "error");
+                   } else {
+             // 🛡️ SMART FALLBACK: Search older Firebase locations before giving up
+             console.log("⚠️ V2 Session Students empty. Checking original session document...");
+             updateSyncStatus("Checking Session Archive...", "neutral");
+             
+             const { getDoc, doc, db } = window.firebase;
+             const baseDoc = await getDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionIdStr));
+             
+             if (baseDoc.exists() && baseDoc.data().students) {
+                 const students = baseDoc.data().students;
+                 allStudentData = [...allStudentData, ...students];
+                 await saveExamDataIDB(allStudentData);
+                 updateSyncStatus("Restored from Legacy V2!", "success");
+                 return;
+             }
+
+             // LAST STAND: Check V1 Chunks
+             console.log("⚠️ Still empty. Checking V1 Chunks...");
+             const chunksRef = collection(db, "colleges", currentCollegeId, "data");
+             const q = query(chunksRef, orderBy("index"));
+             const chunkSnap = await getDocs(q);
+             
+             if (!chunkSnap.empty) {
+                 let fullPayload = "";
+                 chunkSnap.forEach(d => { if(d.id.startsWith("chunk_")) fullPayload += d.data().payload; });
+                 if (fullPayload) {
+                     const bulkData = JSON.parse(fullPayload);
+                     if (bulkData.examBaseData) {
+                         const students = JSON.parse(bulkData.examBaseData);
+                         allStudentData = [...allStudentData, ...students];
+                         await saveExamDataIDB(allStudentData);
+                         updateSyncStatus("Restored from V1 Archive!", "success");
+                         return;
+                     }
+                 }
+             }
+
+             updateSyncStatus("No Master Data Found in Firebase", "error");
         }
+
 
 
     } catch (e) {
