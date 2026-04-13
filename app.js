@@ -1990,8 +1990,10 @@ async function deleteSessionFromCloud(sessionKey) {
                     examSessionNames: get('examSessionNames'),
                     examRulesConfig: get('examRulesConfig'),
                     examRemunerationConfig: get('examRemunerationConfig'),
+                    examAllKnownSessions: get('examAllKnownSessions'),
                     lastUpdated: timestamp
                 };
+
                 
                 await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
 
@@ -2013,13 +2015,16 @@ async function deleteSessionFromCloud(sessionKey) {
             }
 
 
-            // 3. ALLOCATION (Scribes)
+            // 3. ALLOCATION (Scribes + Room Allotments)
             else if (targetSection === 'allocation') {
                 const data = {
                     examScribeList: get('examScribeList'),
-                    examScribeAllotment: get('examScribeAllotment')
+                    examScribeAllotment: get('examScribeAllotment'),
+                    examScribeAllotmentV2: get('examScribeAllotmentV2'),
+                    examAllotmentData: get('examAllotmentData')
                 };
                 await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
+
                          // 🚫 DELETED: Shadow Mirror to GAS
             }
 
