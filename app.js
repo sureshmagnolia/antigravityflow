@@ -253,15 +253,68 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
-        if (typeof syncDataToCloud === 'function') {
+         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('slots');
         }
-        console.log(`🧹 Maintenance: Cleaned up ${deletedCount} records older than 30 days.`);
+        console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
     } else {
+        console.log("✅ [System] Local Data is clean.");
+    }
 
-        console.log("✅ [System] Data is clean. No old records found.");
+    // 4. ☁️ TRUE CLOUD PURGE: Destroy 30-day old Seating & Sessions from Firebase
+    if (window.firebase && window.currentCollegeId && navigator.onLine) {
+        try {
+            const { db, doc, getDoc, setDoc, deleteDoc } = window.firebase;
+            const indexRef = doc(db, 'public_seating', window.currentCollegeId);
+            const indexSnap = await getDoc(indexRef);
+            
+            if (indexSnap.exists()) {
+                const data = indexSnap.data();
+                const sessions = data.sessions || {};
+                let indexModified = false;
+                let cloudPurgeCount = 0;
+
+                for (const [sessionKey, sInfo] of Object.entries(sessions)) {
+                    const dateStr = sessionKey.split(' | ')[0].trim();
+                    let sessionDate;
+                    if (dateStr.includes('.')) {
+                        const [d, m, y] = dateStr.split('.');
+                        sessionDate = new Date(`${y}-${m}-${d}`);
+                    } else {
+                        sessionDate = new Date(dateStr);
+                    }
+                    sessionDate.setHours(0, 0, 0, 0);
+
+                    // If exam is strictly older than 30 days
+                    if (sessionDate < cutoffDate) {
+                        console.log(`🔥 Auto-Incinerating 30-Day Old Cloud Session: ${sessionKey}`);
+                        
+                        // 1. Delete the heavy public seating chunk
+                        if (sInfo.docId) {
+                            await deleteDoc(doc(db, 'public_seating', sInfo.docId));
+                        }
+                        
+                        // 2. Delete the main admin session document
+                        await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', sessionKey));
+
+                        // 3. Remove from public index tracker
+                        delete sessions[sessionKey];
+                        indexModified = true;
+                        cloudPurgeCount++;
+                    }
+                }
+
+                if (indexModified) {
+                    await setDoc(indexRef, data); // Resave the cleaned index
+                    console.log(`🧹 Cloud Maintenance: Permanently deleted ${cloudPurgeCount} expired sessions from Firebase to save costs.`);
+                }
+            }
+        } catch (e) {
+            console.error("Cloud purge error during maintenance:", e);
+        }
     }
 }
+
 
 
 // Smart Trigger (Safe to be at the top)
