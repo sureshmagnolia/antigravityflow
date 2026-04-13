@@ -1183,40 +1183,32 @@ async function updateLocalSlotsFromStudents() {
                 if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
             }
 
-            // --- ☁️ STORAGE MODE (New Stabilization) ---
+                    // --- ☁️ STORAGE MODE (New Stabilization) ---
             try {
                 const { storage, ref, getDownloadURL } = window.firebase;
-                updateSyncStatus("Checking Storage...", "neutral");
+                updateSyncStatus("Checking Firebase Storage...", "neutral");
                 const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
                 const url = await getDownloadURL(storageRef);
                 const response = await fetch(url);
                 const students = await response.json();
+                
                 if (students && students.length > 0) {
                     allStudentData = students;
                     await saveExamDataIDB(students);
                     updateSyncStatus("Synced (Storage)", "success");
+                    
+                    // Rebuild Metadata Registry for Dropdowns
+                    const sessions = new Set(students.map(s => `${s.Date} | ${s.Time}`));
+                    localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                    
+                    // Bootstrap UI (Prevents timeout and populates dropdowns)
+                    loadInitialData();
+                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+
                     return; 
                 }
             } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
 
-
-            // --- [NEW] TRY FIREBASE STORAGE FIRST (Stable Master List) ---
-            try {
-                const { storage, ref, getDownloadURL } = window.firebase;
-                updateSyncStatus("Downloading Master File...", "neutral");
-                const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
-                const url = await getDownloadURL(storageRef);
-                const response = await fetch(url);
-                const students = await response.json();
-                if (students && students.length > 0) {
-                    allStudentData = students;
-                    await saveExamDataIDB(students);
-                    updateSyncStatus("Synced (Storage)", "success");
-                    return; // Successfully loaded from stable storage
-                }
-            } catch (e) {
-                console.warn("⚠️ Storage Master Data not found or unreachable. Trying fallbacks...", e);
-            }
 
             
             // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
@@ -1394,7 +1386,7 @@ async function updateLocalSlotsFromStudents() {
                             allStudentData = parsedStudents; // <-- Hydrate Memory
                             await saveExamDataIDB(parsedStudents);
                             
-                            // <-- Rebuild Metadata Registry for Dropdowns
+                            // <-- 
                             const sessions = new Set(parsedStudents.map(s => `${s.Date} | ${s.Time}`));
                             localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
                         }
