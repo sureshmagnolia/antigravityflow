@@ -15648,25 +15648,122 @@ if (btnSessionReschedule) {
                });
     }
 
+// --- BATCH ARCHIVE: View State Control ---
+window.archiveModalViewMode = 'sessions'; // 'sessions' or 'exams'
+
+window.switchArchiveView = function(mode) {
+    window.archiveModalViewMode = mode;
+    const btnSessions = document.getElementById('btn-archive-view-sessions');
+    const btnExams = document.getElementById('btn-archive-view-exams');
+    
+    if (mode === 'sessions') {
+        btnSessions.className = "flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 bg-indigo-50/50 transition";
+        btnExams.className = "flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-gray-500 hover:bg-gray-50 transition";
+    } else {
+        btnExams.className = "flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-indigo-600 text-indigo-600 bg-indigo-50/50 transition";
+        btnSessions.className = "flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-gray-500 hover:bg-gray-50 transition";
+    }
+    
+    // Re-render the list
+    window.renderBatchArchiveList();
+};
+
+window.renderBatchArchiveList = function() {
+    const listDiv = document.getElementById('batch-archive-checkbox-list');
+    if (!listDiv) return;
+    
+    const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+    
+    if (window.archiveModalViewMode === 'sessions') {
+        // --- 1. RENDER INDIVIDUAL SESSIONS ---
+        known.sort((a, b) => {
+            try {
+                const partsA = a.split(' | ')[0].split('.');
+                const partsB = b.split(' | ')[0].split('.');
+                const dateA = parseInt((partsA[2]||"").substring(0,4) + (partsA[1]||"").padStart(2,'0') + (partsA[0]||"").padStart(2,'0'));
+                const dateB = parseInt((partsB[2]||"").substring(0,4) + (partsB[1]||"").padStart(2,'0') + (partsB[0]||"").padStart(2,'0'));
+                return (dateB || 0) - (dateA || 0);
+            } catch(e) { return 0; }
+        });
+
+        listDiv.innerHTML = known.filter(sk => sk).map(sk => `
+            <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
+                <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                <div class="flex flex-col">
+                    <span class="text-xs font-bold text-gray-700">${sk}</span>
+                    <span class="text-[10px] text-gray-400 font-medium">${getExamName(sk.split(' | ')[0], sk.split(' | ')[1], 'Regular') || 'Untitled Exam'}</span>
+                </div>
+            </label>
+        `).join('');
+    } else {
+        // --- 2. RENDER BY EXAM NAME ---
+        const examMap = {};
+        known.forEach(sk => {
+            const [date, time] = sk.split(' | ');
+            if (date && time) {
+                // Check multiple streams to find the name
+                const name = getExamName(date.trim(), time.trim(), 'Regular') 
+                          || getExamName(date.trim(), time.trim(), 'EDE') 
+                          || 'Untitled Exams';
+                if (!examMap[name]) examMap[name] = [];
+                examMap[name].push(sk);
+            }
+        });
+
+        const sortedNames = Object.keys(examMap).sort();
+        if (sortedNames.length === 0) {
+            listDiv.innerHTML = `<p class="text-xs text-gray-500 italic p-4 text-center">No tagged exam names found.</p>`;
+            return;
+        }
+
+        listDiv.innerHTML = sortedNames.map(name => `
+            <label class="flex items-center justify-between gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-blue-50 cursor-pointer transition">
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" value="EXAM_GROUP::${name}" class="archive-session-cb w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <div class="flex flex-col">
+                        <span class="text-sm font-black text-indigo-900 uppercase">${name}</span>
+                        <span class="text-[10px] text-gray-400 font-bold">${examMap[name].length} Sessions grouped</span>
+                    </div>
+                </div>
+                <div class="shrink-0 bg-gray-100 px-2 py-1 rounded text-[10px] font-bold text-gray-500 italic">Exam Tag</div>
+            </label>
+        `).join('');
+    }
+};
+
 window.generateBatchArchive = async function() {
-    const checked = Array.from(document.querySelectorAll('.archive-session-cb:checked')).map(cb => cb.value);
-    if (checked.length === 0) return alert("Select at least one session to archive.");
+    const rawChecked = Array.from(document.querySelectorAll('.archive-session-cb:checked')).map(cb => cb.value);
+    if (rawChecked.length === 0) return alert("Select at least one option to archive.");
 
     const btn = document.querySelector('#batch-archive-modal button.bg-indigo-600');
     const origText = btn.innerHTML;
     btn.innerHTML = 'Bundling Data... Please wait';
     btn.disabled = true;
-
-    // Allow UI to update
     await new Promise(r => setTimeout(r, 100));
 
+    // --- STEP 1: RESOLVE GROUPS ---
+    const finalSessionSet = new Set();
+    const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+    
+    rawChecked.forEach(val => {
+        if (val.startsWith('EXAM_GROUP::')) {
+            const targetName = val.replace('EXAM_GROUP::', '');
+            known.forEach(sk => {
+                const [d, t] = sk.split(' | ');
+                const name = getExamName(d.trim(), t.trim(), 'Regular') || getExamName(d.trim(), t.trim(), 'EDE');
+                if (name === targetName) finalSessionSet.add(sk);
+            });
+        } else {
+            finalSessionSet.add(val);
+        }
+    });
+
+    const checked = Array.from(finalSessionSet);
     let allArchiveData = [];
     const collegeName = localStorage.getItem('collegeName') || 'ExamFlow Project';
 
-    // Use the globally loaded data. If not yet ready, read fresh from IDB
     let sourceStudentData = allStudentData;
     if (!sourceStudentData || sourceStudentData.length === 0) {
-        console.warn("⚠️ Archive: allStudentData empty, reading fresh from IDB...");
         sourceStudentData = await loadExamDataIDB() || [];
     }
     
@@ -15871,7 +15968,7 @@ window.generateBatchArchive = async function() {
         render();
     <\/script>
 </body>
-</html>`;
+</html>\`;
 
     const blob = new Blob([htmlBlob], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -15889,67 +15986,23 @@ window.generateBatchArchive = async function() {
     closeBatchArchiveModal();
 };
 
-
-
-
-    
-     
- // =======================================================
-// 📦 BATCH ARCHIVE MODAL — GLOBAL SCOPE (always available)
-// These are defined outside DOMContentLoaded and attached to window
-// to guarantee availability even if earlier script code errors.
-// =======================================================
 window.openBatchArchiveModal = function() {
     console.log("🔔 Archive Modal: 'openBatchArchiveModal' triggered.");
     try {
-        const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        console.log(`📊 Archive Modal: Found ${known.length} total sessions in localStorage.`);
-        
-        const listDiv = document.getElementById('batch-archive-checkbox-list');
-        if (!listDiv) {
-            console.error("❌ Archive Modal: Element '#batch-archive-checkbox-list' not found!");
-            alert("Error: UI container missing. Please refresh the page.");
-            return;
-        }
-
-        if (!Array.isArray(known) || known.length === 0) {
-            console.warn("⚠️ Archive Modal: Session list is empty.");
-            listDiv.innerHTML = `<p class="text-sm text-gray-500 italic p-4 text-center">No sessions available to archive.</p>`;
-        } else {
-            known.sort((a, b) => {
-                try {
-                    if (!a || !b || typeof a !== 'string' || typeof b !== 'string') return 0;
-                    const partsA = a.split(' | ')[0].split('.');
-                    const partsB = b.split(' | ')[0].split('.');
-                    const dateA = parseInt((partsA[2] || "").substring(0,4) + (partsA[1] || "").padStart(2,'0') + (partsA[0] || "").padStart(2,'0'));
-                    const dateB = parseInt((partsB[2] || "").substring(0,4) + (partsB[1] || "").padStart(2,'0') + (partsB[0] || "").padStart(2,'0'));
-                    return (dateB || 0) - (dateA || 0);
-                } catch(e) { return 0; }
-            });
-
-            console.log("🛠 Archive Modal: Populating checkbox list...");
-            listDiv.innerHTML = known.filter(sk => sk).map(sk => `
-                <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
-                    <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                    <span class="text-sm font-bold text-gray-700">${sk}</span>
-                </label>
-            `).join('');
-        }
-
         const modal = document.getElementById('batch-archive-modal');
-        if (modal) {
-            console.log("✨ Archive Modal: Extracting from DOM trap and forcing visibility...");
-            document.body.appendChild(modal); // This rips the modal out of any broken layout traps
-            modal.classList.remove('hidden');
-            modal.style.setProperty('display', 'flex', 'important'); // Force flex with priority
-        } else {
+        if (!modal) return alert("Archive modal not found in DOM");
 
+        // Force visibility
+        document.body.appendChild(modal);
+        modal.classList.remove('hidden');
+        modal.style.setProperty('display', 'flex', 'important');
+        
+        // Render initial view
+        window.archiveModalViewMode = 'sessions';
+        window.switchArchiveView('sessions');
 
-            console.error("❌ Archive Modal: Element '#batch-archive-modal' not found in DOM!");
-            alert("Critical Error: Modal UI not found. Check if index.html was updated correctly.");
-        }
     } catch (error) {
-        console.error("🔥 Archive Modal: UNCAUGHT ERROR:", error);
+        console.error("🔥 Archive Modal Error:", error);
         alert("Error opening archive modal: " + error.message);
     }
 };
@@ -15957,11 +16010,9 @@ window.openBatchArchiveModal = function() {
 window.closeBatchArchiveModal = function() {
     console.log("🚪 Archive Modal: Closing...");
     const modal = document.getElementById('batch-archive-modal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.style.setProperty('display', 'none', 'important');
-    }
+    if (modal) modal.classList.add('hidden');
 };
+
 
 
 window.toggleAllArchiveCheckboxes = function(check) {
