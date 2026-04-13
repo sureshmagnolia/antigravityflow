@@ -5052,25 +5052,37 @@ function getExamName(date, time, stream) {
             });
             if (currentVal) dateSelect.value = currentVal;
 
-            // --- ☁️ ASYNC CLOUD STORAGE SCANNER (Bypasses Firestore Metadata) ---
+                       // --- ☁️ ASYNC CLOUD STORAGE SCANNER (Bypasses Firestore Metadata) ---
             if (window.firebase && window.currentCollegeId && navigator.onLine) {
+                console.log("🔍 [Storage Scanner] Running for college:", window.currentCollegeId);
                 const { storage, ref, listAll } = window.firebase;
                 const storageFolderRef = ref(storage, `historical_sessions/${window.currentCollegeId}/`);
                 
                 listAll(storageFolderRef).then(fileList => {
                     let newDatesAdded = false;
+                    console.log(`🔍 [Storage Scanner] Found ${fileList.items.length} files.`);
+                    
                     fileList.items.forEach(itemRef => {
                         const fileName = itemRef.name;
                         if (fileName && fileName.endsWith('.json')) {
                             const dateStr = fileName.replace('.json', '');
-                            // If this date isn't already in the dropdown, add it dynamically!
+                            
+                            // If this date isn't already in the dropdown, add it!
                             if (!uniqueDaysSet.has(dateStr)) {
                                 uniqueDaysSet.add(dateStr);
                                 const option = document.createElement('option');
                                 option.value = dateStr;
                                 option.textContent = dateStr + " (Archived)";
+                                option.style.color = "blue"; // Make it highly visible for diagnostic
                                 dateSelect.appendChild(option);
                                 newDatesAdded = true;
+                                console.log(`➕ Added archived date to dropdown: ${dateStr}`);
+                            } else {
+                                // If it ALREADY exists natively in local DB, alter text to show it's in cloud too!
+                                const existingMatch = Array.from(dateSelect.options).find(o => o.value === dateStr);
+                                if (existingMatch && !existingMatch.textContent.includes('(Archived)')) {
+                                     existingMatch.textContent = dateStr + " (Local & Archived)";
+                                }
                             }
                         }
                     });
@@ -5087,8 +5099,12 @@ function getExamName(date, time, stream) {
                         allOptions.forEach(opt => dateSelect.appendChild(opt));
                         if(currentVal) dateSelect.value = currentVal;
                     }
+                    console.log("🔍 [Storage Scanner] Finished DOM updates.");
                 }).catch(e => console.warn("Cloud archive scan missing or empty:", e));
+            } else {
+                console.warn("🔍 [Storage Scanner] Blocked initially. College ID missing?", !window.currentCollegeId);
             }
+
             // -------------------------------------------------------------------
 
                         dateSelect.onchange = async (e) => {
