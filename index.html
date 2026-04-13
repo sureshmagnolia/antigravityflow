@@ -31,7 +31,7 @@
 
 
     // --- ADD THIS IMPORT ---
-    import { getStorage, ref, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+    import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyBu1CD5Kv55e0avayUUyAbDFC_ek4lEgJM",
@@ -61,7 +61,7 @@
         addDoc, updateDoc, arrayUnion, arrayRemove,
         onSnapshot, writeBatch,
         // --- EXPOSE STORAGE METHODS ---
-        ref, uploadString, getDownloadURL
+        ref, uploadString, getDownloadURL, deleteObject
     };
     console.log("Firebase Initialized (Storage Added)");
 </script>
