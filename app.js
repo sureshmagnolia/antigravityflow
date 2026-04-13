@@ -15756,7 +15756,7 @@ window.generateBatchArchive = async function() {
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 no-print">
             <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm">
                 <span class="text-xs font-bold text-indigo-500 uppercase tracking-widest">Sessions included</span>
-                <p class="text-3xl font-black text-indigo-900">\${checked.length}</p>
+               <p class="text-3xl font-black text-indigo-900">\${checked.length}</p>
             </div>
             <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
                 <span class="text-xs font-bold text-blue-500 uppercase tracking-widest">Total Students</span>
