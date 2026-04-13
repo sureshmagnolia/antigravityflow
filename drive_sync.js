@@ -561,11 +561,17 @@ window.ExamCloudCache = {
             const students = Array.isArray(datePackage) ? datePackage : (datePackage.students || []);
 
             // Merge only the student records into IDB (allotments stay in memory only)
+            // Historical records are tagged with a TTL so they can be evicted after 7 days
             const existingCache = await loadExamDataIDB();
             const getKey = r => `${r.Date||''}|${r.Time||''}|${r['Register Number']||''}`.toUpperCase();
             const existingKeys = new Set(existingCache.map(getKey));
-            const newOnly = students.filter(r => !existingKeys.has(getKey(r)));
+            const thawedAt = new Date().toISOString();
+            const newOnly = students.filter(r => !existingKeys.has(getKey(r))).map(r => ({
+                ...r,
+                _thawedAt: thawedAt  // Tag as cold-thawed for future eviction
+            }));
             await saveExamDataIDB([...existingCache, ...newOnly], true);
+
 
             // Store the full historical context in memory (NOT in localStorage)
             // This lets the UI read allotments for this date without touching current data
