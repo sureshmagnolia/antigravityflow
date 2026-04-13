@@ -15693,10 +15693,12 @@ window.openBatchArchiveModal = function() {
 
         const modal = document.getElementById('batch-archive-modal');
         if (modal) {
-            console.log("✨ Archive Modal: Forcing visibility...");
+            console.log("✨ Archive Modal: Extracting from DOM trap and forcing visibility...");
+            document.body.appendChild(modal); // This rips the modal out of any broken layout traps
             modal.classList.remove('hidden');
             modal.style.setProperty('display', 'flex', 'important'); // Force flex with priority
         } else {
+
 
             console.error("❌ Archive Modal: Element '#batch-archive-modal' not found in DOM!");
             alert("Critical Error: Modal UI not found. Check if index.html was updated correctly.");
