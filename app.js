@@ -15648,7 +15648,6 @@ if (btnSessionReschedule) {
                });
     }
 
-// --- Batch Archive Integration ---
 window.generateBatchArchive = async function() {
     const checked = Array.from(document.querySelectorAll('.archive-session-cb:checked')).map(cb => cb.value);
     if (checked.length === 0) return alert("Select at least one session to archive.");
@@ -15672,8 +15671,14 @@ window.generateBatchArchive = async function() {
     }
     
     checked.forEach(sessionKey => {
-        const [date, time] = sessionKey.split(' | ');
-        const students = sourceStudentData.filter(s => s.Date === date.trim() && s.Time === time.trim());
+        const [datePart, timePart] = sessionKey.split(' | ');
+        const targetDate = (datePart || "").trim();
+        const targetTime = (timePart || "").trim();
+        
+        const students = sourceStudentData.filter(s => 
+            (s.Date || "").trim() === targetDate && 
+            (s.Time || "").trim() === targetTime
+        );
 
         const rooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}')[sessionKey] || {};
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
@@ -15724,7 +15729,7 @@ window.generateBatchArchive = async function() {
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @media print { .no-print { display: none !important; } }
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background: #f9fafb; padding: 20px; }
         @media (max-width: 640px) {
             table thead { display: none; }
             table tr { display: block; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; padding: 8px; background: white; }
@@ -15733,40 +15738,34 @@ window.generateBatchArchive = async function() {
         }
     </style>
 </head>
-<body class="bg-gray-50 p-4 sm:p-6 min-h-screen">
+<body class="p-4 sm:p-6">
     <div class="max-w-[90rem] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
         <div class="flex flex-col sm:flex-row justify-between items-start border-b pb-6 mb-6 gap-4">
             <div>
-                <h1 class="text-3xl font-black text-indigo-900 uppercase">\${collegeName}</h1>
+                <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
                 <p class="text-sm font-bold text-gray-500">EXAM BATCH ARCHIVE DATABASE</p>
-                <p class="text-xs text-gray-400 mt-1">Generated on: \${new Date().toLocaleString()}</p>
+                <p class="text-xs text-gray-400 mt-1">Generated on: ${new Date().toLocaleString()}</p>
             </div>
             <div class="flex gap-2">
-                <button onclick="downloadCSV()" class="no-print bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-green-800 transition flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    CSV
-                </button>
-                <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-                    Print
-                </button>
+                <button onclick="downloadCSV()" class="no-print bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-green-800 transition flex items-center gap-2">CSV</button>
+                <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">Print</button>
             </div>
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 no-print">
-            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm text-center sm:text-left">
+            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm">
                 <span class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Sessions</span>
-                <p class="text-2xl font-black text-indigo-900">\${checked.length}</p>
+                <p class="text-2xl font-black text-indigo-900">${checked.length}</p>
             </div>
-            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm text-center sm:text-left">
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
                 <span class="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Total</span>
-                <p id="stat-total" class="text-2xl font-black text-blue-900">\${allArchiveData.length}</p>
+                <p id="stat-total" class="text-2xl font-black text-blue-900">${allArchiveData.length}</p>
             </div>
-            <div class="p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm text-center sm:text-left">
+            <div class="p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
                 <span class="text-[10px] font-bold text-green-500 uppercase tracking-widest">Present</span>
                 <p id="stat-present" class="text-2xl font-black text-green-900">0</p>
             </div>
-            <div class="p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm text-center sm:text-left">
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm">
                 <span class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Absent</span>
                 <p id="stat-absent" class="text-2xl font-black text-red-900">0</p>
             </div>
@@ -15777,7 +15776,7 @@ window.generateBatchArchive = async function() {
                 class="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm transition">
             <select id="sessionFilter" class="w-full md:w-64 p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm font-bold text-indigo-900 bg-white">
                 <option value="">All Sessions</option>
-                \${checked.map(sk => \`<option value="\${sk}">\${sk}</option>\`).join('')}
+                ${checked.map(sk => `<option value="${sk}">${sk}</option>`).join('')}
             </select>
         </div>
 
@@ -15803,7 +15802,7 @@ window.generateBatchArchive = async function() {
     </div>
 
     <script>
-        const data = \${JSON.stringify(allArchiveData)};
+        const data = ${JSON.stringify(allArchiveData)};
         const tbody = document.getElementById('tableBody');
         const searchInput = document.getElementById('searchInput');
         const sessionFilter = document.getElementById('sessionFilter');
@@ -15872,7 +15871,7 @@ window.generateBatchArchive = async function() {
         render();
     <\/script>
 </body>
-</html>`;
+</html>\`;
 
     const blob = new Blob([htmlBlob], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -15889,6 +15888,7 @@ window.generateBatchArchive = async function() {
     btn.disabled = false;
     closeBatchArchiveModal();
 };
+
 
 
     
