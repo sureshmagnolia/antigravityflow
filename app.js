@@ -16725,10 +16725,18 @@ window.toggleAllArchiveCheckboxes = function(check) {
             
             updateSyncStatus("Saving...", "neutral");
             if (typeof syncDataToCloud === 'function') {
+                // 📡 DUAL-SYNC FIX: Update BOTH the master staff list and the session record
+                // This prevents the refresh listener from overwriting with empty data.
                 await syncDataToCloud('staff');
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(sessionKey);
+                    console.log(`✅ Dual-Sync successful for session: ${sessionKey}`);
+                }
             }
             
             renderInvigilationPanel();
+
+            
             updateSyncStatus("Saved", "success");
             alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
