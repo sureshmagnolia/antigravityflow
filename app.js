@@ -15692,7 +15692,8 @@ window.generateBatchArchive = async function() {
                             studentMap[regNo] = { 
                                 room: roomName, 
                                 seat: idx + 1, 
-                                invigilator: invigilators[roomName] || 'Not Assigned' 
+                                invigilator: invigilators[roomName] || 'Not Assigned',
+                                stream: roomObj.stream || 'Regular'
                             };
                         });
                     }
@@ -15726,6 +15727,7 @@ window.generateBatchArchive = async function() {
                     seat: studentMap[regNo]?.seat || '-',
                     invigilator: studentMap[regNo]?.invigilator || '-',
                     qpCode: qpMap[s.Course] || 'N/A',
+                    stream: studentMap[regNo]?.stream || 'Regular',
                     status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
                 });
             });
@@ -15799,6 +15801,7 @@ window.generateBatchArchive = async function() {
                         <th class="p-3">Register No.</th>
                         <th class="p-3">Student Name</th>
                         <th class="p-3">Hall & Seat</th>
+                        <th class="p-3">Stream</th>
                         <th class="p-3">Invigilator</th>
                         <th class="p-3">Status</th>
                     </tr>
@@ -15852,7 +15855,9 @@ window.generateBatchArchive = async function() {
                             <span class="inline-block bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded text-xs border border-gray-300 shadow-sm">\${s.room}</span>
                             <span class="text-xs text-gray-500 font-medium ml-1">#\${s.seat}</span>
                         </td>
+                        <td class="p-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">\${s.stream}</span></td>
                         <td class="p-3 text-xs italic text-gray-600">\${s.invigilator}</td>
+
                         <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-bold shadow-sm \${s.status === 'ABSENT' ? 'bg-red-600 text-white' : 'bg-green-100 text-green-800 border border-green-200'}">\${s.status}</span></td>
                     </tr>
                 \`).join('');
