@@ -1434,8 +1434,25 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 };
 
 
-        fetchHeavyData();
+    await fetchHeavyData();
+        
+        // --- NEW: Automatic Cloud Healing (Plan A Sync) ---
+        if (window.currentCollegeId && navigator.onLine) {
+            const hasLocalData = (await loadExamDataIDB() || []).length > 0;
+            const isV2Missing = localStorage.getItem('lastBaseDataSync') === null;
+            const needsRestoreSync = localStorage.getItem('pendingDriveRestoreSync') === 'true';
+
+            if (hasLocalData && (isV2Missing || needsRestoreSync)) {
+                console.log("🚀 Automatic Plan A Sync Triggered: Populating Firebase Chunks...");
+                // Run in background without blocking the UI
+                syncDataToCloud('baseData').then(() => {
+                    localStorage.setItem('lastBaseDataSync', new Date().toISOString());
+                    localStorage.removeItem('pendingDriveRestoreSync');
+                });
+            }
+        }
     }
+
 
 
 // ⚡ ON-DEMAND PAST EXAM FETCH ENGINE
