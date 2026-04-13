@@ -15691,12 +15691,13 @@ window.openBatchArchiveModal = function() {
             `).join('');
         }
 
-           const modal = document.getElementById('batch-archive-modal');
+        const modal = document.getElementById('batch-archive-modal');
         if (modal) {
             console.log("✨ Archive Modal: Forcing visibility...");
             modal.classList.remove('hidden');
-            modal.style.display = 'flex'; // Force display flex just in case
+            modal.style.setProperty('display', 'flex', 'important'); // Force flex with priority
         } else {
+
             console.error("❌ Archive Modal: Element '#batch-archive-modal' not found in DOM!");
             alert("Critical Error: Modal UI not found. Check if index.html was updated correctly.");
         }
@@ -15709,8 +15710,12 @@ window.openBatchArchiveModal = function() {
 window.closeBatchArchiveModal = function() {
     console.log("🚪 Archive Modal: Closing...");
     const modal = document.getElementById('batch-archive-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.setProperty('display', 'none', 'important');
+    }
 };
+
 
 window.toggleAllArchiveCheckboxes = function(check) {
     console.log(`🔘 Archive Modal: Toggling all checkboxes to [${check}]`);
