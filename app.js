@@ -5029,7 +5029,11 @@ function getExamName(date, time, stream) {
         }
 
         // --- 4. POPULATE SMART DATE DROPDOWN ---
-        const uniqueDaysSet = new Set(allStudentData.map(s => s.Date));
+        // Include both local dates AND known historical dates from archive
+        const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+        const historicalDates = Object.keys(historicalMeta).map(key => key.split(' | ')[0].trim());
+        const uniqueDaysSet = new Set([...allStudentData.map(s => s.Date), ...historicalDates]);
+
         const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
             const d1 = a.split('.').reverse().join('');
             const d2 = b.split('.').reverse().join('');
