@@ -4,8 +4,8 @@
 
 const BASE_DATA_KEY = 'examBaseData';
 
-// --- HYBRID CLOUD BACKEND CONSTANTS ---
-const HYBRID_GAS_URL = "https://script.google.com/macros/s/AKfycbzcyFanur8XRqDIW3ger-Y2iYgAowUGVnjU8nqePUwhvzRF48RgvfWVgiBlbVP9BXU/exec";
+// 🚫 DELETED: HYBRID_GAS_URL (Returning to Pure Firebase Architecture)
+
 
 
 // Fail-safe constants (Avoids conflict with drive_sync.js)
@@ -1669,24 +1669,8 @@ async function deleteSessionFromCloud(sessionKey) {
             // --- PLAN A: Primary Student Record in Firebase ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
 
-           const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
+                     // 🚫 DELETED: Shadow Mirror to GAS
 
-
-            fetch(HYBRID_GAS_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({
-                    token: secureToken,
-                    action: "saveHeavyData",
-
-
-                    filename: `session_${sessionId}.json`,
-                    payload: JSON.stringify({
-                        sessionData: sessionDoc,
-                        studentData: sessionStudentsDoc
-                    })
-                })
-            });
 
 
             updateSyncStatus("All Data Synced!", "success"); 
@@ -1893,21 +1877,7 @@ async function deleteSessionFromCloud(sessionKey) {
                         await setDoc(doc(db, "colleges", cid, "base_data_v2", `chunk_${i}`), chunkDoc);
                     }
 
-                    // --- Plan B: Background Shadow Mirror to Google Drive (GAS) ---
-                    console.log("☁️ Shadow backup routing to GAS in background...");
-                    const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                    fetch(HYBRID_GAS_URL, { 
-                        method: 'POST', 
-                        mode: 'no-cors', 
-                        body: JSON.stringify({ 
-                            token: secureToken, 
-                            action: "saveHeavyData", 
-                            filename: "examBaseData.json", 
-                            payload: studentString 
-                        }) 
-                    });
-                }
-            }
+                    // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
 
 
             
