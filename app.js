@@ -394,13 +394,14 @@ async function autoCleanPastGhostData() {
 document.addEventListener('DOMContentLoaded', () => {
     // Check every 500ms for app readiness
     const initCheck = setInterval(() => {
-        // We wait for a signal that the app is ready (e.g., syncDataToCloud exists)
-        if (typeof syncDataToCloud === 'function' && window.firebase) {
+        // 🔒 WAIT FOR COLLEGE ID: Ensure Auth is finished before cleaning Firebase
+        if (typeof syncDataToCloud === 'function' && window.firebase && window.currentCollegeId) {
             clearInterval(initCheck);
             autoCleanPastGhostData();
         }
     }, 500);
 });
+
 // ==========================================
 
 
