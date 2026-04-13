@@ -1389,8 +1389,15 @@ async function updateLocalSlotsFromStudents() {
                     if (fullPayload) {
                         const bulkData = JSON.parse(fullPayload);
                         if (bulkData['examRoomAllotment']) localStorage.setItem('examRoomAllotment', bulkData['examRoomAllotment']);
-                        if (bulkData['examBaseData']) await saveExamDataIDB(JSON.parse(bulkData['examBaseData']
-                    ));
+                        if (bulkData['examBaseData']) {
+                            const parsedStudents = JSON.parse(bulkData['examBaseData']);
+                            allStudentData = parsedStudents; // <-- Hydrate Memory
+                            await saveExamDataIDB(parsedStudents);
+                            
+                            // <-- Rebuild Metadata Registry for Dropdowns
+                            const sessions = new Set(parsedStudents.map(s => `${s.Date} | ${s.Time}`));
+                            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                        }
 
                         updateSyncStatus("Synced (V1)", "success");
                     } else {
