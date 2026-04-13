@@ -125,9 +125,13 @@
 
             const savedRegNo = localStorage.getItem('myExamRegNo');
                 if (savedRegNo) {
+                    // Populate the box with their saved number
                     document.getElementById('reg-input').value = savedRegNo;
+                    // 🚀 Auto-Trigger the search immediately upon load
+                    setTimeout(() => searchStudent(), 100);
                 }
             } catch (error) {
+
                 console.error("Load Error:", error);
                 statusEl.textContent = "Minimal mode active.";
             }
