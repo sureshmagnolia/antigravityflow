@@ -15968,7 +15968,7 @@ window.generateBatchArchive = async function() {
         render();
     <\/script>
 </body>
-</html>\`;
+</html>`;
 
     const blob = new Blob([htmlBlob], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
