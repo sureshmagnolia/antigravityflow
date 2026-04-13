@@ -1078,15 +1078,34 @@ async function updateLocalSlotsFromStudents() {
             if (!dataObj) return;
             const now = Date.now();
             Object.keys(dataObj).forEach(key => {
-                // GUARD: If we saved this key locally in the last 10 seconds, ignore the stale cloud update
+                const incoming = dataObj[key];
+                if (!incoming) return;
+
+                // GUARD: If we saved this key locally in the last 10 seconds, ignore stale updates
                 const lastLocalSave = localSyncPriority[key] || 0;
-                if (now - lastLocalSave < 10000) {
-                    console.warn(`🛡️ Sync Guard: Ignored stale cloud update for ${key} (Local priority active)`);
-                    return;
+                if (now - lastLocalSave < 10000) return;
+
+                // --- SMART MERGE LOGIC for Mapping Data ---
+                if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList') {
+                    try {
+                        const localRaw = localStorage.getItem(key) || '{}';
+                        const local = JSON.parse(localRaw);
+                        const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
+                        
+                        // Deep Merge: Combine both, preference for non-empty values
+                        const merged = { ...cloud, ...local };
+                        localStorage.setItem(key, JSON.stringify(merged));
+                        return;
+                    } catch (e) {
+                         console.error("Merge error for " + key, e);
+                    }
                 }
-                if (dataObj[key]) localStorage.setItem(key, dataObj[key]);
+
+                // Default: Direct sync for settings/simple strings
+                localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
             });
         };
+
 
         // 1. METADATA (Root Doc)
         cloudSyncUnsubscribe = onSnapshot(doc(db, "colleges", collegeId), (snap) => {
@@ -1714,11 +1733,19 @@ async function deleteSessionFromCloud(sessionKey) {
     async function syncDataToCloud(targetSection) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
-            console.warn("🚫 Ignored V1 'heavy' sync call. System is V2.");
+            console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
             return;
         }
 
-        if (!currentUser || !currentCollegeId || isSyncing) return;
+        if (!currentUser || !currentCollegeId) return;
+
+        // --- BUSY GUARD: If another sync is running, wait and retry once ---
+        if (isSyncing) {
+            console.log(`⏳ Sync Busy. Queueing ${targetSection}...`);
+            await new Promise(r => setTimeout(r, 2000));
+            if (isSyncing) return; // Still busy? Give up to avoid deadlock
+        }
+
         if (!navigator.onLine) return updateSyncStatus("Offline", "error");
 
 
