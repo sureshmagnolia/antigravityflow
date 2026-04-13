@@ -1434,7 +1434,8 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 };
 
 
-    await fetchHeavyData();
+       (async () => {
+        await fetchHeavyData();
         
         // --- NEW: Automatic Cloud Healing (Plan A Sync) ---
         if (window.currentCollegeId && navigator.onLine) {
@@ -1451,7 +1452,8 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
                 });
             }
         }
-    }
+    })();
+}
 
 
 
