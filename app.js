@@ -9282,6 +9282,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                    class="qp-code-input block w-1/3 p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 ${bgClass}" 
                    value="${savedCode}" 
                    data-course-key="${base64Key}"
+                   data-course="${item.course.replace(/"/g, '&quot;')}"
                    placeholder="QP Code"
                    ${disabledAttr}>
         </div>
@@ -19374,7 +19375,7 @@ window.downloadInvigilationListPDF = async function () {
                 }
 
                 if (courseCode && qpCode && qpCode !== courseCode) {
-                    parsed[courseCode] = qpCode;
+                    parsed[courseCode.trim()] = qpCode.trim();
                 }
             });
 
@@ -19392,11 +19393,14 @@ window.downloadInvigilationListPDF = async function () {
 
             let matched = 0;
             document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                const courseCode = input.dataset.course;
+                const courseCode = input.dataset.course.trim();
+                
+                // Exact Match First
                 if (parsed[courseCode]) {
                     input.value = parsed[courseCode];
                     matched++;
                 } else {
+                    // Smart Partial Match (handles university portal weirdness)
                     const matchKey = Object.keys(parsed).find(k => courseCode.includes(k) || k.includes(courseCode));
                     if (matchKey) {
                         input.value = parsed[matchKey];
@@ -19404,6 +19408,7 @@ window.downloadInvigilationListPDF = async function () {
                     }
                 }
             });
+
 
             if (matched > 0) {
                 document.getElementById('qp-code-status').textContent = `✅ ${matched} of ${count} QP codes imported from clipboard. Click Save QP Codes to confirm.`;
