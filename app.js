@@ -5425,7 +5425,7 @@ function getExamName(date, time, stream) {
     // V68: Helper function to filter data based on selected report filter
     // Helper function to filter data based on selected report filter
     function getFilteredReportData(reportType) {
-        const data = JSON.parse(jsonDataStore.innerHTML || '[]');
+        const data = allStudentData || [];
         if (data.length === 0) return [];
 
         let filteredData = data;
@@ -7661,7 +7661,7 @@ function getExamName(date, time, stream) {
             const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
             if (allScribeStudents.length === 0) { alert("No scribe students found."); return; }
 
-            const allDataRaw = JSON.parse(jsonDataStore.innerHTML || '[]');
+           const allDataRaw = allStudentData || [];
             const originalAllotments = performOriginalAllocation(allDataRaw);
             const originalRoomMap = originalAllotments.reduce((map, s) => {
                 const key = `${s.Date}|${s.Time}|${s['Register Number']}`;
@@ -8548,7 +8548,7 @@ async function parseCsvAndLoadData(csvText) {
 
 window.real_populate_session_dropdown = function () {
         try {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
             if (allStudentData.length === 0) {
                 disable_absentee_tab(true);
                 return;
@@ -8667,7 +8667,7 @@ window.real_populate_session_dropdown = function () {
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
         }
 
         sessionSelect.value = savedSession;
@@ -9096,7 +9096,7 @@ window.real_populate_session_dropdown = function () {
 window.real_populate_qp_code_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
-                allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+                // Removed legacy DOM array wipe
             }
             const knownRegistry_qp = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
             if (allStudentData.length === 0 && knownRegistry_qp.length === 0) {
@@ -9182,7 +9182,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
         }
 
         sessionSelectQP.value = savedSession;
@@ -10059,7 +10059,7 @@ window.real_populate_qp_code_session_dropdown = function () {
   window.real_populate_room_allotment_session_dropdown = function () {
         try {
             if (allStudentData.length === 0) {
-                allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+                // Removed legacy DOM array wipe
             }
             const knownRegistry_room = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
             if (allStudentData.length === 0 && knownRegistry_room.length === 0) {
@@ -10755,7 +10755,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
         }
 
         allotmentSessionSelect.value = savedSession;
@@ -11590,7 +11590,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
         }
 
         editSessionSelect.value = savedSession;
@@ -12968,7 +12968,7 @@ Are you sure you want to update these records?
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
-            allStudentData = JSON.parse(jsonDataStore.innerHTML || '[]');
+            // Removed legacy DOM array wipe
         }
 
         searchSessionSelect.value = savedSession;
