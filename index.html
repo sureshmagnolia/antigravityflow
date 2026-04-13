@@ -4031,20 +4031,59 @@
                             <input type="file" id="restore-file-input" accept=".json" class="hidden" />
                         </div>
                     </div>
-                                    <!-- === CLOUD HISTORY MIGRATION (Cloud Users Only) === -->
+
+
+                <!-- === CLOUD HISTORY MIGRATION (Cloud Users Only) === -->
                     <div id="cloud-migration-wrapper" class="hidden">
-                        <div class="mt-1 p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                        <div class="mt-1 p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
                             <h4 class="text-xs font-bold text-purple-700 uppercase tracking-wide mb-1 flex items-center gap-1">
-                                ☁️ Cloud History Migration
+                                ☁️ Cloud Archive Manager
                             </h4>
-                            <p class="text-[10px] text-purple-500 mb-2 leading-tight">Upload legacy JSON to offload historical data to Firebase Storage.</p>
-                            <input type="file" id="historical-json-upload" accept=".json" class="block w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 mb-2">
-                            <button onclick="window.startHistoricalMigration()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition">
-                                Upload to Cloud
+
+                            <!-- ONE-CLICK: Archive all past sessions from live data -->
+                            <p class="text-[10px] text-purple-500 leading-tight">Push all past sessions from your live database directly to Firebase Cold Storage.</p>
+                            <button onclick="window.archiveAllToCloud()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition">
+                                ☁️ Archive All Past Sessions to Cloud
+                            </button>
+
+                            <!-- DIVIDER -->
+                            <hr class="border-purple-200">
+
+                            <!-- DELETE FROM CLOUD -->
+                            <p class="text-[10px] text-red-500 leading-tight">Remove specific archived date files from Firebase Storage.</p>
+                            <button onclick="window.openCloudDeleteModal()" class="w-full bg-red-100 hover:bg-red-600 hover:text-white text-red-700 border border-red-300 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition">
+                                🗑️ Delete from Cloud Archive
+                            </button>
+
+                            <!-- DIVIDER -->
+                            <hr class="border-purple-200">
+
+                            <!-- LEGACY: Upload from JSON file -->
+                            <p class="text-[10px] text-gray-400 leading-tight">Legacy: Upload from a downloaded JSON backup file.</p>
+                            <input type="file" id="historical-json-upload" accept=".json" class="block w-full text-[10px] text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 mb-1">
+                            <button onclick="window.startHistoricalMigration()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm transition">
+                                Upload JSON to Cloud
                             </button>
                         </div>
                     </div>
+
+                    <!-- === CLOUD DELETE MODAL === -->
+                    <div id="cloud-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[99999] flex items-center justify-center p-4">
+                        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+                            <div class="bg-red-600 p-4 flex justify-between items-center">
+                                <h3 class="text-white font-bold text-sm">🗑️ Delete from Cloud Archive</h3>
+                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="text-white/70 hover:text-white font-bold text-xl">&times;</button>
+                            </div>
+                            <div id="cloud-delete-list" class="p-4 overflow-y-auto grow space-y-2 text-sm text-gray-500 italic">
+                                Loading...
+                            </div>
+                            <div class="p-3 border-t bg-gray-50 text-right">
+                                <button onclick="document.getElementById('cloud-delete-modal').classList.add('hidden')" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200">Close</button>
+                            </div>
+                        </div>
+                    </div>
                     <!-- ================================================= -->
+
 
                 </div>
             </div>
