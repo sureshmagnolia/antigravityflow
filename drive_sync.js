@@ -100,7 +100,8 @@ function restoreSession() {
             handleTokenResponse(resp);
         }
     };
-    tokenClient.requestAccessToken({ prompt: '' });
+    tokenClient.requestAccessToken({ prompt: 'consent', select_account: true });
+
 }
 
 function handleTokenResponse(resp) {
