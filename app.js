@@ -15876,38 +15876,6 @@ window.generateBatchArchive = async function() {
 </tr>
                 \`).join('');
 
-
-
-    <td data-label="Course" class="p-3 text-[11px] uppercase tracking-wide text-indigo-700 font-bold">\${s.course}</td>
-    <td data-label="QP" class="p-3 font-black text-rose-600">\${s.qpCode}</td>
-    <td data-label="Reg No" class="p-3 font-mono font-bold text-gray-900">\${s.regNo}</td>
-    <td data-label="Name" class="p-3 uppercase text-gray-800">\${s.name}</td>
-    <td data-label="Stream" class="p-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">\${s.stream}</span></td>
-    <td data-label="Hall & Seat" class="p-3"><span class="inline-block bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded text-xs border border-gray-300 shadow-sm">\${s.room}</span> <span class="text-xs text-gray-500 font-medium">#\${s.seat}</span></td>
-    <td data-label="Invigilator" class="p-3 text-xs italic text-gray-600">\${s.invigilator}</td>
-    <td data-label="Status" class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-bold shadow-sm \${s.status === 'ABSENT' ? 'bg-red-600 text-white' : 'bg-green-100 text-green-800 border border-green-200'}">\${s.status}</span></td>
-</tr>
-
-                        <td class="p-3 text-[11px] uppercase tracking-wide text-indigo-700 font-bold">\${s.course}</td>
-                        <td class="p-3 font-black text-rose-600">\${s.qpCode}</td>
-                        <td class="p-3 font-mono font-bold text-gray-900">\${s.regNo}</td>
-                        <td class="p-3 uppercase text-gray-800">\${s.name}</td>
-                        <td class="p-3">
-                            <span class="inline-block bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded text-xs border border-gray-300 shadow-sm">\${s.room}</span>
-                            <span class="text-xs text-gray-500 font-medium ml-1">#\${s.seat}</span>
-                        </td>
-                        <td class="p-3"><span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">\${s.stream}</span></td>
-                        <td class="p-3 text-xs italic text-gray-600">\${s.invigilator}</td>
-
-                        <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-bold shadow-sm \${s.status === 'ABSENT' ? 'bg-red-600 text-white' : 'bg-green-100 text-green-800 border border-green-200'}">\${s.status}</span></td>
-                    </tr>
-                \`).join('');
-            }
-        }
-
-        searchInput.addEventListener('input', render);
-        sessionFilter.addEventListener('change', render);
-
         function downloadCSV() {
             const headers = ['Session','Course','QP','Register No','Name','Stream','Room','Seat','Invigilator','Status'];
             const rows = data.map(s => [
