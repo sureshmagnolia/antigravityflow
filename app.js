@@ -1171,6 +1171,25 @@ async function updateLocalSlotsFromStudents() {
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
         const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
+
+            // --- [NEW] TRY FIREBASE STORAGE FIRST (Stable Master List) ---
+            try {
+                const { storage, ref, getDownloadURL } = window.firebase;
+                updateSyncStatus("Downloading Master File...", "neutral");
+                const storageRef = ref(storage, `colleges/${collegeId}/data/examBaseData.json`);
+                const url = await getDownloadURL(storageRef);
+                const response = await fetch(url);
+                const students = await response.json();
+                if (students && students.length > 0) {
+                    allStudentData = students;
+                    await saveExamDataIDB(students);
+                    updateSyncStatus("Synced (Storage)", "success");
+                    return; // Successfully loaded from stable storage
+                }
+            } catch (e) {
+                console.warn("⚠️ Storage Master Data not found or unreachable. Trying fallbacks...", e);
+            }
+
             
             // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
             if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
@@ -1880,28 +1899,21 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
             }
 
-        // 4. BASE DATA (Heavy Student Master List - Plan A: Firebase Chunks)
+                 // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
                 if (students && students.length > 0) {
-                    const studentString = JSON.stringify(students);
-                    const CHUNK_SIZE = 900000; // ~900KB chunks (safe under 1MB limit)
-                    const totalChunks = Math.ceil(studentString.length / CHUNK_SIZE);
+                    const { storage, ref, uploadString } = window.firebase;
+                    const storageRef = ref(storage, `colleges/${cid}/data/examBaseData.json`);
                     
-                    updateSyncStatus(`Mirroring to Firebase (${totalChunks} Chunks)...`, "neutral");
-                    
-                    for (let i = 0; i < totalChunks; i++) {
-                        const chunk = studentString.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-                        const chunkDoc = {
-                            index: i,
-                            total: totalChunks,
-                            payload: chunk,
-                            timestamp: timestamp
-                        };
-                        await setDoc(doc(db, "colleges", cid, "base_data_v2", `chunk_${i}`), chunkDoc);
-        }
+                    updateSyncStatus("Uploading Master File...", "neutral");
+                    await uploadString(storageRef, JSON.stringify(students), 'raw', {
+                        contentType: 'application/json'
+                    });
+                    console.log("📁 Master Data synced to Firebase Storage.");
                 }
             }
+
 
             // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
             updateSyncStatus("Saved", "success");
