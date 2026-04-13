@@ -5131,8 +5131,7 @@ function getExamName(date, time, stream) {
                 const existingNotice = document.getElementById('historical-context-notice');
                 if (existingNotice) existingNotice.remove();
 
-                if (histCtx && (Object.keys(histCtx.roomAllotment || {}).length > 0 || Object.keys(histCtx.invigilatorMapping || {}).length > 0)) {
-                    
+                if (histCtx) {
                     // 🔥 GLOBALLY INJECT THE HISTORICAL DATA SO ALL TABS SEE IT 🔥
                     if (histCtx.roomAllotment) {
                         const existingAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
@@ -5149,15 +5148,21 @@ function getExamName(date, time, stream) {
                         Object.assign(existingScribes, histCtx.scribeAllotment);
                         localStorage.setItem('examScribeAllotmentV2', JSON.stringify(existingScribes));
                     }
-                    
-                    // 🔄 REFRESH ALL SYSTEM DROPDOWNS IMMEDIATELY 🔄
-                    setTimeout(() => {
-                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-                        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
-                        if (typeof window.real_populate_room_allotment_session_dropdown === 'function') window.real_populate_room_allotment_session_dropdown();
-                    }, 150);
+                }
 
+                // 🔄 REFRESH ALL SYSTEM DROPDOWNS UNCONDITIONALLY 🔄
+                // We must do this even if histCtx is empty so the base student data appears!
+                setTimeout(() => {
+                    if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                    if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+                    if (typeof window.real_populate_room_allotment_session_dropdown === 'function') window.real_populate_room_allotment_session_dropdown();
+                    if (typeof renderDashboardInvigilation === 'function') renderDashboardInvigilation();
+                    console.log("✅ Successfully broadcasted thawed historical data to all modules.");
+                }, 150);
+
+                if (histCtx && (Object.keys(histCtx.roomAllotment || {}).length > 0 || Object.keys(histCtx.invigilatorMapping || {}).length > 0)) {
                     const notice = document.createElement('div');
+
 
                     notice.id = 'historical-context-notice';
                     notice.className = 'mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 font-medium';
