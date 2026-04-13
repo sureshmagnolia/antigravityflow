@@ -1754,8 +1754,23 @@ async function deleteSessionFromCloud(sessionKey) {
             }
         }
         // ---------------------------------------------------------
+
+        // --- 3. NEW: Delete from Firebase Storage historical_sessions ---
+        try {
+            const { storage, ref, deleteObject, getDownloadURL } = window.firebase;
+            const dateStr = sessionKey.split(' | ')[0].trim();
+            const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
+            // Only delete if it actually exists (avoids error for sessions not yet archived)
+            await getDownloadURL(storageRef); // throws if missing
+            await deleteObject(storageRef);
+            console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
+        } catch (storageErr) {
+            // File didn't exist in Storage — that's fine, nothing to delete
+        }
+        // ---------------------------------------------------------------
         
         updateSyncStatus("Deleted from Cloud", "success");
+
     } catch (e) {
         console.error("Session Delete Error:", e);
         updateSyncStatus("Delete Failed", "error");
