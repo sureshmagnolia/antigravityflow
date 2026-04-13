@@ -1586,24 +1586,42 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         });
     };
 
-
-    
-
 async function deleteSessionFromCloud(sessionKey) {
     if (!currentCollegeId || !navigator.onLine) return;
     
     updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
-    const { db, doc, deleteDoc } = window.firebase;
+    // Added getDoc and setDoc to interface with the index document
+    const { db, doc, deleteDoc, getDoc, setDoc } = window.firebase;
     const sessionId = generateSessionId(sessionKey);
     
     try {
+        // 1. Delete main session from private admin area
         await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+        
+        // --- 2. NEW: Delete from public seating index and chunk ---
+        const chunkId = `${currentCollegeId}_${sessionId}`;
+        await deleteDoc(doc(db, 'public_seating', chunkId)); // Deletes the heavy student list
+        
+        const indexRef = doc(db, 'public_seating', currentCollegeId);
+        const indexSnap = await getDoc(indexRef);
+        if (indexSnap.exists()) {
+            const data = indexSnap.data();
+            if (data.sessions && data.sessions[sessionKey]) {
+                delete data.sessions[sessionKey];
+                await setDoc(indexRef, data); // Resave the cleaned index
+            }
+        }
+        // ---------------------------------------------------------
+        
         updateSyncStatus("Deleted from Cloud", "success");
     } catch (e) {
         console.error("Session Delete Error:", e);
         updateSyncStatus("Delete Failed", "error");
     }
 }
+
+    
+
 
 
     
