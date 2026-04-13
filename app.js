@@ -288,14 +288,11 @@ async function autoCleanPastGhostData() {
                     // If exam is strictly older than 30 days
                     if (sessionDate < cutoffDate) {
                         console.log(`🔥 Auto-Incinerating 30-Day Old Cloud Session: ${sessionKey}`);
-                        
-                        // 1. Delete the heavy public seating chunk
+                    // 1. Delete the heavy public seating chunk ONLY
                         if (sInfo.docId) {
                             await deleteDoc(doc(db, 'public_seating', sInfo.docId));
                         }
-                        
-                        // 2. Delete the main admin session document
-                        await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', sessionKey));
+                    
 
                         // 3. Remove from public index tracker
                         delete sessions[sessionKey];
