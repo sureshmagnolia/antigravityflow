@@ -5067,17 +5067,19 @@ function getExamName(date, time, stream) {
                         if (fileName && fileName.endsWith('.json')) {
                             const dateStr = fileName.replace('.json', '');
                             
-                            // If this date isn't already in the dropdown, add it!
+                            // If this date isn't already in the local set, verify the dropdown element itself!
                             if (!uniqueDaysSet.has(dateStr)) {
                                 uniqueDaysSet.add(dateStr);
-                                const option = document.createElement('option');
-                                option.value = dateStr;
-                                option.textContent = dateStr + " (Archived)";
-                                option.style.color = "blue"; // Make it highly visible for diagnostic
-                                dateSelect.appendChild(option);
-                                newDatesAdded = true;
-                                console.log(`➕ Added archived date to dropdown: ${dateStr}`);
+                                const dropdownAlreadyHasIt = Array.from(dateSelect.options).some(o => o.value === dateStr);
+                                if (!dropdownAlreadyHasIt) {
+                                    const option = document.createElement('option');
+                                    option.value = dateStr;
+                                    option.textContent = dateStr + " (Archived)";
+                                    dateSelect.appendChild(option);
+                                    newDatesAdded = true;
+                                }
                             } else {
+
                                 // If it ALREADY exists natively in local DB, alter text to show it's in cloud too!
                                 const existingMatch = Array.from(dateSelect.options).find(o => o.value === dateStr);
                                 if (existingMatch && !existingMatch.textContent.includes('(Archived)')) {
@@ -5130,7 +5132,33 @@ function getExamName(date, time, stream) {
                 if (existingNotice) existingNotice.remove();
 
                 if (histCtx && (Object.keys(histCtx.roomAllotment || {}).length > 0 || Object.keys(histCtx.invigilatorMapping || {}).length > 0)) {
+                    
+                    // 🔥 GLOBALLY INJECT THE HISTORICAL DATA SO ALL TABS SEE IT 🔥
+                    if (histCtx.roomAllotment) {
+                        const existingAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
+                        Object.assign(existingAllotments, histCtx.roomAllotment);
+                        localStorage.setItem('examAllotmentData', JSON.stringify(existingAllotments));
+                    }
+                    if (histCtx.invigilatorMapping) {
+                        const existingInvigs = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+                        Object.assign(existingInvigs, histCtx.invigilatorMapping);
+                        localStorage.setItem('examInvigilatorMapping', JSON.stringify(existingInvigs));
+                    }
+                    if (histCtx.scribeAllotment) {
+                        const existingScribes = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+                        Object.assign(existingScribes, histCtx.scribeAllotment);
+                        localStorage.setItem('examScribeAllotmentV2', JSON.stringify(existingScribes));
+                    }
+                    
+                    // 🔄 REFRESH ALL SYSTEM DROPDOWNS IMMEDIATELY 🔄
+                    setTimeout(() => {
+                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+                        if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+                        if (typeof window.real_populate_room_allotment_session_dropdown === 'function') window.real_populate_room_allotment_session_dropdown();
+                    }, 150);
+
                     const notice = document.createElement('div');
+
                     notice.id = 'historical-context-notice';
                     notice.className = 'mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 font-medium';
                     const rCount = Object.keys(histCtx.roomAllotment || {}).length;
