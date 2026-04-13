@@ -15648,6 +15648,209 @@ if (btnSessionReschedule) {
                });
     }
 
+// --- Batch Archive Integration ---
+window.generateBatchArchive = async function() {
+        const checked = Array.from(document.querySelectorAll('.archive-session-cb:checked')).map(cb => cb.value);
+        if (checked.length === 0) return alert("Select at least one session to archive.");
+
+        const btn = document.querySelector('#batch-archive-modal button.bg-indigo-600');
+        const origText = btn.innerHTML;
+        btn.innerHTML = 'Bundling Data... Please wait';
+        btn.disabled = true;
+
+        // Allow UI to update
+        await new Promise(r => setTimeout(r, 100));
+
+        let allArchiveData = [];
+        const collegeName = localStorage.getItem('collegeName') || 'ExamFlow Project';
+
+        checked.forEach(sessionKey => {
+            const [date, time] = sessionKey.split(' | ');
+            const students = allStudentData.filter(s => s.Date === date.trim() && s.Time === time.trim());
+            const rooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}')[sessionKey] || {};
+            const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
+            const absentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}')[sessionKey] || {};
+            const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}')[sessionKey] || {};
+
+            const studentMap = {};
+            for (const roomName in rooms) {
+                rooms[roomName].seats.forEach(seat => {
+                    studentMap[seat.regNo] = { 
+                        room: roomName, 
+                        seat: seat.seatNo, 
+                        invigilator: invigilators[roomName] || 'Not Assigned' 
+                    };
+                });
+            }
+
+            students.forEach(s => {
+                const regNo = s['Register Number'] || s.RegisterNo;
+                allArchiveData.push({
+                    sessionKey: sessionKey,
+                    regNo: regNo,
+                    name: s.Name,
+                    course: s.Course,
+                    date: s.Date,
+                    time: s.Time,
+                    room: studentMap[regNo]?.room || 'Unassigned',
+                    seat: studentMap[regNo]?.seat || '-',
+                    invigilator: studentMap[regNo]?.invigilator || '-',
+                    qpCode: qpMap[s.Course] || 'N/A',
+                    status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
+                });
+            });
+        });
+
+        const htmlBlob = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Exam Archive Database</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>@media print { .no-print { display: none !important; } } body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-gray-50 p-4 sm:p-6 min-h-screen">
+    <div class="max-w-[90rem] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-200">
+        <div class="flex flex-col sm:flex-row justify-between items-start border-b pb-6 mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
+                <p class="text-sm font-bold text-gray-500">EXAM BATCH ARCHIVE DATABASE</p>
+                <p class="text-xs text-gray-400 mt-1">Generated on: \${new Date().toLocaleString()}</p>
+            </div>
+            <button onclick="window.print()" class="no-print bg-gray-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-black transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                Print List
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 no-print">
+            <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm">
+                <span class="text-xs font-bold text-indigo-500 uppercase tracking-widest">Sessions included</span>
+                <p class="text-3xl font-black text-indigo-900">\${checked.length}</p>
+            </div>
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+                <span class="text-xs font-bold text-blue-500 uppercase tracking-widest">Total Students</span>
+                <p id="stat-total" class="text-3xl font-black text-blue-900">\${allArchiveData.length}</p>
+            </div>
+            <div class="p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
+                <span class="text-xs font-bold text-green-500 uppercase tracking-widest">Present</span>
+                <p id="stat-present" class="text-3xl font-black text-green-900">0</p>
+            </div>
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg shadow-sm">
+                <span class="text-xs font-bold text-red-500 uppercase tracking-widest">Absent</span>
+                <p id="stat-absent" class="text-3xl font-black text-red-900">0</p>
+            </div>
+        </div>
+
+        <div class="mb-6 flex gap-4 no-print flex-col md:flex-row bg-gray-100 p-4 rounded-xl shadow-inner border border-gray-200">
+            <div class="flex-1 relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <input type="text" id="searchInput" placeholder="Search Register Number, Name, Course, Hall, or QP Code..." autocomplete="off"
+                    class="w-full pl-10 p-3 border-2 border-transparent rounded-lg focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 outline-none shadow-sm font-medium transition text-gray-800">
+            </div>
+            <div class="shrink-0 w-full md:w-64">
+                <select id="sessionFilter" class="w-full p-3 border-2 border-transparent rounded-lg focus:border-indigo-500 outline-none shadow-sm font-bold tracking-wide text-indigo-900 bg-white cursor-pointer">
+                    <option value="">All Sessions Combined</option>
+                    \${checked.map(sk => \`<option value="\${sk}">\${sk}</option>\`).join('')}
+                </select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+            <table class="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                    <tr class="bg-gray-900 text-white text-[11px] uppercase tracking-wider font-bold">
+                        <th class="p-3">Session Key</th>
+                        <th class="p-3">Course</th>
+                        <th class="p-3">QP</th>
+                        <th class="p-3">Register No.</th>
+                        <th class="p-3">Student Name</th>
+                        <th class="p-3">Hall & Seat</th>
+                        <th class="p-3">Invigilator</th>
+                        <th class="p-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="text-sm text-gray-700 font-medium"></tbody>
+            </table>
+            <div id="no-results" class="hidden p-8 text-center text-gray-500 font-bold">No records found matching your search.</div>
+        </div>
+    </div>
+
+    <script>
+        const data = \${JSON.stringify(allArchiveData)};
+        const tbody = document.getElementById('tableBody');
+        const searchInput = document.getElementById('searchInput');
+        const sessionFilter = document.getElementById('sessionFilter');
+        const noResults = document.getElementById('no-results');
+        
+        function render() {
+            const query = searchInput.value.toLowerCase();
+            const sessionKey = sessionFilter.value;
+            
+            const filtered = data.filter(s => {
+                const matchSession = sessionKey === "" || s.sessionKey === sessionKey;
+                const matchQuery = 
+                    s.regNo.toLowerCase().includes(query) || 
+                    s.name.toLowerCase().includes(query) || 
+                    s.course.toLowerCase().includes(query) ||
+                    s.room.toLowerCase().includes(query) ||
+                    s.qpCode.toLowerCase().includes(query);
+                return matchSession && matchQuery;
+            });
+            
+            // Update stats
+            document.getElementById('stat-total').innerText = filtered.length;
+            document.getElementById('stat-present').innerText = filtered.filter(d => d.status === 'PRESENT').length;
+            document.getElementById('stat-absent').innerText = filtered.filter(d => d.status === 'ABSENT').length;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                noResults.classList.remove('hidden');
+            } else {
+                noResults.classList.add('hidden');
+                tbody.innerHTML = filtered.map(s => \`
+                    <tr class="border-b border-gray-100 hover:bg-indigo-50/50 transition \${s.status === 'ABSENT' ? 'bg-red-50/80 hover:bg-red-100' : ''}">
+                        <td class="p-3 text-[10px] font-bold text-gray-500">\${s.sessionKey}</td>
+                        <td class="p-3 text-[11px] uppercase tracking-wide text-indigo-700 font-bold">\${s.course}</td>
+                        <td class="p-3 font-black text-rose-600">\${s.qpCode}</td>
+                        <td class="p-3 font-mono font-bold text-gray-900">\${s.regNo}</td>
+                        <td class="p-3 uppercase text-gray-800">\${s.name}</td>
+                        <td class="p-3">
+                            <span class="inline-block bg-gray-100 text-gray-800 font-bold px-2 py-1 rounded text-xs border border-gray-300 shadow-sm">\${s.room}</span>
+                            <span class="text-xs text-gray-500 font-medium ml-1">#\${s.seat}</span>
+                        </td>
+                        <td class="p-3 text-xs italic text-gray-600">\${s.invigilator}</td>
+                        <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] font-bold shadow-sm \${s.status === 'ABSENT' ? 'bg-red-600 text-white' : 'bg-green-100 text-green-800 border border-green-200'}">\${s.status}</span></td>
+                    </tr>
+                \`).join('');
+            }
+        }
+
+        searchInput.addEventListener('input', render);
+        sessionFilter.addEventListener('change', render);
+
+        render();
+    <\/script>
+</body>
+</html>\`;
+
+        const blob = new Blob([htmlBlob], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = checked.length === 1 ? checked[0].replace(/[| :.]/g, '_') : \`\${checked.length}_Sessions\`;
+        a.download = \`ExamFlow_Archive_\${safeName}.html\`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        closeBatchArchiveModal();
+    };
+    
      
  // =======================================================
 // 📦 BATCH ARCHIVE MODAL — GLOBAL SCOPE (always available)
