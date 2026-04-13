@@ -5153,9 +5153,20 @@ function getExamName(date, time, stream) {
                         Object.assign(existingScribes, histCtx.scribeAllotment);
                         localStorage.setItem('examScribeAllotmentV2', JSON.stringify(existingScribes));
                     }
+                    if (histCtx.qpCodes) {
+                        const existingQPs = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+                        Object.assign(existingQPs, histCtx.qpCodes);
+                        localStorage.setItem('examQPCodes', JSON.stringify(existingQPs));
+                    }
+                    if (histCtx.absentees) {
+                        const existingAbs = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+                        Object.assign(existingAbs, histCtx.absentees);
+                        localStorage.setItem('examAbsenteeList', JSON.stringify(existingAbs));
+                    }
                 }
 
                 // 🔄 REFRESH ALL SYSTEM DROPDOWNS UNCONDITIONALLY 🔄
+
                 // We must do this even if histCtx is empty so the base student data appears!
                 setTimeout(() => {
                     if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
@@ -8912,11 +8923,12 @@ window.real_populate_session_dropdown = function () {
             const targetVal = (previousSelection && allStudentSessions.includes(previousSelection)) ? previousSelection : defaultSession;
 
             // Set Value & Initialize Trigger UI
-            [sessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+            [sessionSelect, editSessionSelect, searchSessionSelect, sessionSelectQP].forEach(el => {
                 if(el && targetVal) el.value = targetVal;
                 // Dispatch change to run logic, but UI might not be ready yet
                 if(el) el.dispatchEvent(new Event('change'));
             });
+
             if(reportsSessionSelect) reportsSessionSelect.value = targetVal || "all";
 
             reportFilterSection.classList.remove('hidden');
