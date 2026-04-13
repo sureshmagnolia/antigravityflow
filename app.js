@@ -1469,21 +1469,37 @@ if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
        (async () => {
         await fetchHeavyData();
         
-        // --- NEW: Automatic Cloud Healing (Plan A Sync) ---
+          // --- NEW: Automatic Cloud Healing (Full V2 Reconstruction) ---
         if (window.currentCollegeId && navigator.onLine) {
-            const hasLocalData = (await loadExamDataIDB() || []).length > 0;
-            const isV2Missing = localStorage.getItem('lastBaseDataSync') === null;
+            const students = await loadExamDataIDB() || [];
             const needsRestoreSync = localStorage.getItem('pendingDriveRestoreSync') === 'true';
 
-            if (hasLocalData && (isV2Missing || needsRestoreSync)) {
-                console.log("🚀 Automatic Plan A Sync Triggered: Populating Firebase Chunks...");
-                // Run in background without blocking the UI
-                syncDataToCloud('baseData').then(() => {
+            if (students.length > 0 && needsRestoreSync) {
+                console.log("🚀 Automatic Full Sync Triggered: Rebuilding Firebase Modular Sessions...");
+                
+                (async () => {
+                    // 1. Push Master Students
+                    await syncDataToCloud('baseData');
+                    
+                    // 2. Identify and Push All Restored Sessions
+                    const sessionKeys = new Set(students.map(s => `${s.Date} | ${s.Time}`));
+                    console.log(`🔄 Rebuilding ${sessionKeys.size} sessions in modular format...`);
+                    
+                    let i = 0;
+                    for (const skey of sessionKeys) {
+                        i++;
+                        updateSyncStatus(`Syncing Session ${i}/${sessionKeys.size}...`, "neutral");
+                        await syncSessionToCloud(skey);
+                    }
+                    
                     localStorage.setItem('lastBaseDataSync', new Date().toISOString());
                     localStorage.removeItem('pendingDriveRestoreSync');
-                });
+                    updateSyncStatus("Cloud Rebuild Complete!", "success");
+                    console.log("✅ Firebase is now fully synchronized with Restored Data.");
+                })();
             }
         }
+
     })();
 }
 
