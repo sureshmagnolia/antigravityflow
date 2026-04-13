@@ -1,4 +1,4 @@
-// --- FUNCTIONS FOR PYTHON  BRIDGE ---
+//- --- FUNCTIONS FOR PYTHON  BRIDGE ---
 // These 11 functions MUST be outside the DOMContentLoaded listener
 // to be available when Python loads.
 
