@@ -8548,11 +8548,13 @@ async function parseCsvAndLoadData(csvText) {
 
 window.real_populate_session_dropdown = function () {
         try {
-            // Removed legacy DOM array wipe
-            if (allStudentData.length === 0) {
+            // Legacy HTML render logic safely removed by Antigravity
+            const knownRegDrop = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            if (allStudentData.length === 0 && knownRegDrop.length === 0) {
                 disable_absentee_tab(true);
                 return;
             }
+
 
             const previousSelection = sessionSelect.value;
             const seenKeys = new Set();
