@@ -497,7 +497,10 @@ window.executeRestore = async function(fileId) {
 
         localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
         alert("✅ Restored successfully! Reloading...");
+        // Mark that we just restored from Drive so app.js can "Heal" Firebase
+        localStorage.setItem('pendingDriveRestoreSync', 'true');
         location.reload();
+
 
     } catch (e) { alert("Restore Error: " + e.message); }
 };
