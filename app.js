@@ -1272,12 +1272,24 @@ async function updateLocalSlotsFromStudents() {
                                     console.log(`🔄 CSV Update Detected! Downloading fresh master student list for ${sessionKey}...`);
                                     updateSyncStatus(`Syncing Student Data...`, "neutral"); // <-- NEW RIBBON ALERT
                                     const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
-
-                                        .then(studentDoc => {
-                                            if (studentDoc.exists() && studentDoc.data().students) {
-                                                allStudents.push(...studentDoc.data().students);
+                                        .then(async studentDoc => {
+                                            if (studentDoc.exists()) {
+                                                const data = studentDoc.data();
+                                                if (data.isChunked) {
+                                                    // HANDLE CHUNKS (New Logic)
+                                                    let fullPayload = "";
+                                                    for (let i = 0; i < data.totalChunks; i++) {
+                                                        const chunkSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${docSnap.id}_chunk_${i}`));
+                                                        if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
+                                                    }
+                                                    const combined = JSON.parse(fullPayload);
+                                                    if (combined.students) allStudents.push(...combined.students);
+                                                } else if (data.students) {
+                                                    allStudents.push(...data.students);
+                                                }
                                             }
                                         });
+
                                     missingStudentsPromises.push(fetchPromise);
                                 }
                             }
