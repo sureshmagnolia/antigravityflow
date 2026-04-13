@@ -15831,16 +15831,16 @@ window.generateBatchArchive = async function() {
         sessionFilter.addEventListener('change', render);
 
         render();
-    <\/script>
+    </script>
 </body>
-</html>\`;
+</html>`;
 
         const blob = new Blob([htmlBlob], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const safeName = checked.length === 1 ? checked[0].replace(/[| :.]/g, '_') : \`\${checked.length}_Sessions\`;
-        a.download = \`ExamFlow_Archive_\${safeName}.html\`;
+        const safeName = checked.length === 1 ? checked[0].replace(/[| :.]/g, '_') : `${checked.length}_Sessions`;
+        a.download = `ExamFlow_Archive_${safeName}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
