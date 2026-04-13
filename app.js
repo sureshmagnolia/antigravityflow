@@ -15673,15 +15673,36 @@ window.generateBatchArchive = async function() {
             const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}')[sessionKey] || {};
 
             const studentMap = {};
-            for (const roomName in rooms) {
-                rooms[roomName].seats.forEach(seat => {
-                    studentMap[seat.regNo] = { 
-                        room: roomName, 
-                        seat: seat.seatNo, 
-                        invigilator: invigilators[roomName] || 'Not Assigned' 
-                    };
+            if (Array.isArray(rooms)) {
+                // V2 Modular Structure
+                rooms.forEach(roomObj => {
+                    const roomName = roomObj.roomName;
+                    if (roomObj.students && Array.isArray(roomObj.students)) {
+                        roomObj.students.forEach((s, idx) => {
+                            const regNo = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                            studentMap[regNo] = { 
+                                room: roomName, 
+                                seat: idx + 1, 
+                                invigilator: invigilators[roomName] || 'Not Assigned' 
+                            };
+                        });
+                    }
                 });
+            } else {
+                // V1 Legacy Structure Fallback
+                for (const roomName in rooms) {
+                    if (rooms[roomName] && rooms[roomName].seats) {
+                        rooms[roomName].seats.forEach(seat => {
+                            studentMap[seat.regNo] = { 
+                                room: roomName, 
+                                seat: seat.seatNo, 
+                                invigilator: invigilators[roomName] || 'Not Assigned' 
+                            };
+                        });
+                    }
+                }
             }
+
 
             students.forEach(s => {
                 const regNo = s['Register Number'] || s.RegisterNo;
