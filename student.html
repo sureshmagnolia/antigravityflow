@@ -172,11 +172,27 @@
         // SECURITY GATE: Only fetch document if within 45 minutes
         if (now >= unlockTime) {
             const docId = sInfo.docId;
+            const LS_KEY = `seating_payload_${docId}`;
+            const lsCache = JSON.parse(localStorage.getItem(LS_KEY));
+            const serverUpdated = sInfo.lastUpdated || 0;
+
+            // 🛡️ SMART CACHE: Check if phone cache exists AND is newer than Admin's last edit
             if (!sessionCache[docId]) {
-                const sSnap = await getDoc(doc(db, 'public_seating', docId));
-                if (sSnap.exists()) sessionCache[docId] = sSnap.data();
+                if (lsCache && lsCache.timestamp > serverUpdated) {
+                    sessionCache[docId] = lsCache.data;
+                } else {
+                    const sSnap = await getDoc(doc(db, 'public_seating', docId));
+                    if (sSnap.exists()) {
+                        sessionCache[docId] = sSnap.data();
+                        localStorage.setItem(LS_KEY, JSON.stringify({
+                            timestamp: Date.now(),
+                            data: sessionCache[docId]
+                        }));
+                    }
+                }
             }
             const d = sessionCache[docId];
+
             if (d) {
                 allSessions.push({
                     date: dPart.trim(), time: tPart.trim(),
