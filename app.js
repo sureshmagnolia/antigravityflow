@@ -1872,20 +1872,43 @@ async function deleteSessionFromCloud(sessionKey) {
                 await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
             }
 
-            // Add this as case #6 inside syncDataToCloud(targetSection)
+        // 4. BASE DATA (Heavy Student Master List - Plan A: Firebase Chunks)
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
                 if (students && students.length > 0) {
-                // 🚫 DELETED: Firebase Storage uploadString (to save bandwidth cost)
-                console.log("📁 Heavy Data (examBaseData) routing securely to Google Drive...");
+                    const studentString = JSON.stringify(students);
+                    const CHUNK_SIZE = 900000; // ~900KB chunks (safe under 1MB limit)
+                    const totalChunks = Math.ceil(studentString.length / CHUNK_SIZE);
                     
-                const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
-                                fetch(HYBRID_GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ token: secureToken, action: "saveHeavyData", filename: "examBaseData.json", payload: JSON.stringify(students) }) });
-
-
+                    updateSyncStatus(`Mirroring to Firebase (${totalChunks} Chunks)...`, "neutral");
+                    
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = studentString.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+                        const chunkDoc = {
+                            index: i,
+                            total: totalChunks,
+                            payload: chunk,
+                            timestamp: timestamp
+                        };
+                        await setDoc(doc(db, "colleges", cid, "base_data_v2", `chunk_${i}`), chunkDoc);
                     }
 
+                    // --- Plan B: Background Shadow Mirror to Google Drive (GAS) ---
+                    console.log("☁️ Shadow backup routing to GAS in background...");
+                    const secureToken = await window.firebase.auth.currentUser.getIdToken(true);
+                    fetch(HYBRID_GAS_URL, { 
+                        method: 'POST', 
+                        mode: 'no-cors', 
+                        body: JSON.stringify({ 
+                            token: secureToken, 
+                            action: "saveHeavyData", 
+                            filename: "examBaseData.json", 
+                            payload: studentString 
+                        }) 
+                    });
                 }
+            }
+
 
             
 
