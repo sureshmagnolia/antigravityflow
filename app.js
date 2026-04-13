@@ -8845,10 +8845,12 @@ window.real_populate_session_dropdown = function () {
 
 
             // Clear Options
-            [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+            const sessionSelectQP = document.getElementById('session-select-qp');
+            [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect, sessionSelectQP].forEach(el => {
                 if(el) el.innerHTML = '<option value="">-- Select a Session --</option>';
             });
             if(reportsSessionSelect) reportsSessionSelect.innerHTML = '<option value="all">All Sessions</option>';
+
 
                       // --- 🧠 SMART DEFAULT LOGIC (Today's Active vs Next Upcoming) ---
             const now = new Date();
@@ -8863,9 +8865,10 @@ window.real_populate_session_dropdown = function () {
 
             allStudentSessions.forEach(session => {
                 const opt = `<option value="${session}">${session}</option>`;
-                [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect].forEach(el => {
+                [sessionSelect, reportsSessionSelect, editSessionSelect, searchSessionSelect, sessionSelectQP].forEach(el => {
                     if (el) el.innerHTML += opt;
                 });
+
 
                 const [datePart, timePart] = session.split('|').map(s => s.trim());
                 if (!datePart || !timePart) return;
