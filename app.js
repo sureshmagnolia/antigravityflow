@@ -1950,7 +1950,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
             await setDoc(indexRef, {
 
-                collegeName: (collegeData && collegeData.examCollegeName) || '',
+                collegeName: localStorage.getItem('examCollegeName') || 'My College',
                 sessions: existingSessions
             });
 
