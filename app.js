@@ -9352,16 +9352,6 @@ window.real_populate_session_dropdown = function () {
                 };
             });
         });
-
-            map[s['Register Number']] = {
-                room: s['Room No'],
-                isScribe: s.isScribe,
-                stream: s.Stream,
-                name: s.Name
-            };
-            return map;
-        }, {});
-
         currentAbsenteeList.forEach(regNo => {
             const roomData = allocatedMap[regNo] || { room: 'N/A', isScribe: false, stream: 'Regular', name: 'Unknown' };
             const room = roomData.room;
