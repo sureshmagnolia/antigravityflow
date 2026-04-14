@@ -2278,6 +2278,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // --- (V56) Global var for absentee data ---
     let allStudentData = []; // Holds all students from PDF/CSV
+    window.allStudentDataList = () => allStudentData; // 📦 Expose for Exporter
     let allStudentSessions = []; // Holds unique sessions
     let currentAbsenteeList = [];
     let selectedStudent = null;
