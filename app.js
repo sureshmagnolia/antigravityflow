@@ -13749,27 +13749,35 @@ function showStudentDetailsModal(regNo, sessionKey) {
 
             // Calculate allocation for this specific session
             const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
-            // 🛡️ UNIFIED SEARCH (V12): Direct Lookup
+             // 🛡️ UNIFIED SEARCH (V15): Absolute Synchronization
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             const sessionAllotment = allAllotments[sessionKey] || [];
+            
             let allocatedStudent = null;
             sessionAllotment.forEach(room => {
-                const found = (room.students || []).find(s => (s['Register Number'] || s.RegisterNo) === regNo);
-                if (found) allocatedStudent = { ...found, 'Room No': room.roomName, seatNumber: found.seat || '?' };
+                const found = (room.students || []).find(s => {
+                    const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                    return reg === regNo;
+                });
+                if (found) {
+                    allocatedStudent = { 
+                        ...found, 
+                        'Room No': room.roomName, 
+                        seatNumber: found.seat || '?' 
+                    };
+                }
             });
-
 
             let roomDisplay = "Not Allotted";
             let rowClass = "";
 
             if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
                 const roomName = allocatedStudent['Room No'];
-
-                // *** FIX: Get Location ***
                 const roomInfo = currentRoomConfig[roomName] || {};
                 const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
 
-                roomDisplay = `<strong>${roomName}</strong> (Seat: ${studentAlloc.seatNumber})${location}`;
+                // FIXED: Using 'allocatedStudent' consistently
+                roomDisplay = `<strong>${roomName}</strong> (Seat: ${allocatedStudent.seatNumber})${location}`;
 
                 const sessionScribeMap = allScribeAllotments[sessionKey] || {};
                 const scribeRoom = sessionScribeMap[regNo];
@@ -13780,6 +13788,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
                     rowClass = "bg-orange-50";
                 }
             }
+
 
             const tr = document.createElement('tr');
             if (rowClass) tr.className = rowClass;
