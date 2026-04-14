@@ -4679,6 +4679,8 @@ function getExamName(date, time, stream) {
         // Create a unique key combining both
         return btoa(unescape(encodeURIComponent(`${courseName}|${s}`)));
     }
+    window.getQpKey = getQpKey; // Expose globally for archive generator
+
     // --- Helper function to numerically sort room keys ---
     function getNumericSortKey(key) {
         const parts = key.split('_'); // Date_Time_Room 1
@@ -16191,7 +16193,7 @@ window.generateBatchArchive = async function() {
                 room: studentMap[regNo]?.room || 'Unassigned',
                 seat: studentMap[regNo]?.seat || '-',
                 invigilator: studentMap[regNo]?.invigilator || '-',
-                qpCode: qpMap[btoa(unescape(encodeURIComponent(`${s.Course}|${s.Stream || 'Regular'}`)))] || 'N/A',
+                qpCode: qpMap[window.getQpKey(s.Course, s.Stream)] || 'N/A',
                 stream: studentMap[regNo]?.stream || 'Regular',
                 status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
             });
