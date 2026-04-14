@@ -11114,8 +11114,10 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
             const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
             const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
-            const matchA = regA.match(/^([A-Z]+)(\d+)$/i);
-            const matchB = regB.match(/^([A-Z]+)(\d+)$/i);
+            // 🛡️ UNIVERSAL SORT: Safely parse alphanumeric and pure numeric IDs
+            const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
+            const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
+
             if (matchA && matchB) {
                 const prefixA = matchA[1].toUpperCase();
                 const numA = parseInt(matchA[2], 10);
