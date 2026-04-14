@@ -13790,8 +13790,9 @@ function showStudentDetailsModal(regNo, sessionKey) {
             
 
             const tr = document.createElement('tr');
-            if (rowClass) tr.className = rowClass;
+            if (rowCss) tr.className = rowCss; // 🛡️ FIXED: Matches the new rowCss variable (V15)
             tr.innerHTML = `
+
                 <td class="px-3 py-2 border-b">${exam.Date}</td>
                 <td class="px-3 py-2 border-b">${exam.Time}</td>
                 <td class="px-3 py-2 border-b text-xs">
