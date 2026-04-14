@@ -16282,7 +16282,18 @@ window.generateBatchArchive = async function() {
         });
     });
 
-    // Pre-compute session summaries for remuneration (normalCount + scribeCount per session)
+    // 🛡️ SORTING: Ensure students are listed from Seat 1 to 30 for every room
+    allArchiveData.sort((a, b) => {
+        // First sort by Room Name
+        if (a.room !== b.room) return a.room.localeCompare(b.room);
+        // Then sort by Seat Number (numeric)
+        const sA = parseInt(a.seat) || 0;
+        const sB = parseInt(b.seat) || 0;
+        return sA - sB;
+    });
+
+    // Pre-compute session summaries
+
     const sessionSummary = {};
     allArchiveData.forEach(row => {
         let streamName = row.stream || 'Regular';
