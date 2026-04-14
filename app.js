@@ -16144,9 +16144,25 @@ window.generateBatchArchive = async function() {
 
     const checked = Array.from(finalSessionSet);
     let allArchiveData = [];
-    const collegeName = localStorage.getItem('collegeName') || 'ExamFlow Project';
+    
+    // Correctly fetch College Name using the actual local storage key
+    const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Project';
+    
+    // Calculate the overarching Exam Name for this Archive Batch dynamically
+    const archiveExamNamesSet = new Set();
+    checked.forEach(sessionKey => {
+        const [d, t] = sessionKey.split(' | ');
+        const n1 = getExamName(d.trim(), t.trim(), 'Regular');
+        const n2 = getExamName(d.trim(), t.trim(), 'EDE');
+        if (n1) archiveExamNamesSet.add(n1);
+        if (n2) archiveExamNamesSet.add(n2);
+    });
+    const archiveExamName = archiveExamNamesSet.size > 0 
+        ? Array.from(archiveExamNamesSet).join(" & ") 
+        : "University Examinations";
 
     let sourceStudentData = allStudentData;
+
     if (!sourceStudentData || sourceStudentData.length === 0) {
         sourceStudentData = await loadExamDataIDB() || [];
     }
@@ -16249,9 +16265,11 @@ window.generateBatchArchive = async function() {
         <div class="flex flex-col sm:flex-row justify-between items-start border-b pb-6 mb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black text-indigo-900 uppercase">${collegeName}</h1>
-                <p class="text-sm font-bold text-gray-500">EXAM BATCH ARCHIVE DATABASE</p>
+                <h2 class="text-lg font-bold text-indigo-700 mt-1">${archiveExamName}</h2>
+                <p class="text-sm font-bold text-gray-500 mt-2">EXAM BATCH ARCHIVE DATABASE</p>
                 <p class="text-xs text-gray-400 mt-1">Generated on: ${new Date().toLocaleString()}</p>
             </div>
+
             <div class="flex gap-2">
                 <button onclick="downloadCSV()" class="no-print bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-green-800 transition flex items-center gap-2">CSV</button>
                 <button onclick="showBillModal()" class="text-xs bg-green-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-green-700 transition shadow">💰 Generate Bill</button>
@@ -16380,10 +16398,13 @@ window.generateBatchArchive = async function() {
 
 <script>
     // Embedded archived data (self-contained, no Firebase needed)
+    const ARCHIVED_COLLEGE = ${JSON.stringify(collegeName).replace(/</g, '\\u003c')};
+    const ARCHIVED_EXAM = ${JSON.stringify(archiveExamName).replace(/</g, '\\u003c')};
     const ARCHIVED_RATES = ${JSON.stringify(archivedRates).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
     const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary)).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
 
-        function showBillModal() {
+
+    function showBillModal() {
         const streamKeys = Object.keys(ARCHIVED_RATES);
         
         function numToWords(n) {
@@ -16566,6 +16587,8 @@ window.generateBatchArchive = async function() {
 
             html += '<div class="bill-page">'
                  + '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:16px;margin-bottom:16px;">'
+                 + '<h1 style="font-size:24px;font-weight:900;text-transform:uppercase;margin:0 0 8px 0;">' + ARCHIVED_COLLEGE + '</h1>'
+                 + '<h2 style="font-size:16px;font-weight:bold;margin:0 0 12px 0;">' + ARCHIVED_EXAM + '</h2>'
                  + '<h2 style="font-size:20px;font-weight:bold;text-transform:uppercase;margin:0;">Exam Center Remuneration</h2>'
                  + '<h3 style="font-size:18px;font-weight:600;margin:4px 0;">Archived Bill - ' + stream + ' Stream</h3>'
                  + '</div>'
@@ -16639,6 +16662,7 @@ window.generateBatchArchive = async function() {
             alert('Please allow popups to view the Bill.');
         }
     }
+
 
 
     
