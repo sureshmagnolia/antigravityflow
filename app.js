@@ -7738,7 +7738,7 @@ function getExamName(date, time, stream) {
         if (!regNos || regNos.length === 0) return 'None'; // Changed from <em>None</em> to plain text
 
         const outputStrings = [];
-        const regEx = /^([A-Z]+)(\d+)$/;
+         const regNoRegex = /^([a-zA-Z\-_]*)(\d+)$/;
 
         regNos.sort();
 
@@ -11340,43 +11340,50 @@ if (saveScribeBtn) {
         });
     }
 
-    if (saveRoomAllotmentButton) {
-        saveRoomAllotmentButton.addEventListener('click', () => {
-            if (!currentSessionKey) return;
+        if (saveRoomAllotmentButton) {
+        saveRoomAllotmentButton.addEventListener('click', async () => {
+            try { // 🛡️ GLOBAL GUARD: Prevents silent UI freeze on error
+                if (!currentSessionKey) return;
 
-            // 1. Update Global Allotment Objects
-            const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-            allAllotments[currentSessionKey] = currentSessionAllotment;
+                // 1. Update Global Allotment Objects
+                const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+                allAllotments[currentSessionKey] = currentSessionAllotment;
 
-            const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            allScribeAllotments[currentSessionKey] = currentScribeAllotment;
+                const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                allScribeAllotments[currentSessionKey] = currentScribeAllotment;
 
-            // 2. Save to Local Storage
-            localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
-            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
+                // 2. Save to Local Storage
+                localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
 
-            // 3. Sync to Cloud
-            if (currentCollegeId && typeof syncDataToCloud === 'function') {
-                syncSessionToCloud(currentSessionKey);
+                // 3. Sync to Cloud
+                if (currentCollegeId && typeof syncDataToCloud === 'function') {
+                    await syncSessionToCloud(currentSessionKey);
+                }
+
+                // 3b. 🚀 Publish Seating to Public Portal
+                if (currentCollegeId) {
+                    await publishSeatingToPublic(currentSessionKey, currentSessionAllotment, currentScribeAllotment);
+                }
+
+                // 4. Reset Dirty Flag
+                hasUnsavedAllotment = false;
+
+
+                // 5. UI Feedback
+                roomAllotmentStatus.textContent = 'Allotment Saved Successfully!';
+                setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
+
+                // 6. Refresh Display (Button changes to "✅ Saved")
+                updateAllotmentDisplay();
+            } catch (err) {
+                console.error("Critical Save Error:", err);
+                alert("🛑 SAVE FAILED: Please check your internet connection.");
+                roomAllotmentStatus.textContent = 'Error: Save Failed';
             }
-
-            // 3b. 🚀 Publish Seating to Public Portal
-            if (currentCollegeId) {
-                publishSeatingToPublic(currentSessionKey, currentSessionAllotment, currentScribeAllotment);
-            }
-
-            // 4. Reset Dirty Flag
-            hasUnsavedAllotment = false;
-
-
-            // 5. UI Feedback
-            roomAllotmentStatus.textContent = 'Allotment Saved Successfully!';
-            setTimeout(() => { roomAllotmentStatus.textContent = ''; }, 2000);
-
-            // 6. Refresh Display (Button changes to "✅ Saved")
-            updateAllotmentDisplay();
         });
     }
+
 
     // --- END ROOM ALLOTMENT FUNCTIONALITY ---
 
