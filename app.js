@@ -6344,12 +6344,29 @@ function getExamName(date, time, stream) {
             `;
             }
 
-            // Main Loop
+            // 🛡️ UNIFIED PIPELINE: Use saved database instead of simulation
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+
             for (const streamName of sortedStreamNames) {
-                const streamData = dataByStream[streamName];
-                const processed_rows = performOriginalAllocation(streamData);
+                // Flatten the saved database for this stream
+                let processed_rows = [];
+                sessionAllotment.forEach(room => {
+                    const roomStream = room.stream || "Regular";
+                    if (roomStream === streamName) {
+                        (room.students || []).forEach(s => {
+                            processed_rows.push({
+                                ...s,
+                                'Room No': room.roomName,
+                                seatNumber: s.seat || '?',
+                                Stream: roomStream
+                            });
+                        });
+                    }
+                });
 
                 const daySessions = {};
+
                 processed_rows.forEach(student => {
                     const key = `${student.Date}_${student.Time}`;
                     if (!daySessions[key]) daySessions[key] = { Date: student.Date, Time: student.Time, students: [] };
