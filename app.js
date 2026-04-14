@@ -16381,47 +16381,258 @@ window.generateBatchArchive = async function() {
 
     function showBillModal() {
         const streamKeys = Object.keys(ARCHIVED_RATES);
-        let html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="this.remove()">'
-                 + '<div style="background:white;border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">'
-                 + '<h2 style="font-weight:900;font-size:18px;margin-bottom:16px;">💰 Remuneration Bill</h2>';
+        
+        // Helper to convert numbers to words
+        function numToWords(n) {
+            const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+            const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            if ((n = n.toString()).length > 9) return 'Overflow';
+            const n_array = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+            if (!n_array) return;
+            let str = '';
+            str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
+            str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
+            str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
+            str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
+            str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
+            return str.trim();
+        }
 
+        let html = '<div id="bill-modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;">'
+                 + '<div style="background:white;width:100%;max-width:800px;position:relative;" onclick="event.stopPropagation()">';
+
+        // Add Print and Close Buttons at top
+        html += '<div class="no-print" style="position:sticky;top:0;background:#f3f4f6;padding:10px;display:flex;justify-content:flex-end;gap:10px;border-bottom:1px solid #d1d5db;z-index:10;box-shadow:0 2px 5px rgba(0,0,0,0.1);">'
+             + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Print Bill</button>'
+             + '<button onclick="document.getElementById(\'bill-modal-overlay\').remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
+             + '</div>';
+        
+        // Render each stream as a separate A4 page
         streamKeys.forEach(function(stream) {
             const rates = ARCHIVED_RATES[stream];
             if (!rates) return;
             
-            let totalNormal = 0, totalScribe = 0;
-            SESSION_SUMMARY.forEach(function(s) { 
-               if((s.stream || "Regular") === stream) {
-                  totalNormal += s.normalCount; totalScribe += s.scribeCount; 
-               }
+            // Filter sessions for this stream
+            const streamSessions = SESSION_SUMMARY.filter(function(s) { 
+                return (s.stream || "Regular") === stream; 
+            }).sort(function(a, b) {
+                const d1 = a.date.split('.').reverse().join('');
+                const d2 = b.date.split('.').reverse().join('');
+                return d1.localeCompare(d2) || a.time.localeCompare(b.time);
             });
-            const totalStudents = totalNormal + totalScribe;
-            if (totalStudents === 0) return;
 
-            const invigs = Math.max(1, Math.floor(totalStudents / (rates.invigilator_ratio || 30))) + Math.ceil(totalScribe / (rates.scribe_invigilator_ratio || 1));
-            const invigCost = invigs * (rates.invigilator || 0);
-            const supervision = (rates.chief_supdt || 0) + (rates.senior_supdt || 0) + (rates.office_supdt || 0);
-            const contingency = totalStudents * (rates.contingent_charge || 0);
-            const grandTotal = supervision + invigCost + contingency + (rates.data_entry_operator || 0);
+            if (streamSessions.length === 0) return;
 
-            // Using standard string concatenation (Safe from nested backtick errors)
-            html += '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">'
-                 + '<h3 style="font-weight:700;color:#4f46e5;margin-bottom:8px;">' + stream + ' Stream</h3>'
-                 + '<table style="width:100%;font-size:13px;border-collapse:collapse;">'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Students (Normal / Scribe)</td><td style="text-align:right;font-weight:700;">' + totalNormal + ' / ' + totalScribe + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Supervision</td><td style="text-align:right;font-weight:700;">\u20B9' + supervision.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (' + invigs + ')</td><td style="text-align:right;font-weight:700;">\u20B9' + invigCost.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">\u20B9' + contingency.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">\u20B9' + (rates.data_entry_operator||0).toFixed(2) + '</td></tr>'
-                 + '<tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">\u20B9' + grandTotal.toFixed(2) + '</td></tr>'
+            // Generate Bill Logic
+            let invigilation = 0, clerical = 0, sweeping = 0, peon = 0, supervision = 0;
+            let chiefTotal = 0, seniorTotal = 0, officeTotal = 0;
+            let bodyRows = "";
 
-                 + '</table></div>';
+            if (rates.is_sde_mode) {
+                // SDE GROUPING
+                const sessionsByDate = {};
+                streamSessions.forEach(function(s) {
+                    if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
+                    sessionsByDate[s.date].push(s);
+                });
+
+                Object.keys(sessionsByDate).sort().forEach(function(date) {
+                    const daily = sessionsByDate[date];
+                    const isDouble = daily.length > 1;
+                    
+                    daily.forEach(function(session) {
+                        const count = session.normalCount + session.scribeCount;
+                        
+                        const chiefRate = isDouble ? (rates.chief_supdt_double||0) : (rates.chief_supdt_single||0);
+                        const seniorRate = isDouble ? (rates.senior_supdt_double||0) : (rates.senior_supdt_single||0);
+                        const chiefCost = chiefRate / daily.length;
+                        const seniorCost = seniorRate / daily.length;
+                        
+                        chiefTotal += chiefCost;
+                        seniorTotal += seniorCost;
+                        const supTotal = chiefCost + seniorCost;
+
+                        let normalInvigs = 0;
+                        const invigRatio = rates.invigilator_ratio || 30;
+                        if (count > 0) {
+                            normalInvigs = Math.floor(count / invigRatio);
+                            if ((count % invigRatio) > (rates.invigilator_min_fraction||0)) normalInvigs++;
+                            if (normalInvigs === 0) normalInvigs = 1;
+                        }
+                        let scribeInvigs = session.scribeCount > 0 ? Math.ceil(session.scribeCount / (rates.scribe_invigilator_ratio || 1)) : 0;
+                        const invigCost = (normalInvigs + scribeInvigs) * (rates.invigilator || 0);
+
+                        const staffCount = Math.ceil(count / (rates.clerk_ratio || 500));
+                        const clerkCost = ((isDouble ? (rates.clerk_double||0) : (rates.clerk_single||0)) / daily.length) * staffCount;
+                        const peonCost = ((isDouble ? (rates.peon_double||0) : (rates.peon_single||0)) / daily.length) * staffCount;
+                        const sweeperCost = ((isDouble ? (rates.sweeper_double||0) : (rates.sweeper_single||0)) / daily.length) * staffCount;
+
+                        supervision += supTotal; invigilation += invigCost; clerical += clerkCost; peon += peonCost; sweeping += sweeperCost;
+
+                        const lineTotal = invigCost + clerkCost + peonCost + sweeperCost + supTotal;
+                        
+                        let studentDetail = count + (session.scribeCount > 0 ? ' <span style="font-size:10px;">(Incl '+session.scribeCount+' Scr)</span>' : '');
+                        let invigDetail = normalInvigs + (scribeInvigs > 0 ? ' + '+scribeInvigs : '');
+
+                        bodyRows += '<tr style="border-bottom:1px solid black;text-align:center;">'
+                                  + '<td style="padding:4px;border:1px solid black;text-align:left;">' + session.date + '<br><span style="font-size:10px;">' + session.time + '</span></td>'
+                                  + '<td style="padding:4px;border:1px solid black;font-weight:bold;">' + studentDetail + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(\u20B9' + invigCost + ')</span></td>'
+                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + clerkCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + peonCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + sweeperCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + chiefCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;">\u20B9' + seniorCost + '</td>'
+                                  + '<td style="padding:4px;border:1px solid black;font-weight:bold;">\u20B9' + lineTotal + '</td></tr>';
+                    });
+                });
+
+            } else {
+                // REGULAR LOGIC
+                streamSessions.forEach(function(session) {
+                    const count = session.normalCount + session.scribeCount;
+                    
+                    let normalInvigs = 0;
+                    const invigRatio = rates.invigilator_ratio || 30;
+                    if (count > 0) {
+                        normalInvigs = Math.floor(count / invigRatio);
+                        if ((count % invigRatio) > (rates.invigilator_min_fraction||0)) normalInvigs++;
+                        if (normalInvigs === 0) normalInvigs = 1;
+                    }
+                    let scribeInvigs = session.scribeCount > 0 ? Math.ceil(session.scribeCount / (rates.scribe_invigilator_ratio || 1)) : 0;
+                    const invigCost = (normalInvigs + scribeInvigs) * (rates.invigilator || 0);
+
+                    const clerkFullBatches = Math.floor(count / 100);
+                    const clerkRemainder = count % 100;
+                    let clerkCost = clerkFullBatches * (rates.clerk_full_slab||0);
+                    if (clerkRemainder > 0 && clerkRemainder <= 30) clerkCost += (rates.clerk_slab_1||0);
+                    else if (clerkRemainder > 30 && clerkRemainder <= 60) clerkCost += (rates.clerk_slab_2||0);
+                    else if (clerkRemainder > 60) clerkCost += (rates.clerk_full_slab||0);
+
+                    let sweeperCost = Math.ceil(count / 100) * (rates.sweeper_rate||0);
+                    if (sweeperCost < (rates.sweeper_min||0)) sweeperCost = (rates.sweeper_min||0);
+
+                    const chiefCost = rates.chief_supdt||0;
+                    const seniorCost = rates.senior_supdt||0;
+                    const officeCost = rates.office_supdt||0;
+                    const supTotal = chiefCost + seniorCost + officeCost;
+
+                    chiefTotal += chiefCost; seniorTotal += seniorCost; officeTotal += officeCost;
+                    supervision += supTotal; invigilation += invigCost; clerical += clerkCost; sweeping += sweeperCost;
+
+                    const lineTotal = invigCost + clerkCost + sweeperCost + supTotal;
+                    
+                    let studentDetail = count + (session.scribeCount > 0 ? ' <span style="font-size:10px;">(Incl '+session.scribeCount+' Scr)</span>' : '');
+                    let invigDetail = normalInvigs + (scribeInvigs > 0 ? ' + '+scribeInvigs : '');
+
+                    bodyRows += '<tr style="border-bottom:1px solid black;text-align:center;">'
+                              + '<td style="padding:4px;border:1px solid black;text-align:left;">' + session.date + '<br><span style="font-size:10px;">' + session.time + '</span></td>'
+                              + '<td style="padding:4px;border:1px solid black;font-weight:bold;">' + studentDetail + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;">' + invigDetail + '<br><span style="font-size:10px;">(\u20B9' + invigCost + ')</span></td>'
+                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + clerkCost + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + sweeperCost + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + chiefCost + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + seniorCost + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;">\u20B9' + officeCost + '</td>'
+                              + '<td style="padding:4px;border:1px solid black;font-weight:bold;">\u20B9' + lineTotal + '</td></tr>';
+                });
+            }
+
+            const totalRegistered = streamSessions.reduce(function(sum, s) { return sum + s.normalCount + s.scribeCount; }, 0);
+            const contingency = totalRegistered * (rates.contingent_charge || 0);
+            const dataEntry = rates.data_entry_operator || 0;
+            const accountant = rates.accountant || 0;
+            
+            const grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
+            
+            const totalAmountStr = grandTotal.toFixed(2);
+            const parts = totalAmountStr.split('.');
+            let words = numToWords(Number(parts[0]));
+            if (Number(parts[1]) > 0) words += ' and ' + numToWords(Number(parts[1])) + ' Paise';
+
+            let supSummaryHTML = rates.is_sde_mode
+                ? 'Chief Supdt: \u20B9'+chiefTotal+', Senior Supdt: \u20B9'+seniorTotal+', <strong>Total: \u20B9'+supervision+'</strong>'
+                : 'CS: \u20B9'+chiefTotal+', SAS: \u20B9'+seniorTotal+', OS: \u20B9'+officeTotal+', <strong>Total: \u20B9'+supervision+'</strong>';
+
+            const peonHeader = rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">Peon</th>' : '';
+            const osHeader = !rates.is_sde_mode ? '<th style="padding:4px;border:1px solid black;">OS</th>' : '';
+            const peonFooter = rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">\u20B9'+peon+'</td>' : '';
+            const osFooter = !rates.is_sde_mode ? '<td style="padding:8px;border:1px solid black;">\u20B9'+officeTotal+'</td>' : '';
+            const colGroup = rates.is_sde_mode 
+                ? '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">'
+                : '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">';
+
+            html += '<div class="print-page w-full p-8 bg-white text-black" style="font-family:sans-serif;page-break-after:always;background:white !important;min-height:297mm;border-bottom:2px dashed #ccc;box-sizing:border-box;">'
+                 + '<style>@media print { body * { visibility:hidden; } #bill-modal-overlay, #bill-modal-overlay * { visibility:visible; } #bill-modal-overlay { position:absolute; left:0; top:0; padding:0; background:none; } .no-print { display:none !important; } .print-page { border:none !important; page-break-after:always; } }</style>'
+                 + '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:16px;margin-bottom:16px;">'
+                 + '<h2 style="font-size:20px;font-weight:bold;text-transform:uppercase;margin:0;">Exam Center Remuneration</h2>'
+                 + '<h3 style="font-size:18px;font-weight:600;margin:4px 0;">Archived Bill - ' + stream + ' Stream</h3>'
+                 + '</div>'
+                 
+                 + '<table style="width:100%;border-collapse:collapse;border:1px solid black;font-size:13px;margin-bottom:16px;table-layout:fixed;">'
+                 + '<colgroup>' + colGroup + '</colgroup>'
+                 + '<thead><tr style="background:white;color:black;">'
+                 + '<th style="padding:4px;border:1px solid black;text-align:left;">Session</th>'
+                 + '<th style="padding:4px;border:1px solid black;">Candidates</th>'
+                 + '<th style="padding:4px;border:1px solid black;">Invig</th>'
+                 + '<th style="padding:4px;border:1px solid black;">Clerk</th>'
+                 + peonHeader
+                 + '<th style="padding:4px;border:1px solid black;">Swpr</th>'
+                 + '<th style="padding:4px;border:1px solid black;">CS</th>'
+                 + '<th style="padding:4px;border:1px solid black;">SAS</th>'
+                 + osHeader
+                 + '<th style="padding:4px;border:1px solid black;">Total</th>'
+                 + '</tr></thead>'
+                 + '<tbody>' + bodyRows + '</tbody>'
+                 + '<tfoot><tr style="font-weight:bold;font-size:12px;text-align:center;background:white;">'
+                 + '<td colspan="2" style="padding:8px;border:1px solid black;text-align:right;">Subtotals:</td>'
+                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + invigilation + '</td>'
+                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + clerical + '</td>'
+                 + peonFooter
+                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + sweeping + '</td>'
+                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + chiefTotal + '</td>'
+                 + '<td style="padding:8px;border:1px solid black;">\u20B9' + seniorTotal + '</td>'
+                 + osFooter
+                 + '<td style="padding:8px;border:1px solid black;font-size:14px;">\u20B9' + (invigilation+clerical+sweeping+peon+supervision) + '</td>'
+                 + '</tr></tfoot>'
+                 + '</table>'
+                 
+                 + '<div style="display:flex;gap:32px;font-size:13px;border-top:2px solid black;padding-top:16px;margin-bottom:24px;">'
+                 + '<div style="flex:1;border:1px solid black;padding:12px;">'
+                 + '<div style="font-weight:bold;border-bottom:1px solid black;margin-bottom:8px;padding-bottom:4px;">1. Supervision Breakdown</div>'
+                 + '<div>' + supSummaryHTML + '</div>'
+                 + '</div>'
+                 + '<div style="flex:1;">'
+                 + '<div style="font-weight:bold;border-bottom:1px dotted black;margin-bottom:8px;padding-bottom:4px;display:flex;justify-content:space-between;"><span>2. Other Allowances</span></div>'
+                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Contingency:</span> <strong>\u20B9' + contingency.toFixed(2) + '</strong></div>'
+                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;margin-bottom:4px;"><span>Data Entry Operator:</span> <strong>\u20B9' + dataEntry + '</strong></div>'
+                 + '<div style="display:flex;justify-content:space-between;border-bottom:1px dotted black;padding-bottom:4px;"><span>Accountant:</span> <strong>\u20B9' + accountant + '</strong></div>'
+                 + '</div>'
+                 + '</div>'
+
+                 + '<div style="border:1px solid black;padding:12px;display:flex;flex-direction:column;align-items:flex-end;">'
+                 + '<div style="width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                 + '<span style="font-size:18px;font-weight:bold;text-transform:uppercase;">Grand Total Claim</span>'
+                 + '<span style="font-size:24px;font-weight:bold;font-family:monospace;">\u20B9' + grandTotal.toFixed(2) + '</span>'
+                 + '</div>'
+                 + '<div style="width:100%;text-align:right;border-top:1px solid black;padding-top:4px;">'
+                 + '<span style="font-size:13px;font-weight:bold;font-style:italic;">(Rupees ' + words + ' Only)</span>'
+                 + '</div>'
+                 + '</div>'
+                 
+                 + '<div style="margin-top:64px;display:flex;justify-content:flex-end;font-size:13px;font-weight:bold;">'
+                 + '<div style="border-top:1px solid black;width:33%;text-align:center;padding-top:8px;">Chief Superintendent</div>'
+                 + '</div>'
+                 
+                 + '</div>'; // End single stream print page
         });
         
-        html += '<button onclick="this.parentNode.parentNode.remove()" style="width:100%;padding:10px;background:#4f46e5;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Close</button>';
         html += '</div></div>';
         document.body.insertAdjacentHTML('beforeend', html);
     }
+
+
+    
 <\/script>
 
 
