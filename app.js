@@ -500,7 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => { loader.remove(); }, 500);
         }
     }, 12000); // 12 seconds max wait
-
+});
     // ------------------------------------
 
 
