@@ -3897,7 +3897,23 @@ function generateQuestionPaperReportPDF() {
         
         if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
-        const dataWithRooms = performOriginalAllocation(rawData);
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[`${reportsSessionSelect.value}`] || [];
+        
+        const studentToRoomMap = {};
+        sessionAllotment.forEach(room => {
+            (room.students || []).forEach(s => {
+                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                studentToRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
+            });
+        });
+
+        const dataWithRooms = rawData.map(s => {
+            const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
+            return { ...s, 'Room No': assignment.room, seatNumber: assignment.seat };
+        });
+
 
         // Group by Room -> QP Code
         const roomMap = {};
@@ -9320,11 +9336,23 @@ window.real_populate_session_dropdown = function () {
             return;
         }
 
-        // Allocate rooms for correct display
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const allocatedSessionData = performOriginalAllocation(sessionStudents);
+        // 🛡️ UNIFIED ABSENTEE VIEW (V12): Read from actual database
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[sessionKey] || [];
+        
+        const allocatedMap = {};
+        sessionAllotment.forEach(room => {
+            (room.students || []).forEach(s => {
+                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                allocatedMap[reg] = {
+                    room: room.roomName,
+                    isScribe: s.isScribe,
+                    stream: room.stream || "Regular",
+                    name: s.Name
+                };
+            });
+        });
 
-        const allocatedMap = allocatedSessionData.reduce((map, s) => {
             map[s['Register Number']] = {
                 room: s['Room No'],
                 isScribe: s.isScribe,
