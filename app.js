@@ -16404,7 +16404,7 @@ window.generateBatchArchive = async function() {
         // Add Print and Close Buttons at top
         html += '<div class="no-print" style="position:sticky;top:0;background:#f3f4f6;padding:10px;display:flex;justify-content:flex-end;gap:10px;border-bottom:1px solid #d1d5db;z-index:10;box-shadow:0 2px 5px rgba(0,0,0,0.1);">'
              + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Print Bill</button>'
-             + '<button onclick="document.getElementById(\'bill-modal-overlay\').remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
+             + '<button onclick="this.parentNode.parentNode.remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
              + '</div>';
         
         // Render each stream as a separate A4 page
