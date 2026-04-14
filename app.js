@@ -15305,19 +15305,23 @@ async function loadInitialData() {
     // 5. Render Function (Strictly Black & White - No Date)
     function renderBillHTML(bill, container) {
         function numToWords(n) {
+            // Guard against NaN or exactly 0
+            if (isNaN(n) || n === 0) return 'Zero';
+            
             const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
             const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
             if ((n = n.toString()).length > 9) return 'Overflow';
             const n_array = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
-            if (!n_array) return;
+            if (!n_array) return 'Zero';
             let str = '';
             str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
             str += (n_array[2] != 0) ? (a[Number(n_array[2])] || b[n_array[2][0]] + ' ' + a[n_array[2][1]]) + 'Lakh ' : '';
             str += (n_array[3] != 0) ? (a[Number(n_array[3])] || b[n_array[3][0]] + ' ' + a[n_array[3][1]]) + 'Thousand ' : '';
             str += (n_array[4] != 0) ? (a[Number(n_array[4])] || b[n_array[4][0]] + ' ' + a[n_array[4][1]]) + 'Hundred ' : '';
             str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
-            return str.trim();
+            return str.trim() || 'Zero';
         }
+
 
         const totalAmount = bill.grand_total.toFixed(2);
         const [rupeesPart, paisePart] = totalAmount.split('.');
@@ -16566,12 +16570,15 @@ window.generateBatchArchive = async function() {
             const dataEntry = rates.data_entry_operator || 0;
             const accountant = rates.accountant || 0;
             
-            const grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
+            // Fixed: Added Accountant to the grand total sum!
+            let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry + accountant;
+            if (isNaN(grandTotal)) grandTotal = 0; // Final safeguard
             
             const totalAmountStr = grandTotal.toFixed(2);
             const parts = totalAmountStr.split('.');
             let words = numToWords(Number(parts[0]));
             if (Number(parts[1]) > 0) words += ' and ' + numToWords(Number(parts[1])) + ' Paise';
+
 
             let supSummaryHTML = rates.is_sde_mode
                 ? 'Chief Supdt: \u20B9'+chiefTotal+', Senior Supdt: \u20B9'+seniorTotal+', <strong>Total: \u20B9'+supervision+'</strong>'
