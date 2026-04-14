@@ -1,5 +1,5 @@
 /**
- * Session Export Module for ExamFlow
+ * Session Export Module for ExamFlow (Full 9-Report Edition)
  * Creates a 100% self-contained, offline-ready HTML document for 
  * individual exam sessions with 9 printable reports and interactive QP entry.
  */
@@ -16,7 +16,8 @@ const SESSION_EXPORT_JS = {
 
         // 1. COLLECT DATA FROM CORE APP
         const [date, time] = sessionKey.split(' | ');
-        const stream = reportsStreamSelect?.value || 'Regular';
+        const streamSelect = document.getElementById('reports-stream-select');
+        const stream = streamSelect ? streamSelect.value : 'Regular';
         const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Institution';
 
         // Filters
@@ -84,7 +85,7 @@ const SESSION_EXPORT_JS = {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${data.meta.collegeName} - ${data.meta.date} ${data.meta.time}</title>
+    <title>\${data.meta.collegeName} - \${data.meta.date} \${data.meta.time}</title>
     <style>
         :root {
             --primary: #1e3a8a;
@@ -125,7 +126,7 @@ const SESSION_EXPORT_JS = {
 
         /* Report Rendering */
         #report-viewer { margin-top: 40px; }
-        .report-page { background: white; padding: 1.5cm; width: 210mm; min-height: 297mm; margin: 0 auto 20px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .report-page { background: white; padding: 1.5cm; width: 210mm; min-height: 297mm; margin: 0 auto 20px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; position: relative; }
         
         /* Print Styles */
         @media print {
@@ -144,23 +145,29 @@ const SESSION_EXPORT_JS = {
         .rh { margin-bottom: 20px; text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
         .rh h2 { margin: 0; font-size: 18px; }
         .rh h3 { margin: 5px 0 0 0; font-size: 14px; color: #444; }
+
+        /* Stickers Grid */
+        .sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5mm; }
+        .sticker { border: 1px dashed #ccc; padding: 5mm; text-align: center; }
+        .sticker-reg { font-size: 16pt; font-weight: 800; font-family: monospace; }
+        .sticker-room { font-size: 10pt; color: #555; }
     </style>
 </head>
 <body>
     <div class="container no-print">
         <header>
             <div class="header-top">
-                <img src="${this.LOGO_SVG}" class="logo" alt="Logo">
+                <img src="\${this.LOGO_SVG}" class="logo" alt="Logo">
                 <div>
-                    <h1>Session Document: ${data.meta.examName}</h1>
+                    <h1>Session Document: \${data.meta.examName}</h1>
                     <div style="font-size: 12px; color: var(--secondary); margin-top: 4px;">Independent Reference #\${Date.now()}</div>
                 </div>
             </div>
             <div class="session-info">
-                <div class="info-pill">📅 ${data.meta.date}</div>
-                <div class="info-pill">⏰ ${data.meta.time}</div>
-                <div class="info-pill">📚 ${data.meta.stream}</div>
-                <div class="info-pill">👤 ${data.students.length} Students</div>
+                <div class="info-pill">📅 \${data.meta.date}</div>
+                <div class="info-pill">⏰ \${data.meta.time}</div>
+                <div class="info-pill">📚 \${data.meta.stream}</div>
+                <div class="info-pill">👤 \${data.students.length} Students</div>
             </div>
         </header>
 
@@ -178,7 +185,7 @@ const SESSION_EXPORT_JS = {
         </section>
 
         <section>
-            <div class="section-title">Printable Reports</div>
+            <div class="section-title">Printable Reports (A4)</div>
             <div class="report-grid">
                 <button class="btn btn-primary" onclick="render('notice')">📢 Notice Board</button>
                 <button class="btn btn-primary" onclick="render('roomwise')">🏠 Room-wise List</button>
@@ -216,7 +223,6 @@ const SESSION_EXPORT_JS = {
         }
         initQP();
 
-        // 📋 Smart Clipboard Logic (Restored)
         async function importFromClipboard() {
             try {
                 const text = await navigator.clipboard.readText();
@@ -237,11 +243,10 @@ const SESSION_EXPORT_JS = {
             } catch(e) { alert("Clipboard error: " + e.message); }
         }
 
-        // 🖨️ Report Engine
+        // 🖨️ THE MASTER REPORT ENGINE
         function render(type) {
             const v = document.getElementById('report-viewer');
             v.innerHTML = '';
-            
             const h = \`<div class="rh"><h2>\${D.meta.collegeName}</h2><h3>\${D.meta.examName}</h3><h4>\${D.meta.date} | \${D.meta.time}</h4></div>\`;
 
             if (type === 'notice') {
@@ -252,9 +257,9 @@ const SESSION_EXPORT_JS = {
                 const tb = document.createElement('tbody');
                 const sorted = [...D.students].sort((a,b) => a.Name.localeCompare(b.Name));
                 sorted.forEach((s, i) => {
-                    const allot = D.allotment.find(r => r.students.some(st => (st['Register Number'] || st.RegisterNo) === s['Register Number']));
-                    const seat = allot?.students.find(st => (st['Register Number'] || st.RegisterNo) === s['Register Number'])?.seat || '?';
-                    tb.innerHTML += \`<tr><td class="center">\${i+1}</td><td>\${s['Register Number']}</td><td>\${s.Name}</td><td>\${s.Course}</td><td class="center bold">\${allot?.roomName || '-'}</td><td class="center bold">\${seat}</td></tr>\`;
+                    const room = D.allotment.find(r => r.students.some(st => (st['Register Number'] || st.RegisterNo) === s['Register Number']));
+                    const seat = room?.students.find(st => (st['Register Number'] || st.RegisterNo) === s['Register Number'])?.seat || '?';
+                    tb.innerHTML += \`<tr><td class="center">\${i+1}</td><td>\${s['Register Number']}</td><td>\${s.Name}</td><td>\${s.Course}</td><td class="center bold">\${room?.roomName || '-'}</td><td class="center bold">\${seat}</td></tr>\`;
                 });
                 t.appendChild(tb); p.appendChild(t); v.appendChild(p);
             }
@@ -268,36 +273,112 @@ const SESSION_EXPORT_JS = {
                     const tb = document.createElement('tbody');
                     room.students.forEach((s, i) => {
                        const fullS = D.students.find(fs => fs['Register Number'] === (s['Register Number'] || s.RegisterNo));
-                       tb.innerHTML += \`<tr><td class="center">\${i+1}</td><td>\${s['Register Number'] || s.RegisterNo}</td><td>\${fullS?.Name || '-'}</td><td>\${fullS?.Course || '-'}</td><td class="center bold">\${s.seat || '?'}</td><td></td></tr>\`;
+                       tb.innerHTML += \`<tr><td class="center">\${i+1}</td><td>\${s['Register Number'] || s.RegisterNo}</td><td>\${fullS?.Name || '-'}</td><td style="font-size:9px">\${fullS?.Course || '-'}</td><td class="center bold">\${s.seat || '?'}</td><td></td></tr>\`;
                     });
                     t.appendChild(tb); p.appendChild(t); v.appendChild(p);
                 });
             }
 
-            if (type === 'bill') {
+            if (type === 'qp_dist') {
                 const p = createPage();
-                p.innerHTML = h + '<h3>REMUNERATION BILL SUMMARY</h3>';
-                p.innerHTML += '<p style="text-align:right">Bill Date: ' + new Date().toLocaleDateString() + '</p>';
+                p.innerHTML = h + '<h3>QUESTION PAPER DISTRIBUTION PROFORMA</h3>';
                 const t = document.createElement('table'); t.className = 'rt';
-                t.innerHTML = '<thead><tr><th>Designation</th><th>Rate</th><th>Count</th><th>Amount</th></tr></thead>';
+                t.innerHTML = '<thead><tr><th>Room</th><th>Course Name</th><th>QP Code</th><th>Required</th><th>Signature</th></tr></thead>';
                 const tb = document.createElement('tbody');
-                // Mock calculation (Basic version)
-                const counts = { invig: D.invigilators.length, scribe: D.scribes.length };
-                tb.innerHTML += \`<tr><td>Invigilators</td><td class="center">350</td><td class="center">\${counts.invig}</td><td class="center">\${counts.invig*350}</td></tr>\`;
-                tb.innerHTML += \`<tr><td>Scribes</td><td class="center">150</td><td class="center">\${counts.scribe}</td><td class="center">\${counts.scribe*150}</td></tr>\`;
+                D.allotment.forEach(room => {
+                    const courses = {};
+                    room.students.forEach(s => {
+                        const fullS = D.students.find(fs => fs['Register Number'] === (s['Register Number'] || s.RegisterNo));
+                        if(fullS) courses[fullS.Course] = (courses[fullS.Course] || 0) + 1;
+                    });
+                    Object.entries(courses).forEach(([c, count]) => {
+                        const code = D.qpCodes[\`\${c}|Regular\`] || D.qpCodes[\`\${c}|Supplementary\`] || '???';
+                        tb.innerHTML += \`<tr><td class="center bold">\${room.roomName}</td><td>\${c}</td><td class="center bold">\${code}</td><td class="center bold">\${count}</td><td></td></tr>\`;
+                    });
+                });
                 t.appendChild(tb); p.appendChild(t); v.appendChild(p);
             }
-            
-            // ... (I will add basic implementations for others in the full code block) ...
-            
+
+            if (type === 'qp_sum') {
+                const p = createPage();
+                p.innerHTML = h + '<h3>CONSOLIDATED QP SUMMARY</h3>';
+                const t = document.createElement('table'); t.className = 'rt';
+                t.innerHTML = '<thead><tr><th>QP Code</th><th>Course Name</th><th>Total Students</th></tr></thead>';
+                const tb = document.createElement('tbody');
+                const sum = {};
+                D.students.forEach(s => {
+                   const code = D.qpCodes[\`\${s.Course}|Regular\`] || D.qpCodes[\`\${s.Course}|Supplementary\`] || 'NOT_SET';
+                   if(!sum[s.Course]) sum[s.Course] = { code, count: 0 };
+                   sum[s.Course].count++;
+                });
+                Object.entries(sum).forEach(([course, info]) => {
+                    tb.innerHTML += \`<tr><td class="center bold">\${info.code}</td><td>\${course}</td><td class="center bold">\${info.count}</td></tr>\`;
+                });
+                t.appendChild(tb); p.appendChild(t); v.appendChild(p);
+            }
+
+            if (type === 'invig') {
+                const p = createPage();
+                p.innerHTML = h + '<h3>INVIGILATOR DUTY LIST</h3>';
+                const t = document.createElement('table'); t.className = 'rt';
+                t.innerHTML = '<thead><tr><th>Room</th><th>Location</th><th>Assigned Staff</th><th>Signature</th></tr></thead>';
+                const tb = document.createElement('tbody');
+                D.allotment.forEach(room => {
+                    const invig = D.invigilators.find(i => i.room === room.roomName);
+                    tb.innerHTML += \`<tr><td class="center bold">\${room.roomName}</td><td>\${D.roomConfig[room.roomName]?.location || '-'}</td><td class="center italic">\${invig?.staffName || '(Unassigned)'}</td><td></td></tr>\`;
+                });
+                t.appendChild(tb); p.appendChild(t); v.appendChild(p);
+            }
+
+            if (type === 'stickers') {
+                const p = createPage();
+                p.innerHTML = h + '<h3>SEATING STICKERS</h3>';
+                const sg = document.createElement('div'); sg.className = 'sticker-grid';
+                D.students.forEach(s => {
+                    const room = D.allotment.find(r => r.students.some(st => (st['Register Number'] || st.RegisterNo) === s['Register Number']));
+                    const seat = room?.students.find(st => (st['Register Number'] || st.RegisterNo) === s['Register Number'])?.seat || '?';
+                    sg.innerHTML += \`<div class="sticker"><div class="sticker-reg">\${s['Register Number']}</div><div class="sticker-room">\${room?.roomName || ''} - Seat \${seat}</div></div>\`;
+                });
+                p.appendChild(sg); v.appendChild(p);
+            }
+
+            if (type === 'absentee') {
+                const p = createPage();
+                p.innerHTML = h + '<h3>ABSENTEE STATEMENT</h3>';
+                const t = document.createElement('table'); t.className = 'rt';
+                t.innerHTML = '<thead><tr><th>#</th><th>Reg No</th><th>Name</th><th>Course</th><th>Seat</th></tr></thead>';
+                const tb = document.createElement('tbody');
+                let count = 0;
+                Object.entries(D.absentees).forEach(([reg, info]) => {
+                   const s = D.students.find(st => st['Register Number'] === reg);
+                   if(s) {
+                       count++;
+                       tb.innerHTML += \`<tr><td>\${count}</td><td>\${reg}</td><td>\${s.Name}</td><td>\${s.Course}</td><td>\${info.seat || '-'}</td></tr>\`;
+                   }
+                });
+                if(count===0) tb.innerHTML = '<tr><td colspan="5" class="center">No absentees reported for this session.</td></tr>';
+                t.appendChild(tb); p.appendChild(t); v.appendChild(p);
+            }
+
+            if (type === 'bill') {
+                const p = createPage();
+                p.innerHTML = h + '<h3>REMUNERATION BILL</h3>';
+                const t = document.createElement('table'); t.className = 'rt';
+                t.innerHTML = '<thead><tr><th>Description</th><th>Rate</th><th>Count</th><th>Total Amount</th></tr></thead>';
+                const tb = document.createElement('tbody');
+                const iC = D.invigilators.length;
+                const sC = D.scribes.length;
+                tb.innerHTML += \`<tr><td>Invigilation Duty</td><td class="center">350.00</td><td class="center">\${iC}</td><td class="center">\${(iC*350).toFixed(2)}</td></tr>\`;
+                tb.innerHTML += \`<tr><td>Scribe Allowance</td><td class="center">150.00</td><td class="center">\${sC}</td><td class="center">\${(sC*150).toFixed(2)}</td></tr>\`;
+                tb.innerHTML += \`<tr><td colspan="3" class="bold">GRAND TOTAL</td><td class="center bold">\${(iC*350 + sC*150).toFixed(2)}</td></tr>\`;
+                t.appendChild(tb); p.appendChild(t); v.appendChild(p);
+            }
+
             window.scrollTo({ top: v.offsetTop - 50, behavior: 'smooth' });
-            alert("Reports Generated Below. Press Ctrl+P to Print.");
         }
 
         function createPage() {
-            const div = document.createElement('div');
-            div.className = 'report-page';
-            return div;
+            const div = document.createElement('div'); div.className = 'report-page'; return div;
         }
     <\/script>
 </body>
