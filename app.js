@@ -1906,21 +1906,30 @@ async function deleteSessionFromCloud(sessionKey) {
             const { db, doc, setDoc, getDoc } = window.firebase;
             const cid = currentCollegeId;
 
-            // Build flat { regNo: { room, seat, name, course } } from allotment array
+            // Build flat map using Sticky Seats and Rich Location data
             const studentMap = {};
+            const roomSerialMap = typeof getRoomSerialMap === 'function' ? getRoomSerialMap(sessionKey) : {};
+            const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+
             (roomAllotment || []).forEach(room => {
-                (room.students || []).forEach((s, idx) => {
-                    const reg = (typeof s === 'object' ? s['Register Number'] : s);
+                const serial = roomSerialMap[room.roomName] || '';
+                const roomInfo = roomConfig[room.roomName] || {};
+                const loc = (roomInfo.location && roomInfo.location.trim()) ? ` (${roomInfo.location})` : '';
+                const roomString = serial ? `Hall #${serial} - ${room.roomName}${loc}` : `${room.roomName}${loc}`;
+
+                (room.students || []).forEach((s) => {
+                    const reg = (typeof s === 'object' ? (s['Register Number'] || s.RegisterNo) : s);
                     if (reg) {
                         studentMap[reg] = {
-                            room: room.roomName,
-                            seat: idx + 1,
+                            room: roomString,
+                            seat: s.seat || '?', // Read sticky seat
                             name: (typeof s === 'object' ? s['Name'] : '') || '',
-                            course: (typeof s === 'object' ? s['Course'] : '') || '',
+                            course: (typeof s === 'object' ? (s['Course'] || s.Course) : '') || '',
                         };
                     }
                 });
             });
+
             // Add scribe allotments
             Object.entries(scribeAllotment || {}).forEach(([reg, scribeRoom]) => {
                 if (studentMap[reg]) studentMap[reg].room = scribeRoom;
@@ -11016,16 +11025,20 @@ window.real_populate_qp_code_session_dropdown = function () {
             const sliceB = streamPart.partB.slice(streamPart.pB, streamPart.pB + takeB);
 
             // ── GUARD 3: Partial last room — one course nearly exhausted ──────
-            // If either slice is shorter than requested, mixing can't be done
-            // cleanly. Take all remaining candidates as-is. No scramble.
             if (sliceA.length < takeA || sliceB.length < takeB) {
                 newStudents = candidates.slice(0, candidates.length);
             } else {
-                // Normal mixed room: combine Part A and Part B, advance pointers
-                newStudents = [...sliceA, ...sliceB];
+                // Normal mixed room: Interleave students for true mixing (A, B, A, B...)
+                newStudents = [];
+                const maxLen = Math.max(sliceA.length, sliceB.length);
+                for (let i = 0; i < maxLen; i++) {
+                    if (i < sliceA.length) newStudents.push(sliceA[i]);
+                    if (i < sliceB.length) newStudents.push(sliceB[i]);
+                }
                 streamPart.pA += sliceA.length;
                 streamPart.pB += sliceB.length;
             }
+
 
         } else {
             // No Mix selected: standard fill, original behaviour preserved
@@ -11040,12 +11053,20 @@ window.real_populate_qp_code_session_dropdown = function () {
             return;
         }
 
+        // Assign "Sticky Seat" numbers permanently during allotment
+        const studentsWithSeats = newStudents.map((s, idx) => {
+            const studentObj = (typeof s === 'object') ? { ...s } : { RegisterNo: s };
+            studentObj.seat = idx + 1; // Assigned once here!
+            return studentObj;
+        });
+
         currentSessionAllotment.push({
             roomName: roomName,
             capacity: capacity,
-            students: newStudents,
+            students: studentsWithSeats,
             stream: targetStream
         });
+
 
        
 
@@ -16231,7 +16252,7 @@ window.generateBatchArchive = async function() {
                         const regNo = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
                         studentMap[regNo] = { 
                             room: roomDisplay, 
-                            seat: idx + 1, 
+                            seat: s.seat || (idx + 1), // Use sticky seat
                             invigilator: invigilators[roomName] || 'Not Assigned',
                             stream: roomObj.stream || 'Regular'
                         };
@@ -17874,6 +17895,9 @@ if (displayLoc) {
                     <td style="text-align: center;">${serial}</td>
                     <td>${room.roomName}</td>
                     <td>${loc}</td>
+                    <td style="font-size: 8pt;">
+                        ${Array.from(new Set(room.students.map(s => s.Course || s['Course'] || '-'))).join(', ')}
+                    </td>
                     <td style="text-align: center;">${stream}</td>
                     <td style="text-align: center; font-weight: bold;">${count}</td>
                 </tr>
@@ -17917,7 +17941,8 @@ if (displayLoc) {
                             <th style="width: 8%;">S.No</th>
                             <th style="width: 25%;">Room Name</th>
                             <th style="width: 30%;">Location</th>
-                            <th style="width: 20%;">Stream</th>
+                            <th style="width: 25%;">Mixed Courses</th>
+                            <th style="width: 15%;">Stream</th>
                             <th style="width: 17%;">Students</th>
                         </tr>
                     </thead>
