@@ -419,13 +419,12 @@ function dismissLoader() {
 
 // Single function called when data is local, from cloud, or auth fails
 async function finalizeAppLoad() {
+    // 🛡️ CANCEL SAFETY TIMEOUT: App loaded natively, so prevent the 12-second warning!
+    if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer);
+
     await migrateFromLocalStorage(); // Add this line!
     if (typeof updateDashboard === 'function') updateDashboard();
-    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-    if (typeof restoreActiveTab === 'function') restoreActiveTab(); // Restore last view
-    dismissLoader(); // Safely remove the loader once all is done
-}
+
 
 let currentUser = null;
 window.currentCollegeId = null; // The shared document ID
@@ -458,7 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ABSENTEE_LIST_KEY = 'examAbsenteeList';
     const QP_CODE_LIST_KEY = 'examQPCodes';
     const BASE_DATA_KEY = 'examBaseData';
-    migrateFromLocalStorage(); // ← ADD THIS LINE HERE
+    // 🗑️ REMOVED duplicate migrateFromLocalStorage(); to prevent IndexedDB race conditions
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
     const loaderMessages = [
@@ -483,25 +482,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Ensure this function exists to stop it later
-    window.finalizeAppLoad = function () {
-        // Cancel the safety timer since we loaded successfully  ← NEW LINE
-        if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer); 
-        // 1. Run UI Updates
-        if (typeof updateDashboard === 'function') updateDashboard();
-        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
-        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-        if (typeof restoreActiveTab === 'function') restoreActiveTab();
+    // 🗑️ REMOVED completely redundant window.finalizeAppLoad duplicate.
+    // It conflicted with the primary global async finalizeAppLoad() at the top of the file!
 
-        // 2. Stop Animation & Remove Loader
-        if (window.loaderMessageInterval) clearInterval(window.loaderMessageInterval);
-
-        const loader = document.getElementById('initial-app-loader');
-        if (loader) {
-            loader.style.opacity = '0';
-            setTimeout(() => { loader.remove(); }, 500);
-        }
-    };
     // --- SAFETY TIMEOUT: Force-dismiss loader after 12 seconds on all browsers ---
+
     window._loaderSafetyTimer = setTimeout(function() {
         const loader = document.getElementById('initial-app-loader');
         if (loader) {
