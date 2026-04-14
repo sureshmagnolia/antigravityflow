@@ -13749,46 +13749,45 @@ function showStudentDetailsModal(regNo, sessionKey) {
 
             // Calculate allocation for this specific session
             const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
-             // 🛡️ UNIFIED SEARCH (V15): Absolute Synchronization
+
+            // 🛡️ UNIFIED SEARCH (V15): Absolute Synchronization
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             const sessionAllotment = allAllotments[sessionKey] || [];
             
-            let allocatedStudent = null;
+            let assignedHall = "Not Allotted";
+            let rowCss = "";
+            let foundInRoom = null;
+
             sessionAllotment.forEach(room => {
-                const found = (room.students || []).find(s => {
-                    const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
-                    return reg === regNo;
+                const match = (room.students || []).find(s => {
+                    const r = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                    return r === regNo;
                 });
-                if (found) {
-                    allocatedStudent = { 
-                        ...found, 
-                        'Room No': room.roomName, 
-                        seatNumber: found.seat || '?' 
+                if (match) {
+                    foundInRoom = { 
+                        name: room.roomName, 
+                        seat: match.seat || '?' 
                     };
                 }
             });
 
-            let roomDisplay = "Not Allotted";
-            let rowClass = "";
+            if (foundInRoom) {
+                const hallInfo = currentRoomConfig[foundInRoom.name] || {};
+                const hallLoc = hallInfo.location ? ` <br><span class="text-xs text-gray-500">(${hallInfo.location})</span>` : "";
+                assignedHall = `<strong>${foundInRoom.name}</strong> (Seat: ${foundInRoom.seat})${hallLoc}`;
 
-            if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
-                const roomName = allocatedStudent['Room No'];
-                const roomInfo = currentRoomConfig[roomName] || {};
-                const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
-
-                // FIXED: Using 'allocatedStudent' consistently
-                roomDisplay = `<strong>${roomName}</strong> (Seat: ${allocatedStudent.seatNumber})${location}`;
-
-                const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-                const scribeRoom = sessionScribeMap[regNo];
-                if (scribeRoom) {
-                    const sInfo = currentRoomConfig[scribeRoom] || {};
-                    const sLoc = sInfo.location ? ` (${sInfo.location})` : "";
-                    roomDisplay += `<br><span class="text-orange-600 text-xs font-bold">Scribe: ${scribeRoom}${sLoc}</span>`;
-                    rowClass = "bg-orange-50";
+                // Scribe Sync
+                const scMap = allScribeAllotments[sessionKey] || {};
+                const scRoom = scMap[regNo];
+                if (scRoom) {
+                    const scInfo = currentRoomConfig[scRoom] || {};
+                    const scLoc = scInfo.location ? ` (${scInfo.location})` : "";
+                    assignedHall += `<br><span class="text-orange-600 text-xs font-bold">Scribe: ${scRoom}${scLoc}</span>`;
+                    rowCss = "bg-orange-50";
                 }
             }
 
+            
 
             const tr = document.createElement('tr');
             if (rowClass) tr.className = rowClass;
@@ -13800,7 +13799,8 @@ function showStudentDetailsModal(regNo, sessionKey) {
                     <span class="font-bold text-gray-600">${qpDisplay}</span>
                     <span class="text-indigo-600 ml-1">(${streamDisplay})</span>
                 </td>
-                <td class="px-3 py-2 border-b text-sm">${roomDisplay}</td>
+                <td class="px-3 py-2 border-b text-sm">${assignedHall}</td>
+
             `;
             tbody.appendChild(tr);
         });
