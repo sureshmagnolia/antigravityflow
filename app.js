@@ -16191,7 +16191,7 @@ window.generateBatchArchive = async function() {
                 room: studentMap[regNo]?.room || 'Unassigned',
                 seat: studentMap[regNo]?.seat || '-',
                 invigilator: studentMap[regNo]?.invigilator || '-',
-                qpCode: qpMap[s.Course] || 'N/A',
+                qpCode: qpMap[btoa(unescape(encodeURIComponent(`${s.Course}|${s.Stream || 'Regular'}`)))] || 'N/A',
                 stream: studentMap[regNo]?.stream || 'Regular',
                 status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
             });
