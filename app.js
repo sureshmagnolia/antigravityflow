@@ -7478,10 +7478,29 @@ function getExamName(date, time, stream) {
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-                const data = getFilteredReportData('qp-distribution');
-                if (data.length === 0) { alert("No data found."); return; }
+            // 🛡️ UNIFIED PIPELINE (V8): Use actual database for Room-wise
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            
+            if (sessionAllotment.length === 0) { 
+                alert("Please allot rooms before generating the Room-wise report."); 
+                generateReportButton.disabled = false;
+                generateReportButton.textContent = "Generate Room-wise Seating Report";
+                return; 
+            }
 
-                const processed_rows_with_rooms = performOriginalAllocation(data);
+            const processed_rows_with_rooms = [];
+            sessionAllotment.forEach(room => {
+                (room.students || []).forEach(s => {
+                    processed_rows_with_rooms.push({
+                        ...s,
+                        'Room No': room.roomName,
+                        seatNumber: s.seat || '?',
+                        Stream: room.stream || 'Regular'
+                    });
+                });
+            });
+
                 const sessions = {};
 
                 // 1. Grouping Logic
