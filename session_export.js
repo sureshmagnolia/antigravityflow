@@ -23,7 +23,8 @@ const SESSION_EXPORT_JS = {
         const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Institution';
 
         // Filters
-        const allStudents = typeof allStudentData !== 'undefined' ? allStudentData : [];
+        // Access data via the global window hook in app.js
+        const allStudents = (typeof window.allStudentDataList === 'function') ? window.allStudentDataList() : [];
         const sessionStudents = allStudents.filter(s => s.Date === date && s.Time === time);
         
         if (sessionStudents.length === 0) {
