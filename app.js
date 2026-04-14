@@ -19825,50 +19825,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // These are defined outside DOMContentLoaded so they are
 // guaranteed to be registered even if earlier code errors.
 // =======================================================
-window.openBatchArchiveModal = function() {
-    try {
-        const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-
-        const listDiv = document.getElementById('batch-archive-checkbox-list');
-
-        if (!listDiv) {
-            alert("Error: Batch Archive list container not found in HTML.");
-            return;
-        }
-
-        if (!Array.isArray(known) || known.length === 0) {
-            listDiv.innerHTML = `<p class="text-sm text-gray-500 italic p-4 text-center">No sessions available to archive.</p>`;
-        } else {
-            known.sort((a, b) => {
-                try {
-                    if (!a || !b || typeof a !== 'string' || typeof b !== 'string') return 0;
-                    const partsA = a.split(' | ')[0].split('.');
-                    const partsB = b.split(' | ')[0].split('.');
-                    const dateA = parseInt((partsA[2] || "").substring(0,4) + (partsA[1] || "").padStart(2,'0') + (partsA[0] || "").padStart(2,'0'));
-                    const dateB = parseInt((partsB[2] || "").substring(0,4) + (partsB[1] || "").padStart(2,'0') + (partsB[0] || "").padStart(2,'0'));
-                    return (dateB || 0) - (dateA || 0);
-                } catch(e) { return 0; }
-            });
-
-            listDiv.innerHTML = known.filter(sk => sk).map(sk => `
-                <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
-                    <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                    <span class="text-sm font-bold text-gray-700">${sk}</span>
-                </label>
-            `).join('');
-        }
-
-        const modal = document.getElementById('batch-archive-modal');
-        if (modal) {
-            modal.classList.remove('hidden');
-        } else {
-            alert("Error: Modal UI not found! Check index.html has id='batch-archive-modal'.");
-        }
-    } catch (error) {
-        alert("Error opening archive modal: " + error.message);
-        console.error("Batch Archive Error:", error);
-    }
-}
 
 window.closeBatchArchiveModal = function() {
     const modal = document.getElementById('batch-archive-modal');
