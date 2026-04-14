@@ -5840,26 +5840,11 @@ function getExamName(date, time, stream) {
                         seatNumber: s.seat || '?', // The STICKY SEAT
                         Stream: room.stream || 'Regular'
                     });
-                });
             });
-
-            const final_student_list_for_report = [];
-
-            for (const student of processed_rows_with_rooms) {
-                if (student.isScribe) {
-                    const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-                    const sessionScribeAllotment = allScribeAllotments[sessionKeyPipe] || {};
-                    const scribeRoom = sessionScribeAllotment[student['Register Number']] || 'N/A';
-                    final_student_list_for_report.push({ ...student, Name: student.Name, remark: `${scribeRoom}`, isPlaceholder: true });
-                } else {
-                    final_student_list_for_report.push(student);
-                }
-            }
-
-            lastGeneratedRoomData = processed_rows_with_rooms;
-            lastGeneratedReportType = "Roomwise_Seating_Report";
+        });
 
             const sessions = {};
+
             loadQPCodes();
 
             final_student_list_for_report.forEach(student => {
@@ -6213,11 +6198,30 @@ function getExamName(date, time, stream) {
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+                       currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
 
-            const baseData = getFilteredReportData('day-wise');
-            if (baseData.length === 0) { alert("No data found."); return; }
+            // 🛡️ UNIFIED PIPELINE (V9): Direct database source
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            if (sessionAllotment.length === 0) { 
+                alert("Please allot rooms before generating this report."); 
+                generateDaywiseReportButton.disabled = false;
+                generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
+                return; 
+            }
+
+            const baseData = [];
+            sessionAllotment.forEach(room => {
+                (room.students || []).forEach(s => {
+                    baseData.push({
+                        ...s,
+                        'Room No': room.roomName,
+                        seatNumber: s.seat || '?',
+                        Stream: room.stream || 'Regular'
+                    });
+                });
+            });
 
             // 1. Split Data by Stream
             const dataByStream = {};
@@ -6364,10 +6368,6 @@ function getExamName(date, time, stream) {
                 </table>
             `;
             }
-
-            // 🛡️ UNIFIED PIPELINE: Use saved database instead of simulation
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const sessionAllotment = allAllotments[sessionKey] || [];
 
             for (const streamName of sortedStreamNames) {
                 // Flatten the saved database for this stream
