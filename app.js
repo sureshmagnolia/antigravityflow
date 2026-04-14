@@ -2952,10 +2952,20 @@ function generateDayWisePDF() {
             });
         });
 
+        // 🛠️ UNIFIED PIPELINE (V13): Restore QP Code Mapping
+        const sessionQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[reportsSessionSelect.value] || {};
+        
         const dataWithRooms = rawData.map(s => {
             const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
-            return { ...s, 'Room No': assignment.room, seatNumber: assignment.seat };
+            const courseKey = window.getQpKey(s.Course, s.Stream || 'Regular');
+            return { 
+                ...s, 
+                'Room No': assignment.room, 
+                seatNumber: assignment.seat,
+                qpCode: sessionQPCodes[courseKey] || '' 
+            };
         });
+
 
         const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
 
@@ -13742,8 +13752,9 @@ function showStudentDetailsModal(regNo, sessionKey) {
             let roomDisplay = "Not Allotted";
             let rowClass = "";
 
-            if (studentAlloc && studentAlloc['Room No'] !== "Unallotted") {
-                const roomName = studentAlloc['Room No'];
+            if (allocatedStudent && allocatedStudent['Room No'] !== "Unallotted") {
+                const roomName = allocatedStudent['Room No'];
+
                 // *** FIX: Get Location ***
                 const roomInfo = currentRoomConfig[roomName] || {};
                 const location = roomInfo.location ? ` <br><span class="text-xs text-gray-500">(${roomInfo.location})</span>` : "";
