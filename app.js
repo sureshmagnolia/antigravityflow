@@ -16207,7 +16207,14 @@ window.generateBatchArchive = async function() {
     const sessionSummary = {};
     allArchiveData.forEach(row => {
         if (!sessionSummary[row.sessionKey]) {
-            sessionSummary[row.sessionKey] = { date: row.date, time: row.time, normalCount: 0, scribeCount: 0 };
+            sessionSummary[row.sessionKey] = { 
+                date: row.date, 
+                time: row.time, 
+                stream: row.stream || 'Regular', 
+                normalCount: 0, 
+                scribeCount: 0 
+            };
+
         }
         if (row.status !== 'ABSENT') {
             if (row.stream === 'Regular') sessionSummary[row.sessionKey].normalCount++;
