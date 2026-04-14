@@ -196,7 +196,15 @@ window.disable_edit_data_tab = disable_edit_data_tab;
 async function autoCleanPastGhostData() {
     console.log("🚀 [System] Checking for expired exam data...");
     
+    // 🛡️ UNIFIED PARSER: Safely reads any Date string and converts 2-digit years automatically
+    const parseSessionDate = (dStr) => {
+        if (!dStr.includes('.')) return new Date(dStr);
+        const [d, m, y] = dStr.split('.');
+        return new Date(`${y.length === 2 ? '20' + y : y}-${m}-${d}`);
+    };
+
     const today = new Date();
+
     today.setHours(0, 0, 0, 0);
 
     // 🛡️ SAFETY BUFFER: Keep data for 30 days after the exam date
@@ -213,13 +221,8 @@ async function autoCleanPastGhostData() {
     Object.keys(slots).forEach(slotId => {
         const dateStr = slotId.split('_')[0]; 
         // Handle "DD.MM.YYYY" or "YYYY-MM-DD"
-        let slotDate;
-        if (dateStr.includes('.')) {
-            const [d, m, y] = dateStr.split('.');
-            slotDate = new Date(`${y}-${m}-${d}`);
-        } else {
-            slotDate = new Date(dateStr);
-        }
+        let slotDate = parseSessionDate(dateStr);
+
         slotDate.setHours(0, 0, 0, 0);
 
         // ONLY delete if the exam is strictly older than 30 days
@@ -233,13 +236,8 @@ async function autoCleanPastGhostData() {
 
     // 2. Scan Availability
     Object.keys(availability).forEach(dateStr => {
-        let availDate;
-        if (dateStr.includes('.')) {
-            const [d, m, y] = dateStr.split('.');
-            availDate = new Date(`${y}-${m}-${d}`);
-        } else {
-            availDate = new Date(dateStr);
-        }
+        let availDate = parseSessionDate(dateStr);
+
         availDate.setHours(0, 0, 0, 0);
 
         if (availDate < cutoffDate) {
@@ -276,13 +274,7 @@ async function autoCleanPastGhostData() {
 
                 for (const [sessionKey, sInfo] of Object.entries(sessions)) {
                     const dateStr = sessionKey.split(' | ')[0].trim();
-                    let sessionDate;
-                    if (dateStr.includes('.')) {
-                        const [d, m, y] = dateStr.split('.');
-                        sessionDate = new Date(`${y}-${m}-${d}`);
-                    } else {
-                        sessionDate = new Date(dateStr);
-                    }
+                    let sessionDate = parseSessionDate(dateStr);
                     sessionDate.setHours(0, 0, 0, 0);
 
                     // Public Seating Only: If the exam happened before today (i.e. yesterday or older)
