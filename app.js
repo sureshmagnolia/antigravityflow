@@ -15304,12 +15304,17 @@ async function loadInitialData() {
 
     // 5. Render Function (Strictly Black & White - No Date)
     function renderBillHTML(bill, container) {
+
         function numToWords(n) {
+            // Added NaN / 0 guard
             if (isNaN(n) || n === 0) return 'Zero';
             const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
             const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
             if ((n = n.toString()).length > 9) return 'Overflow';
+            
+            // Double backslashes (\\d) ensures the pattern doesn't crash when rendered into string HTML!
             const n_array = ('000000000' + n).slice(-9).match(/^(\\d{2})(\\d{2})(\\d{2})(\\d{1})(\\d{2})$/);
+            
             if (!n_array) return 'Zero';
             let str = '';
             str += (n_array[1] != 0) ? (a[Number(n_array[1])] || b[n_array[1][0]] + ' ' + a[n_array[1][1]]) + 'Crore ' : '';
@@ -15319,6 +15324,7 @@ async function loadInitialData() {
             str += (n_array[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n_array[5])] || b[n_array[5][0]] + ' ' + a[n_array[5][1]]) : '';
             return str.trim() || 'Zero';
         }
+
 
 
 
