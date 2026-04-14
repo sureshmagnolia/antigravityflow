@@ -16187,16 +16187,21 @@ window.generateBatchArchive = async function() {
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
         const absentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}')[sessionKey] || {};
         const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}')[sessionKey] || {};
+        const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '[]');
+        const roomConfigMap = {};
+        roomConfig.forEach(r => { roomConfigMap[r.name] = r; });
 
         const studentMap = {};
         if (Array.isArray(rooms)) {
             rooms.forEach(roomObj => {
                 const roomName = roomObj.roomName;
+                const roomInfo = roomConfigMap[roomName] || {};
+                const roomDisplay = (roomInfo.location && roomInfo.location.trim()) ? roomName + ' (' + roomInfo.location + ')' : roomName;
                 if (roomObj.students && Array.isArray(roomObj.students)) {
                     roomObj.students.forEach((s, idx) => {
                         const regNo = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
                         studentMap[regNo] = { 
-                            room: roomName, 
+                            room: roomDisplay, 
                             seat: idx + 1, 
                             invigilator: invigilators[roomName] || 'Not Assigned',
                             stream: roomObj.stream || 'Regular'
@@ -16205,6 +16210,7 @@ window.generateBatchArchive = async function() {
                 }
             });
         }
+
 
         students.forEach(s => {
             const regNo = s['Register Number'] || s.RegisterNo;
