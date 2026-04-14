@@ -5817,11 +5817,32 @@ function getExamName(date, time, stream) {
             getRoomCapacitiesFromStorage();
             loadQPCodes();
 
-            const data = getFilteredReportData('room-wise');
-            if (data.length === 0) { alert("No data found."); return; }
+            // 🛡️ UNIFIED PIPELINE (V8): Read actual database, don't simulate!
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            
+            if (sessionAllotment.length === 0) { 
+                alert("Please allot rooms before generating the Room-wise report."); 
+                generateReportButton.disabled = false;
+                generateReportButton.textContent = "Generate Room-wise Seating Report";
+                return; 
+            }
 
-            const processed_rows_with_rooms = performOriginalAllocation(data);
             const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            const final_student_list_for_report = [];
+
+            // Flatten saved allotment into student rows
+            sessionAllotment.forEach(room => {
+                (room.students || []).forEach(s => {
+                    final_student_list_for_report.push({
+                        ...s,                      // Original Student Keys
+                        'Room No': room.roomName, // Physical Room
+                        seatNumber: s.seat || '?', // The STICKY SEAT
+                        Stream: room.stream || 'Regular'
+                    });
+                });
+            });
+
             const final_student_list_for_report = [];
 
             for (const student of processed_rows_with_rooms) {
@@ -7991,11 +8012,6 @@ function getExamName(date, time, stream) {
                     }
                 });
             });
-
-                const key = `${s.Date}|${s.Time}|${s['Register Number']}`;
-                map[key] = { room: s['Room No'], seat: s.seatNumber };
-                return map;
-            }, {});
 
             const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
             loadQPCodes();
