@@ -456,7 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const COLLEGE_NAME_KEY = 'examCollegeName';
     const ABSENTEE_LIST_KEY = 'examAbsenteeList';
     const QP_CODE_LIST_KEY = 'examQPCodes';
-    const BASE_DATA_KEY = 'examBaseData';
     // 🗑️ REMOVED duplicate migrateFromLocalStorage(); to prevent IndexedDB race conditions
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
