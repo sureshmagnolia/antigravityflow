@@ -16413,11 +16413,12 @@ window.generateBatchArchive = async function() {
                  + '<tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (' + invigs + ')</td><td style="text-align:right;font-weight:700;">\u20B9' + invigCost.toFixed(2) + '</td></tr>'
                  + '<tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">\u20B9' + contingency.toFixed(2) + '</td></tr>'
                  + '<tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">\u20B9' + (rates.data_entry_operator||0).toFixed(2) + '</td></tr>'
-                 + '<tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">₹' + grandTotal.toFixed(2) + '</td></tr>'
+                 + '<tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">\u20B9' + grandTotal.toFixed(2) + '</td></tr>'
+
                  + '</table></div>';
         });
         
-        html += '<button onclick="this.closest(\'[onclick]\').remove()" style="width:100%;padding:10px;background:#4f46e5;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Close</button>';
+        html += '<button onclick="this.parentNode.parentNode.remove()" style="width:100%;padding:10px;background:#4f46e5;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Close</button>';
         html += '</div></div>';
         document.body.insertAdjacentHTML('beforeend', html);
     }
