@@ -16383,10 +16383,9 @@ window.generateBatchArchive = async function() {
     const ARCHIVED_RATES = ${JSON.stringify(archivedRates).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
     const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary)).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
 
-    function showBillModal() {
+        function showBillModal() {
         const streamKeys = Object.keys(ARCHIVED_RATES);
         
-        // Helper to convert numbers to words
         function numToWords(n) {
             const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
             const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -16402,21 +16401,23 @@ window.generateBatchArchive = async function() {
             return str.trim();
         }
 
-        let html = '<div id="bill-modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;">'
-                 + '<div style="background:white;width:100%;max-width:800px;position:relative;" onclick="event.stopPropagation()">';
+        let html = '<!DOCTYPE html><html><head><title>Remuneration Bill</title>'
+                 + '<style>'
+                 + 'body{background:#e5e7eb;font-family:sans-serif;margin:0;padding:20px;display:flex;flex-direction:column;align-items:center;}'
+                 + '.no-print{width:100%;max-width:850px;background:white;padding:16px;display:flex;justify-content:flex-end;gap:16px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;box-sizing:border-box;}'
+                 + '.bill-page{width:100%;max-width:850px;background:white;padding:40px;margin-bottom:24px;box-shadow:0 4px 6px rgba(0,0,0,0.1);box-sizing:border-box;min-height:297mm;}'
+                 + '@media print { body{padding:0;background:white;display:block;} .no-print{display:none!important;} .bill-page{box-shadow:none;margin:0;padding:0;page-break-after:always;} }'
+                 + '</style></head><body>';
 
-        // Add Print and Close Buttons at top
-        html += '<div class="no-print" style="position:sticky;top:0;background:#f3f4f6;padding:10px;display:flex;justify-content:flex-end;gap:10px;border-bottom:1px solid #d1d5db;z-index:10;box-shadow:0 2px 5px rgba(0,0,0,0.1);">'
-             + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Print Bill</button>'
-             + '<button onclick="this.parentNode.parentNode.parentNode.remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
+        html += '<div class="no-print">'
+             + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">📄 Print Bill</button>'
+             + '<button onclick="window.close()" style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">❌ Close Tab</button>'
              + '</div>';
         
-        // Render each stream as a separate A4 page
         streamKeys.forEach(function(stream) {
             const rates = ARCHIVED_RATES[stream];
             if (!rates) return;
             
-            // Filter sessions for this stream
             const streamSessions = SESSION_SUMMARY.filter(function(s) { 
                 return (s.stream || "Regular") === stream; 
             }).sort(function(a, b) {
@@ -16427,13 +16428,11 @@ window.generateBatchArchive = async function() {
 
             if (streamSessions.length === 0) return;
 
-            // Generate Bill Logic
             let invigilation = 0, clerical = 0, sweeping = 0, peon = 0, supervision = 0;
             let chiefTotal = 0, seniorTotal = 0, officeTotal = 0;
             let bodyRows = "";
 
             if (rates.is_sde_mode) {
-                // SDE GROUPING
                 const sessionsByDate = {};
                 streamSessions.forEach(function(s) {
                     if (!sessionsByDate[s.date]) sessionsByDate[s.date] = [];
@@ -16492,7 +16491,6 @@ window.generateBatchArchive = async function() {
                 });
 
             } else {
-                // REGULAR LOGIC
                 streamSessions.forEach(function(session) {
                     const count = session.normalCount + session.scribeCount;
                     
@@ -16566,8 +16564,7 @@ window.generateBatchArchive = async function() {
                 ? '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">'
                 : '<col style="width:16%;"><col style="width:12%;"><col style="width:10%;"><col style="width:8%;"><col style="width:8%;"><col style="width:10%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;">';
 
-            html += '<div class="print-page w-full p-8 bg-white text-black" style="font-family:sans-serif;page-break-after:always;background:white !important;min-height:297mm;border-bottom:2px dashed #ccc;box-sizing:border-box;">'
-                 + '<style>@media print { body * { visibility:hidden; } #bill-modal-overlay, #bill-modal-overlay * { visibility:visible; } #bill-modal-overlay { position:absolute; left:0; top:0; padding:0; background:none; } .no-print { display:none !important; } .print-page { border:none !important; page-break-after:always; } }</style>'
+            html += '<div class="bill-page">'
                  + '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:16px;margin-bottom:16px;">'
                  + '<h2 style="font-size:20px;font-weight:bold;text-transform:uppercase;margin:0;">Exam Center Remuneration</h2>'
                  + '<h3 style="font-size:18px;font-weight:600;margin:4px 0;">Archived Bill - ' + stream + ' Stream</h3>'
@@ -16628,11 +16625,19 @@ window.generateBatchArchive = async function() {
                  + '<div style="border-top:1px solid black;width:33%;text-align:center;padding-top:8px;">Chief Superintendent</div>'
                  + '</div>'
                  
-                 + '</div>'; // End single stream print page
+                 + '</div>';
         });
         
-        html += '</div></div>';
-        document.body.insertAdjacentHTML('beforeend', html);
+        html += '</body></html>';
+        
+        const newWin = window.open('', '_blank');
+        if (newWin) {
+            newWin.document.write(html);
+            newWin.document.close();
+            newWin.focus();
+        } else {
+            alert('Please allow popups to view the Bill.');
+        }
     }
 
 
