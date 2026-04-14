@@ -417,20 +417,20 @@ function dismissLoader() {
     }
 }
 
-// Single function called when data is local, from cloud, or auth fails
 async function finalizeAppLoad() {
     // 🛡️ CANCEL SAFETY TIMEOUT: App loaded natively, so prevent the 12-second warning!
     if (window._loaderSafetyTimer) clearTimeout(window._loaderSafetyTimer);
 
-    await migrateFromLocalStorage(); // Add this line!
+    await migrateFromLocalStorage();
     if (typeof updateDashboard === 'function') updateDashboard();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
     if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
     if (typeof restoreActiveTab === 'function') restoreActiveTab();
-    dismissLoader();
+    dismissLoader(); // 🛡️ CRITICAL: Removes the loading screen
 }
 
 let currentUser = null;
+
 
 window.currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
