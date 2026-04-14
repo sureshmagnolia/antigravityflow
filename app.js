@@ -16566,20 +16566,18 @@ window.generateBatchArchive = async function() {
                               + '<td style="padding:4px;border:1px solid black;font-weight:bold;">\u20B9' + lineTotal + '</td></tr>';
                 });
             }
-
             const totalRegistered = streamSessions.reduce(function(sum, s) { return sum + s.normalCount + s.scribeCount; }, 0);
             const contingency = totalRegistered * (rates.contingent_charge || 0);
             const dataEntry = rates.data_entry_operator || 0;
-            const accountant = rates.accountant || 0;
             
-            // Fixed: Added Accountant to the grand total sum!
-            let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry + accountant;
-            if (isNaN(grandTotal)) grandTotal = 0; // Final safeguard
+            let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
+            if (isNaN(grandTotal)) grandTotal = 0;
             
             const totalAmountStr = grandTotal.toFixed(2);
             const parts = totalAmountStr.split('.');
             let words = numToWords(Number(parts[0]));
             if (Number(parts[1]) > 0) words += ' and ' + numToWords(Number(parts[1])) + ' Paise';
+
 
 
             let supSummaryHTML = rates.is_sde_mode
