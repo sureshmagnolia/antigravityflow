@@ -16569,9 +16569,11 @@ window.generateBatchArchive = async function() {
             const totalRegistered = streamSessions.reduce(function(sum, s) { return sum + s.normalCount + s.scribeCount; }, 0);
             const contingency = totalRegistered * (rates.contingent_charge || 0);
             const dataEntry = rates.data_entry_operator || 0;
+            const accountant = rates.accountant || 0; // Fixed: Restored this line so it can be displayed later!
             
             let grandTotal = supervision + invigilation + clerical + sweeping + peon + contingency + dataEntry;
             if (isNaN(grandTotal)) grandTotal = 0;
+
             
             const totalAmountStr = grandTotal.toFixed(2);
             const parts = totalAmountStr.split('.');
