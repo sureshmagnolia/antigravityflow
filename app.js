@@ -11096,25 +11096,12 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (sliceA.length < takeA || sliceB.length < takeB) {
                 newStudents = candidates.slice(0, candidates.length);
             } else {
-                // Normal mixed room: Interleave students for true mixing (A, B, A, B...)
-                newStudents = [];
-                // 🛡️ SMART MIXING: Only interleave if subjects are DIFFERENT
-                const isDifferentSubject = sliceA.length > 0 && sliceB.length > 0 && sliceA[0].Course !== sliceB[0].Course;
-
-                if (isDifferentSubject) {
-                    // Interleave (A1, B1, A2, B2...) for security when subjects differ
-                    const maxLen = Math.max(sliceA.length, sliceB.length);
-                    for (let i = 0; i < maxLen; i++) {
-                        if (i < sliceA.length) newStudents.push(sliceA[i]);
-                        if (i < sliceB.length) newStudents.push(sliceB[i]);
-                    }
-                } else {
-                    // Concatenate (A1, A2, A3... B1, B2...) for continuity within same subject
-                    newStudents.push(...sliceA, ...sliceB);
-                }
+                // 🛡️ BLOCK MIXING: Always continuous seats (A1...A20, then B1...B10)
+                newStudents = [...sliceA, ...sliceB];
 
                 streamPart.pA += sliceA.length;
                 streamPart.pB += sliceB.length;
+
             }
 
 
