@@ -10390,7 +10390,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
                         // F. Room & Location
                         let roomNo = s['Room No'];
-                        let seatNo = s.seatNumber;
+                        // 🛡️ UNIFIED: Read sticky seat property
+                        let seatNo = s.seat || s.seatNumber || '?';
 
                         const roomInfo = currentRoomConfig[roomNo] || {};
                         const location = roomInfo.location || "";
