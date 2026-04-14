@@ -16305,7 +16305,7 @@ window.generateBatchArchive = async function() {
     </div>
 
     <script>
-        const data = ${JSON.stringify(allArchiveData)};
+        const data = ${JSON.stringify(allArchiveData).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
         const tbody = document.getElementById('tableBody');
         const searchInput = document.getElementById('searchInput');
         const sessionFilter = document.getElementById('sessionFilter');
@@ -16376,8 +16376,8 @@ window.generateBatchArchive = async function() {
 
 <script>
     // Embedded archived data (self-contained, no Firebase needed)
-    const ARCHIVED_RATES = ${JSON.stringify(archivedRates)};
-    const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary))};
+    const ARCHIVED_RATES = ${JSON.stringify(archivedRates).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
+    const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary)).replace(/`/g, '\\`').replace(/\$/g, '\\$')};
 
     function showBillModal() {
         const streamKeys = Object.keys(ARCHIVED_RATES);
@@ -16409,10 +16409,10 @@ window.generateBatchArchive = async function() {
                  + '<h3 style="font-weight:700;color:#4f46e5;margin-bottom:8px;">' + stream + ' Stream</h3>'
                  + '<table style="width:100%;font-size:13px;border-collapse:collapse;">'
                  + '<tr><td style="padding:4px 8px;color:#6b7280;">Students (Normal / Scribe)</td><td style="text-align:right;font-weight:700;">' + totalNormal + ' / ' + totalScribe + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Supervision</td><td style="text-align:right;font-weight:700;">₹' + supervision.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (' + invigs + ')</td><td style="text-align:right;font-weight:700;">₹' + invigCost.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">₹' + contingency.toFixed(2) + '</td></tr>'
-                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">₹' + (rates.data_entry_operator||0).toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Supervision</td><td style="text-align:right;font-weight:700;">\u20B9' + supervision.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (' + invigs + ')</td><td style="text-align:right;font-weight:700;">\u20B9' + invigCost.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">\u20B9' + contingency.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">\u20B9' + (rates.data_entry_operator||0).toFixed(2) + '</td></tr>'
                  + '<tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">₹' + grandTotal.toFixed(2) + '</td></tr>'
                  + '</table></div>';
         });
