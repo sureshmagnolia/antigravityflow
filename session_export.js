@@ -388,7 +388,7 @@ const SESSION_EXPORT_JS = {
         }
     <\/script>
 </body>
-</html>\`;
+</html>`;
     }
 };
 
