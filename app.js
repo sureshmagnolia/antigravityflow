@@ -16226,6 +16226,7 @@ window.generateBatchArchive = async function() {
 
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Exam Archive Database</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -16420,7 +16421,7 @@ window.generateBatchArchive = async function() {
         html += '</div></div>';
         document.body.insertAdjacentHTML('beforeend', html);
     }
-</script>
+<\/script>
 
 
 
