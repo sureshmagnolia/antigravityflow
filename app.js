@@ -13504,10 +13504,29 @@ function showStudentDetailsModal(regNo, sessionKey) {
         return;
     }
 
-    // 1. Calculate Allocation Logic
-    const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-    const allocatedSessionData = performOriginalAllocation(sessionStudents);
-    const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === regNo);
+    // 🛡️ UNIFIED SEARCH (V11): Read from actual database, not simulation
+    const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    const sessionAllotment = allAllotments[sessionKey] || [];
+    
+    let allocatedStudent = null;
+    sessionAllotment.forEach(room => {
+        const found = (room.students || []).find(s => {
+            const sReg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+            return sReg === regNo;
+        });
+        if (found) {
+            allocatedStudent = { 
+                ...found, 
+                'Room No': room.roomName,
+                seatNumber: found.seat || '?' 
+            };
+        }
+    });
+
+    if (!allocatedStudent) {
+        alert("Student not found in any room allotment.");
+        return;
+    }
 
     // 2. Scribe Info
     const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
