@@ -3919,10 +3919,20 @@ function generateQuestionPaperReportPDF() {
             });
         });
 
+        // 🛡️ UNIFIED PIPELINE (V13): Restore QP Code Mapping
+        const sessionQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[reportsSessionSelect.value] || {};
+        
         const dataWithRooms = rawData.map(s => {
             const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
-            return { ...s, 'Room No': assignment.room, seatNumber: assignment.seat };
+            const courseKey = window.getQpKey(s.Course, s.Stream || 'Regular');
+            return { 
+                ...s, 
+                'Room No': assignment.room, 
+                seatNumber: assignment.seat,
+                qpCode: sessionQPCodes[courseKey] || '' 
+            };
         });
+
 
 
         // Group by Room -> QP Code
