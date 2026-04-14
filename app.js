@@ -20360,8 +20360,7 @@ window.downloadInvigilationListPDF = async function () {
         }
     };
     // --- END GLOBALLY AVAILABLE FUNCTIONS ---
-
-}); // <-- Closes the DOMContentLoaded block from the top of the file
+ // <-- Closes the DOMContentLoaded block from the top of the file
 
 // ==========================================
 // 🔒 APP SECURITY: DAILY ENTRY LOCK
