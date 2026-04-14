@@ -10525,6 +10525,31 @@ window.real_populate_qp_code_session_dropdown = function () {
             streamStats[roomStream].roomsUsed++;
         });
 
+        
+        // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
+        const totalAllottedOverall = Object.values(streamStats).reduce((sum, s) => sum + s.allotted, 0);
+        const mixingRadios = document.querySelectorAll('input[name="mixing-strategy"]');
+        if (totalAllottedOverall > 0) {
+            mixingRadios.forEach(radio => {
+                radio.disabled = true;
+                radio.parentElement.style.opacity = "0.5";
+                radio.parentElement.title = "Cannot change strategy mid-allotment. Wipe allotment to change.";
+            });
+            const mixPanel = document.getElementById('mixing-strategy-panel');
+            if (mixPanel) mixPanel.style.border = "1px solid #fee2e2"; // Subtle red border to show locked state
+        } else {
+            mixingRadios.forEach(radio => {
+                radio.disabled = false;
+                radio.parentElement.style.opacity = "1";
+                radio.parentElement.title = "";
+            });
+            const mixPanel = document.getElementById('mixing-strategy-panel');
+            if (mixPanel) mixPanel.style.border = "none";
+        }
+
+
+
+        
         // 2. Render Stats Cards
         Object.keys(streamStats).forEach(streamName => {
             const stats = streamStats[streamName];
