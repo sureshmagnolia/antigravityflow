@@ -16197,7 +16197,8 @@ window.generateBatchArchive = async function() {
                 seat: studentMap[regNo]?.seat || '-',
                 invigilator: studentMap[regNo]?.invigilator || '-',
                 qpCode: qpMap[window.getQpKey(s.Course, s.Stream)] || 'N/A',
-                stream: studentMap[regNo]?.stream || 'Regular',
+                stream: studentMap[regNo]?.stream || s.Stream || 'Regular',
+                isScribe: typeof scribeRegNos !== 'undefined' ? scribeRegNos.has(regNo) : false,
                 status: absentees[regNo] ? 'ABSENT' : 'PRESENT'
             });
         });
@@ -16206,21 +16207,24 @@ window.generateBatchArchive = async function() {
     // Pre-compute session summaries for remuneration (normalCount + scribeCount per session)
     const sessionSummary = {};
     allArchiveData.forEach(row => {
-        if (!sessionSummary[row.sessionKey]) {
-            sessionSummary[row.sessionKey] = { 
+        let streamName = row.stream || 'Regular';
+        let uniqueKey = row.sessionKey + '_' + streamName; // Separate Regular and EDE on same date/time
+        
+        if (!sessionSummary[uniqueKey]) {
+            sessionSummary[uniqueKey] = { 
                 date: row.date, 
                 time: row.time, 
-                stream: row.stream || 'Regular', 
+                stream: streamName, 
                 normalCount: 0, 
                 scribeCount: 0 
             };
-
         }
         if (row.status !== 'ABSENT') {
-            if (row.stream === 'Regular') sessionSummary[row.sessionKey].normalCount++;
-            else sessionSummary[row.sessionKey].scribeCount++;
+            if (row.isScribe) sessionSummary[uniqueKey].scribeCount++;
+            else sessionSummary[uniqueKey].normalCount++;
         }
     });
+
 
     const htmlBlob = `<!DOCTYPE html>
 
@@ -16404,7 +16408,7 @@ window.generateBatchArchive = async function() {
         // Add Print and Close Buttons at top
         html += '<div class="no-print" style="position:sticky;top:0;background:#f3f4f6;padding:10px;display:flex;justify-content:flex-end;gap:10px;border-bottom:1px solid #d1d5db;z-index:10;box-shadow:0 2px 5px rgba(0,0,0,0.1);">'
              + '<button onclick="window.print()" style="background:#1f2937;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Print Bill</button>'
-             + '<button onclick="this.parentNode.parentNode.remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
+             + '<button onclick="this.parentNode.parentNode.parentNode.remove()" style="background:#dc2626;color:white;padding:8px 16px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">Close</button>'
              + '</div>';
         
         // Render each stream as a separate A4 page
