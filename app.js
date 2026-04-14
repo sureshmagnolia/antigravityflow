@@ -20471,4 +20471,23 @@ window.toggleAllArchiveCheckboxes = function(check) {
 };
 
 
+/**
+ * --- 📦 SESSION DOCUMENT EXPORTER HOOK ---
+ * Triggered by the UI button. Feeds the selected session to the export module.
+ */
+window.triggerSessionExport = function() {
+    const sessionKey = document.getElementById('reports-session-select')?.value;
+    
+    if (!sessionKey) {
+        return alert("⚠️ Please select a Session from the dropdown first.");
+    }
+
+    if (typeof SESSION_EXPORT_JS !== 'undefined') {
+        SESSION_EXPORT_JS.exportSession(sessionKey);
+    } else {
+        alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
+    }
+};
+
+
 
