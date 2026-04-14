@@ -2940,7 +2940,23 @@ function generateDayWisePDF() {
         // --- 4. PREPARE DATA ---
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
-        const dataWithRooms = performOriginalAllocation(rawData);
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[`${date} | ${time}`] || [];
+        
+        const studentToRoomMap = {};
+        sessionAllotment.forEach(room => {
+            (room.students || []).forEach(s => {
+                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                studentToRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
+            });
+        });
+
+        const dataWithRooms = rawData.map(s => {
+            const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
+            return { ...s, 'Room No': assignment.room, seatNumber: assignment.seat };
+        });
+
         const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
 
         const sessionsMap = {};
@@ -8177,11 +8193,18 @@ function getExamName(date, time, stream) {
             const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
             if (allScribeStudents.length === 0) throw new Error("No scribe students found in the selected session.");
 
-            const originalAllotments = performOriginalAllocation(data);
-            const originalRoomMap = originalAllotments.reduce((map, s) => {
-                map[s['Register Number']] = { room: s['Room No'], seat: s.seatNumber };
-                return map;
-            }, {});
+            // 🛡️ UNIFIED PIPELINE (V12): Use actual database for Original Rooms
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            
+            const originalRoomMap = {};
+            sessionAllotment.forEach(room => {
+                (room.students || []).forEach(s => {
+                    const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                    originalRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
+                });
+            });
+
 
             const reportRows = [];
 
@@ -9114,12 +9137,16 @@ window.real_populate_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
         const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
 
-        // Perform allocation on the *entire* session
-        // *** THIS NOW USES THE MAIN ALLOCATION, WHICH IS SCRIBE-AWARE ***
-        const allocatedSessionData = performOriginalAllocation(sessionStudents);
+        // 🛡️ UNIFIED SEARCH (V12): Read from actual database
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionAllotment = allAllotments[sessionKey] || [];
+        
+        let allocatedStudent = null;
+        sessionAllotment.forEach(room => {
+            const found = (room.students || []).find(s => (s['Register Number'] || s.RegisterNo) === student['Register Number']);
+            if (found) allocatedStudent = { ...found, 'Room No': room.roomName };
+        });
 
-        // Find our selected student in the allocated list
-        const allocatedStudent = allocatedSessionData.find(s => s['Register Number'] === student['Register Number']);
 
         const roomNo = allocatedStudent ? allocatedStudent['Room No'] : 'N/A';
         const roomInfo = currentRoomConfig[roomNo];
@@ -10275,8 +10302,17 @@ window.real_populate_qp_code_session_dropdown = function () {
                 for (const [sessionKey, students] of Object.entries(sessions)) {
                     const [date, time] = sessionKey.split(' | ');
 
-                    // Run allocation logic to get Seats & Rooms
-                    const allocatedStudents = performOriginalAllocation(students);
+                    // 🛡️ UNIFIED CACHE (V12): Use saved session record
+                    const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                    const sessionAllotment = allAllotments[sessionKey] || [];
+                    
+                    const allocatedStudents = [];
+                    sessionAllotment.forEach(room => {
+                        (room.students || []).forEach(s => {
+                            allocatedStudents.push({ ...s, 'Room No': room.roomName, seatNumber: s.seat || '?' });
+                        });
+                    });
+
 
                     // Helper: Absentee Set for this session
                     const sessionAbsentees = new Set(allAbsentees[sessionKey] || []);
@@ -13675,8 +13711,15 @@ function showStudentDetailsModal(regNo, sessionKey) {
 
             // Calculate allocation for this specific session
             const sessionStudents = allStudentData.filter(s => s.Date === exam.Date && s.Time === exam.Time);
-            const allocatedSession = performOriginalAllocation(sessionStudents);
-            const studentAlloc = allocatedSession.find(s => s['Register Number'] === regNo);
+            // 🛡️ UNIFIED SEARCH (V12): Direct Lookup
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            let allocatedStudent = null;
+            sessionAllotment.forEach(room => {
+                const found = (room.students || []).find(s => (s['Register Number'] || s.RegisterNo) === regNo);
+                if (found) allocatedStudent = { ...found, 'Room No': room.roomName, seatNumber: found.seat || '?' };
+            });
+
 
             let roomDisplay = "Not Allotted";
             let rowClass = "";
