@@ -424,9 +424,14 @@ async function finalizeAppLoad() {
 
     await migrateFromLocalStorage(); // Add this line!
     if (typeof updateDashboard === 'function') updateDashboard();
-
+    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+    if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+    if (typeof restoreActiveTab === 'function') restoreActiveTab();
+    dismissLoader();
+}
 
 let currentUser = null;
+
 window.currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
