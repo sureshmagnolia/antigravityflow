@@ -13864,16 +13864,40 @@ Are you sure?
             if (confirm(confirmMsg)) {
                 if (!confirm("Are you absolutely sure?")) return;
 
-                // --- EXECUTE DELETE (Strict Stream Check) ---
-                allStudentData = allStudentData.filter(s => {
-                    const sStream = s.Stream || "Regular";
-                    return !(s.Date === date &&
-                        s.Time === time &&
-                        s.Course === targetCourse &&
-                        sStream === targetStream);
-                });
+                // --- 🛡️ ABSOLUTE SYNC (V14): Cascading Delete ---
+                const deletedRegNos = new Set(studentsToDelete.map(d => d['Register Number']));
+                
+                // 1. Purge from Master List
+                allStudentData = allStudentData.filter(s => !deletedRegNos.has(s['Register Number'] || s.RegisterNo));
+                
+                // 2. Purge from Sticky Allotments (Reports)
+                let roomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                if (roomAllots[sessionVal]) {
+                    roomAllots[sessionVal].forEach(room => {
+                        room.students = (room.students || []).filter(s => {
+                            const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                            return !deletedRegNos.has(reg);
+                        });
+                    });
+                    localStorage.setItem('examRoomAllotment', JSON.stringify(roomAllots));
+                }
 
-                alert(`Deleted ${studentsToDelete.length} records.\nThe page will now reload.`);
+                // 3. Purge from Scribe Assignments
+                let scribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                if (scribeAllots[sessionVal]) {
+                    deletedRegNos.forEach(r => delete scribeAllots[sessionVal][r]);
+                    localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(scribeAllots));
+                }
+
+                // 4. Purge from Absentee List
+                let allAbsentees = JSON.parse(localStorage.getItem(ABSENTEE_LIST_KEY) || '{}');
+                if (allAbsentees[sessionVal]) {
+                    allAbsentees[sessionVal] = allAbsentees[sessionVal].filter(r => !deletedRegNos.has(r));
+                    localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
+                }
+
+                alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
+
 
                // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
