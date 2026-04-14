@@ -16187,16 +16187,20 @@ window.generateBatchArchive = async function() {
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
         const absentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}')[sessionKey] || {};
         const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}')[sessionKey] || {};
-        const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '[]');
-        const roomConfigMap = {};
-        roomConfig.forEach(r => { roomConfigMap[r.name] = r; });
-
+        // Fixed: examRoomConfig is stored as an Object/Map, not an Array
+        const roomConfig = JSON.parse(localStorage.getItem('examRoomConfig') || '{}');
+        
         const studentMap = {};
         if (Array.isArray(rooms)) {
             rooms.forEach(roomObj => {
                 const roomName = roomObj.roomName;
-                const roomInfo = roomConfigMap[roomName] || {};
+                // Location lookup directly from the config map
+                const roomInfo = roomConfig[roomName] || {};
                 const roomDisplay = (roomInfo.location && roomInfo.location.trim()) ? roomName + ' (' + roomInfo.location + ')' : roomName;
+
+
+
+        
                 if (roomObj.students && Array.isArray(roomObj.students)) {
                     roomObj.students.forEach((s, idx) => {
                         const regNo = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
