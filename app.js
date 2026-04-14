@@ -7973,9 +7973,25 @@ function getExamName(date, time, stream) {
             const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
             if (allScribeStudents.length === 0) { alert("No scribe students found."); return; }
 
-           const allDataRaw = allStudentData || [];
-            const originalAllotments = performOriginalAllocation(allDataRaw);
-            const originalRoomMap = originalAllotments.reduce((map, s) => {
+            // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats
+            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const sessionAllotment = allAllotments[sessionKey] || [];
+            const originalRoomMap = {};
+            
+            sessionAllotment.forEach(room => {
+                const roomSerialMap = getRoomSerialMap(sessionKey);
+                const serial = roomSerialMap[room.roomName] || '-';
+                (room.students || []).forEach(s => {
+                    const reg = s['Register Number'] || s.RegisterNo;
+                    if (reg) {
+                        originalRoomMap[`${s.Date}|${s.Time}|${reg}`] = { 
+                            room: room.roomName, 
+                            seat: s.seat || '?' 
+                        };
+                    }
+                });
+            });
+
                 const key = `${s.Date}|${s.Time}|${s['Register Number']}`;
                 map[key] = { room: s['Room No'], seat: s.seatNumber };
                 return map;
@@ -13066,15 +13082,36 @@ Are you sure you want to update these records?
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-                const data = getFilteredReportData('room-wise');
-                if (data.length === 0) { alert("No data found."); return; }
+                // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers
+                const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                const sessionAllotment = allAllotments[sessionKey] || [];
+                
+                if (sessionAllotment.length === 0) { 
+                    alert("Please allot rooms before generating stickers."); 
+                    generateStickerButton.disabled = false;
+                    generateStickerButton.textContent = "Generate Stickers";
+                    return; 
+                }
 
-                const processed_rows = performOriginalAllocation(data);
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                const final_student_list_for_stickers = [];
+
+                // Load from database
+                sessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        final_student_list_for_stickers.push({
+                            ...s,
+                            'Room No': room.roomName,
+                            seatNumber: s.seat || '?',
+                            Stream: room.stream || 'Regular'
+                        });
+                    });
+                });
 
                 // 1. Group by Session -> Room
                 const sessions = {};
-                processed_rows.forEach(student => {
+                final_student_list_for_stickers.forEach(student => {
+
                     let roomName = student['Room No'];
                     let isScribe = false;
                     if (student.isScribe) {
