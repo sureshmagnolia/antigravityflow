@@ -6082,7 +6082,9 @@ function getExamName(date, time, stream) {
 
                 // --- 2. Table Row Generator ---
                 let previousCourseName = ""; let previousRegNoPrefix = "";
-                const regNoRegex = /^([A-Z]+)(\d+)$/;
+                // 🛡️ UNIVERSAL ID SPLITTER: Handles Alphanumeric, Hyphenated, or Pure Number IDs safely
+                const regNoRegex = /^([a-zA-Z\-_]*)(\d+)$/;
+
 
                 function generateTableRows(studentList) {
                     let rowsHtml = '';
@@ -15581,7 +15583,9 @@ async function loadInitialData() {
     function renderBillHTML(bill, container) {
 
         function numToWords(n) {
-            if (isNaN(n) || n === 0) return 'Zero';
+            // 🛡️ SANITIZER: Handles Strings, Numbers, and Fractional parts in Archive Mode
+            n = Math.floor(Number(String(n).replace(/[^\d.]/g, '')));
+            if (!n || n === 0) return 'Zero';
             const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
             const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
             if ((n = n.toString()).length > 9) return 'Overflow';
