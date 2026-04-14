@@ -16379,47 +16379,41 @@ window.generateBatchArchive = async function() {
     const SESSION_SUMMARY = ${JSON.stringify(Object.values(sessionSummary))};
 
     function showBillModal() {
-        // Group sessions by stream
-        const streams = [...new Set(SESSION_SUMMARY.map(s => s.stream || 'Regular'))];
         const streamKeys = Object.keys(ARCHIVED_RATES);
-        
         let html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="this.remove()">'
                  + '<div style="background:white;border-radius:12px;padding:24px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;" onclick="event.stopPropagation()">'
                  + '<h2 style="font-weight:900;font-size:18px;margin-bottom:16px;">💰 Remuneration Bill</h2>';
 
-        streamKeys.forEach(stream => {
-            const sessionData = SESSION_SUMMARY.filter(s => (s.stream || 'Regular') === stream);
-            if (sessionData.length === 0 && streamKeys.length > 1) return;
-            const allSessionData = SESSION_SUMMARY; // use all if stream isn't stored per row
-
-            // Compute bill inline (mirrors generateBillForSessions logic)
+        streamKeys.forEach(function(stream) {
             const rates = ARCHIVED_RATES[stream];
             if (!rates) return;
             
             let totalNormal = 0, totalScribe = 0;
-            SESSION_SUMMARY.forEach(s => { totalNormal += s.normalCount; totalScribe += s.scribeCount; });
+            SESSION_SUMMARY.forEach(function(s) { 
+               if((s.stream || "Regular") === stream) {
+                  totalNormal += s.normalCount; totalScribe += s.scribeCount; 
+               }
+            });
             const totalStudents = totalNormal + totalScribe;
-            
-            let invigs = Math.max(1, Math.floor(totalStudents / (rates.invigilator_ratio || 30)));
-            if ((totalStudents % (rates.invigilator_ratio || 30)) > 0) invigs++;
-            invigs += Math.ceil(totalScribe / (rates.scribe_invigilator_ratio || 1));
+            if (totalStudents === 0) return;
 
+            const invigs = Math.max(1, Math.floor(totalStudents / (rates.invigilator_ratio || 30))) + Math.ceil(totalScribe / (rates.scribe_invigilator_ratio || 1));
             const invigCost = invigs * (rates.invigilator || 0);
             const supervision = (rates.chief_supdt || 0) + (rates.senior_supdt || 0) + (rates.office_supdt || 0);
             const contingency = totalStudents * (rates.contingent_charge || 0);
             const grandTotal = supervision + invigCost + contingency + (rates.data_entry_operator || 0);
-            
-            html += \`<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">
-                <h3 style="font-weight:700;color:#4f46e5;margin-bottom:8px;">\${stream} Stream</h3>
-                <table style="width:100%;font-size:13px;border-collapse:collapse;">
-                    <tr><td style="padding:4px 8px;color:#6b7280;">Students (Normal / Scribe)</td><td style="text-align:right;font-weight:700;">\${totalNormal} / \${totalScribe}</td></tr>
-                    <tr><td style="padding:4px 8px;color:#6b7280;">Supervision</td><td style="text-align:right;font-weight:700;">₹\${supervision.toFixed(2)}</td></tr>
-                    <tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (\${invigs})</td><td style="text-align:right;font-weight:700;">₹\${invigCost.toFixed(2)}</td></tr>
-                    <tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">₹\${contingency.toFixed(2)}</td></tr>
-                    <tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">₹\${(rates.data_entry_operator||0).toFixed(2)}</td></tr>
-                    <tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">₹\${grandTotal.toFixed(2)}</td></tr>
-                </table>
-            </div>\`;
+
+            // Using standard string concatenation (Safe from nested backtick errors)
+            html += '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">'
+                 + '<h3 style="font-weight:700;color:#4f46e5;margin-bottom:8px;">' + stream + ' Stream</h3>'
+                 + '<table style="width:100%;font-size:13px;border-collapse:collapse;">'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Students (Normal / Scribe)</td><td style="text-align:right;font-weight:700;">' + totalNormal + ' / ' + totalScribe + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Supervision</td><td style="text-align:right;font-weight:700;">₹' + supervision.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Invigilators (' + invigs + ')</td><td style="text-align:right;font-weight:700;">₹' + invigCost.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Contingency</td><td style="text-align:right;font-weight:700;">₹' + contingency.toFixed(2) + '</td></tr>'
+                 + '<tr><td style="padding:4px 8px;color:#6b7280;">Data Entry</td><td style="text-align:right;font-weight:700;">₹' + (rates.data_entry_operator||0).toFixed(2) + '</td></tr>'
+                 + '<tr style="border-top:2px solid #4f46e5;"><td style="padding:8px;font-weight:900;font-size:15px;">GRAND TOTAL</td><td style="text-align:right;font-weight:900;font-size:15px;color:#059669;">₹' + grandTotal.toFixed(2) + '</td></tr>'
+                 + '</table></div>';
         });
         
         html += '<button onclick="this.closest(\'[onclick]\').remove()" style="width:100%;padding:10px;background:#4f46e5;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Close</button>';
@@ -16427,6 +16421,7 @@ window.generateBatchArchive = async function() {
         document.body.insertAdjacentHTML('beforeend', html);
     }
 </script>
+
 
 
 </body>
