@@ -3206,11 +3206,21 @@ function generateDayWisePDF() {
                             if (rotatedText !== row.loc) rotatedText = rotatedText.substring(0, rotatedText.length-2) + '..';
 
                             pdf.setTextColor(0);
-                            const centerX = xLoc + (W_LOC / 2);
-                            pdf.text(rotatedText, centerX, mergeCenterY, { align: "center", baseline: "middle", angle: 90 });
+                            
+                            // jsPDF Math: Manually center rotated text because 'align: center' breaks with angles
+                            const txtWidth = pdf.getTextWidth(rotatedText);
+                            // Font height estimation (1 pt = ~0.35mm)
+                            const fontHeightMm = (locFontSize * 0.35); 
+                            
+                            // Anchor coordinates for 90-deg CCW rotation (reads bottom to top)
+                            const startX = xLoc + (W_LOC / 2) + (fontHeightMm / 2.5);
+                            const startY = mergeCenterY + (txtWidth / 2);
+                            
+                            // Draw raw text using strict coordinates and strict angle flag
+                            pdf.text(rotatedText, startX, startY, { angle: 90 });
                         } else {
                             drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
-                        }
+
                         
                         const blockBottomY = y + totalMergeH;
                         pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); 
