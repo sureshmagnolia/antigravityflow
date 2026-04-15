@@ -1267,13 +1267,12 @@ async function updateLocalSlotsFromStudents() {
             if (snap.exists()) syncLocal(snap.data());
         });
 
-        // 4. ALLOCATIONS (Scribes - V1 Listener)
-        allocUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "allocation"), (snap) => {
-            if (snap.exists()) {
-                syncLocal(snap.data());
-                if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-            }
-        });
+        // 4. ALLOCATIONS (Scribes)
+        // 🛡️ ARCHITECTURAL UNIFICATION: Removed legacy Global Listener.
+        // Scribe allotments are now managed solely by the Sessions collection (Line 1378).
+        // This prevents the legacy global document from wiping modular session data.
+        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+
 
         // 5. STAFF
         staffUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "staff"), (snap) => {
@@ -1490,13 +1489,19 @@ async function updateLocalSlotsFromStudents() {
                             // We already initialized allScribeAllotments with local data (Line 1383), 
                             // and the loop updated it with cloud data. No extra wipe-logic needed!
                             
+                            // 🧬 SCR5-STABLE: Unlocked Modular Persistence
                             // Standardize storage using the SCRIBE_ALLOTMENT_KEY constant
                             if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
                                 safeSetItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
                             } else {
                                 safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
                             }
+                            // Also unify Invigilator mapping to prevent similar conflicts
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+                            
+                            // 🚀 GLOBAL REFRESH: Signal that data is ready
+                            hasUnsavedScribes = false; 
+
 
 
                         } else {
