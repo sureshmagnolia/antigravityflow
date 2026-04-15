@@ -301,33 +301,73 @@ const SESSION_EXPORT_JS = {
                         summ += '<tr><td>' + qp + '</td><td style="font-size:8.5pt">' + getSmartName(c) + (v.scribe > 0 ? ' <b>(' + v.scribe + ' Scribes)</b>' : '') + '</td><td style="text-align:center">' + bks + '</td></tr>';
                     });
 
-                    const cFoot = '<div style="margin-top:15px; font-size:9pt"><b>Course Summary:</b><table class="rt" style="margin-bottom:10px"><thead style="background:#f0f0f0"><tr><th>QP Code</th><th>Course</th><th>Count</th></tr></thead><tbody>' + 
-                        summ + '<tr><td colspan="2" style="text-align:right"><b>Total (Excl. Scribes):</b></td><td style="text-align:center"><b>' + gTot + '</b></td></tr></tbody></table>' +
-                        '<div style="border:1px solid #000; padding:8px; margin-bottom:15px"><b>Booklets Received: ____ | Used: ____ | Balance: ____</b></div>' +
-                        '<div style="display:flex; justify-content:space-between; align-items:flex-end"><span style="font-size:8pt">* = Scribe Help</span><div style="width:250px; border-top:1px solid #000; text-align:center; padding-top:5px">' + (D.invigilators[room.roomName] || 'Signature of Invigilator') + '</div></div></div>';
+                    // --- ADVANCED ACCOUNTING FOOTER ---
+                    let uniqueQPs = [...new Set(Object.keys(stats).map(k => D.qpCodes[k] || 'N/A'))].filter(q => q !== 'N/A');
+                    let qpChecklist = '';
+                    uniqueQPs.forEach(q => { qpChecklist += '<span style="margin-right:15px">' + q + ': ____</span>'; });
 
+                    const cFoot = '<div style="margin-top:10px; font-size:9pt"><b>Course Summary:</b>' +
+                        '<table class="rt" style="margin-bottom:8px"><thead style="background:#f0f0f0"><tr><th>QP Code</th><th>Course</th><th>Count</th></tr></thead><tbody>' + summ + 
+                        '<tr><td colspan="2" style="text-align:right"><b>Total (Excl. Scribes):</b></td><td style="text-align:center"><b>' + gTot + '</b></td></tr></tbody></table>' +
+                        '<div style="border:1px solid #000; padding:5px; margin-bottom:8px">' +
+                            '<div style="display:flex; justify-content:space-between; border-bottom:1px dotted #ccc; padding-bottom:3px; margin-bottom:3px">' +
+                                '<span>Booklets Received: ________</span><span>Used: ________</span><span>Balance Returned: ________</span>' +
+                            '</div>' +
+                            '<div><b>Written Booklets (QP Wise):</b> ' + qpChecklist + '</div>' +
+                        '</div>' +
+                        '<div style="display:flex; justify-content:space-between; align-items:flex-end">' +
+                            '<span style="font-size:8pt">* = Scribe Assistance</span>' +
+                            '<div style="width:250px; text-align:center">' +
+                                '<div style="border-top:1px solid #000; padding-top:4px">' + (D.invigilators[room.roomName] || 'Name & Signature of Invigilator') + '</div>' +
+                            '</div>' +
+                        '</div></div>';
+
+
+                    // --- 🏠 REPORT 3 REFACTORED: 1:1 CORE PARITY ---
+                    const renderTableRows = (list, isPageTwo) => {
+                        let rows = '';
+                        let prevC = '';
+                        list.forEach(s => {
+                            const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                            const reg = s.RegisterNo || s['Register Number'];
+                            const isScr = D.scribes.some(sc => sc.regNo === reg);
+                            const qp = D.qpCodes[fs.Course + '|' + (room.stream || 'Regular')] || 'N/A';
+                            
+                            // Ditto marks for Course
+                            const courseDisplay = (fs.Course === prevC) ? '<div style="text-align:center">"</div>' : 
+                                '<div style="font-size:8.5pt"><b>' + qp + '</b> ' + getSmartName(fs.Course) + '</div>';
+                            prevC = fs.Course;
+
+                            // RegNo Font Sizing
+                            const fSize = (/[a-zA-Z]/.test(reg)) ? '9pt' : (reg.length > 7 ? '11pt' : '12pt');
+
+                            rows += '<tr style="height:35px">' +
+                                '<td style="text-align:center">' + s.seat + (isScr ? '*' : '') + '</td>' +
+                                '<td>' + courseDisplay + '</td>' +
+                                '<td style="font-weight:bold; font-size:' + fSize + '">' + reg + '</td>' +
+                                '<td>' + (fs?.Name || '') + '</td>' +
+                                '<td></td><td></td></tr>';
+                        });
+                        return rows;
+                    };
+
+                    const tHead = '<table class="rt"><thead><tr><th style="width:8%">SEAT</th><th style="width:30%">COURSE (QP)</th><th style="width:18%">REG NO</th><th style="width:24%">NAME</th><th style="width:10%">REMARK</th><th style="width:10%">SIGN</th></tr></thead><tbody>';
+
+                    // Page 1
                     page1.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 1) + 
                         '<div style="margin-bottom:10px"><b>Location:</b> ' + (D.roomConfig[room.roomName]?.location || 'Main Block') + '</div>' +
-                        '<table class="rt"><thead><tr><th>SEAT</th><th>REG NO</th><th>NAME</th><th>SIGNATURE</th></tr></thead><tbody>';
-
-                    st.slice(0, 20).forEach(s => {
-                        const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
-                        const isScr = D.scribes.some(sc => sc.regNo === (s.RegisterNo || s['Register Number']));
-                        page1.querySelector('tbody').innerHTML += '<tr style="height:35px"><td>' + s.seat + (isScr ? '*' : '') + '</td><td style="font-weight:bold">' + (s.RegisterNo||s['Register Number']) + '</td><td>' + (fs?.Name || '') + '</td><td></td></tr>';
-                    });
-                    page1.innerHTML += '</tbody></table>' + (st.length <= 20 ? cFoot : '<div style="text-align:right; font-size:8pt">Continued...</div>');
+                        tHead + renderTableRows(st.slice(0, 20)) + '</tbody></table>' + 
+                        (st.length <= 20 ? cFoot : '<div style="text-align:right; font-size:8pt">Continued on Page 2...</div>');
                     v.appendChild(page1);
 
+                    // Page 2 (if exists)
                     if(st.length > 20) {
                         const p2 = createPage();
-                        p2.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 2) + '<table class="rt"><thead><tr><th>SEAT</th><th>REG NO</th><th>NAME</th><th>SIGNATURE</th></tr></thead><tbody>';
-                        st.slice(20).forEach(s => {
-                           const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
-                           p2.querySelector('tbody').innerHTML += '<tr style="height:35px"><td>' + s.seat + '</td><td style="font-weight:bold">' + (s.RegisterNo||s['Register Number']) + '</td><td>' + (fs?.Name || '') + '</td><td></td></tr>';
-                        });
-                        p2.innerHTML += '</tbody></table>' + cFoot;
+                        p2.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 2) + 
+                            tHead + renderTableRows(st.slice(20)) + '</tbody></table>' + cFoot;
                         v.appendChild(p2);
                     }
+
                 });
             }
 
