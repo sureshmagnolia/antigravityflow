@@ -508,20 +508,20 @@ const SESSION_EXPORT_JS = {
 
                              // ROTATED TEXT STYLING
                              const tdStyles = r.span > 4 
-                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; white-space:normal; word-wrap:break-word; max-width:25px; line-height:1.1;' 
-                                : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word;';
+                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; white-space:nowrap; line-height:1.1; margin:auto;' 
+                                : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
                              
-                             // TIGHT PADDING + DYNAMIC FONT
+                             // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
                              rowsHtml += '<tr style="line-height:1.1">' + 
-                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</td>') +
+                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
 
-                                 '<td style="font-weight:700; font-size:9pt; padding:1px 4px">' + r['Register Number'] + '</td>' +
-                                 '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + r.Name + '</td>' +
-                                 '<td style="text-align:center; font-weight:bold; padding:1px 4px">' + r.seat + '</td></tr>';
+                                 '<td style="font-weight:700; font-size:8.5pt; padding:1px 4px; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + r['Register Number'] + '</td>' +
+                                 '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; border:1px solid #000;">' + r.Name + '</td>' +
+                                 '<td style="text-align:center; font-weight:bold; padding:1px 4px; border:1px solid #000;">' + r.seat + '</td></tr>';
                          });
                          
-                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%">' +
-                                '<thead style="font-size:7.5pt"><tr><th style="width:25px">Loc</th><th style="width:28%">Reg No</th><th style="width:40%">Name</th><th style="width:10%">Seat</th></tr></thead>' +
+                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse;">' +
+                                '<thead style="font-size:7.5pt"><tr><th style="width:25px; border:1px solid #000;">Loc</th><th style="width:85px; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:32px; border:1px solid #000;">Seat</th></tr></thead>' +
                                 '<tbody>' + rowsHtml + '</tbody></table>';
                     };
 
