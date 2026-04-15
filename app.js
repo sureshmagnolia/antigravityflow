@@ -3220,7 +3220,7 @@ function generateDayWisePDF() {
                             pdf.text(rotatedText, startX, startY, { angle: 90 });
                         } else {
                             drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
-
+                    }
                         
                         const blockBottomY = y + totalMergeH;
                         pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); 
