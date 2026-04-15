@@ -494,8 +494,8 @@ const SESSION_EXPORT_JS = {
                              }
                              // ROTATED TEXT STYLING: Vertically rotates Location text if it merges across multiple rows
                              const tdStyles = r.span > 2 
-                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px;' 
-                                : 'text-align:center; padding:1px;';
+                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; white-space:normal; word-wrap:break-word; max-width:25px; line-height:1.1;' 
+                                : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word;';
                              
                              // TIGHT PADDING: Eliminates wasted vertical space
                              rowsHtml += '<tr style="line-height:1.1">' + 
