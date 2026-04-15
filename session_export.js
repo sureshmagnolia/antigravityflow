@@ -492,14 +492,29 @@ const SESSION_EXPORT_JS = {
                              if(r.isNewCourse) {
                                  rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:7.5pt; padding:2px 4px">' + r.Course + '</td></tr>';
                              }
-                             // ROTATED TEXT STYLING: Vertically rotates Location text if it merges across multiple rows
-                             const tdStyles = r.span > 2 
+                             // DYNAMIC FONT SIZING: Shrinks font if text is extremely dense for the given cell span
+                             let dynFontSize = 9;
+                             const charLen = r.loc.length;
+                             if (r.span > 4) {
+                                 // Vertical cell mapping (Allows ~4 chars per row span at 9pt)
+                                 const maxChars = r.span * 4;
+                                 if (charLen > maxChars + 8) dynFontSize = 6.5;
+                                 else if (charLen > maxChars) dynFontSize = 7.5;
+                             } else {
+                                 // Horizontal cell mapping
+                                 if (charLen > 25) dynFontSize = 6.5;
+                                 else if (charLen > 15) dynFontSize = 7.5;
+                             }
+
+                             // ROTATED TEXT STYLING
+                             const tdStyles = r.span > 4 
                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; white-space:normal; word-wrap:break-word; max-width:25px; line-height:1.1;' 
                                 : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word;';
                              
-                             // TIGHT PADDING: Eliminates wasted vertical space
+                             // TIGHT PADDING + DYNAMIC FONT
                              rowsHtml += '<tr style="line-height:1.1">' + 
-                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="' + tdStyles + ' font-weight:bold; font-size:9pt;">' + r.loc + '</td>') +
+                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</td>') +
+
                                  '<td style="font-weight:700; font-size:9pt; padding:1px 4px">' + r['Register Number'] + '</td>' +
                                  '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + r.Name + '</td>' +
                                  '<td style="text-align:center; font-weight:bold; padding:1px 4px">' + r.seat + '</td></tr>';
