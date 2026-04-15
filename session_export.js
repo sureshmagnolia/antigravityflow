@@ -521,7 +521,7 @@ const SESSION_EXPORT_JS = {
                          });
                          
                          return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse;">' +
-                                '<thead style="font-size:7.5pt"><tr><th style="width:25px; border:1px solid #000;">Loc</th><th style="width:85px; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:32px; border:1px solid #000;">Seat</th></tr></thead>' +
+                                '<thead style="font-size:7.5pt"><tr><th style="width:45px; border:1px solid #000;">Loc</th><th style="width:85px; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:32px; border:1px solid #000;">Seat</th></tr></thead>' +
                                 '<tbody>' + rowsHtml + '</tbody></table>';
                     };
 
