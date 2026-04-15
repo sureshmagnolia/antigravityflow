@@ -8434,8 +8434,95 @@ function getExamName(date, time, stream) {
         }
     });
 
+    // --- 🤝 REPORT 7: SCRIBE ASSISTANCE SUMMARY ---
+    generateScribeReportButton.addEventListener('click', async () => {
+        if (!reportsSessionSelect.value) { return alert("Please select an Exam Session."); }
+        
+        generateScribeReportButton.disabled = true;
+        generateScribeReportButton.textContent = "Generating...";
+        reportStatus.textContent = "Processing Scribe Summary...";
+
+        try {
+            const scribeListKey = 'examScribeList';
+            const scribeAllotmentKey = 'examScribeAllotment';
+            const allScribesData = JSON.parse(localStorage.getItem(scribeListKey) || '[]');
+            const allScribesAllotment = JSON.parse(localStorage.getItem(scribeAllotmentKey) || '{}');
+            const sessionAllotments = allScribesAllotment[reportsSessionSelect.value] || {};
+            const scribeRegKeys = Object.keys(sessionAllotments);
+
+            if (scribeRegKeys.length === 0) { return alert("No Scribes allotted for this session."); }
+
+            // Fetch students to cross-reference their Course and Name
+            const allStudentsForReport = getFilteredReportData('day-wise');
+            let htmlRows = '';
+            
+            // Generate clean Table Rows
+            scribeRegKeys.forEach((regNo, idx) => {
+                const roomName = sessionAllotments[regNo];
+                const scribeObj = allScribesData.find(s => s.regNo === regNo) || {};
+                const studentObj = allStudentsForReport.find(s => s['Register Number'] === regNo) || {};
+                
+                const candName = studentObj.Name || "Unknown Candidate";
+                const courseName = studentObj.Course || "Unknown Course";
+                const scribeName = scribeObj.name || "Unknown Scribe";
+
+                htmlRows += `
+                    <tr>
+                        <td style="text-align:center; padding:5px; border:1px solid #000;">${idx + 1}</td>
+                        <td style="font-weight:bold; padding:5px; border:1px solid #000;">${regNo}</td>
+                        <td style="padding:5px; border:1px solid #000; font-size:9pt;">${candName}</td>
+                        <td style="padding:5px; border:1px solid #000; font-size:9pt;">${courseName}</td>
+                        <td style="font-weight:bold; color:#059669; padding:5px; border:1px solid #000;">${scribeName}</td>
+                        <td style="text-align:center; font-weight:bold; padding:5px; border:1px solid #000;">${roomName}</td>
+                        <td style="padding:5px; border:1px solid #000;"></td>
+                    </tr>
+                `;
+            });
+
+            const html = `
+                <style> @media print { .print-page { box-shadow: none !important; border: none !important; margin: 0 auto !important; } } </style>
+                <div class="print-page bg-white text-black p-8 mx-auto my-4 shadow-lg border border-gray-200" style="width: 210mm; min-height: 297mm;">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <h1 style="font-size: 16pt; font-weight: bold; margin: 0;">${typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"}</h1>
+                        <h2 style="font-size: 14pt; margin: 5px 0;">SCRIBE ASSISTANCE SUMMARY</h2>
+                        <h3 style="font-size: 11pt; font-weight: normal; margin: 5px 0;">Session: ${reportsSessionSelect.value}</h3>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10pt;">
+                        <thead>
+                            <tr style="background-color:#f3f4f6;">
+                                <th style="width:5%; border:1px solid #000; padding:6px;">Sl No</th>
+                                <th style="width:15%; border:1px solid #000; padding:6px;">Reg No</th>
+                                <th style="width:25%; border:1px solid #000; padding:6px;">Candidate Name</th>
+                                <th style="width:15%; border:1px solid #000; padding:6px;">Course</th>
+                                <th style="width:20%; border:1px solid #000; padding:6px;">Scribe Name</th>
+                                <th style="width:10%; border:1px solid #000; padding:6px;">Room</th>
+                                <th style="width:10%; border:1px solid #000; padding:6px;">Sign</th>
+                            </tr>
+                        </thead>
+                        <tbody>${htmlRows}</tbody>
+                    </table>
+                </div>
+            `;
+
+            reportOutputArea.innerHTML = html;
+            reportOutputArea.style.display = 'block';
+            reportStatus.textContent = "Generated Scribe Assistance Summary.";
+            reportControls.classList.remove('hidden');
+            lastGeneratedReportType = "Scribe_Summary";
+
+        } catch (e) {
+            console.error("Scribe Summary Error:", e);
+            alert("Error generating report: " + e.message);
+            reportStatus.textContent = "Generation failed.";
+        } finally {
+            generateScribeReportButton.disabled = false;
+            generateScribeReportButton.textContent = "7-Generate Scribe Assistance Report";
+        }
+    });
+
     // --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
     // downloadPdfButton.addEventListener('click', ... removed ...)
+
 
        // --- Event listener for the "Clear" button ---
     clearReportButton.addEventListener('click', clearReport);
