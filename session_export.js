@@ -24,6 +24,7 @@ const SESSION_EXPORT_JS = {
         const allQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
         const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
         const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
         const allInvigs = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
         const roomConfig = (typeof window.getMyRoomConfig === 'function') ? window.getMyRoomConfig() : {};
 
@@ -35,7 +36,17 @@ const SESSION_EXPORT_JS = {
             allotment: allAllotments[sessionKey] || [],
             qpCodes: allQPCodes[sessionKey] || {},
             absentees: allAbsentees[sessionKey] || {},
-            scribes: allScribes[sessionKey] || [],
+            scribes: Object.entries(allScribes[sessionKey] || {}).map(([regNo, room]) => {
+                const scribeInfo = scribeList.find(s => s.regNo === regNo) || {};
+                const studentInfo = sessionStudents.find(s => s['Register Number'] === regNo) || {};
+                return { 
+                    regNo, 
+                    room, 
+                    scribeName: scribeInfo.name || 'Not Available',
+                    studentName: studentInfo.Name || 'Unknown student'
+                };
+            }),
+
             invigilators: allInvigs[sessionKey] || {},
             roomConfig: roomConfig
         };
@@ -258,8 +269,8 @@ const SESSION_EXPORT_JS = {
                   const p = createPage();
                   p.innerHTML = heading('SCRIBE SEATING PROFORMA') + '<table class="rt">' +
                       '<tr><td style="font-weight:bold">Candidate Reg No</td><td>'+s.regNo+'</td></tr>' +
-                      '<tr><td style="font-weight:bold">Candidate Name</td><td> - </td></tr>' +
-                      '<tr><td style="font-weight:bold">Scribe Name</td><td>'+s.scribeName+'</td></tr>' +
+                      '<tr><td style="font-weight:bold">Candidate Name</td><td>'+s.studentName+'</td></tr>' +
+                      '<tr><td style="font-weight:bold">Scribe Name</td><td>'+s.scribeName+'</td></tr>'
                       '<tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">'+s.room+'</td></tr>' +
                       '<tr><td style="height:60px; font-weight:bold">Candidate Thumb Impression</td><td></td></tr>' +
                       '<tr><td style="height:60px; font-weight:bold">Scribe Thumb Impression</td><td></td></tr>' +
