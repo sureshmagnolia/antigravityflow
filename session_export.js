@@ -458,52 +458,66 @@ const SESSION_EXPORT_JS = {
                     return a['Register Number'].localeCompare(b['Register Number']);
                 });
 
-                const mid = Math.ceil(enriched.length / 2);
-                const getTable = (list) => {
-                    let rowsHtml = '';
-                    let prevCourse = '';
-                    let tempRows = [];
+                    // --- HARD PAGINATION ENGINE (90 Students Per A4 Page) ---
+                const CHUNK_SIZE = 90; 
+                for(let i=0; i < enriched.length; i += CHUNK_SIZE) {
+                    const chunk = enriched.slice(i, i + CHUNK_SIZE);
+                    const pg = createPage();
+                    pg.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName, Math.floor(i/CHUNK_SIZE)+1);
+                    
+                    const mid = Math.ceil(chunk.length / 2);
+                    
+                    const getTable = (list) => {
+                         let rowsHtml = '';
+                         let prevCourse = '';
+                         let tempRows = [];
+                         
+                         // Calculate rowspans cleanly within this specific column slice
+                         list.forEach(item => {
+                             const isNewCourse = item.Course !== prevCourse;
+                             tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
+                             prevCourse = item.Course;
+                         });
 
-                    // Calculate spans inside this column slice
-                    list.forEach(item => {
-                        const isNewCourse = item.Course !== prevCourse;
-                        tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
-                        prevCourse = item.Course;
-                    });
+                         for(let j=0; j < tempRows.length; j++) {
+                             if(tempRows[j].skip) continue;
+                             for(let k=j+1; k < tempRows.length; k++) {
+                                 if(tempRows[k].isNewCourse || tempRows[k].loc !== tempRows[j].loc) break;
+                                 tempRows[j].span++;
+                                 tempRows[k].skip = true;
+                             }
+                         }
 
-                    // Rowspan merging for Location (blocked by Course change)
-                    for(let i=0; i < tempRows.length; i++) {
-                        if(tempRows[i].skip) continue;
-                        for(let j=i+1; j < tempRows.length; j++) {
-                            if(tempRows[j].isNewCourse || tempRows[j].loc !== tempRows[i].loc) break;
-                            tempRows[i].span++;
-                            tempRows[j].skip = true;
-                        }
-                    }
+                         tempRows.forEach(r => {
+                             if(r.isNewCourse) {
+                                 rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:7.5pt; padding:2px 4px">' + r.Course + '</td></tr>';
+                             }
+                             // ROTATED TEXT STYLING: Vertically rotates Location text if it merges across multiple rows
+                             const tdStyles = r.span > 2 
+                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px;' 
+                                : 'text-align:center; padding:1px;';
+                             
+                             // TIGHT PADDING: Eliminates wasted vertical space
+                             rowsHtml += '<tr style="line-height:1.1">' + 
+                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="' + tdStyles + ' font-weight:bold; font-size:9pt;">' + r.loc + '</td>') +
+                                 '<td style="font-weight:700; font-size:9pt; padding:1px 4px">' + r['Register Number'] + '</td>' +
+                                 '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + r.Name + '</td>' +
+                                 '<td style="text-align:center; font-weight:bold; padding:1px 4px">' + r.seat + '</td></tr>';
+                         });
+                         
+                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%">' +
+                                '<thead style="font-size:7.5pt"><tr><th style="width:25px">Loc</th><th style="width:28%">Reg No</th><th style="width:40%">Name</th><th style="width:10%">Seat</th></tr></thead>' +
+                                '<tbody>' + rowsHtml + '</tbody></table>';
+                    };
 
-                    tempRows.forEach(r => {
-                        if(r.isNewCourse) {
-                            rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:8pt; padding:2px 4px">' + r.Course + '</td></tr>';
-                        }
-                        const lSize = r.span > 15 ? '1.3em' : (r.span > 8 ? '1.1em' : '0.9em');
-                        rowsHtml += '<tr>' + 
-                            (r.skip ? '' : '<td rowspan="' + r.span + '" style="text-align:center; font-weight:bold; font-size:' + lSize + '">' + r.loc + '</td>') +
-                            '<td style="font-weight:600">' + r['Register Number'] + '</td>' +
-                            '<td style="font-size:8.5pt">' + r.Name.substring(0,25) + '</td>' +
-                            '<td style="text-align:center; font-weight:bold">' + r.seat + '</td></tr>';
-                    });
-
-                    return '<table class="rt" style="font-size:9pt; table-layout:fixed">' +
-                        '<thead style="font-size:8pt"><tr><th style="width:22%">Location</th><th style="width:28%">Reg No</th><th style="width:40%">Name</th><th style="width:10%">Seat</th></tr></thead>' +
-                        '<tbody>' + rowsHtml + '</tbody></table>';
-                };
-
-                p.innerHTML += '<div style="display:flex; gap:10px">' +
-                    '<div style="flex:1">' + getTable(enriched.slice(0, mid)) + '</div>' +
-                    '<div style="flex:1">' + getTable(enriched.slice(mid)) + '</div>' +
-                '</div>' + footer();
-                v.appendChild(p);
+                    pg.innerHTML += '<div style="display:flex; gap:10px">' +
+                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(0, mid)) + '</div>' +
+                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
+                    '</div>' + footer();
+                    v.appendChild(pg);
+                }
             }
+
 
 
             // --- 🏷️ REPORT 5: ROOM STICKERS (DYNAMIC GRID & GROUPS) ---
