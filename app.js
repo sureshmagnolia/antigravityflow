@@ -20721,8 +20721,8 @@ window.triggerSessionExport = function() {
     if (typeof qpCodeMap !== 'undefined') {
         localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
     }
-    getRoomCapacitiesFromStorage();
     const sessionKey = document.getElementById('reports-session-select')?.value;
+
     
     if (!sessionKey) {
         return alert("⚠️ Please select a Session from the dropdown first.");
