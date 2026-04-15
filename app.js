@@ -2329,7 +2329,7 @@ async function deleteSessionFromCloud(sessionKey) {
     window.getMyRoomSerialMap = (key) => (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(key) : {};
     window.getMySessionSort = () => (typeof compareSessionStrings === 'function') ? compareSessionStrings : null;
     window.getMyExamName = (d, t, s) => (typeof getExamName === 'function') ? getExamName(d, t, s) : '';
-    
+    window.getMyQPCodes = () => qpCodeMap || {}; // 🛡️ EXPOSE LIVE QP CODES TO EXPORTER
     let allStudentSessions = []; // Holds unique sessions
     let currentAbsenteeList = [];
     let selectedStudent = null;
@@ -20717,6 +20717,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
  * Triggered by the UI button. Feeds the selected session to the export module.
  */
 window.triggerSessionExport = function() {
+    // 🛡️ DATA FLUSH: Sync live memory to disk before Exporting
+    if (typeof qpCodeMap !== 'undefined') {
+        localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
+    }
     getRoomCapacitiesFromStorage();
     const sessionKey = document.getElementById('reports-session-select')?.value;
     
