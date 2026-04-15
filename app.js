@@ -6457,7 +6457,7 @@ function getExamName(date, time, stream) {
                 return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 25px;"> <col style="width: 85px;"> <col style="width: auto;"> <col style="width: 32px;"> </colgroup>
+                        <col style="width: 35px;"> <col style="width: 85px;"> <col style="width: auto;"> <col style="width: 32px;"> </colgroup>
 
                     <thead>
                         <tr>
