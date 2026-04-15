@@ -393,7 +393,7 @@ const SESSION_EXPORT_JS = {
                                 <h4 style="margin:2px 0">ROOM \${room.roomName}</h4>
                                 <div style="font-size:8pt">\${D.meta.date} | \${D.meta.time}</div>
                             </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:x; column-gap:15px">\${rows}</div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; column-gap:15px">${rows}</div>
                         </div>`;
                     }
                     page.innerHTML = drawSticker(i) + '<div style="height:10mm; border-bottom:1px dashed #ccc; margin:5mm 0"></div>' + drawSticker(i+1);
@@ -419,9 +419,6 @@ const SESSION_EXPORT_JS = {
                 });
             }
         }
-
-        }
-
         function createPage() { const d = document.createElement('div'); d.className = 'a4'; return d; }
     </script>
 </body>
