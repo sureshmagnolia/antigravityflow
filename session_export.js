@@ -493,7 +493,7 @@ const SESSION_EXPORT_JS = {
                                  rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:7.5pt; padding:2px 4px">' + r.Course + '</td></tr>';
                              }
                              // ROTATED TEXT STYLING: Vertically rotates Location text if it merges across multiple rows
-                             const tdStyles = r.span > 4 
+                             const tdStyles = r.span > 2 
                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px;' 
                                 : 'text-align:center; padding:1px;';
                              
