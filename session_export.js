@@ -204,16 +204,16 @@ const SESSION_EXPORT_JS = {
 
         // --- NEW: Self-Mutating HTML Saver ---
         function saveStateToFile() {
-            // 1. Clear dynamic views to keep file size small
+            // 1. Clear viewer on current screen to save memory
             document.getElementById('viewer').innerHTML = '';
             
             // 2. Clone the current document's source structure
             const docClone = document.documentElement.cloneNode(true);
             
-            // 3. Prevent duplicating nested inputs/badges in the cloned html body
-            const inputs = docClone.querySelectorAll('input');
-            const targetInputs = document.querySelectorAll('input');
-            inputs.forEach((inp, idx) => { inp.setAttribute('value', targetInputs[idx].value); });
+            // 3. ERASER FIX: Strip generated outputs from the clone before saving
+            // This prevents duplication since the init() script rebuilds them on open.
+            docClone.querySelector('#qb').innerHTML = '';
+            docClone.querySelector('#viewer').innerHTML = '';
 
             // 4. Locate and rewrite the 'const D =' variable block in the raw string
             const docHtml = docClone.outerHTML;
