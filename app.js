@@ -3189,10 +3189,17 @@ function generateDayWisePDF() {
                         if (span > 4) {
                             // Rotate 90 degrees (Bottom-to-Top) for spans > 4
                             pdf.setFont("helvetica", "bold");
-                            pdf.setFontSize(8);
+                            let locFontSize = 8;
+                            pdf.setFontSize(locFontSize);
                             let rotatedText = String(row.loc);
                             
-                            // Prevent bleeding out of the vertical cell bounds
+                            // 1. DYNAMIC FONT: Shrink the font first before truncating
+                            while(pdf.getTextWidth(rotatedText) > (totalMergeH - 4) && locFontSize > 4.5) {
+                                locFontSize -= 0.5;
+                                pdf.setFontSize(locFontSize);
+                            }
+                            
+                            // 2. TRUNCATE: Only chop characters if it's STILL too long at the smallest font
                             while(pdf.getTextWidth(rotatedText) > (totalMergeH - 4) && rotatedText.length > 2) {
                                 rotatedText = rotatedText.substring(0, rotatedText.length - 1);
                             }
