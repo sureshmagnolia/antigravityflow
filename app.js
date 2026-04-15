@@ -1477,13 +1477,19 @@ async function updateLocalSlotsFromStudents() {
                             safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
                             safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
                             
-                            // FIX: Protect local unsaved scribe assignments from cloud overwrite
-                            if (hasUnsavedScribes) {
-                                const localScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-                                Object.assign(allScribeAllotments, localScribes);
-                            }
-                            safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
-                            
+                            // FIX: Persistent Protection Logic (Merged across Refreshes)
+                            const localScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                            // Merge Strategy: Keep local assignments if cloud is missing data for that session
+                            Object.keys(localScribes).forEach(sessionKey => {
+                                const localCount = Object.keys(localScribes[sessionKey] || {}).length;
+                                const cloudCount = Object.keys(allScribeAllotments[sessionKey] || {}).length;
+                                
+                                // Preserve local work if cloud hasn't caught up yet
+                                if (localCount > cloudCount) {
+                                    allScribeAllotments[sessionKey] = localScribes[sessionKey];
+                                }
+                            });
+                            safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));                           
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
                         } else {
@@ -12149,19 +12155,9 @@ function renderScribeAllotmentList(sessionKey) {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        hasUnsavedScribes = false; // FIXED: Will be saved right away below
-        updateSyncStatus("Saving Scribe Room...", "warning");
+        hasUnsavedScribes = true; // Stay in "Dirty" status until session is complete or manually saved
+        updateSyncStatus("Local Changes Unsaved", "warning");
 
-        // AUTO-SYNC: Push to Firestore immediately so it survives refresh
-        if (currentCollegeId && typeof syncSessionToCloud === 'function') {
-            syncSessionToCloud(sessionKey).then(() => {
-                updateSyncStatus("Scribe Room Saved ✅", "ok");
-            }).catch(err => {
-                console.error("Scribe room auto-sync failed:", err);
-                hasUnsavedScribes = true;
-                updateSyncStatus("Sync Failed ⚠️ - Manual save needed", "warning");
-            });
-        }
     }
 
 
