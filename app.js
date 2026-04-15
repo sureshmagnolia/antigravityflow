@@ -2281,6 +2281,10 @@ async function deleteSessionFromCloud(sessionKey) {
     window.getMyAllStudentData = () => allStudentData;
     window.getMyRoomConfig = () => currentRoomConfig;
     window.allStudentDataList = () => allStudentData; // 📦 Expose for Exporter
+    window.getMyRoomSerialMap = (key) => (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(key) : {};
+    window.getMySessionSort = () => (typeof compareSessionStrings === 'function') ? compareSessionStrings : null;
+    window.getMyExamName = (d, t, s) => (typeof getExamName === 'function') ? getExamName(d, t, s) : '';
+    
     let allStudentSessions = []; // Holds unique sessions
     let currentAbsenteeList = [];
     let selectedStudent = null;
