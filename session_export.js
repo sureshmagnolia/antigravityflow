@@ -302,37 +302,74 @@ const SESSION_EXPORT_JS = {
                 });
             }
 
-            // --- 📋 REPORT 4: NOTICE BOARD ---
+            // --- 📋 REPORT 4: SEATING DETAILS (PAPER-WISE GROUPING) ---
             if (type === 'r4') {
                 const p = createPage();
-                p.innerHTML = heading('SEATING DETAILS (ALPHABETICAL)', '', D.meta.examName);
-                const sorted = [...D.students].sort((a,b) => a.Name.localeCompare(b.Name));
-                const mid = Math.ceil(sorted.length / 2);
+                p.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName);
+                
+                // 1. Enrich data with Room Info for sorting
+                const enriched = D.students.map(s => {
+                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number']) === s['Register Number']));
+                    const seat = room?.students.find(x => (x.RegisterNo || x['Register Number']) === s['Register Number'])?.seat || '-';
+                    const loc = (D.roomConfig[room?.roomName]?.location || room?.roomName || '-');
+                    const rSerial = (D.roomConfig[room?.roomName]?.serial || 999);
+                    return { ...s, roomName: room?.roomName, loc: loc, seat: seat, rSerial: rSerial };
+                });
+
+                // 2. Sort by Course -> Room Serial -> Register Number
+                enriched.sort((a,b) => {
+                    if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                    if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
+                    return a['Register Number'].localeCompare(b['Register Number']);
+                });
+
+                const mid = Math.ceil(enriched.length / 2);
                 const getTable = (list) => {
-                    let rows = [];
-                    list.forEach(s => {
-                        const rm = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number']) === s['Register Number']));
-                        const st = rm?.students.find(x => (x.RegisterNo || x['Register Number']) === s['Register Number'])?.seat || '-';
-                        rows.push({ reg: s['Register Number'], name: s.Name.substring(0,22), loc: (D.roomConfig[rm?.roomName]?.location || rm?.roomName || '-'), seat: st, skip: false, span: 1 });
+                    let rowsHtml = '';
+                    let prevCourse = '';
+                    let tempRows = [];
+
+                    // Calculate spans inside this column slice
+                    list.forEach(item => {
+                        const isNewCourse = item.Course !== prevCourse;
+                        tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
+                        prevCourse = item.Course;
                     });
-                    for(let i=0; i<rows.length; i++) {
-                        if(rows[i].skip) continue;
-                        for(let j=i+1; j<rows.length; j++) {
-                            if(rows[j].loc !== rows[i].loc) break;
-                            rows[i].span++; rows[j].skip = true;
+
+                    // Rowspan merging for Location (blocked by Course change)
+                    for(let i=0; i < tempRows.length; i++) {
+                        if(tempRows[i].skip) continue;
+                        for(let j=i+1; j < tempRows.length; j++) {
+                            if(tempRows[j].isNewCourse || tempRows[j].loc !== tempRows[i].loc) break;
+                            tempRows[i].span++;
+                            tempRows[j].skip = true;
                         }
                     }
-                    let h = '<table class="rt" style="font-size:9pt; table-layout:fixed"><thead style="font-size:8pt"><tr><th style="width:25%">Location</th><th style="width:30%">Reg No</th><th style="width:35%">Name</th><th style="width:10%">Seat</th></tr></thead><tbody>';
-                    rows.forEach(r => {
-                        const lStyle = r.span > 10 ? 'font-size:1.2em' : (r.span > 5 ? 'font-size:1.1em' : 'font-size:0.9em');
-                        h += '<tr>' + (r.skip ? '' : '<td rowspan="' + r.span + '" style="text-align:center; font-weight:bold; ' + lStyle + '">' + r.loc + '</td>') +
-                           '<td style="font-weight:600">' + r.reg + '</td><td>' + r.name + '</td><td style="text-align:center; font-weight:bold">' + r.seat + '</td></tr>';
+
+                    tempRows.forEach(r => {
+                        if(r.isNewCourse) {
+                            rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:8pt; padding:2px 4px">' + r.Course + '</td></tr>';
+                        }
+                        const lSize = r.span > 15 ? '1.3em' : (r.span > 8 ? '1.1em' : '0.9em');
+                        rowsHtml += '<tr>' + 
+                            (r.skip ? '' : '<td rowspan="' + r.span + '" style="text-align:center; font-weight:bold; font-size:' + lSize + '">' + r.loc + '</td>') +
+                            '<td style="font-weight:600">' + r['Register Number'] + '</td>' +
+                            '<td style="font-size:8.5pt">' + r.Name.substring(0,25) + '</td>' +
+                            '<td style="text-align:center; font-weight:bold">' + r.seat + '</td></tr>';
                     });
-                    return h + '</tbody></table>';
+
+                    return '<table class="rt" style="font-size:9pt; table-layout:fixed">' +
+                        '<thead style="font-size:8pt"><tr><th style="width:22%">Location</th><th style="width:28%">Reg No</th><th style="width:40%">Name</th><th style="width:10%">Seat</th></tr></thead>' +
+                        '<tbody>' + rowsHtml + '</tbody></table>';
                 };
-                p.innerHTML += '<div style="display:flex; gap:15px"><div style="flex:1">' + getTable(sorted.slice(0, mid)) + '</div><div style="flex:1">' + getTable(sorted.slice(mid)) + '</div></div>' + footer();
+
+                p.innerHTML += '<div style="display:flex; gap:10px">' +
+                    '<div style="flex:1">' + getTable(enriched.slice(0, mid)) + '</div>' +
+                    '<div style="flex:1">' + getTable(enriched.slice(mid)) + '</div>' +
+                '</div>' + footer();
                 v.appendChild(p);
             }
+
 
             // --- 🏷️ REPORT 5: ROOM STICKERS ---
             if (type === 'r5') {
