@@ -157,6 +157,7 @@ const SESSION_EXPORT_JS = {
             <button class="btn" onclick="render('r4')">📋 4. Notice Board (2-Col)</button>
             <button class="btn" onclick="render('r5')">🏷️ 5. Room Stickers (2/pg)</button>
             <button class="btn" onclick="render('r6')">✍️ 6. Scribe Proforma</button>
+            <button class="btn" onclick="render('r7')">🤝 7. Scribe Assistance Summary</button>
         </div>
         
         <div style="display:flex; justify-content:center; padding-top:10px; border-top:1px solid #ddd;">
@@ -627,7 +628,36 @@ const SESSION_EXPORT_JS = {
                     v.appendChild(p);
                 });
             }
+
+            // --- 🤝 REPORT 7: SCRIBE ASSISTANCE SUMMARY ---
+            if (type === 'r7') {
+                if (!D.scribes || D.scribes.length === 0) return alert("No Scribes allotted for this session.");
+                
+                let rowsHtml = '';
+                D.scribes.forEach((s, idx) => {
+                    // Try to dig out the exact Course (QP) data
+                    const fs = D.students.find(x => x['Register Number'] === s.regNo);
+                    const courseDisplay = fs ? getSmartName(fs.Course) : '';
+                    
+                    rowsHtml += '<tr style="line-height:1.4">' +
+                        '<td style="text-align:center">' + (idx + 1) + '</td>' +
+                        '<td style="font-weight:bold">' + s.regNo + '</td>' +
+                        '<td>' + (s.studentName || '') + '</td>' +
+                        '<td>' + courseDisplay + '</td>' +
+                        '<td style="font-weight:bold; color:#059669">' + (s.scribeName || '') + '</td>' +
+                        '<td style="text-align:center; font-weight:bold; font-size:10pt">' + s.room + '</td>' +
+                        '<td></td></tr>';
+                });
+
+                const thead = '<thead><tr><th style="width:5%">Sl</th><th style="width:15%">Reg No</th><th style="width:25%">Candidate Name</th><th style="width:15%">Course</th><th style="width:20%">Scribe Name</th><th style="width:10%">Room</th><th style="width:10%">Sign</th></tr></thead>';
+                
+                const pg = createPage();
+                pg.innerHTML = heading('SCRIBE ASSISTANCE SUMMARY', '', D.meta.examName) + 
+                    '<table class="rt" style="font-size:9pt">' + thead + '<tbody>' + rowsHtml + '</tbody></table>' + footer();
+                v.appendChild(pg);
+            }
         }
+
 
         function createPage() { const d = document.createElement('div'); d.className = 'a4'; return d; }
     </script>
