@@ -6414,30 +6414,40 @@ function getExamName(date, time, stream) {
 
                     if (!row.skipLocation) {
                         const rowspanAttr = row.span > 1 ? `rowspan="${row.span}"` : '';
-                        // Center vertically if merged, Top if single (to save space)
-                        const valign = row.span > 1 ? 'vertical-align: middle;' : 'vertical-align: top;';
+                        
+                        // --- DYNAMIC FONT & ROTATION LOGIC (Synced with Export HTML) ---
+                        let dynFontSize = 9;
+                        let tdStyles = '';
+                        const charLen = (row.displayRoom || '').length;
 
-                        // --- NEW: DYNAMIC FONT SIZE LOGIC ---
-                        // Scales font based on how many rows (students) are in the room
-                        let locFontSize = '0.8em'; // Default small (for single/double rows)
+                        if (row.span > 4) {
+                            // Rotate 90 degrees for long spans
+                            const maxChars = row.span * 4;
+                            if (charLen > maxChars + 8) dynFontSize = 6.5;
+                            else if (charLen > maxChars) dynFontSize = 7.5;
+                            
+                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-width:25px; line-height:1.1; white-space:normal; word-wrap:break-word;';
+                        } else {
+                            // Keep horizontal for short spans
+                            if (charLen > 25) dynFontSize = 6.5;
+                            else if (charLen > 15) dynFontSize = 7.5;
+                            
+                            tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1;';
+                        }
 
-                        if (row.span > 15) locFontSize = '1.4em';       // Very Large for big halls
-                        else if (row.span > 10) locFontSize = '1.2em';  // Large
-                        else if (row.span > 5) locFontSize = '1.0em';   // Medium
-                        else if (row.span > 2) locFontSize = '0.9em';   // Slightly larger than base
-
-                        // Applied styles: Bold, Centered, Dynamic Size
-                        rowsHtml += `<td ${rowspanAttr} style="padding: 2px; font-size:${locFontSize}; font-weight:bold; background-color: #fff; ${valign} text-align: center; line-height: 1.1; border: 1px solid #000;">
+                        rowsHtml += `<td ${rowspanAttr} style="${tdStyles} font-size:${dynFontSize}pt; font-weight:bold; background-color:#fff; border:1px solid #000;">
                         ${row.displayRoom}
                     </td>`;
                     }
 
+                    // TIGHT PADDING: Eliminates wasted vertical space for names
                     rowsHtml += `
-                        <td style="padding: 1px 4px; font-weight: 600; font-size: 0.9em; border: 1px solid #000;">${row.student['Register Number']}</td>
+                        <td style="padding: 1px 4px; font-weight: 700; font-size: 9pt; border: 1px solid #000;">${row.student['Register Number']}</td>
                         
-                        <td style="padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; border: 1px solid #000;">
+                        <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; border: 1px solid #000;">
                             ${row.student.Name}
                         </td>
+
                         
                         <td style="padding: 1px 4px; text-align: center; font-weight: bold; border: 1px solid #000;">${row.seatNo}</td>
                     </tr>
@@ -6447,7 +6457,7 @@ function getExamName(date, time, stream) {
                 return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 22%;"> <col style="width: 30%;"> <col style="width: 38%;"> <col style="width: 10%;"> </colgroup>
+                        <col style="width: 25px;"> <col style="width: 28%;"> <col style="width: 40%;"> <col style="width: 10%;"> </colgroup>
                     <thead>
                         <tr>
                             <th style="border: 1px solid #000;">Location</th>
