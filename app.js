@@ -1377,11 +1377,12 @@ async function updateLocalSlotsFromStudents() {
                                // --- 📡 [SCR5 CONTEXT] MODULAR SESSION LISTENER ---
                 sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
                     let cloudMetaFound = false;
-                    let allAllotments = {};
-                    let allQPCodes = {};
-                    let allAbsentees = {};
-                    let allScribeAllotments = {};
-                    let allInvigMapping = {};
+                    
+                    let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                    let allQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+                    let allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+                    let allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                    let allInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
                     let allStudents = [];
 
                     if (!sessionSnap.empty) {
@@ -1478,22 +1479,10 @@ async function updateLocalSlotsFromStudents() {
                             safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
                             
                             // FIX: Persistent Protection Logic (Merged across Refreshes)
-                            const localScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                            // 🧬 SCR5-ACCURATE MERGE: Final data protection
+                            // We already initialized allScribeAllotments with local data (Line 1383), 
+                            // and the loop updated it with cloud data. No extra wipe-logic needed!
                             
-                            // 🛡️ CRASH SHIELD: Ensures sync doesn't die if cloud data is missing
-                            Object.keys(localScribes).forEach(sk => {
-                                const localSession = localScribes[sk] || {};
-                                const cloudSession = allScribeAllotments[sk] || {}; // Handle missing session keys safely
-                                
-                                const localCount = Object.keys(localSession).length;
-                                const cloudCount = Object.keys(cloudSession).length;
-                                
-                                // Logic: If local computer has MORE data than the cloud, trust local progress
-                                if (localCount > cloudCount) {
-                                    allScribeAllotments[sk] = localSession;
-                                }
-                            });
-
                             safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));                           
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
@@ -1511,15 +1500,17 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                         
-                        // ✅ UI WAKE-UP: Automatically re-render the scribe list once the merge logic is safe
+                        // ✅ UI WAKE-UP (SCR5 Style): Immediately refresh visibility
                         if (typeof loadScribeAllotment === 'function' && typeof allotmentSessionSelect !== 'undefined') {
                             const activeSession = allotmentSessionSelect.value;
                             if (activeSession) loadScribeAllotment(activeSession);
                         }
-
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
+                    
+                    // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
+                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
                 });
 
 
