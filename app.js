@@ -5964,15 +5964,23 @@ function getExamName(date, time, stream) {
             }
 
             const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            
+            // 🛡️ SCRIBE DETECTION: Load the official scribe list
+            const scribeListRaw = JSON.parse(localStorage.getItem(typeof SCRIBE_LIST_KEY !== 'undefined' ? SCRIBE_LIST_KEY : 'examScribeList') || '[]');
+            const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
+            
             const final_student_list_for_report = [];
+
 
             // Flatten saved allotment into student rows
             sessionAllotment.forEach(room => {
                 (room.students || []).forEach(s => {
+                    const isOfficialScribe = scribeRegNos.has(s['Register Number']);
                     final_student_list_for_report.push({
                         ...s,                      // Original Student Keys
                         'Room No': room.roomName, // Physical Room
                         seatNumber: s.seat || '?', // The STICKY SEAT
+                        isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
                         Stream: room.stream || 'Regular'
                     });
             });
@@ -6015,6 +6023,7 @@ function getExamName(date, time, stream) {
                 @media print {
                     .print-page-room, .print-page { padding: 10mm !important; box-shadow: none !important; border: none !important; }
                 }
+                .scribe-row-highlight { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
             </style>
         `;
 
@@ -6203,8 +6212,13 @@ function getExamName(date, time, stream) {
                         let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
                         if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
 
-                        const rowClass = student.isPlaceholder ? 'class="scribe-row-highlight"' : '';
-                        const remarkText = student.remark || '';
+                        // 🛡️ SCRIBE HIGHLIGHT: Apply grey background and auto-mark remarks
+                        const rowClass = (student.isScribeChecked || student.isPlaceholder) ? 'class="scribe-row-highlight"' : '';
+                        let remarkText = student.remark || '';
+                        if (student.isScribeChecked) {
+                            remarkText = (remarkText ? remarkText + ', ' : '') + 'SCRIBE';
+                        }
+
 
                         rowsHtml += `
                         <tr ${rowClass} class="room-report-row">
