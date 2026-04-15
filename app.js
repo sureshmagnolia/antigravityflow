@@ -1505,6 +1505,11 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
+                        
+                        // FIX: Re-hydrate Scribe Allotment UI after sync results are merged
+                        if (typeof loadScribeAllotment === 'function' && typeof allotmentSessionSelect !== 'undefined') {
+                            loadScribeAllotment(allotmentSessionSelect.value);
+                        }
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
