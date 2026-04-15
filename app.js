@@ -6023,7 +6023,7 @@ function getExamName(date, time, stream) {
                 @media print {
                     .print-page-room, .print-page { padding: 10mm !important; box-shadow: none !important; border: none !important; }
                 }
-                .scribe-row-highlight { background-color: #d1d5db !important; -webkit-print-color-adjust: exact; font-weight: bold; }
+                .scribe-row-highlight { background-color: #374151 !important; color: white !important; -webkit-print-color-adjust: exact; font-weight: bold; }
             </style>
         `;
 
