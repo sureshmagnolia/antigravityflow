@@ -158,9 +158,16 @@ const SESSION_EXPORT_JS = {
             <button class="btn" onclick="render('r5')">🏷️ 5. Room Stickers (2/pg)</button>
             <button class="btn" onclick="render('r6')">✍️ 6. Scribe Proforma</button>
         </div>
+        
+        <div style="display:flex; justify-content:center; padding-top:10px; border-top:1px solid #ddd;">
+            <button onclick="window.print()" class="btn" style="background:#10b981; padding:12px 30px; font-size:16px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4);">
+                🖨️ Print Generated Report
+            </button>
+        </div>
     </div>
 
     <div id="viewer"></div>
+
 
     <script>
         const D = ${JSON.stringify(data)};
