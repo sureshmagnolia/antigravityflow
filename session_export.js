@@ -198,18 +198,47 @@ const SESSION_EXPORT_JS = {
                 return w.length <= 4 ? clean : w.slice(0, 3).join(' ') + ' ... ' + w[w.length -1];
             };
 
-            // --- 📄 REPORT 1: QP SUMMARY ---
+            // --- 📄 REPORT 1: QP SUMMARY (STREAM-WISE) ---
             if (type === 'r1') {
                 const p = createPage();
-                let table = '<table class="rt"><thead><tr><th>SL</th><th>COURSE NAME</th><th>COUNT</th></tr></thead><tbody>';
-                const counts = {};
-                D.students.forEach(s => { counts[s.Course] = (counts[s.Course] || 0) + 1; });
-                Object.entries(counts).sort().forEach(([c, n], i) => {
-                    table += '<tr><td>' + (i+1) + '</td><td>' + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
+                let contentHtml = '';
+                
+                // 1. Group by Stream
+                const streams = {};
+                D.students.forEach(s => {
+                    const st = s.Stream || 'Regular';
+                    if (!streams[st]) streams[st] = {};
+                    streams[st][s.Course] = (streams[st][s.Course] || 0) + 1;
                 });
-                p.innerHTML = heading('QUESTION PAPER SUMMARY', '', D.meta.examName) + table + '</tbody></table>' + footer();
+
+                // 2. Sort Streams (Regular first)
+                const sortedStreams = Object.keys(streams).sort((a, b) => {
+                    if (a === 'Regular') return -1;
+                    if (b === 'Regular') return 1;
+                    return a.localeCompare(b);
+                });
+
+                sortedStreams.forEach(stName => {
+                    const courses = streams[stName];
+                    let totalInStream = 0;
+                    let tableRows = '';
+                    
+                    Object.entries(courses).sort().forEach(([c, n], i) => {
+                        totalInStream += n;
+                        tableRows += '<tr><td>' + (i + 1) + '</td><td>' + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
+                    });
+
+                    contentHtml += '<h3 style="margin-top:20px; border-bottom:2px solid #000; display:inline-block">Stream: ' + stName + '</h3>' +
+                        '<table class="rt" style="margin-bottom:20px"><thead><tr><th>SL</th><th style="width:70%">COURSE NAME</th><th>COUNT</th></tr></thead>' +
+                        '<tbody>' + tableRows + '</tbody>' +
+                        '<tfoot><tr><td colspan="2" style="text-align:right"><b>Total (' + stName + '):</b></td><td style="text-align:center"><b>' + totalInStream + '</b></td></tr></tfoot>' +
+                        '</table>';
+                });
+
+                p.innerHTML = heading('QUESTION PAPER SUMMARY', '', D.meta.examName) + contentHtml + footer();
                 v.appendChild(p);
             }
+
 
             // --- 📦 REPORT 2: QP DISTRIBUTION ---
             if (type === 'r2') {
