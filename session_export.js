@@ -57,7 +57,7 @@ const SESSION_EXPORT_JS = {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>\${data.meta.collegeName} - Portable Session Document</title>
+    <title>${data.meta.collegeName} - Portable Session Document</title>
     <style>
         :root { --p: #1e3a8a; --bg: #f3f4f6; --txt: #111827; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--txt); margin: 0; padding: 20px; }
@@ -101,9 +101,9 @@ const SESSION_EXPORT_JS = {
         <header>
             <h1 style="margin:0; color:var(--p)">📥 Portable Session Document</h1>
             <div style="display:flex; gap:10px; margin-top:15px">
-                <span id="p-date" style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">\${data.meta.date}</span>
-                <span style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">\${data.meta.time}</span>
-                <span style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">\${data.students.length} Students</span>
+                <span id="p-date" style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">${data.meta.date}</span>
+                <span style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">${data.meta.time}</span>
+                <span style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">${data.students.length} Students</span>
             </div>
         </header>
 
@@ -130,7 +130,7 @@ const SESSION_EXPORT_JS = {
     <div id="viewer"></div>
 
     <script>
-        const D = \${JSON.stringify(data)};
+        const D = ${JSON.stringify(data)};
 
         function init() {
             const b = document.getElementById('qb');
@@ -139,7 +139,7 @@ const SESSION_EXPORT_JS = {
                 const [code, stream] = c.split('|');
                 const row = document.createElement('tr');
                 row.innerHTML = '<td style="padding:5px; border-bottom:1px solid #eee">' + code + ' (' + stream + ')</td>' + 
-                    '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + (D.qpCodes[c] || '') + '" onchange="D.qpCodes[\'' + c + '\']=this.value"></td>';
+                    '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + (D.qpCodes[c] || '') + '" onchange="D.qpCodes[\\'' + c + '\\']=this.value"></td>';
                 b.appendChild(row);
             });
         }
@@ -220,7 +220,6 @@ const SESSION_EXPORT_JS = {
                 p.innerHTML = heading('SEATING DETAILS (ALPHABETICAL)');
                 const sorted = [...D.students].sort((a,b) => a.Name.localeCompare(b.Name));
                 const mid = Math.ceil(sorted.length / 2);
-                let html = '<div style="display:flex; gap:20px"><div style="flex:1"><table class="rt"><thead><tr><th>NAME</th><th>REG NO</th><th>ROOM</th><th>SEAT</th></tr></thead><tbody>';
                 
                 const drawTable = (list) => {
                     let rows = '';
@@ -232,8 +231,8 @@ const SESSION_EXPORT_JS = {
                     return rows;
                 };
 
-                p.innerHTML += '<div style="display:flex; gap:20px"><div style="flex:1"><table class="rt"><thead><tr><th>NAME</th><th>REG NO</th><th>ROOM</th></tr></thead><tbody>' + drawTable(sorted.slice(0,mid)) + '</tbody></table></div>' +
-                               '<div style="flex:1"><table class="rt"><thead><tr><th>NAME</th><th>REG NO</th><th>ROOM</th></tr></thead><tbody>' + drawTable(sorted.slice(mid)) + '</tbody></table></div></div>' + footer();
+                p.innerHTML += '<div style="display:flex; gap:20px"><div style="flex:1"><table class="rt"><thead><tr><th>NAME</th><th>REG NO</th><th>ROOM</th><th>SEAT</th></tr></thead><tbody>' + drawTable(sorted.slice(0,mid)) + '</tbody></table></div>' +
+                               '<div style="flex:1"><table class="rt"><thead><tr><th>NAME</th><th>REG NO</th><th>ROOM</th><th>SEAT</th></tr></thead><tbody>' + drawTable(sorted.slice(mid)) + '</tbody></table></div></div>' + footer();
                 v.appendChild(p);
             }
 
@@ -273,8 +272,9 @@ const SESSION_EXPORT_JS = {
         function createPage() { const d = document.createElement('div'); d.className = 'a4'; return d; }
     </script>
 </body>
-</html>\`;
+</html>`;
     }
 };
 
 window.SESSION_EXPORT_JS = SESSION_EXPORT_JS;
+
