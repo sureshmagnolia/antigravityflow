@@ -3180,19 +3180,37 @@ function generateDayWisePDF() {
 
                     const rowCenterY = y + (rowH / 2);
 
-                    // LOC: Merged Drawing
+                    // LOC: Merged Drawing (With Dynamic Rotation)
                     if (!mergeMap[i].skip) {
                         const span = mergeMap[i].span;
                         const totalMergeH = span * rowH;
                         const mergeCenterY = y + (totalMergeH / 2);
                         
-                        drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
+                        if (span > 4) {
+                            // Rotate 90 degrees (Bottom-to-Top) for spans > 4
+                            pdf.setFont("helvetica", "bold");
+                            pdf.setFontSize(8);
+                            let rotatedText = String(row.loc);
+                            
+                            // Prevent bleeding out of the vertical cell bounds
+                            while(pdf.getTextWidth(rotatedText) > (totalMergeH - 4) && rotatedText.length > 2) {
+                                rotatedText = rotatedText.substring(0, rotatedText.length - 1);
+                            }
+                            if (rotatedText !== row.loc) rotatedText = rotatedText.substring(0, rotatedText.length-2) + '..';
+
+                            pdf.setTextColor(0);
+                            const centerX = xLoc + (W_LOC / 2);
+                            pdf.text(rotatedText, centerX, mergeCenterY, { align: "center", baseline: "middle", angle: 90 });
+                        } else {
+                            drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
+                        }
                         
                         const blockBottomY = y + totalMergeH;
                         pdf.line(xBase, blockBottomY, xBase + W_LOC, blockBottomY); 
                         pdf.line(xBase + W_LOC, y, xBase + W_LOC, blockBottomY); 
                         pdf.line(xBase, y, xBase, blockBottomY); 
                     }
+
 
                     drawSmartText(String(row.reg), xReg + 1, rowCenterY, W_REG - 2, rowH, "left", true, 8);
                     drawSmartText(row.name, xName + 1, rowCenterY, W_NAME, rowH, "left", row.isScribe, 8);
