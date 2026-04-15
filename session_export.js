@@ -179,8 +179,13 @@ const SESSION_EXPORT_JS = {
             courses.forEach(c => {
                 const [code, stream] = c.split('|');
                 const row = document.createElement('tr');
+                // 🛡️ ENCODED KEY FALLBACK: Ensure input boxes find the main app's data
+                const encodedKey = btoa(unescape(encodeURIComponent(c)));
+                const qpValue = D.qpCodes[encodedKey] || D.qpCodes[c] || '';
+
                 row.innerHTML = '<td style="padding:5px; border-bottom:1px solid #eee">' + code + ' (' + stream + ')</td>' + 
-                    '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + (D.qpCodes[c] || '') + '" onchange="D.qpCodes[\\'' + c + '\\']=this.value"></td>';
+                    '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + qpValue + '" onchange="D.qpCodes[\\'' + c + '\\']=this.value"></td>';
+
                 b.appendChild(row);
             });
         }
