@@ -235,7 +235,14 @@ const SESSION_EXPORT_JS = {
             alert("✅ Updated HTML file has been downloaded.\\n\\nYou can now send this new file to other computers; the QP codes are permanently saved inside it!");
         }
 
-         function render(type) {
+    function render(type) {
+    // 🛡️ QP KEY UNIFIER: Handles both Raw and Base64 Encoded keys
+    const getActualQPValue = (course, stream) => {
+        const rawKey = course + '|' + (stream || 'Regular');
+        const encodedKey = btoa(unescape(encodeURIComponent(rawKey)));
+        return D.qpCodes[encodedKey] || D.qpCodes[rawKey] || 'N/A';
+    };
+
             const v = document.getElementById('viewer'); v.innerHTML = '';
             
             // --- 🎨 SHARED HELPERS ---
@@ -398,8 +405,12 @@ const SESSION_EXPORT_JS = {
                             const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
                             const reg = s.RegisterNo || s['Register Number'];
                             const isScr = D.scribes.some(sc => sc.regNo === reg);
-                            const qp = D.qpCodes[fs.Course + '|' + (room.stream || 'Regular')] || 'N/A';
+                            const qp = getActualQPValue(fs.Course, room.stream);
                             
+                            // Apply Deep Charcoal Style for Scribes
+                            const rowClass = isScr ? 'class="scribe-row-highlight"' : '';
+                            const scribeRemark = isScr ? 'SCRIBE' : '';
+
                             // Ditto marks for Course
                             const courseDisplay = (fs.Course === prevC) ? '<div style="text-align:center">"</div>' : 
                                 '<div style="font-size:8.5pt"><b>' + qp + '</b> ' + getSmartName(fs.Course) + '</div>';
@@ -408,10 +419,12 @@ const SESSION_EXPORT_JS = {
                             // RegNo Font Sizing
                             const fSize = (/[a-zA-Z]/.test(reg)) ? '9pt' : (reg.length > 7 ? '11pt' : '12pt');
 
-                            rows += '<tr style="height:35px">' +
+                            rows += '<tr ' + rowClass + ' style="height:35px">' +
                                 '<td style="text-align:center">' + s.seat + (isScr ? '*' : '') + '</td>' +
                                 '<td>' + courseDisplay + '</td>' +
                                 '<td style="font-weight:bold; font-size:' + fSize + '">' + reg + '</td>' +
+                                '<td>' + (fs?.Name || '') + '</td>' +
+                                '<td style="text-align:center; font-weight:bold; font-size:8pt">' + scribeRemark + '</td>' +
                                 '<td>' + (fs?.Name || '') + '</td>' +
                                 '<td></td><td></td></tr>';
                         });
@@ -618,16 +631,25 @@ const SESSION_EXPORT_JS = {
             }
 
 
-            // --- ✍️ REPORT 6: SCRIBE PROFORMA ---
+            // --- ✍️ REPORT 6: SCRIBE PROFORMA (SEQUENTIAL) ---
             if (type === 'r6') {
                 if (D.scribes.length === 0) return alert("No Scribes allotted.");
+                
+                // Calculate Sequential SCR labels
+                const scribeRoomNames = [...new Set(D.scribes.map(s => s.room))];
+                scribeRoomNames.sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
+                const scrLabelMap = {};
+                scribeRoomNames.forEach((name, idx) => { scrLabelMap[name] = 'SCR' + (idx+1); });
+
                 D.scribes.forEach(s => {
                     const p = createPage();
-                    p.innerHTML = heading('SCRIBE SEATING PROFORMA', s.room, D.meta.examName) + 
-                        '<table class="rt" style="margin-top:20px"><tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>' + s.regNo + '</td></tr><tr><td style="font-weight:bold">Candidate Name</td><td>' + s.studentName + '</td></tr><tr><td style="font-weight:bold">Scribe Name</td><td>' + s.scribeName + '</td></tr><tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">' + s.room + '</td></tr><tr style="height:100px"><td style="font-weight:bold">Candidate Thumb</td><td></td></tr><tr style="height:100px"><td style="font-weight:bold">Scribe Thumb</td><td></td></tr></table>' + footer();
+                    const label = scrLabelMap[s.room] || 'SCRIBE';
+                    p.innerHTML = heading('SCRIBE SEATING PROFORMA', label + ' (' + s.room + ')', D.meta.examName) + 
+                        '<table class="rt" style="margin-top:20px"><tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>' + s.regNo + '</td></tr><tr><td style="font-weight:bold">Candidate Name</td><td>' + s.studentName + '</td></tr><tr><td style="font-weight:bold">Scribe Name</td><td>' + s.scribeName + '</td></tr><tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">' + label + ' (' + s.room + ')</td></tr><tr style="height:120px"><td style="font-weight:bold">Candidate Thumb Impression</td><td></td></tr><tr style="height:120px"><td style="font-weight:bold">Scribe Thumb Impression</td><td></td></tr></table>' + footer();
                     v.appendChild(p);
                 });
             }
+
 
             // --- 🤝 REPORT 7: SCRIBE ASSISTANCE SUMMARY ---
             if (type === 'r7') {
