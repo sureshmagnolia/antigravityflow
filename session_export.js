@@ -371,9 +371,55 @@ const SESSION_EXPORT_JS = {
                     <div style="flex:1">\${getTable(sorted.slice(0, mid))}</div>
                     <div style="flex:1">\${getTable(sorted.slice(mid))}</div>
                 </div>\` + footer();
-                v.appendChild(p);
-              });
+                               v.appendChild(p);
             }
+
+            // --- 🏷️ REPORT 5: ROOM STICKERS (EXACT 135mm LAYOUT) ---
+            if (type === 'r5') {
+                for(let i=0; i<D.allotment.length; i+=2) {
+                    const page = document.createElement('div'); page.className = 'a4 sticker-page';
+                    const drawSticker = (idx) => {
+                        if (!D.allotment[idx]) return '';
+                        const room = D.allotment[idx];
+                        let rows = '';
+                        room.students.slice(0, 45).forEach(s => {
+                            rows += `<div style="display:flex; justify-content:space-between; font-size:9px; border-bottom:1px dotted #ccc; padding:0 2px">
+                                <span>\${s.seat}</span><b>\${s.RegisterNo||s['Register Number']}</b>
+                            </div>`;
+                        });
+                        return `<div class="sticker">
+                            <div style="text-align:center; border-bottom:1px solid #000; margin-bottom:8px">
+                                <h3 style="margin:2px 0">\${D.meta.collegeName}</h3>
+                                <h4 style="margin:2px 0">ROOM \${room.roomName}</h4>
+                                <div style="font-size:8pt">\${D.meta.date} | \${D.meta.time}</div>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:x; column-gap:15px">\${rows}</div>
+                        </div>`;
+                    }
+                    page.innerHTML = drawSticker(i) + '<div style="height:10mm; border-bottom:1px dashed #ccc; margin:5mm 0"></div>' + drawSticker(i+1);
+                    v.appendChild(page);
+                }
+            }
+
+            // --- ✍️ REPORT 6: SCRIBE PROFORMA (ENRICHED) ---
+            if (type === 'r6') {
+                if (D.scribes.length === 0) return alert("No Scribes allotted for this session.");
+                D.scribes.forEach(s => {
+                    const p = createPage();
+                    p.innerHTML = heading('SCRIBE SEATING PROFORMA', s.room, D.meta.examName) + 
+                        \`<table class="rt" style="margin-top:20px">
+                            <tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>\${s.regNo}</td></tr>
+                            <tr><td style="font-weight:bold">Candidate Name</td><td>\${s.studentName}</td></tr>
+                            <tr><td style="font-weight:bold">Scribe Name</td><td>\${s.scribeName}</td></tr>
+                            <tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">\${s.room}</td></tr>
+                            <tr style="height:100px"><td style="font-weight:bold">Candidate Thumb</td><td></td></tr>
+                            <tr style="height:100px"><td style="font-weight:bold">Scribe Thumb</td><td></td></tr>
+                        </table>\` + footer();
+                    v.appendChild(p);
+                });
+            }
+        }
+
         }
 
         function createPage() { const d = document.createElement('div'); d.className = 'a4'; return d; }
