@@ -1476,8 +1476,16 @@ async function updateLocalSlotsFromStudents() {
                             safeSetItem('examRoomAllotment', JSON.stringify(allAllotments));
                             safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
                             safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
+                            
+                            // FIX: Protect local unsaved scribe assignments from cloud overwrite
+                            if (hasUnsavedScribes) {
+                                const localScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                                Object.assign(allScribeAllotments, localScribes);
+                            }
                             safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                            
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+
                         } else {
                             // Local Fallback: Identify sessions from allStudentData if cloud is empty
                             const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
@@ -6558,11 +6566,13 @@ function getExamName(date, time, stream) {
                 `;
                     }
 
-            // Generate Dedicated Scribe Assistance Summary Page (Large Font, Per Session)
+                    // Generate Dedicated Scribe Assistance Summary Page (A4 Large Font)
                     const sessionScribes = session.students.filter(s => s.isScribe);
                     if (sessionScribes.length > 0 && typeof renderScribeSummaryPage === 'function') {
+                        // FIX: Restore call to the dedicated page generator (renderScribeSummaryPage)
                         allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
                     }
+
 
                 });
             }
