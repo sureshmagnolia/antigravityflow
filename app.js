@@ -8350,8 +8350,27 @@ function getExamName(date, time, stream) {
                 });
             });
 
+            // 🛡️ SCR1, SCR2 SEQUENTIAL MAPPING
+            // 1. Identify all unique rooms used for scribes in this session
+            const currentSessionScribeRooms = allScribeAllotments[sessionKey] || {};
+            const uniqueScribeRoomsInSession = [...new Set(Object.values(currentSessionScribeRooms))];
+            
+            // 2. Sort them by their physical Room Serial to assign SCR numbers in order
+            const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sessionKey) : {};
+            uniqueScribeRoomsInSession.sort((a, b) => {
+                const serialA = parseInt(roomSerialMap[a]) || 999;
+                const serialB = parseInt(roomSerialMap[b]) || 999;
+                return serialA - serialB;
+            });
+
+            // 3. Create the Scribe Mapping (e.g., "Room 5" -> "SCR1")
+            const scribeRoomLabelMap = {};
+            uniqueScribeRoomsInSession.forEach((roomName, idx) => {
+                scribeRoomLabelMap[roomName] = `SCR${idx + 1}`;
+            });
 
             const reportRows = [];
+
 
             for (const s of allScribeStudents) {
                 const sessionKey = `${s.Date} | ${s.Time}`;
@@ -8380,7 +8399,10 @@ function getExamName(date, time, stream) {
                         if (rLoc) locText = ` (${rLoc})`;
                     }
                     const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
-                    scribeRoomDisplay = `<strong>${scribeSerial} - ${rawScribeRoom}</strong>${locText}`;
+                    const scribeLabel = scribeRoomLabelMap[rawScribeRoom] || 'SCR?';
+                    // Display style: SCR1 - #10 - Room 5
+                    scribeRoomDisplay = `<strong><span style="color:#2563eb;">${scribeLabel}</span> - #${scribeSerial} - ${rawScribeRoom}</strong>${locText}`;
+
                 }
 
                 reportRows.push({
@@ -8448,8 +8470,8 @@ function getExamName(date, time, stream) {
                                 <td class="data">${student.OriginalRoom}</td>
                             </tr>
                             <tr>
-                                <td class="label">Scribe Allotted Room:</td>
-                                <td class="data" style="font-size: 1.1em;">${student.ScribeRoom}</td>
+                                <td class="label" style="font-size: 12pt; font-weight: bold;">Scribe Allotted Room:</td>
+                                <td class="data" style="font-size: 1.3em; font-weight: 800; border: 2px solid #000; padding: 10px; background-color: #f1f5f9;">${student.ScribeRoom}</td>
                             </tr>
                             <tr>
                                 <td class="label">Sign or Thumb Impression of Candidate:</td>
