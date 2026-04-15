@@ -2941,7 +2941,11 @@ function generateDayWisePDF() {
         const rawData = getFilteredReportData(reportType); 
         // 🛡️ UNIFIED PIPELINE (V12): Direct database source
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const sessionAllotment = allAllotments[`${date} | ${time}`] || [];
+        
+        // FIX: Extract the session key securely from the UI select element!
+        const sessionKey = reportsSessionSelect ? reportsSessionSelect.value : "";
+        const sessionAllotment = allAllotments[sessionKey] || [];
+
         
         const studentToRoomMap = {};
         sessionAllotment.forEach(room => {
