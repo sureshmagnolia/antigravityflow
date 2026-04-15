@@ -21,7 +21,8 @@ const SESSION_EXPORT_JS = {
         if (sessionStudents.length === 0) return alert("❌ No data found! Ensure student data is loaded in the dashboard.");
 
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const allQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+        // 🛡️ PREFER LIVE BRIDGE: Get QP codes from memory if dashboard is active
+        const allQPCodes = (typeof window.getMyQPCodes === 'function') ? window.getMyQPCodes() : JSON.parse(localStorage.getItem('examQPCodes') || '{}');
         const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
         const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
         const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
@@ -183,8 +184,13 @@ const SESSION_EXPORT_JS = {
                 const encodedKey = btoa(unescape(encodeURIComponent(c)));
                 const qpValue = D.qpCodes[encodedKey] || D.qpCodes[c] || '';
 
+                // 🛡️ KEY UNIFIER: Handles both Raw text and Base64 encoded keys
+                const encodedKey = btoa(unescape(encodeURIComponent(c)));
+                const qpValue = D.qpCodes[encodedKey] || D.qpCodes[c] || '';
+
                 row.innerHTML = '<td style="padding:5px; border-bottom:1px solid #eee">' + code + ' (' + stream + ')</td>' + 
                     '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + qpValue + '" onchange="D.qpCodes[\\'' + c + '\\']=this.value"></td>';
+
 
                 b.appendChild(row);
             });
