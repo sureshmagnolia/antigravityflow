@@ -84,10 +84,25 @@ const SESSION_EXPORT_JS = {
         .a4 { background:white; width:210mm; min-height:297mm; padding:15mm; margin:0 auto 20px; box-shadow:0 0 20px rgba(0,0,0,0.1); box-sizing:border-box; position:relative; }
         
         @media print {
-            .no-p { display:none !important; }
-            .a4 { box-shadow:none; border:none; margin:0; width:100%!important; padding:10mm!important; page-break-after:always; }
-            @page { size: A4; margin: 0; }
+            html, body { height: 100%; margin: 0 !important; padding: 0 !important; }
+            .no-p { display: none !important; }
+            /* Strict pagination to prevent single-page overflow */
+            .a4 { 
+                box-shadow: none !important; 
+                border: none !important; 
+                margin: 0 !important; 
+                width: 100% !important; 
+                padding: 10mm !important; 
+                height: auto !important;
+                min-height: auto !important; 
+                break-inside: auto;
+                break-after: page; 
+                page-break-after: always; 
+            }
+            .a4:last-of-type { break-after: auto; page-break-after: auto; }
+            @page { size: A4 portrait; margin: 0; }
         }
+
 
         /* Report Styles */
         .rt { width: 100%; border-collapse: collapse; font-family: serif; font-size: 11pt; }
