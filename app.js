@@ -6426,28 +6426,28 @@ function getExamName(date, time, stream) {
                             if (charLen > maxChars + 8) dynFontSize = 6.5;
                             else if (charLen > maxChars) dynFontSize = 7.5;
                             
-                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-width:25px; line-height:1.1; white-space:normal; word-wrap:break-word;';
+                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; line-height:1.1; white-space:nowrap; margin:auto;';
                         } else {
                             // Keep horizontal for short spans
                             if (charLen > 25) dynFontSize = 6.5;
                             else if (charLen > 15) dynFontSize = 7.5;
                             
-                            tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1;';
+                            tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                         }
 
-                        rowsHtml += `<td ${rowspanAttr} style="${tdStyles} font-size:${dynFontSize}pt; font-weight:bold; background-color:#fff; border:1px solid #000;">
-                        ${row.displayRoom}
+                        // FIXED: TD borders are intact. Rotating a DIV inside the TD prevents collapse bugs.
+                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden;">
+                        <div style="${tdStyles} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
                     </td>`;
                     }
 
-                    // TIGHT PADDING: Eliminates wasted vertical space for names
+                    // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
                     rowsHtml += `
-                        <td style="padding: 1px 4px; font-weight: 700; font-size: 9pt; border: 1px solid #000;">${row.student['Register Number']}</td>
+                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>
                         
                         <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; border: 1px solid #000;">
                             ${row.student.Name}
                         </td>
-
                         
                         <td style="padding: 1px 4px; text-align: center; font-weight: bold; border: 1px solid #000;">${row.seatNo}</td>
                     </tr>
@@ -6457,7 +6457,8 @@ function getExamName(date, time, stream) {
                 return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 25px;"> <col style="width: 28%;"> <col style="width: 40%;"> <col style="width: 10%;"> </colgroup>
+                        <col style="width: 25px;"> <col style="width: 85px;"> <col style="width: auto;"> <col style="width: 32px;"> </colgroup>
+
                     <thead>
                         <tr>
                             <th style="border: 1px solid #000;">Location</th>
