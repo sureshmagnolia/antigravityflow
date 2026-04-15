@@ -1403,7 +1403,14 @@ async function updateLocalSlotsFromStudents() {
                             if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
                             if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                             if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                            if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                           
+                            // 🛡️ SMART MERGE SHIELD: Only overwrite if cloud data has MORE or EQUAL records
+                            const cloudScribes = s.scribeAllotment || {};
+                            const localScribes = allScribeAllotments[sessionKey] || {};
+                            if (Object.keys(cloudScribes).length >= Object.keys(localScribes).length) {
+                                allScribeAllotments[sessionKey] = cloudScribes;
+                            }
+
                             if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
 
                             // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
@@ -1483,8 +1490,14 @@ async function updateLocalSlotsFromStudents() {
                             // We already initialized allScribeAllotments with local data (Line 1383), 
                             // and the loop updated it with cloud data. No extra wipe-logic needed!
                             
-                            safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));                           
+                            // Standardize storage using the SCRIBE_ALLOTMENT_KEY constant
+                            if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
+                                safeSetItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
+                            } else {
+                                safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                            }
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
+
 
                         } else {
                             // Local Fallback: Identify sessions from allStudentData if cloud is empty
@@ -1500,11 +1513,17 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                         
-                        // ✅ UI WAKE-UP (SCR5 Style): Immediately refresh visibility
-                        if (typeof loadScribeAllotment === 'function' && typeof allotmentSessionSelect !== 'undefined') {
-                            const activeSession = allotmentSessionSelect.value;
-                            if (activeSession) loadScribeAllotment(activeSession);
+                        // ✅ ROBUST UI WAKE-UP: Force visibility for Scribes and Invigilators
+                        if (typeof loadScribeAllotment === 'function') {
+                            const activeSession = (typeof allotmentSessionSelect !== 'undefined') ? allotmentSessionSelect.value : null;
+                            if (activeSession) {
+                                loadScribeAllotment(activeSession);
+                            } else {
+                                // Fallback: load based on current session global if dropdown isn't ready
+                                if (window.currentSessionKey) loadScribeAllotment(window.currentSessionKey);
+                            }
                         }
+
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
