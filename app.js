@@ -20717,6 +20717,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
  * Triggered by the UI button. Feeds the selected session to the export module.
  */
 window.triggerSessionExport = function() {
+    getRoomCapacitiesFromStorage();
     const sessionKey = document.getElementById('reports-session-select')?.value;
     
     if (!sessionKey) {
