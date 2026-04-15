@@ -110,7 +110,10 @@ const SESSION_EXPORT_JS = {
 <body>
     <div class="no-p">
         <header>
-            <h1 style="margin:0; color:var(--p)">📥 Portable Session Document</h1>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h1 style="margin:0; color:var(--p)">📥 Portable Session Document</h1>
+                <button onclick="window.print()" class="btn" style="background:#10b981; padding:10px 20px; box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4);">🖨️ Print Report</button>
+            </div>
             <div style="display:flex; gap:10px; margin-top:15px">
                 <span id="p-date" style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">${data.meta.date}</span>
                 <span style="background:#eff6ff; padding:5px 15px; border-radius:20px; font-weight:bold; color:#1e40af">${data.meta.time}</span>
