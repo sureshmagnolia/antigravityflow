@@ -189,12 +189,12 @@ const SESSION_EXPORT_JS = {
                '</div>';
             };
 
-            const footer = () => `<div class="rf"><span>Date: \${D.meta.date}</span><span>Chief Superintendent Signature</span></div>`;
+            const footer = () => '<div class="rf"><span>Date: ' + D.meta.date + '</span><span>Chief Superintendent Signature</span></div>';
 
             const getSmartName = (name) => {
                 let clean = name.replace(/\[.*?\]/g, '').replace(/\s-\s$/, '').trim();
                 const w = clean.split(/\s+/);
-                return w.length <= 4 ? clean : `\${w.slice(0, 3).join(' ')} ... \${w[w.length -1]}`;
+                return w.length <= 4 ? clean : w.slice(0, 3).join(' ') + ' ... ' + w[w.length -1];
             };
 
             // --- 📄 REPORT 1: QP SUMMARY ---
@@ -204,7 +204,7 @@ const SESSION_EXPORT_JS = {
                 const counts = {};
                 D.students.forEach(s => { counts[s.Course] = (counts[s.Course] || 0) + 1; });
                 Object.entries(counts).sort().forEach(([c, n], i) => {
-                    table += `<tr><td>\${i+1}</td><td>\${c}</td><td style="text-align:center; font-weight:bold">\${n}</td></tr>`;
+                    table += '<tr><td>' + (i+1) + '</td><td>' + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
                 });
                 p.innerHTML = heading('QUESTION PAPER SUMMARY', '', D.meta.examName) + table + '</tbody></table>' + footer();
                 v.appendChild(p);
@@ -234,22 +234,22 @@ const SESSION_EXPORT_JS = {
                         let loc = (D.roomConfig[r]?.location || "");
                         const words = loc.split(' ');
                         const displayLoc = words.length > 2 ? words.slice(0,2).join(' ') + '..' : loc;
-                        boxes += `<div class="qp-room-box">
-                           <div style="display:flex; align-items:baseline; overflow:hidden">
-                              <span style="font-size:16pt; font-weight:900; margin-right:4px">\${info.rooms[r]}</span>
-                              <span style="font-size:9px; font-weight:bold; color:#666; margin-right:8px">Nos</span>
-                              <span style="color:#ddd; margin-right:8px">|</span>
-                              <span style="font-weight:bold; font-size:11pt; white-space:nowrap">Room \${r}</span>
-                              <span style="font-size:9px; margin-left:4px; color:#666">\${displayLoc ? '('+displayLoc+')' : ''}</span>
-                           </div>
-                           <div class="qp-room-check"></div>
-                        </div>`;
+                        boxes += '<div class="qp-room-box">' +
+                           '<div style="display:flex; align-items:baseline; overflow:hidden">' +
+                              '<span style="font-size:16pt; font-weight:900; margin-right:4px">' + info.rooms[r] + '</span>' +
+                              '<span style="font-size:9px; font-weight:bold; color:#666; margin-right:8px">Nos</span>' +
+                              '<span style="color:#ddd; margin-right:8px">|</span>' +
+                              '<span style="font-weight:bold; font-size:11pt; white-space:nowrap">Room ' + r + '</span>' +
+                              '<span style="font-size:9px; margin-left:4px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
+                           '</div>' +
+                           '<div class="qp-room-check"></div>' +
+                        '</div>';
                     });
 
-                    p.innerHTML += `<div style="margin-top:15px; border-bottom:1px solid #000; padding:4px; display:flex; justify-content:space-between">
-                        <span><b>\${info.title}</b> (\${info.stream})</span>
-                        <span>QP: <b>\${info.qp}</b> | Total: <b>\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
-                    </div>` + boxes + '</div>';
+                    p.innerHTML += '<div style="margin-top:15px; border-bottom:1px solid #000; padding:4px; display:flex; justify-content:space-between">' +
+                        '<span><b>' + info.title + '</b> (' + info.stream + ')</span>' +
+                        '<span>QP: <b>' + info.qp + '</b> | Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
+                    '</div>' + boxes + '</div>';
                 });
                 v.appendChild(p);
             }
@@ -383,18 +383,18 @@ const SESSION_EXPORT_JS = {
                         const room = D.allotment[idx];
                         let rows = '';
                         room.students.slice(0, 45).forEach(s => {
-                            rows += `<div style="display:flex; justify-content:space-between; font-size:9px; border-bottom:1px dotted #ccc; padding:0 2px">
-                                <span>\${s.seat}</span><b>\${s.RegisterNo||s['Register Number']}</b>
-                            </div>`;
+                            rows += '<div style="display:flex; justify-content:space-between; font-size:9px; border-bottom:1px dotted #ccc; padding:0 2px">' +
+                                '<span>' + s.seat + '</span><b>' + (s.RegisterNo||s['Register Number']) + '</b>' +
+                            '</div>';
                         });
-                        return `<div class="sticker">
-                            <div style="text-align:center; border-bottom:1px solid #000; margin-bottom:8px">
-                                <h3 style="margin:2px 0">\${D.meta.collegeName}</h3>
-                                <h4 style="margin:2px 0">ROOM \${room.roomName}</h4>
-                                <div style="font-size:8pt">\${D.meta.date} | \${D.meta.time}</div>
-                            </div>
-                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; column-gap:15px">${rows}</div>
-                        </div>`;
+                        return '<div class="sticker">' +
+                            '<div style="text-align:center; border-bottom:1px solid #000; margin-bottom:8px">' +
+                                '<h3 style="margin:2px 0">' + D.meta.collegeName + '</h3>' +
+                                '<h4 style="margin:2px 0">ROOM ' + room.roomName + '</h4>' +
+                                '<div style="font-size:8pt">' + D.meta.date + ' | ' + D.meta.time + '</div>' +
+                            '</div>' +
+                            '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; column-gap:15px">' + rows + '</div>' +
+                        '</div>';
                     }
                     page.innerHTML = drawSticker(i) + '<div style="height:10mm; border-bottom:1px dashed #ccc; margin:5mm 0"></div>' + drawSticker(i+1);
                     v.appendChild(page);
