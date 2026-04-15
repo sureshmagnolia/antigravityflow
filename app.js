@@ -6558,11 +6558,10 @@ function getExamName(date, time, stream) {
                 `;
                     }
 
-                    // Generate Separate Scribe Page
+            // Generate Dedicated Scribe Assistance Summary Page (Large Font, Per Session)
                     const sessionScribes = session.students.filter(s => s.isScribe);
-                    if (sessionScribes.length > 0 && typeof renderScribeSummaryBlock === 'function') {
-                        // FIX: Updated function name and corrected from 4 to 3 parameters
-                        allPagesHtml += renderScribeSummaryBlock(sessionScribes, session, allScribeAllotments);
+                    if (sessionScribes.length > 0 && typeof renderScribeSummaryPage === 'function') {
+                        allPagesHtml += renderScribeSummaryPage(sessionScribes, streamName, session, allScribeAllotments);
                     }
 
                 });
