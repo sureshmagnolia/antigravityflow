@@ -6472,6 +6472,10 @@ function getExamName(date, time, stream) {
             `;
             }
 
+            // Build a Set of scribe Reg Nos for fast lookup
+            const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
+            const scribeRegSet = new Set(globalScribeList.map(s => s.regNo));
+
             for (const streamName of sortedStreamNames) {
                 // Flatten the saved database for this stream
                 let processed_rows = [];
@@ -6479,15 +6483,19 @@ function getExamName(date, time, stream) {
                     const roomStream = room.stream || "Regular";
                     if (roomStream === streamName) {
                         (room.students || []).forEach(s => {
+                            const reg = s['Register Number'] || s.RegisterNo || '';
                             processed_rows.push({
                                 ...s,
                                 'Room No': room.roomName,
                                 seatNumber: s.seat || '?',
-                                Stream: roomStream
+                                Stream: roomStream,
+                                // FIX: Stamp isScribe flag from the global scribe list
+                                isScribe: scribeRegSet.has(reg)
                             });
                         });
                     }
                 });
+
 
                 const daySessions = {};
 
