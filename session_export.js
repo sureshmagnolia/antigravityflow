@@ -178,15 +178,15 @@ const SESSION_EXPORT_JS = {
             
             // --- 🎨 SHARED HELPERS ---
             const heading = (title, hall = '', exam = '', page = 1) => {
-               const examTitle = exam ? `<div style="font-size: 14pt; font-weight: bold; margin: 2px 0; text-align:center;">\${exam}</div>` : '';
-               const hallInfo = hall ? `<h2 style="margin: 2px 0; text-align:center;">Hall: \${hall} &nbsp;|&nbsp; \${D.meta.date} &nbsp;|&nbsp; \${D.meta.time}</h2>` : 
-                                     `<h2 style="margin: 2px 0; text-align:center;">\${D.meta.date} | \${D.meta.time} | \${title}</h2>`;
-               return `<div class="rh">
-                  <div style="position: absolute; top: 15mm; left: 15mm; font-weight: bold;">Page \${page}</div>
-                  <h1>\${D.meta.collegeName}</h1>
-                  \${examTitle}
-                  \${hallInfo}
-               </div>`;
+               const examTitle = exam ? '<div style="font-size: 14pt; font-weight: bold; margin: 2px 0; text-align:center;">' + exam + '</div>' : '';
+               const hallInfo = hall ? '<h2 style="margin: 2px 0; text-align:center;">Hall: ' + hall + ' &nbsp;|&nbsp; ' + D.meta.date + ' &nbsp;|&nbsp; ' + D.meta.time + '</h2>' : 
+                                     '<h2 style="margin: 2px 0; text-align:center;">' + D.meta.date + ' | ' + D.meta.time + ' | ' + title + '</h2>';
+               return '<div class="rh">' +
+                  '<div style="position: absolute; top: 15mm; left: 15mm; font-weight: bold;">Page ' + page + '</div>' +
+                  '<h1>' + D.meta.collegeName + '</h1>' +
+                  examTitle +
+                  hallInfo +
+               '</div>';
             };
 
             const footer = () => `<div class="rf"><span>Date: \${D.meta.date}</span><span>Chief Superintendent Signature</span></div>`;
@@ -307,11 +307,11 @@ const SESSION_EXPORT_JS = {
                     students.slice(0, 20).forEach(s => {
                         const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
                         const isScribe = D.scribes.some(sc => sc.regNo === (s.RegisterNo || s['Register Number']));
-                        page1.querySelector('tbody').innerHTML += \`<tr style="height:35px font-size:11pt">
-                            <td>\${s.seat}\${isScribe ? '*' : ''}</td>
-                            <td style="font-weight:bold">\${s.RegisterNo || s['Register Number']}</td>
-                            <td>\${fs?.Name || ''}</td><td></td>
-                        </tr>\`;
+                        page1.querySelector('tbody').innerHTML += '<tr style="height:35px font-size:11pt">' +
+                            '<td>' + s.seat + (isScribe ? '*' : '') + '</td>' +
+                            '<td style="font-weight:bold">' + (s.RegisterNo || s['Register Number']) + '</td>' +
+                            '<td>' + (fs?.Name || '') + '</td><td></td>' +
+                        '</tr>';
                     });
                     
                     page1.innerHTML += '</tbody></table>' + (students.length <= 20 ? customFooter : '<div style="text-align:right; font-size:8pt">Continued on Page 2...</div>');
@@ -407,14 +407,14 @@ const SESSION_EXPORT_JS = {
                 D.scribes.forEach(s => {
                     const p = createPage();
                     p.innerHTML = heading('SCRIBE SEATING PROFORMA', s.room, D.meta.examName) + 
-                        \`<table class="rt" style="margin-top:20px">
-                            <tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>\${s.regNo}</td></tr>
-                            <tr><td style="font-weight:bold">Candidate Name</td><td>\${s.studentName}</td></tr>
-                            <tr><td style="font-weight:bold">Scribe Name</td><td>\${s.scribeName}</td></tr>
-                            <tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">\${s.room}</td></tr>
-                            <tr style="height:100px"><td style="font-weight:bold">Candidate Thumb</td><td></td></tr>
-                            <tr style="height:100px"><td style="font-weight:bold">Scribe Thumb</td><td></td></tr>
-                        </table>\` + footer();
+                        '<table class="rt" style="margin-top:20px">' +
+                            '<tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>' + s.regNo + '</td></tr>' +
+                            '<tr><td style="font-weight:bold">Candidate Name</td><td>' + s.studentName + '</td></tr>' +
+                            '<tr><td style="font-weight:bold">Scribe Name</td><td>' + s.scribeName + '</td></tr>' +
+                            '<tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">' + s.room + '</td></tr>' +
+                            '<tr style="height:100px"><td style="font-weight:bold">Candidate Thumb</td><td></td></tr>' +
+                            '<tr style="height:100px"><td style="font-weight:bold">Scribe Thumb</td><td></td></tr>' +
+                        '</table>' + footer();
                     v.appendChild(p);
                 });
             }
