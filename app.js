@@ -8284,6 +8284,8 @@ function getExamName(date, time, stream) {
 
             // 🛡️ UNIFIED PIPELINE (V12): Use actual database for Original Rooms
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // FIX: Derive sessionKey from the UI dropdown (was undefined before the for-loop)
+            const sessionKey = reportsSessionSelect.value;
             const sessionAllotment = allAllotments[sessionKey] || [];
             
             const originalRoomMap = {};
@@ -8299,6 +8301,7 @@ function getExamName(date, time, stream) {
 
             for (const s of allScribeStudents) {
                 const sessionKey = `${s.Date} | ${s.Time}`;
+
                 const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
                 const sessionQPCodes = qpCodeMap[sessionKey] || {};
 
