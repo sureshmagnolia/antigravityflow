@@ -12140,9 +12140,21 @@ function renderScribeAllotmentList(sessionKey) {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        hasUnsavedScribes = true; // ADD THIS FLAG
-        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
+        hasUnsavedScribes = false; // FIXED: Will be saved right away below
+        updateSyncStatus("Saving Scribe Room...", "warning");
+
+        // AUTO-SYNC: Push to Firestore immediately so it survives refresh
+        if (currentCollegeId && typeof syncSessionToCloud === 'function') {
+            syncSessionToCloud(sessionKey).then(() => {
+                updateSyncStatus("Scribe Room Saved ✅", "ok");
+            }).catch(err => {
+                console.error("Scribe room auto-sync failed:", err);
+                hasUnsavedScribes = true;
+                updateSyncStatus("Sync Failed ⚠️ - Manual save needed", "warning");
+            });
+        }
     }
+
 
     scribeCloseRoomModal.addEventListener('click', () => {
         scribeRoomModal.classList.add('hidden');
