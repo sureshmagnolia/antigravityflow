@@ -139,8 +139,12 @@ const SESSION_EXPORT_JS = {
         <div class="qp-box">
             <div style="display:flex; justify-content:space-between; margin-bottom:15px">
                 <h3 style="margin:0">1. Question Paper Codes</h3>
-                <button onclick="fromClipboard()" class="btn" style="padding:5px 10px; font-size:12px">📋 Sync from Clipboard</button>
+                <div>
+                    <button onclick="fromClipboard()" class="btn" style="padding:5px 10px; font-size:12px; margin-right:5px; background:#4b5563">📋 Sync from Clipboard</button>
+                    <button onclick="saveStateToFile()" class="btn" style="padding:5px 10px; font-size:12px; background:#059669">💾 Save Codes to File</button>
+                </div>
             </div>
+
             <table style="width:100%; border-collapse:collapse" id="qt">
                 <tbody id="qb"></tbody>
             </table>
@@ -189,6 +193,38 @@ const SESSION_EXPORT_JS = {
                 });
                 alert("✨ Successfully matched and updated QP codes!");
             } catch(e) { alert("Clipboard access denied."); }
+        }
+
+        // --- NEW: Self-Mutating HTML Saver ---
+        function saveStateToFile() {
+            // 1. Clear dynamic views to keep file size small
+            document.getElementById('viewer').innerHTML = '';
+            
+            // 2. Clone the current document's source structure
+            const docClone = document.documentElement.cloneNode(true);
+            
+            // 3. Prevent duplicating nested inputs/badges in the cloned html body
+            const inputs = docClone.querySelectorAll('input');
+            const targetInputs = document.querySelectorAll('input');
+            inputs.forEach((inp, idx) => { inp.setAttribute('value', targetInputs[idx].value); });
+
+            // 4. Locate and rewrite the 'const D =' variable block in the raw string
+            const docHtml = docClone.outerHTML;
+            const newDataString = 'const D = ' + JSON.stringify(D) + ';';
+            const updatedHtml = '<!DOCTYPE html>\\n' + docHtml.replace(/const D = \\{.*?\\};/s, newDataString);
+            
+            // 5. Trigger download of the new self-contained file
+            const blob = new Blob([updatedHtml], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = D.meta.date.replace(/\\./g, '-') + '_' + D.meta.time.replace(/:/g, '') + '_[Updated].html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert("✅ Updated HTML file has been downloaded.\\n\\nYou can now send this new file to other computers; the QP codes are permanently saved inside it!");
         }
 
          function render(type) {
