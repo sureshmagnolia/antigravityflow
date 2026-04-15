@@ -1479,16 +1479,21 @@ async function updateLocalSlotsFromStudents() {
                             
                             // FIX: Persistent Protection Logic (Merged across Refreshes)
                             const localScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-                            // Merge Strategy: Keep local assignments if cloud is missing data for that session
-                            Object.keys(localScribes).forEach(sessionKey => {
-                                const localCount = Object.keys(localScribes[sessionKey] || {}).length;
-                                const cloudCount = Object.keys(allScribeAllotments[sessionKey] || {}).length;
+                            
+                            // 🛡️ CRASH SHIELD: Ensures sync doesn't die if cloud data is missing
+                            Object.keys(localScribes).forEach(sk => {
+                                const localSession = localScribes[sk] || {};
+                                const cloudSession = allScribeAllotments[sk] || {}; // Handle missing session keys safely
                                 
-                                // Preserve local work if cloud hasn't caught up yet
+                                const localCount = Object.keys(localSession).length;
+                                const cloudCount = Object.keys(cloudSession).length;
+                                
+                                // Logic: If local computer has MORE data than the cloud, trust local progress
                                 if (localCount > cloudCount) {
-                                    allScribeAllotments[sessionKey] = localScribes[sessionKey];
+                                    allScribeAllotments[sk] = localSession;
                                 }
                             });
+
                             safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));                           
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
 
@@ -1506,10 +1511,12 @@ async function updateLocalSlotsFromStudents() {
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                         
-                        // FIX: Re-hydrate Scribe Allotment UI after sync results are merged
+                        // ✅ UI WAKE-UP: Automatically re-render the scribe list once the merge logic is safe
                         if (typeof loadScribeAllotment === 'function' && typeof allotmentSessionSelect !== 'undefined') {
-                            loadScribeAllotment(allotmentSessionSelect.value);
+                            const activeSession = allotmentSessionSelect.value;
+                            if (activeSession) loadScribeAllotment(activeSession);
                         }
+
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
