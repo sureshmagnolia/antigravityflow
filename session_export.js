@@ -440,21 +440,87 @@ const SESSION_EXPORT_JS = {
             }
 
 
-            // --- 🏷️ REPORT 5: ROOM STICKERS ---
+            // --- 🏷️ REPORT 5: ROOM STICKERS (DYNAMIC GRID & GROUPS) ---
             if (type === 'r5') {
-                for(let i=0; i<D.allotment.length; i+=2) {
-                    const pg = createPage(); pg.className = 'a4 sticker-page';
-                    const draw = (idx) => {
-                        const r = D.allotment[idx]; if(!r) return '';
-                        let rs = ''; r.students.slice(0, 45).forEach(s => {
-                            rs += '<div style="display:flex; justify-content:space-between; font-size:9px; border-bottom:1px dotted #ccc; padding:0 2px"><span>' + s.seat + '</span><b>' + (s.RegisterNo||s['Register Number']) + '</b></div>';
+                const getTruncName = (name) => (!name) ? "" : (name.length <= 20 ? name : name.substring(0, 20) + "..");
+
+                for(let i=0; i < D.allotment.length; i+=2) {
+                    const pg = createPage(); 
+                    pg.className = 'a4 sticker-page';
+                    pg.style.padding = '5mm';
+
+                    const drawSticker = (idx) => {
+                        const r = D.allotment[idx]; 
+                        if(!r) return '';
+
+                        // Group students by Course
+                        const byCourse = {};
+                        r.students.forEach(s => {
+                            const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                            const cName = fs ? fs.Course : 'Unknown';
+                            if(!byCourse[cName]) byCourse[cName] = [];
+                            // Check Scribe Status
+                            const isScr = D.scribes.some(sc => sc.regNo === (s.RegisterNo || s['Register Number']));
+                            byCourse[cName].push({ ...s, fullName: fs?.Name || '', isScribe: isScr });
                         });
-                        return '<div class="sticker"><div style="text-align:center; border-bottom:1px solid #000; margin-bottom:8px"><h3 style="margin:2px 0">' + D.meta.collegeName + '</h3><h4 style="margin:2px 0">ROOM ' + r.roomName + '</h4><div style="font-size:8pt">' + D.meta.date + ' | ' + D.meta.time + '</div></div><div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; column-gap:15px">' + rs + '</div></div>';
+
+                        const sortedCourses = Object.keys(byCourse).sort();
+                        
+                        // Dynamic layout adjustments for dense rooms
+                        const isDense = sortedCourses.length > 6;
+                        const rowPad = isDense ? "0px" : "1px";
+                        const fReg = isDense ? "8.5pt" : "9pt";
+                        const fName = isDense ? "8pt" : "8.5pt";
+
+                        let blocksHtml = '';
+                        sortedCourses.forEach(c => {
+                            const courseStudents = byCourse[c].sort((a,b) => (a.seat || 999) - (b.seat || 999));
+                            let gridHtml = '';
+                            
+                            courseStudents.forEach(st => {
+                                const sBadge = st.isScribe ? '<span style="font-size:0.6em; color:white; padding:0 2px; border-radius:2px; background:black; margin-left:2px;">S</span>' : '';
+                                gridHtml += 
+                                    '<div style="display:grid; grid-template-columns:25px max-content 1fr; align-items:center; border-bottom:1px dotted #ccc; padding:' + rowPad + ' 0; font-size:' + fReg + ';">' +
+                                        '<div style="text-align:center; font-weight:bold; border-right:1px solid #ddd;">' + (st.seat || '-') + '</div>' +
+                                        '<div style="text-align:left; font-weight:bold; padding:0 5px; border-right:1px solid #ddd; white-space:nowrap;">' + (st.RegisterNo || st['Register Number']) + '</div>' +
+                                        '<div style="padding-left:5px; font-size:' + fName + '; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#333;">' + getTruncName(st.fullName) + sBadge + '</div>' +
+                                    '</div>';
+                            });
+
+                            blocksHtml += 
+                                '<div style="margin-bottom:4px; break-inside:avoid; border:1px solid #eee; padding:2px; background:#fafafa;">' +
+                                    '<div style="font-weight:bold; font-size:8.5pt; background:#e5e7eb; padding:1px 4px; margin-bottom:1px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' +
+                                        c + ' <span style="background:#fff; padding:0 3px; border-radius:4px; margin-left:3px; font-size:8pt; border:1px solid #ccc;">' + courseStudents.length + '</span>' +
+                                    '</div>' +
+                                    '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">' + gridHtml + '</div>' +
+                                '</div>';
+                        });
+
+                        const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(' + r.roomName + ')</span>' : r.roomName;
+
+                        return '' +
+                        '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:135mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
+                            '<div style="text-align:center; margin-bottom:3px; flex-shrink:0; border-bottom:2px solid #000; padding-bottom:3px;">' +
+                                '<h1 style="font-size:12pt; font-weight:bold; margin:0; text-transform:uppercase; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + D.meta.collegeName + '</h1>' +
+                                '<div style="font-size:9pt; font-weight:bold; margin-top:1px; color:#444;">' + D.meta.date + ' | ' + D.meta.time + '</div>' +
+                                '<div style="margin-top:3px; border:2px solid #000; padding:2px 6px; display:flex; justify-content:center; align-items:center;">' +
+                                    '<span style="font-size:12pt; font-weight:bold; line-height:1.1; text-align:center;">' + roomTitle + '</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div style="flex:1 1 auto; overflow:hidden; min-height:0; padding-top:2px;">' +
+                                '<div style="display:block;">' + blocksHtml + '</div>' +
+                            '</div>' +
+                            '<div style="text-align:center; font-size:9pt; color:#000; margin-top:2px; flex-shrink:0; border-top:2px solid #000; padding-top:2px; font-weight:bold; background:#f0f0f0;">' +
+                                'Total Candidates: ' + r.students.length + 
+                            '</div>' +
+                        '</div>';
                     };
-                    pg.innerHTML = draw(i) + '<div style="height:10mm; border-bottom:1px dashed #ccc; margin:5mm 0"></div>' + draw(i+1);
+
+                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:10mm; border-bottom:1px dotted #ccc; margin-bottom:10mm;"></div>' + drawSticker(i+1) : '');
                     v.appendChild(pg);
                 }
             }
+
 
             // --- ✍️ REPORT 6: SCRIBE PROFORMA ---
             if (type === 'r6') {
