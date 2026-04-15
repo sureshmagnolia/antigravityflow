@@ -1204,7 +1204,7 @@ async function updateLocalSlotsFromStudents() {
                 if (now - lastLocalSave < 10000) return;
 
                 // --- SMART MERGE LOGIC for Mapping Data ---
-                if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList') {
+                if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment') {
                     try {
                         const localRaw = localStorage.getItem(key) || '{}';
                         const local = JSON.parse(localRaw);
@@ -1515,6 +1515,10 @@ async function updateLocalSlotsFromStudents() {
                         // 3. Refresh Components
                         if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
                         if (typeof updateDashboard === 'function') updateDashboard();
+                        
+                        // ✅ SYNC COMPLETE: Reset unsaved flag
+                        hasUnsavedScribes = false;
+
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                         
