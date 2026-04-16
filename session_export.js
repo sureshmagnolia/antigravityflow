@@ -9,16 +9,25 @@ const SESSION_EXPORT_JS = {
     exportSession: function(sessionKey) {
         if (!sessionKey) return alert("Please select a session first.");
 
-        // 1. COLLECT DATA via Global Bridge
-        const [date, time] = sessionKey.split(' | ');
+        // 🛡️ ROBUST DATA SPLIT: Handles varying space-pipe formats
+        const [date, time] = sessionKey.split('|').map(x => x.trim());
         const streamSelect = document.getElementById('reports-stream-select');
         const stream = streamSelect ? streamSelect.value : 'Regular';
         const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Institution';
 
+        // 🛡️ CASE-INSENSITIVE FILTER: Handles both s.Date and s.date from different data sources
         const allStudents = (typeof window.getMyAllStudentData === 'function') ? window.getMyAllStudentData() : [];
-        const sessionStudents = allStudents.filter(s => s.Date === date && s.Time === time);
+        const sessionStudents = allStudents.filter(s => {
+            const sDate = (s.Date || s.date || '').trim();
+            const sTime = (s.Time || s.time || '').trim();
+            return sDate === date && sTime === time;
+        });
         
-        if (sessionStudents.length === 0) return alert("❌ No data found! Ensure student data is loaded in the dashboard.");
+        if (sessionStudents.length === 0) {
+            console.error("Exporter Filter Failed:", { targetDate: date, targetTime: time, sample: allStudents[0] });
+            return alert("❌ No matching student data found! Ensure the dashboard is showing students for this session before exporting.");
+        }
+
 
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         // 🛡️ PREFER LIVE BRIDGE: Get QP codes from memory if dashboard is active
@@ -34,7 +43,8 @@ const SESSION_EXPORT_JS = {
                    generatedAt: new Date().toLocaleString(),
                    examName: (typeof getExamName === 'function') ? getExamName(date, time, stream) : 'Examination Session' },
             students: sessionStudents,
-            allotment: allAllotments[sessionKey] || [],
+            // 🛡️ KEY FALLBACK: Checks both raw and trimmed formats for the allotment key
+            allotment: allAllotments[sessionKey] || allAllotments[sessionKey.trim()] || [],
             qpCodes: allQPCodes[sessionKey] || {},
             absentees: allAbsentees[sessionKey] || {},
             scribes: Object.entries(allScribes[sessionKey] || {}).map(([regNo, room]) => {
@@ -180,17 +190,13 @@ const SESSION_EXPORT_JS = {
             courses.forEach(c => {
                 const [code, stream] = c.split('|');
                 const row = document.createElement('tr');
-                // 🛡️ ENCODED KEY FALLBACK: Ensure input boxes find the main app's data
-                const encodedKey = btoa(unescape(encodeURIComponent(c)));
-                const qpValue = D.qpCodes[encodedKey] || D.qpCodes[c] || '';
-
-                // 🛡️ KEY UNIFIER: Handles both Raw text and Base64 encoded keys
+                
+                // 🛡️ KEY UNIFIER: Handles both Raw text and Base64 encoded keys (cleaned)
                 const encodedKey = btoa(unescape(encodeURIComponent(c)));
                 const qpValue = D.qpCodes[encodedKey] || D.qpCodes[c] || '';
 
                 row.innerHTML = '<td style="padding:5px; border-bottom:1px solid #eee">' + code + ' (' + stream + ')</td>' + 
                     '<td style="padding:5px; border-bottom:1px solid #eee"><input type="text" data-key="' + c + '" value="' + qpValue + '" onchange="D.qpCodes[\\'' + c + '\\']=this.value"></td>';
-
 
                 b.appendChild(row);
             });
