@@ -105,7 +105,7 @@
                 const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
                 const now = Date.now();
 
-               if (cachedIndex && (now - cachedIndex.timestamp < 300000)) { 
+               if (cachedIndex && (now - cachedIndex.timestamp < 600000)) { 
                     indexCache = cachedIndex.data;
                     collegeName = indexCache.collegeName || "Exam Centre";
                     document.getElementById('college-name').textContent = collegeName;
