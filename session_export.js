@@ -787,18 +787,17 @@ const SESSION_EXPORT_JS = {
                         '<tbody>' +
                             '<tr><td style="padding:10px; border:1px solid #000; width:35%; font-weight:bold;">Name of Candidate:</td><td style="padding:10px; border:1px solid #000;">' + s.studentName + '</td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Register Number:</td><td style="padding:10px; border:1px solid #000; font-weight:bold; font-size:13pt;">' + s.regNo + '</td></tr>' +
-                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Course:</td><td style="padding:10px; border:1px solid #000;">' + courseDisplay + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Course / Paper:</td><td style="padding:10px; border:1px solid #000;">' + courseDisplay + '</td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">QP Code:</td><td style="padding:10px; border:1px solid #000; font-weight:bold;">' + qp + '</td></tr>' +
-                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotment:</td><td style="padding:10px; border:1px solid #000;">' + origRoomDisplay + '</td></tr>' +
-                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Room (New):</td><td style="padding:10px; border:1px solid #000; background-color:#eff6ff;">' + scribeRoomDisplay.replace(/"/g, "'") + '</td></tr>' +
-                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe:</td><td style="padding:10px; border:1px solid #000;">' + s.scribeName + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotted Room:</td><td style="padding:10px; border:1px solid #000;">' + origRoomDisplay + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-size:12pt; font-weight:bold;">Scribe Allotted Room:</td><td style="padding:10px; border:2px solid #000; font-size:1.3em; font-weight:800; background-color:#f1f5f9;">' + scribeRoomDisplay.replace(/"/g, "'") + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Sign or Thumb Impression of Candidate:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe Assistant:</td><td style="padding:10px; border:1px solid #000;">' + s.scribeName + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Assistant ID Card &amp; No:</td><td style="padding:10px; border:1px solid #000;"></td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Signature of Scribe Assistant:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name &amp; Signature of Invigilator:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
                         '</tbody>' +
-                    '</table>' +
-                    '<div style="display:flex; justify-content:space-between; margin-top:40px;">' +
-                        '<div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Candidate<br>Thumb Impression</div>' +
-                        '<div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Scribe<br>Thumb Impression</div>' +
-                    '</div>' +
-                    '<div style="margin-top:60px; text-align:right; font-weight:bold;">Signature of Chief Superintendent</div>';
+                    '</table>';
                     v.appendChild(p);
                 });
             }
