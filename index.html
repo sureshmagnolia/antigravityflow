@@ -26,7 +26,7 @@
         initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
         addDoc, updateDoc, arrayUnion, arrayRemove,
-        onSnapshot, writeBatch
+        onSnapshot, writeBatch, initializeFirestore, persistentLocalCache, persistentMultipleTabManager
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 
@@ -46,10 +46,9 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }), // ⚡ COST FIX: Enables 0-cost Local Cross-Tab Memory
         experimentalForceLongPolling: true
     });
-
-
     // --- ADD THIS INITIALIZATION ---
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
