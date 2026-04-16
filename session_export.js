@@ -153,6 +153,8 @@ const SESSION_EXPORT_JS = {
         /* Stickers Grid */
         .sticker-page { padding: 5mm!important; display: flex; flex-direction: column; justify-content: space-between; height: 297mm; box-sizing: border-box; }
         .sticker { border: 2px dashed #000; padding: 10px; height: 135mm; box-sizing: border-box; display: flex; flex-direction: column; }
+        /* Highlighting Logic */
+        .scribe-row-highlight { background-color: #f1f5f9 !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -228,19 +230,94 @@ const SESSION_EXPORT_JS = {
         async function fromClipboard() {
             try {
                 const text = await navigator.clipboard.readText();
-                const lines = text.split('\\n').map(l => l.trim()).filter(l => l);
-                const map = {};
-                lines.forEach(l => {
-                    const p = l.split(/\\t|,|\\s+-/).map(x => x.trim());
-                    if(p.length >= 2) map[p[0]] = p[p.length-1];
+                if (!text || text.trim().length === 0) return alert("Clipboard is empty.");
+
+                const rawPrefix = prompt("Enter alphabetical prefix for these QP Codes (e.g. K, Z) to auto-prepend, or leave empty to skip:", "");
+                if (rawPrefix === null) return; 
+                const prefix = rawPrefix.trim().toUpperCase();
+
+                const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
+                const parsedPairs = [];
+
+                lines.forEach(line => {
+                    const tabParts = line.split('\\t').map(p => p.trim()).filter(p => p);
+                    const dashParts = line.split(/\\s+-\\s+/).map(p => p.trim()).filter(p => p);
+                    const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
+
+                    let searchString = null, qpCode = null;
+
+                    if (tabParts.length >= 4 && line.includes('--(')) {
+                        qpCode = tabParts[0]; 
+                        searchString = tabParts[1].toUpperCase(); 
+                    } else if (tabParts.length >= 2) {
+                        searchString = tabParts[0].toUpperCase();
+                        qpCode = tabParts[tabParts.length - 1]; 
+                    } else if (dashParts.length === 2) {
+                        searchString = dashParts[0].toUpperCase();
+                        qpCode = dashParts[1];
+                    } else if (commaParts.length >= 2) {
+                        searchString = commaParts[0].toUpperCase();
+                        qpCode = commaParts[commaParts.length - 1];
+                    }
+
+                    if (searchString && qpCode && qpCode !== searchString) {
+                        let finalQpCode = qpCode.trim().toUpperCase().replace(/\\s+/g, '');
+                        if (prefix && !finalQpCode.startsWith(prefix)) {
+                            finalQpCode = prefix + finalQpCode;
+                        }
+                        
+                        parsedPairs.push({
+                            searchText: searchString, 
+                            code: finalQpCode,
+                            isEde: finalQpCode.endsWith('A')
+                        });
+                    }
                 });
-                document.querySelectorAll('#qt input').forEach(i => {
-                    const k = i.dataset.key.split('|')[0];
-                    if(map[k]) { i.value = map[k]; D.qpCodes[i.dataset.key] = map[k]; }
+
+                let matched = 0;
+                document.querySelectorAll('#qt input').forEach(input => {
+                    const keyParts = input.dataset.key.split('|');
+                    const uiCourseName = keyParts[0].trim().toUpperCase();
+                    const streamName = (keyParts[1] || "").toUpperCase();
+                    const isEdeStream = streamName.includes("EDE");
+                    
+                    let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                    if (validPairs.length === 0) validPairs = parsedPairs;
+
+                    let bestMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
+
+                    if (!bestMatch) {
+                        const words = uiCourseName.split(/[\\s,.-]+/).filter(w => w.length > 2);
+                        if (words.length > 0) {
+                            let bestScore = 0;
+                            validPairs.forEach(p => {
+                                let score = 0;
+                                words.forEach(w => { if (p.searchText.includes(w)) score++; });
+                                if (score > bestScore) {
+                                    bestScore = score;
+                                    bestMatch = p;
+                                }
+                            });
+                            if (bestScore < 1) bestMatch = null; 
+                        }
+                    }
+
+                    if (bestMatch) {
+                        input.value = bestMatch.code;
+                        D.qpCodes[input.dataset.key] = bestMatch.code;
+                        matched++;
+                    }
                 });
-                alert("✨ Successfully matched and updated QP codes!");
-            } catch(e) { alert("Clipboard access denied."); }
+
+                if (matched > 0) alert("✨ Successfully matched and updated " + matched + " QP codes using Fuzzy Logic!");
+                else alert("Could not find any matches for the courses in this session.");
+                
+            } catch(e) { 
+                console.error(e); 
+                alert("Clipboard access denied or format error."); 
+            }
         }
+
 
         // --- NEW: Self-Mutating HTML Saver ---
         function saveStateToFile() {
@@ -464,8 +541,7 @@ const SESSION_EXPORT_JS = {
                                 '<td style="font-weight:bold; font-size:' + fSize + '">' + reg + '</td>' +
                                 '<td>' + (fs?.Name || '') + '</td>' +
                                 '<td style="text-align:center; font-weight:bold; font-size:8pt">' + scribeRemark + '</td>' +
-                                '<td>' + (fs?.Name || '') + '</td>' +
-                                '<td></td><td></td></tr>';
+                                '<td></td></tr>';
                         });
                         return rows;
                     };
@@ -670,11 +746,10 @@ const SESSION_EXPORT_JS = {
             }
 
 
-            // --- ✍️ REPORT 6: SCRIBE PROFORMA (SEQUENTIAL) ---
+            // --- ✍️ REPORT 6: SCRIBE PROFORMA (CORE SYSTEM REPLICA) ---
             if (type === 'r6') {
                 if (D.scribes.length === 0) return alert("No Scribes allotted.");
                 
-                // Calculate Sequential SCR labels
                 const scribeRoomNames = [...new Set(D.scribes.map(s => s.room))];
                 scribeRoomNames.sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
                 const scrLabelMap = {};
@@ -682,14 +757,54 @@ const SESSION_EXPORT_JS = {
 
                 D.scribes.forEach(s => {
                     const p = createPage();
-                    const label = scrLabelMap[s.room] || 'SCRIBE';
-                    p.innerHTML = heading('SCRIBE SEATING PROFORMA', label + ' (' + s.room + ')', D.meta.examName) + 
-                        '<table class="rt" style="margin-top:20px"><tr><td style="font-weight:bold; width:40%">Candidate Reg No</td><td>' + s.regNo + '</td></tr><tr><td style="font-weight:bold">Candidate Name</td><td>' + s.studentName + '</td></tr><tr><td style="font-weight:bold">Scribe Name</td><td>' + s.scribeName + '</td></tr><tr><td style="font-weight:bold">Allotted Room</td><td style="font-size:16pt; font-weight:bold">' + label + ' (' + s.room + ')</td></tr><tr style="height:120px"><td style="font-weight:bold">Candidate Thumb Impression</td><td></td></tr><tr style="height:120px"><td style="font-weight:bold">Scribe Thumb Impression</td><td></td></tr></table>' + footer();
+                    const label = scrLabelMap[s.room] || 'SCR?';
+                    
+                    // Dig out Core Student Information
+                    const fs = D.students.find(x => x['Register Number'] === s.regNo) || {};
+                    const courseDisplay = fs.Course || 'Unknown Course';
+                    
+                    // Trace back to original allotment
+                    let origRoomDisplay = 'N/A';
+                    let streamName = 'Regular';
+                    const origRoom = D.allotment.find(rm => rm.students.some(st => (st.RegisterNo || st['Register Number']) === s.regNo));
+                    if (origRoom) {
+                        const stDat = origRoom.students.find(st => (st.RegisterNo || st['Register Number']) === s.regNo);
+                        streamName = origRoom.stream || 'Regular';
+                        const orgSerial = D.roomConfig[origRoom.roomName]?.serial || '-';
+                        origRoomDisplay = `${orgSerial} - ${origRoom.roomName} (Seat: ${stDat.seat})`;
+                    }
+                    
+                    const qp = getActualQPValue(courseDisplay, streamName);
+                    const scrSerial = D.roomConfig[s.room]?.serial || '-';
+                    const scrLoc = D.roomConfig[s.room]?.location ? ` (${D.roomConfig[s.room].location})` : '';
+                    const scribeRoomDisplay = `<strong><span style="color:#2563eb;">${label}</span> - #${scrSerial} - ${s.room}</strong>${scrLoc}`;
+
+                    p.innerHTML = `
+                        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">
+                            <h1 style="margin:0; font-size:18pt;">${D.meta.collegeName}</h1>
+                            <h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>
+                            <h3 style="margin:0; font-size:11pt; font-weight:normal;">${D.meta.date} &nbsp;|&nbsp; ${D.meta.time}</h3>
+                        </div>
+                        <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:11pt;">
+                            <tbody>
+                                <tr><td style="padding:10px; border:1px solid #000; width:35%; font-weight:bold;">Name of Candidate:</td><td style="padding:10px; border:1px solid #000;">${s.studentName}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Register Number:</td><td style="padding:10px; border:1px solid #000; font-weight:bold; font-size:13pt;">${s.regNo}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Course:</td><td style="padding:10px; border:1px solid #000;">${courseDisplay}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">QP Code:</td><td style="padding:10px; border:1px solid #000; font-weight:bold;">${qp}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotment:</td><td style="padding:10px; border:1px solid #000;">${origRoomDisplay}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Room (New):</td><td style="padding:10px; border:1px solid #000; background-color:#eff6ff;">${scribeRoomDisplay}</td></tr>
+                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe:</td><td style="padding:10px; border:1px solid #000;">${s.scribeName}</td></tr>
+                            </tbody>
+                        </table>
+                        <div style="display:flex; justify-content:space-between; margin-top:40px;">
+                            <div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Candidate<br>Thumb Impression</div>
+                            <div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Scribe<br>Thumb Impression</div>
+                        </div>
+                        <div style="margin-top:60px; text-align:right; font-weight:bold;">Signature of Chief Superintendent</div>
+                    `;
                     v.appendChild(p);
                 });
             }
-
-
             // --- 🤝 REPORT 7: SCRIBE ASSISTANCE SUMMARY ---
             if (type === 'r7') {
                 if (!D.scribes || D.scribes.length === 0) return alert("No Scribes allotted for this session.");
