@@ -771,16 +771,14 @@ const SESSION_EXPORT_JS = {
                         const stDat = origRoom.students.find(st => (st.RegisterNo || st['Register Number']) === s.regNo);
                         streamName = origRoom.stream || 'Regular';
                         const orgSerial = D.roomConfig[origRoom.roomName]?.serial || '-';
-                        origRoomDisplay = `${orgSerial} - ${origRoom.roomName} (Seat: ${stDat.seat})`;
+                        origRoomDisplay = orgSerial + ' - ' + origRoom.roomName + ' (Seat: ' + stDat.seat + ')';
                     }
                     
                     const qp = getActualQPValue(courseDisplay, streamName);
                     const scrSerial = D.roomConfig[s.room]?.serial || '-';
-                    const scrLoc = D.roomConfig[s.room]?.location ? ` (${D.roomConfig[s.room].location})` : '';
-                    const scribeRoomDisplay = `<strong><span style="color:#2563eb;">${label}</span> - #${scrSerial} - ${s.room}</strong>${scrLoc}`;
-
-                    p.innerHTML = `
-                        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">
+                    const scrLoc = D.roomConfig[s.room]?.location ? ' (' + D.roomConfig[s.room].location + ')' : '';
+                    const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - #' + scrSerial + ' - ' + s.room + '</strong>' + scrLoc;
+                    p.innerHTML = '<div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">' +
                             <h1 style="margin:0; font-size:18pt;">${D.meta.collegeName}</h1>
                             <h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>
                             <h3 style="margin:0; font-size:11pt; font-weight:normal;">${D.meta.date} &nbsp;|&nbsp; ${D.meta.time}</h3>
