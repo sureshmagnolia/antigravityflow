@@ -792,7 +792,7 @@ const SESSION_EXPORT_JS = {
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotted Room:</td><td style="padding:10px; border:1px solid #000;">' + origRoomDisplay + '</td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-size:12pt; font-weight:bold;">Scribe Allotted Room:</td><td style="padding:10px; border:2px solid #000; font-size:1.3em; font-weight:800; background-color:#f1f5f9;">' + scribeRoomDisplay.replace(/"/g, "'") + '</td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Sign or Thumb Impression of Candidate:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
-                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe Assistant:</td><td style="padding:10px; border:1px solid #000;">' + s.scribeName + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe Assistant:</td><td style="padding:10px; border:1px solid #000;"></td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Assistant ID Card &amp; No:</td><td style="padding:10px; border:1px solid #000;"></td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Signature of Scribe Assistant:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
                             '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name &amp; Signature of Invigilator:</td><td style="padding:35px; border:1px solid #000;"></td></tr>' +
