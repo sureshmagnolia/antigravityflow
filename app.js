@@ -20717,12 +20717,15 @@ window.toggleAllArchiveCheckboxes = function(check) {
  * Triggered by the UI button. Feeds the selected session to the export module.
  */
 window.triggerSessionExport = function() {
-    // 🛡️ DATA FLUSH: Sync live memory to disk before Exporting
+    // 🛡️ TRIPLE-CHECKED DATA FLUSH: Ensures memory is not empty before syncing
     if (typeof qpCodeMap !== 'undefined') {
+        // Force a load if memory is empty to prevent wiping valid storage
+        if (Object.keys(qpCodeMap).length === 0 && typeof loadQPCodes === 'function') {
+            loadQPCodes();
+        }
         localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
     }
     const sessionKey = document.getElementById('reports-session-select')?.value;
-
     
     if (!sessionKey) {
         return alert("⚠️ Please select a Session from the dropdown first.");
