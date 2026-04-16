@@ -29,9 +29,9 @@ const SESSION_EXPORT_JS = {
         }
 
 
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         // 🛡️ PREFER LIVE BRIDGE: Get QP codes from memory if dashboard is active
         const allQPCodes = (typeof window.getMyQPCodes === 'function') ? window.getMyQPCodes() : JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
 
         // 🛡️ FUZZY SESSION MATCHER: Finds the correct data folder regardless of pipe spacing (|)
         const getSessionData = (masterMap, targetKey) => {
@@ -60,7 +60,7 @@ const SESSION_EXPORT_JS = {
             absentees: sessionAbsentees,
             scribes: Object.entries(sessionScribes).map(([regNo, room]) => {
                 const scribeInfo = scribeList.find(s => s.regNo === regNo) || {};
-                const studentInfo = sessionStudents.find(s => s['Register Number'] === regNo || s.regNo === regNo) || {};
+                const studentInfo = sessionStudents.find(s => (s['Register Number'] || s.regNo) === regNo) || {};
                 return { 
                     regNo, 
                     room, 
@@ -68,6 +68,7 @@ const SESSION_EXPORT_JS = {
                     studentName: studentInfo.Name || studentInfo.name || 'Unknown student'
                 };
             }),
+
             invigilators: sessionInvigs,
             roomConfig: roomConfig
         };
