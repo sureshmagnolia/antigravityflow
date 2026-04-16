@@ -20531,7 +20531,7 @@ window.downloadInvigilationListPDF = async function () {
     window.syncSessionToCloud = syncSessionToCloud;
     window.syncDataToCloud = syncDataToCloud;
 
-    // --- 📋 CLIPBOARD QP CODE IMPORTER ---
+    // --- 📋 CLIPBOARD QP CODE IMPORTER (Fuzzy Match & Stream Aware) ---
     window.importQPFromClipboard = async function() {
         try {
             const text = await navigator.clipboard.readText();
@@ -20540,35 +20540,58 @@ window.downloadInvigilationListPDF = async function () {
                 return;
             }
 
+            // ⚡ PREFIX INTERCEPTOR
+            const rawPrefix = prompt("Enter alphabetical prefix for these QP Codes (e.g. K, Z) to auto-prepend, or leave empty to skip:", "");
+            if (rawPrefix === null) return; 
+            const prefix = rawPrefix.trim().toUpperCase();
+
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            const parsed = {};
+            
+            // We use an Array to hold all portal rows for Deep Fuzzy Searching
+            const parsedPairs = [];
 
             lines.forEach(line => {
                 const tabParts = line.split('\t').map(p => p.trim()).filter(p => p);
-                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
                 const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
+                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
 
-                let courseCode = null, qpCode = null;
+                let searchString = null, qpCode = null;
 
-                if (tabParts.length >= 2) {
-                    courseCode = tabParts[0];
+                // ⚡ SMART DETECTION: University Portal Table
+                if (tabParts.length >= 4 && line.includes('--(')) {
+                    qpCode = tabParts[0]; 
+                    // Keep the ENTIRE Name & Code for highest fuzzy success rate
+                    searchString = tabParts[1].toUpperCase(); 
+                } 
+                // Fallback Generic Manual Parsing
+                else if (tabParts.length >= 2) {
+                    searchString = tabParts[0].toUpperCase();
                     qpCode = tabParts[tabParts.length - 1]; 
                 } else if (dashParts.length === 2) {
-                    courseCode = dashParts[0];
+                    searchString = dashParts[0].toUpperCase();
                     qpCode = dashParts[1];
                 } else if (commaParts.length >= 2) {
-                    courseCode = commaParts[0];
+                    searchString = commaParts[0].toUpperCase();
                     qpCode = commaParts[commaParts.length - 1];
                 }
 
-                if (courseCode && qpCode && qpCode !== courseCode) {
-                    parsed[courseCode.trim()] = qpCode.trim();
+                if (searchString && qpCode && qpCode !== searchString) {
+                    // Compress structure to remove bad portal spaces (e.g. "1234 A" -> "1234A")
+                    let finalQpCode = qpCode.trim().toUpperCase().replace(/\s+/g, '');
+                    if (prefix && !finalQpCode.startsWith(prefix)) {
+                        finalQpCode = prefix + finalQpCode;
+                    }
+                    
+                    parsedPairs.push({
+                        searchText: searchString, // Native unmolested string
+                        code: finalQpCode,
+                        isEde: finalQpCode.endsWith('A') // Flags "A" suffix for EDE
+                    });
                 }
             });
 
-            const count = Object.keys(parsed).length;
-            if (count === 0) {
-                alert("Could not detect any QP codes from clipboard. Expected format: CourseCode [tab or comma or dash] QP Code");
+            if (parsedPairs.length === 0) {
+                alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject' or raw Portal Table.");
                 return;
             }
 
@@ -20579,41 +20602,60 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             let matched = 0;
+
+            // ⚡ FUZZY ASSIGNMENT LAYER
             document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                const courseCode = input.dataset.course.trim();
+                const uiCourseName = input.dataset.course.trim().toUpperCase();
+                const streamName = (input.dataset.stream || "").toUpperCase();
+                const isEdeStream = streamName.includes("EDE");
                 
-                // Exact Match First
-                if (parsed[courseCode]) {
-                    input.value = parsed[courseCode];
-                    matched++;
-                } else {
-                    // Smart Partial Match (handles university portal weirdness)
-                    const matchKey = Object.keys(parsed).find(k => courseCode.includes(k) || k.includes(courseCode));
-                    if (matchKey) {
-                        input.value = parsed[matchKey];
-                        matched++;
+                // 1. Hard Filter by Stream (Only match 'A' suffix to EDE, non-'A' to Regular)
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                // Fallback if no specific stream match is found
+                if (validPairs.length === 0) validPairs = parsedPairs;
+
+                let bestMatch = null;
+
+                // Pass 1: Exact Substring Included
+                bestMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
+
+                // Pass 2: Deep Word-Tokenizing Fuzzy Match (e.g., handles "Research Meth" vs "RESEARCH METHODOLOGY--(BCM6B16)")
+                if (!bestMatch) {
+                    const words = uiCourseName.split(/[\s,.-]+/).filter(w => w.length > 2); // Ignore 'of', 'in'
+                    if (words.length > 0) {
+                        let bestScore = 0;
+                        validPairs.forEach(p => {
+                            let score = 0;
+                            words.forEach(w => { if (p.searchText.includes(w)) score++; });
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestMatch = p;
+                            }
+                        });
+                        // Requires at least 1 solid keyword overlap to prevent false positives
+                        if (bestScore < 1) bestMatch = null; 
                     }
+                }
+
+                if (bestMatch) {
+                    input.value = bestMatch.code;
+                    matched++;
                 }
             });
 
-
             if (matched > 0) {
-                document.getElementById('qp-code-status').textContent = `✅ ${matched} of ${count} QP codes imported from clipboard. Click Save QP Codes to confirm.`;
-                setTimeout(() => {
-                    document.getElementById('save-qp-codes-button')?.click();
-                }, 500);
+                document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully (Fuzzy Match). Click Save QP Codes below to confirm.`;
+                document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
-                alert(`Parsed ${count} QP codes from clipboard, but none matched the current session's courses.\n\nPlease check the course codes match.`);
+                alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
             }
 
         } catch (e) {
-            if (e.name === 'NotAllowedError') {
-                alert("Clipboard access denied. Please click 'Allow' or modify browser settings.");
-            } else {
-                alert("Error reading clipboard: " + e.message);
-            }
+            console.error("Clipboard access failed:", e);
+            alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
         }
     };
+
     // --- END GLOBALLY AVAILABLE FUNCTIONS ---
 
 }); // <-- Closes the DOMContentLoaded block from the top of the file
