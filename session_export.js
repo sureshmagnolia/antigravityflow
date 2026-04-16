@@ -32,10 +32,22 @@ const SESSION_EXPORT_JS = {
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         // 🛡️ PREFER LIVE BRIDGE: Get QP codes from memory if dashboard is active
         const allQPCodes = (typeof window.getMyQPCodes === 'function') ? window.getMyQPCodes() : JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-        const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
-        const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+
+        // 🛡️ FUZZY SESSION MATCHER: Finds the correct data folder regardless of pipe spacing (|)
+        const getSessionData = (masterMap, targetKey) => {
+            if (masterMap[targetKey]) return masterMap[targetKey];
+            const cleanTarget = targetKey.replace(/\s/g, '');
+            const foundKey = Object.keys(masterMap).find(k => k.replace(/\s/g, '') === cleanTarget);
+            return foundKey ? masterMap[foundKey] : null;
+        };
+
+        const sessionQPCodes = getSessionData(allQPCodes, sessionKey) || {};
+        const sessionAllotment = getSessionData(allAllotments, sessionKey) || [];
+        const sessionAbsentees = getSessionData(JSON.parse(localStorage.getItem('examAbsenteeList') || '{}'), sessionKey) || {};
+        const sessionScribes = getSessionData(JSON.parse(localStorage.getItem('examScribeAllotment') || '{}'), sessionKey) || {};
+        const sessionInvigs = getSessionData(JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'), sessionKey) || {};
+
         const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
-        const allInvigs = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
         const roomConfig = (typeof window.getMyRoomConfig === 'function') ? window.getMyRoomConfig() : {};
 
         const snapshot = {
@@ -43,24 +55,23 @@ const SESSION_EXPORT_JS = {
                    generatedAt: new Date().toLocaleString(),
                    examName: (typeof getExamName === 'function') ? getExamName(date, time, stream) : 'Examination Session' },
             students: sessionStudents,
-            // 🛡️ KEY FALLBACK: Checks both raw and trimmed formats for the allotment key
-            allotment: allAllotments[sessionKey] || allAllotments[sessionKey.trim()] || [],
-            qpCodes: allQPCodes[sessionKey] || {},
-            absentees: allAbsentees[sessionKey] || {},
-            scribes: Object.entries(allScribes[sessionKey] || {}).map(([regNo, room]) => {
+            allotment: sessionAllotment,
+            qpCodes: sessionQPCodes,
+            absentees: sessionAbsentees,
+            scribes: Object.entries(sessionScribes).map(([regNo, room]) => {
                 const scribeInfo = scribeList.find(s => s.regNo === regNo) || {};
-                const studentInfo = sessionStudents.find(s => s['Register Number'] === regNo) || {};
+                const studentInfo = sessionStudents.find(s => s['Register Number'] === regNo || s.regNo === regNo) || {};
                 return { 
                     regNo, 
                     room, 
                     scribeName: scribeInfo.name || 'Not Available',
-                    studentName: studentInfo.Name || 'Unknown student'
+                    studentName: studentInfo.Name || studentInfo.name || 'Unknown student'
                 };
             }),
-
-            invigilators: allInvigs[sessionKey] || {},
+            invigilators: sessionInvigs,
             roomConfig: roomConfig
         };
+
 
         const htmlContent = this.getTemplate(snapshot);
         const blob = new Blob([htmlContent], { type: 'text/html' });
