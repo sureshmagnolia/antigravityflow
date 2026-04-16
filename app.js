@@ -9724,12 +9724,16 @@ window.real_populate_session_dropdown = function () {
 
     // --- NEW: Real-time Cloud Listener ---
     function subscribeToQPSession(sessionKey) {
+        // 🛡️ DEDUP GUARD: Bail if already listening to this exact session
+        if (window._activeQPSession === sessionKey && qpSessionUnsubscribe) {
+            return;
+        }
+        window._activeQPSession = sessionKey;
         // 1. Unsubscribe from previous session if any
         if (qpSessionUnsubscribe) {
             qpSessionUnsubscribe();
             qpSessionUnsubscribe = null;
         }
-
         if (!sessionKey || !window.firebase) return;
 
         const { db, doc, onSnapshot } = window.firebase;
