@@ -1310,7 +1310,7 @@ async function updateLocalSlotsFromStudents() {
                 
                 if (students && students.length > 0) {
                     allStudentData = students;
-                    await saveExamDataIDB(students);
+                    await saveExamDataIDB(students, true); // ⚡ BUG FIX: TRUE prevents it from uselessly uploading back to the cloud
                     updateSyncStatus("Synced (Storage)", "success");
                     
                     // Rebuild Metadata Registry for Dropdowns
@@ -1464,7 +1464,7 @@ async function updateLocalSlotsFromStudents() {
                         if (allStudents.length > 0) {
                             const merged = [...localDB, ...allStudents];
                             allStudentData = merged; 
-                            await saveExamDataIDB(merged);
+                            await saveExamDataIDB(merged, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce
                         }
                     } else {
                         console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
@@ -1563,8 +1563,7 @@ async function updateLocalSlotsFromStudents() {
                         if (bulkData['examBaseData']) {
                             const parsedStudents = JSON.parse(bulkData['examBaseData']);
                             allStudentData = parsedStudents; // <-- Hydrate Memory
-                            await saveExamDataIDB(parsedStudents);
-                            
+                            await saveExamDataIDB(parsedStudents, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce                            
                             // <-- 
                             const sessions = new Set(parsedStudents.map(s => `${s.Date} | ${s.Time}`));
                             localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
@@ -5206,8 +5205,10 @@ function getExamName(date, time, stream) {
             });
             if (currentVal) dateSelect.value = currentVal;
 
-                       // --- ☁️ ASYNC CLOUD STORAGE SCANNER (Bypasses Firestore Metadata) ---
+                       // --- 📡 ASYNC CLOUD STORAGE SCANNER (Bypasses Firestore Metadata) ---
             if (window.firebase && window.currentCollegeId && navigator.onLine) {
+                if (window.storageScannerRan) return; // ⚡ COST FIX: Prevents the scanner from running twice on boot
+                window.storageScannerRan = true;
                 console.log("🔍 [Storage Scanner] Running for college:", window.currentCollegeId);
                 const { storage, ref, listAll } = window.firebase;
                 const storageFolderRef = ref(storage, `historical_sessions/${window.currentCollegeId}/`);
