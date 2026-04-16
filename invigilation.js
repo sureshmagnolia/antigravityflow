@@ -4831,20 +4831,24 @@ window.viewActivityLogs = function () {
     // This query is much faster and safer than downloading the whole file
     const q = query(logsColRef, orderBy("t", "desc"), limit(100)); 
 
-    activityLogUnsubscribe = onSnapshot(q, (snapshot) => {
-        const logs = [];
-        snapshot.forEach(doc => {
-            logs.push(doc.data());
-        });
-        
-        // Cache data for search filtering
-        window.cachedLogs = logs; 
-        filterDisplayedLogs(""); // Render all initially
-        
-    }, (error) => {
-        console.error("Log Read Error:", error);
-        list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Access Denied or Connection Lost.</div>';
-    });
+    // 3. COST SAVER: Poll Logs Every 60s
+    const fetchLogs = async () => {
+        try {
+            const snapshot = await getDocs(q);
+            const logs = [];
+            snapshot.forEach(doc => logs.push(doc.data()));
+            window.cachedLogs = logs; 
+            filterDisplayedLogs(document.getElementById('act-search')?.value || ""); 
+        } catch (error) {
+            console.error("Log Read Error:", error);
+            list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Access Denied or Connection Lost.</div>';
+        }
+    };
+    
+    fetchLogs(); // Initial explicit fetch
+    const actInterval = setInterval(fetchLogs, 60000);
+    activityLogUnsubscribe = () => clearInterval(actInterval);
+
 };
 
 // Helper to render the logs (Paste this below viewActivityLogs)
@@ -8561,7 +8565,9 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
 
         if (presenceUnsubscribe) presenceUnsubscribe();
         
-        presenceUnsubscribe = onSnapshot(q, (snapshot) => {
+        // 3. COST SAVER: Poll Presence Every 60s Instead of Real-Time Sync
+        const fetchPresence = async () => {
+            const snapshot = await getDocs(q);
             const now = Date.now();
             globalLiveUsers = {}; 
             let onlineCount = 0;
@@ -8594,7 +8600,11 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
                 if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
                 if (typeof renderStaffTable === 'function') renderStaffTable(); 
             }, 500);
-        });
+        };
+
+        fetchPresence(); // Pull live status immediately when Admin opens view
+        const presInterval = setInterval(fetchPresence, 60000); // Check again exactly every 60s
+        presenceUnsubscribe = () => clearInterval(presInterval); // Clean up background tasks
 
     } else {
         console.log("🟢 Live Presence: Staff Mode (Broadcasting only)");
