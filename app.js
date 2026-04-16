@@ -1365,16 +1365,17 @@ async function updateLocalSlotsFromStudents() {
                 const sessionsRef = collection(db, "colleges", collegeId, "sessions");
                 
                       // [NEW] Use onSnapshot for live global synchronization
-                if (sessionsUnsub) sessionsUnsub(); // Cleanup existing
+                if (sessionsUnsub) { sessionsUnsub(); sessionsUnsub = null; } 
                 
             // Get timestamp for Today's Midnight
                 const todayMidnight = new Date();
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
 
-                // --> All sessions listener (heavy data protected by isTodayOrFuture guard below)
-                               // --- 📡 [SCR5 CONTEXT] MODULAR SESSION LISTENER ---
-                sessionsUnsub = onSnapshot(sessionsRef, async (sessionSnap) => {
+                // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
+                (async () => {
+                    const sessionSnap = await getDocs(sessionsRef);
+
                     let cloudMetaFound = false;
                     
                     let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
@@ -1539,7 +1540,7 @@ async function updateLocalSlotsFromStudents() {
                     
                     // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
                     if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-                });
+                })();
 
 
                 // Check for V1 Fallback if sessions collection doesn't exist
