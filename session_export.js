@@ -779,27 +779,26 @@ const SESSION_EXPORT_JS = {
                     const scrLoc = D.roomConfig[s.room]?.location ? ' (' + D.roomConfig[s.room].location + ')' : '';
                     const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - #' + scrSerial + ' - ' + s.room + '</strong>' + scrLoc;
                     p.innerHTML = '<div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">' +
-                            <h1 style="margin:0; font-size:18pt;">${D.meta.collegeName}</h1>
-                            <h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>
-                            <h3 style="margin:0; font-size:11pt; font-weight:normal;">${D.meta.date} &nbsp;|&nbsp; ${D.meta.time}</h3>
-                        </div>
-                        <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:11pt;">
-                            <tbody>
-                                <tr><td style="padding:10px; border:1px solid #000; width:35%; font-weight:bold;">Name of Candidate:</td><td style="padding:10px; border:1px solid #000;">${s.studentName}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Register Number:</td><td style="padding:10px; border:1px solid #000; font-weight:bold; font-size:13pt;">${s.regNo}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Course:</td><td style="padding:10px; border:1px solid #000;">${courseDisplay}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">QP Code:</td><td style="padding:10px; border:1px solid #000; font-weight:bold;">${qp}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotment:</td><td style="padding:10px; border:1px solid #000;">${origRoomDisplay}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Room (New):</td><td style="padding:10px; border:1px solid #000; background-color:#eff6ff;">${scribeRoomDisplay}</td></tr>
-                                <tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe:</td><td style="padding:10px; border:1px solid #000;">${s.scribeName}</td></tr>
-                            </tbody>
-                        </table>
-                        <div style="display:flex; justify-content:space-between; margin-top:40px;">
-                            <div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Candidate<br>Thumb Impression</div>
-                            <div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Scribe<br>Thumb Impression</div>
-                        </div>
-                        <div style="margin-top:60px; text-align:right; font-weight:bold;">Signature of Chief Superintendent</div>
-                    `;
+                        '<h1 style="margin:0; font-size:18pt;">' + D.meta.collegeName + '</h1>' +
+                        '<h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>' +
+                        '<h3 style="margin:0; font-size:11pt; font-weight:normal;">' + D.meta.date + ' &nbsp;|&nbsp; ' + D.meta.time + '</h3>' +
+                    '</div>' +
+                    '<table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:11pt;">' +
+                        '<tbody>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; width:35%; font-weight:bold;">Name of Candidate:</td><td style="padding:10px; border:1px solid #000;">' + s.studentName + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Register Number:</td><td style="padding:10px; border:1px solid #000; font-weight:bold; font-size:13pt;">' + s.regNo + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Course:</td><td style="padding:10px; border:1px solid #000;">' + courseDisplay + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">QP Code:</td><td style="padding:10px; border:1px solid #000; font-weight:bold;">' + qp + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Original Allotment:</td><td style="padding:10px; border:1px solid #000;">' + origRoomDisplay + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Scribe Room (New):</td><td style="padding:10px; border:1px solid #000; background-color:#eff6ff;">' + scribeRoomDisplay.replace(/"/g, "'") + '</td></tr>' +
+                            '<tr><td style="padding:10px; border:1px solid #000; font-weight:bold;">Name of Scribe:</td><td style="padding:10px; border:1px solid #000;">' + s.scribeName + '</td></tr>' +
+                        '</tbody>' +
+                    '</table>' +
+                    '<div style="display:flex; justify-content:space-between; margin-top:40px;">' +
+                        '<div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Candidate<br>Thumb Impression</div>' +
+                        '<div style="border:1px solid #000; width:150px; height:100px; text-align:center; padding-top:10px; color:#666; font-size:9pt;">Scribe<br>Thumb Impression</div>' +
+                    '</div>' +
+                    '<div style="margin-top:60px; text-align:right; font-weight:bold;">Signature of Chief Superintendent</div>';
                     v.appendChild(p);
                 });
             }
