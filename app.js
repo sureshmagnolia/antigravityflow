@@ -9953,6 +9953,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                    value="${savedCode}" 
                    data-course-key="${base64Key}"
                    data-course="${item.course.replace(/"/g, '&quot;')}"
+                   data-stream="${item.stream.replace(/"/g, '&quot;')}"
                    placeholder="QP Code"
                    ${disabledAttr}>
         </div>
