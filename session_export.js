@@ -33,12 +33,21 @@ const SESSION_EXPORT_JS = {
         const allQPCodes = (typeof window.getMyQPCodes === 'function') ? window.getMyQPCodes() : JSON.parse(localStorage.getItem('examQPCodes') || '{}');
         const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
 
-        // 🛡️ FUZZY SESSION MATCHER: Finds the correct data folder regardless of pipe spacing (|)
-        const getSessionData = (masterMap, targetKey) => {
-            if (masterMap[targetKey]) return masterMap[targetKey];
-            const cleanTarget = targetKey.replace(/\s/g, '');
-            const foundKey = Object.keys(masterMap).find(k => k.replace(/\s/g, '') === cleanTarget);
-            return foundKey ? masterMap[foundKey] : null;
+        // 🛡️ UNIVERSAL SESSION MATCHER: Finds data by Label, ID, or Fuzzy Match
+        const getSessionData = (masterMap, targetLabel) => {
+            if (!masterMap || typeof masterMap !== 'object') return null;
+            if (masterMap[targetLabel]) return masterMap[targetLabel];
+            
+            // 1. Try Fuzzy Space-Agnostic Match (e.g., '30.03 | 10:00' matches '30.03|10:00')
+            const cleanTarget = targetLabel.replace(/\s/g, '');
+            const fuzzyKey = Object.keys(masterMap).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (fuzzyKey) return masterMap[fuzzyKey];
+
+            // 2. Try ID Patterns (Checks if data is stored by Firebase ID instead of Label)
+            const datePart = targetLabel.split('|')[0].trim();
+            const idKey = datePart.split('.').reverse().join(''); // Converts 30.03.2026 to 20260330
+            const foundIdKey = Object.keys(masterMap).find(k => k.includes(idKey));
+            return foundIdKey ? masterMap[foundIdKey] : null;
         };
 
         const sessionQPCodes = getSessionData(allQPCodes, sessionKey) || {};
@@ -49,6 +58,7 @@ const SESSION_EXPORT_JS = {
 
         const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
         const roomConfig = (typeof window.getMyRoomConfig === 'function') ? window.getMyRoomConfig() : {};
+
 
         const snapshot = {
             meta: { collegeName, date, time, stream, 
@@ -194,8 +204,8 @@ const SESSION_EXPORT_JS = {
 
 
     <script>
-        const D = ${JSON.stringify(data)};
-
+        // 🛡️ TEMPLATE SHIELD: Prevents special characters in data from crashing the HTML script block
+        const D = ${JSON.stringify(data).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')};
         function init() {
             const b = document.getElementById('qb');
             const courses = [...new Set(D.students.map(s => s.Course + '|' + (s.Stream || 'Regular')))];
