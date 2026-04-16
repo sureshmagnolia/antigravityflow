@@ -491,11 +491,24 @@ function initAdminDashboard() {
 
 
 function isDateInVacation(dateObj) {
+    // 1. Check Specific Extra Holidays List First
+    const yyyy = dateObj.getFullYear();
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const dateString = `${yyyy}-${mm}-${dd}`;
+    if (vacationExtraHolidays && vacationExtraHolidays.has(dateString)) return true;
+
+    // 2. Check General Vacation Range
     if (!vacationStart || !vacationEnd) return false;
     const start = new Date(vacationStart);
     const end = new Date(vacationEnd);
-    return dateObj >= start && dateObj <= end;
+    // Normalize to midnight for fair comparison
+    const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    const s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    return d >= s && d <= e;
 }
+
 
 
 
@@ -762,6 +775,11 @@ function isUserUnavailable(slot, email, key) {
             // *** LOGIC FIX: Only check days if Guest Lecturer ***
             // Regular staff are assumed available Mon-Sat (1-6) regardless of saved preference
             if (staff.designation === "Guest Lecturer") {
+                // 🛡️ VACATION EXCLUSION: Guest Faculty are excluded during vacation periods
+                if (isDateInVacation(date)) {
+                    return true; 
+                }
+
                 const allowedDays = staff.preferredDays || [1, 2, 3, 4, 5, 6];
                 if (!allowedDays.includes(dayOfWeek)) {
                     return true; // Unavailable on this day
