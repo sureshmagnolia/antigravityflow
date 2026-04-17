@@ -52,14 +52,15 @@ def find_course_name(text):
     text = re.sub(r'\s+', ' ', text).strip()
     
     # 2. PRIORITY EXTRACTION: PG Paper Details Format (NAME--(CODE)/YEAR)
-    # FIX: Added \s* around the slash to handle "/ 2019" vs "/2019"
-    pg_match = re.search(r"Paper\s*Details\s*[:\-]\s*(.*?)\s*--\s*\((.*?)\)\s*\/\s*\d{4}", text, flags=re.IGNORECASE)
+    # FIX: Added capture group (\d{4}) to preserve Syllabus Year
+    pg_match = re.search(r"Paper\s*Details\s*[:\-]\s*(.*?)\s*--\s*\((.*?)\)\s*\/\s*(\d{4})", text, flags=re.IGNORECASE)
 
     if pg_match:
-        # Reconstruct as "NAME (CODE)"
+        # Reconstruct as "NAME (CODE) [YEAR SYLLABUS]"
         course_name = pg_match.group(1).strip()
         course_code = pg_match.group(2).strip()
-        candidate = f"{course_name} ({course_code})"
+        syllabus_year = pg_match.group(3).strip()
+        candidate = f"{course_name} ({course_code}) [{syllabus_year} SYLLABUS]"
         
         # FIX: Removed ')' and ']' from the cleanup list so we don't delete the closing parenthesis.
         candidate = re.sub(r'[\s\-\.:,]+$', '', candidate).strip()
