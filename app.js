@@ -6053,11 +6053,23 @@ function getExamName(date, time, stream) {
             });
 
             function getSmartCourseName(fullName) {
+                // Extract syllabus info before cleaning (looks for 4 digits inside brackets)
+                const syllabusMatch = fullName.match(/\[(.*?\d{4}.*?)\]/i);
+                
                 let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
                 cleanName = cleanName.replace(/\s-\s$/, '').trim();
+                
                 const words = cleanName.split(/\s+/);
-                if (words.length <= 4) return cleanName;
-                return `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
+                let resultName = cleanName;
+                if (words.length > 4) {
+                    resultName = `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
+                }
+                
+                // Re-append the syllabus year if found
+                if (syllabusMatch) {
+                    resultName += ` [${syllabusMatch[1].trim()}]`;
+                }
+                return resultName;
             }
 
             sortedSessionKeys.forEach(key => {
