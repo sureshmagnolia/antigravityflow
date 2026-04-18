@@ -11211,6 +11211,13 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
+    const autoAllotBtn = document.getElementById('auto-allot-button');
+    if (autoAllotBtn) {
+        autoAllotBtn.addEventListener('click', () => {
+            getRoomCapacitiesFromStorage();
+            const listDiv = document.getElementById('auto-allot-room-list');
+            listDiv.innerHTML = '';
+            
             // Calculate Needed Seats
             const [date, time] = currentSessionKey.split(' | ');
             const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
