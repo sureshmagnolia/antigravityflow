@@ -11365,6 +11365,9 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const candidates = [];
         sessionStudentRecords.sort((a, b) => {
+            // Primary: Course alphabetically
+            if (a.Course !== b.Course) return (a.Course || '').localeCompare(b.Course || '');
+            // Secondary: Register prefix DESC, number ASC
             const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
             const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
             const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
@@ -11610,7 +11613,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         const candidates = [];
 
         // Sort: Prefix Descending (Z->Y), Number Ascending (001->002)
+        // Sort: Course ASC → Prefix DESC → Number ASC
         sessionStudentRecords.sort((a, b) => {
+            // Primary: Course alphabetically
+            if (a.Course !== b.Course) return (a.Course || '').localeCompare(b.Course || '');
+            // Secondary: Register prefix DESC, number ASC
             const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
             const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
             const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
