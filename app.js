@@ -11086,6 +11086,13 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
     function renderAllottedRooms() {
         allottedRoomsList.innerHTML = '';
+        const clearAllBtn = document.getElementById('clear-all-rooms-btn');
+        if (clearAllBtn) {
+            clearAllBtn.disabled = isAllotmentLocked;
+            clearAllBtn.className = isAllotmentLocked 
+                ? "text-xs px-3 py-1.5 bg-gray-100 border border-gray-300 text-gray-400 rounded flex items-center gap-1 font-bold cursor-not-allowed opacity-60" 
+                : "text-xs px-3 py-1.5 bg-white border border-red-600 text-red-600 rounded hover:bg-red-50 flex items-center gap-1 font-bold transition";
+        }      
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
         if (currentSessionAllotment.length === 0) {
@@ -11172,6 +11179,208 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
     }
 
+       // --- CLEAR ALL ROOMS ---
+    window.deleteAllRooms = async function() {
+        if (isAllotmentLocked) return alert('List is locked. Please unlock it first.');
+        if (!confirm('Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
+
+        currentSessionAllotment.forEach(roomData => {
+            if (roomData && roomData.students) {
+                roomData.students.forEach(s => {
+                    const reg = (typeof s === 'object') ? s['Register Number'] : s;
+                    if (currentScribeAllotment[reg]) delete currentScribeAllotment[reg];
+                });
+            }
+            const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+            if (allInvigMappings[currentSessionKey] && allInvigMappings[currentSessionKey][roomData.roomName]) {
+                delete allInvigMappings[currentSessionKey][roomData.roomName];
+                localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvigMappings));
+                if (window.currentInvigMapping) delete window.currentInvigMapping[roomData.roomName];
+            }
+        });
+
+        currentSessionAllotment = [];
+        hasUnsavedAllotment = true;
+        saveRoomAllotment();
+        updateAllotmentDisplay();
+        if (typeof window.renderInvigilationPanel === 'function') window.renderInvigilationPanel();
+    };
+
+    // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
+    const autoAllotBtn = document.getElementById('auto-allot-button');
+    if (autoAllotBtn) {
+        autoAllotBtn.addEventListener('click', () => {
+            getRoomCapacitiesFromStorage();
+            const listDiv = document.getElementById('auto-allot-room-list');
+            listDiv.innerHTML = '';
+            
+            const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+            const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+            const scribeRoomNames = Object.values(allScribeAllotments[currentSessionKey] || {});
+            
+            const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
+                return (parseInt(a.replace(/\\D/g, ''), 10) || 0) - (parseInt(b.replace(/\\D/g, ''), 10) || 0);
+            });
+
+            sortedRoomNames.forEach(roomName => {
+                if (allottedRoomNames.includes(roomName) || scribeRoomNames.includes(roomName)) return;
+                const room = currentRoomConfig[roomName];
+                const location = room.location ? ` (${room.location})` : '';
+                
+                const label = document.createElement('label');
+                label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
+                label.innerHTML = `
+                    <input type="checkbox" class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
+                    <div class="flex-1">
+                        <div class="font-bold text-gray-800">${roomName}${location}</div>
+                        <div class="text-xs text-gray-500 font-medium">Standard Capacity: ${room.capacity}</div>
+                    </div>
+                `;
+                label.querySelector('input').addEventListener('change', updateAutoAllotCounter);
+                listDiv.appendChild(label);
+            });
+            
+            document.getElementById('auto-allot-search').value = '';
+            document.getElementById('auto-allot-search').oninput = (e) => {
+                const val = e.target.value.toLowerCase();
+                listDiv.querySelectorAll('label').forEach(lbl => {
+                    lbl.style.display = lbl.innerText.toLowerCase().includes(val) ? 'flex' : 'none';
+                });
+            };
+            
+            updateAutoAllotCounter();
+            document.getElementById('auto-allot-modal').classList.remove('hidden');
+        });
+    }
+
+    function updateAutoAllotCounter() {
+        let count = 0, cap = 0;
+        document.querySelectorAll('.auto-allot-room-cb:checked').forEach(cb => {
+            count++;
+            cap += parseInt(cb.getAttribute('data-cap')) || 30;
+        });
+        document.getElementById('auto-allot-selected-count').textContent = count;
+        document.getElementById('auto-allot-total-capacity').textContent = cap;
+        document.getElementById('run-auto-allot-button').disabled = count === 0;
+    }
+
+    document.getElementById('close-auto-allot-modal')?.addEventListener('click', () => {
+        document.getElementById('auto-allot-modal').classList.add('hidden');
+    });
+
+    document.getElementById('run-auto-allot-button')?.addEventListener('click', async () => {
+        const checkedBoxes = Array.from(document.querySelectorAll('.auto-allot-room-cb:checked'));
+        if (checkedBoxes.length === 0) return;
+        
+        document.getElementById('auto-allot-modal').classList.add('hidden');
+        
+        // Randomly shuffle selected rooms (Prevents deterministic daily neighboring)
+        const selectedRooms = checkedBoxes.map(cb => ({
+            name: cb.value,
+            capacity: parseInt(cb.getAttribute('data-cap')) || 30
+        })).sort(() => Math.random() - 0.5); 
+        
+        const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+        let roomIndex = 0;
+
+        // Process sequentially to respect Paper Mixing Engine internally
+        for (const stream of currentStreamConfig) {
+            let remainingForStream = true;
+            while (remainingForStream && roomIndex < selectedRooms.length) {
+                const r = selectedRooms[roomIndex];
+                
+                const [date, time] = currentSessionKey.split(' | ');
+                const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+                const allottedRegNos = new Set();
+                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(s['Register Number'] || s.RegisterNo)));
+                
+                const candidates = sessionStudentRecords.filter(s => 
+                    !allottedRegNos.has(s['Register Number']) && (s.Stream || "Regular") === stream
+                );
+                
+                if (candidates.length === 0) {
+                    remainingForStream = false;
+                    break;
+                }
+                
+                // Programmatically invoke the internal filling engine (silent UI sync variant)
+                await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy);
+                roomIndex++;
+            }
+        }
+        
+        hasUnsavedAllotment = true;
+        saveRoomAllotment();
+        updateAllotmentDisplay();
+        if (window.renderInvigilationPanel) window.renderInvigilationPanel();
+    });
+
+    // Invisible equivalent to your existing selectRoomForAllotment that respects Mixing Engine fully
+    async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none') {
+        const [date, time] = currentSessionKey.split(' | ');
+        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const allottedRegNos = new Set();
+        currentSessionAllotment.forEach(room => room.students.forEach(s => allottedRegNos.add(s['Register Number'] || s.RegisterNo)));
+
+        const candidates = [];
+        sessionStudentRecords.sort((a, b) => {
+            if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+            const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
+            const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
+            const matchA = regA.match(/^([a-zA-Z\\-_]*)(\\d+)$/i);
+            const matchB = regB.match(/^([a-zA-Z\\-_]*)(\\d+)$/i);
+            if (matchA && matchB) {
+                if (matchA[1].toUpperCase() !== matchB[1].toUpperCase()) return matchB[1].toUpperCase().localeCompare(matchA[1].toUpperCase());
+                return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
+            }
+            return regA.localeCompare(regB);
+        });
+
+        for (const student of sessionStudentRecords) {
+            if (!allottedRegNos.has(student['Register Number']) && (student.Stream || "Regular") === targetStream) {
+                candidates.push(student);
+            }
+        }
+        
+        let limit = parseInt(capacity) || 30;
+        let newStudents = [];
+        const streamPart = typeof mixingParts !== 'undefined' ? mixingParts[targetStream] : null;
+        const leftoverThreshold = Math.max(limit, 33); 
+        
+        if (candidates.length <= leftoverThreshold) {
+            newStudents = candidates.slice();
+        } else if (!streamPart || !streamPart.partB || streamPart.partB.length === 0) {
+            newStudents = candidates.slice(0, limit);
+        } else if (strategy === 'ratio_1_1' || strategy === 'ratio_2_1') {
+            const ratio = (strategy === 'ratio_2_1') ? (2 / 3) : 0.5;
+            let takeA = Math.round(limit * ratio);
+            let takeB = limit - takeA;
+            const sliceA = streamPart.partA.slice(streamPart.pA, streamPart.pA + takeA);
+            const sliceB = streamPart.partB.slice(streamPart.pB, streamPart.pB + takeB);
+            if (sliceA.length < takeA || sliceB.length < takeB) {
+                newStudents = candidates.slice(0, candidates.length);
+            } else {
+                newStudents = [...sliceA, ...sliceB];
+                streamPart.pA += sliceA.length;
+                streamPart.pB += sliceB.length;
+            }
+        } else {
+            newStudents = candidates.slice(0, limit);
+        }
+
+        if (newStudents.length === 0) return;
+
+        const studentsWithSeats = newStudents.map((s, idx) => {
+            const studentObj = (typeof s === 'object') ? { ...s } : { RegisterNo: s };
+            studentObj.seat = idx + 1;
+            return studentObj;
+        });
+
+        currentSessionAllotment.push({ roomName: roomName, capacity: capacity, students: studentsWithSeats, stream: targetStream });
+    }
+ 
+
+    
   // Delete a room from allotment (Fixed: Actually removes the room now)
     window.deleteRoom = async function (index) {
         if (!confirm('Are you sure you want to remove this room allotment?')) return;
