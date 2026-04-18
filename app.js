@@ -11204,6 +11204,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         saveRoomAllotment();
         updateAllotmentDisplay();
         if (typeof window.renderInvigilationPanel === 'function') window.renderInvigilationPanel();
+
+        // 🚀 Trigger automatic cloud sync after clearing
+        const saveBtn = document.getElementById('save-room-allotment-button');
+        if (saveBtn) saveBtn.click();
     };
 
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
@@ -11313,7 +11317,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         saveRoomAllotment();
         updateAllotmentDisplay();
         if (window.renderInvigilationPanel) window.renderInvigilationPanel();
+
+        // 🚀 Trigger automatic cloud sync after auto-allotment finishes
+        const saveBtn = document.getElementById('save-room-allotment-button');
+        if (saveBtn) saveBtn.click();
     });
+
 
     // Invisible equivalent to your existing selectRoomForAllotment that respects Mixing Engine fully
     async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none') {
