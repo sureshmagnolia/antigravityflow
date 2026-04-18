@@ -11365,18 +11365,18 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const candidates = [];
         sessionStudentRecords.sort((a, b) => {
-            if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
             const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
             const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
-            const matchA = regA.match(/^([a-zA-Z\\-_]*)(\\d+)$/i);
-            const matchB = regB.match(/^([a-zA-Z\\-_]*)(\\d+)$/i);
+            const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
+            const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             if (matchA && matchB) {
-                if (matchA[1].toUpperCase() !== matchB[1].toUpperCase()) return matchB[1].toUpperCase().localeCompare(matchA[1].toUpperCase());
-                return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
+                const prefixA = matchA[1].toUpperCase();
+                const prefixB = matchB[1].toUpperCase();
+                if (prefixA !== prefixB) return prefixB.localeCompare(prefixA); // prefix DESC
+                return parseInt(matchA[2], 10) - parseInt(matchB[2], 10); // number ASC
             }
             return regA.localeCompare(regB);
         });
-
         for (const student of sessionStudentRecords) {
             if (!allottedRegNos.has(student['Register Number']) && (student.Stream || "Regular") === targetStream) {
                 candidates.push(student);
@@ -11611,24 +11611,18 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Sort: Prefix Descending (Z->Y), Number Ascending (001->002)
         sessionStudentRecords.sort((a, b) => {
-            if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
             const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
             const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
-            // 🛡️ UNIVERSAL SORT: Safely parse alphanumeric and pure numeric IDs
             const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
-
             if (matchA && matchB) {
                 const prefixA = matchA[1].toUpperCase();
-                const numA = parseInt(matchA[2], 10);
                 const prefixB = matchB[1].toUpperCase();
-                const numB = parseInt(matchB[2], 10);
-                if (prefixA !== prefixB) return prefixB.localeCompare(prefixA);
-                return numA - numB;
+                if (prefixA !== prefixB) return prefixB.localeCompare(prefixA); // prefix DESC
+                return parseInt(matchA[2], 10) - parseInt(matchB[2], 10); // number ASC
             }
             return regA.localeCompare(regB);
         });
-
         for (const student of sessionStudentRecords) {
             const regNo = student['Register Number'];
             const studentStream = student.Stream || "Regular";
