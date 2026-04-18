@@ -4997,20 +4997,16 @@ function getExamName(date, time, stream) {
         // 1. Group Regular/Distance Rooms
         // The 'stream' property is now saved in 'currentSessionAllotment'
 
-        // Sort by Stream Priority (Index in config) then Room Name
+        // Sort by Stream Priority only — preserve insertion order within stream (shuffle visible)
         currentSessionAllotment.sort((a, b) => {
             const s1 = a.stream || "Regular";
             const s2 = b.stream || "Regular";
             const idx1 = currentStreamConfig.indexOf(s1);
             const idx2 = currentStreamConfig.indexOf(s2);
-
-            if (idx1 !== idx2) return idx1 - idx2;
-
-            // If same stream, numeric sort of room name
-            const numA = parseInt(a.roomName.replace(/\D/g, ''), 10) || 0;
-            const numB = parseInt(b.roomName.replace(/\D/g, ''), 10) || 0;
-            return numA - numB;
+            return idx1 - idx2;
+            // NOTE: No room-name sort — insertion order preserved so auto-allot shuffle is visible
         });
+
 
         const usedRegularRooms = new Set();
 
@@ -11107,10 +11103,12 @@ window.real_populate_qp_code_session_dropdown = function () {
             const idx2 = currentStreamConfig.indexOf(s2);
             if (idx1 !== idx2) return idx1 - idx2;
 
-            const numA = parseInt(a.roomName.replace(/\D/g, ''), 10) || 0;
-            const numB = parseInt(b.roomName.replace(/\D/g, ''), 10) || 0;
-            return numA - numB;
+            // Sort by serial (assignment order) not room number — preserves shuffle visibility
+            const serialA = roomSerialMap[a.roomName] || 999;
+            const serialB = roomSerialMap[b.roomName] || 999;
+            return serialA - serialB;
         });
+
 
         currentSessionAllotment.forEach((room, index) => {
             const roomDiv = document.createElement('div');
