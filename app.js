@@ -11211,12 +11211,14 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
-    const autoAllotBtn = document.getElementById('auto-allot-button');
-    if (autoAllotBtn) {
-        autoAllotBtn.addEventListener('click', () => {
-            getRoomCapacitiesFromStorage();
-            const listDiv = document.getElementById('auto-allot-room-list');
-            listDiv.innerHTML = '';
+            // Calculate Needed Seats
+            const [date, time] = currentSessionKey.split(' | ');
+            const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+            let allottedCount = 0;
+            currentSessionAllotment.forEach(r => allottedCount += r.students.length);
+            const neededSeats = sessionStudents.length - allottedCount;
+            const neededEl = document.getElementById('auto-allot-needed-capacity');
+            if (neededEl) neededEl.textContent = neededSeats;
             
             const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
             const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
