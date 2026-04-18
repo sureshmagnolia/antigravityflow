@@ -17968,17 +17968,18 @@ window.toggleAllArchiveCheckboxes = function(check) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
         
-               // Sync (Added Session Sync)
+        // Reset UI immediately for responsiveness
+        swapSourceRoom = null;
+        renderInvigilationPanel();
+
+        // Sync in background (Fire and Forget)
         if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('staff');
+            syncDataToCloud('staff');
             if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
+                syncSessionToCloud(sessionKey);
             }
         }
 
-        // Reset UI
-        swapSourceRoom = null;
-        renderInvigilationPanel();
 
         // Optional Feedback
         // alert("Swapped successfully!"); 
@@ -18138,25 +18139,19 @@ window.toggleAllArchiveCheckboxes = function(check) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
-        // Sync
-        // Sync (Added Slots and Session Mapping Sync)
+        // Hide Modal & Refresh UI immediately
+        document.getElementById('invigilator-select-modal').classList.add('hidden');
+        window.renderInvigilationPanel();
+
+        // Sync in background
         if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('staff');
-            await syncDataToCloud('slots'); // Sync the pool change
-            
-            // Sync the specific room-to-person mapping (Crucial for other PCs)
+            syncDataToCloud('staff');
+            syncDataToCloud('slots');
             if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
+                syncSessionToCloud(sessionKey);
             }
         }
 
-
-        // Hide Modal
-        document.getElementById('invigilator-select-modal').classList.add('hidden');
-
-        // Refresh UI
-        window.renderInvigilationPanel();
-    }
 
       window.autoAssignInvigilators = async function () {
         const sessionKey = allotmentSessionSelect.value;
@@ -18209,17 +18204,16 @@ window.toggleAllArchiveCheckboxes = function(check) {
             localSyncPriority[INVIG_MAPPING_KEY] = Date.now();
             
             updateSyncStatus("Saving...", "neutral");
+            // Refresh UI immediately
+            renderInvigilationPanel();
+
             if (typeof syncDataToCloud === 'function') {
-                // 📡 DUAL-SYNC FIX: Update BOTH the master staff list and the session record
-                // This prevents the refresh listener from overwriting with empty data.
-                await syncDataToCloud('staff');
+                syncDataToCloud('staff');
                 if (typeof syncSessionToCloud === 'function') {
-                    await syncSessionToCloud(sessionKey);
-                    console.log(`✅ Dual-Sync successful for session: ${sessionKey}`);
+                    syncSessionToCloud(sessionKey);
                 }
             }
-            
-            renderInvigilationPanel();
+
 
             
             updateSyncStatus("Saved", "success");
@@ -20705,7 +20699,7 @@ window.downloadInvigilationListPDF = async function () {
 
     window.replaceInvigilator = async function(room, name) {
         if(!confirm(`Confirm replace with ${name}?`)) return;
-        await window.saveInvigAssignment(room, name); // Wait for sync
+        window.saveInvigAssignment(room, name); // Don't block UI
 
         
         // Reset Modal Title
