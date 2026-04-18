@@ -11218,14 +11218,37 @@ window.real_populate_qp_code_session_dropdown = function () {
             const listDiv = document.getElementById('auto-allot-room-list');
             listDiv.innerHTML = '';
             
-            // Calculate Needed Seats
+            // Calculate Needed Rooms Stream-wise and Total
             const [date, time] = currentSessionKey.split(' | ');
             const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
-            let allottedCount = 0;
-            currentSessionAllotment.forEach(r => allottedCount += r.students.length);
-            const neededSeats = sessionStudents.length - allottedCount;
+            
+            const streamStats = {};
+            currentStreamConfig.forEach(s => streamStats[s] = { total: 0 });
+            
+            sessionStudents.forEach(s => {
+                const st = s.Stream || "Regular";
+                if (!streamStats[st]) streamStats[st] = { total: 0 };
+                streamStats[st].total++;
+            });
+            
+            let neededHtml = '';
+            let totalNeededRooms = 0;
+            
+            for (const [st, counts] of Object.entries(streamStats)) {
+                if (counts.total > 0) {
+                    const rooms = Math.ceil(counts.total / 30);
+                    totalNeededRooms += rooms;
+                    // Exact match to your card's calculation: Total Students / 30
+                    neededHtml += `<span class="ml-1.5 text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded shadow-sm">${st}: ~${rooms}</span>`;
+                }
+            }
+            
             const neededEl = document.getElementById('auto-allot-needed-capacity');
-            if (neededEl) neededEl.textContent = neededSeats;
+            if (neededEl) {
+                neededEl.innerHTML = totalNeededRooms > 0 
+                    ? `<span class="mr-1">~${totalNeededRooms}</span> ${neededHtml}`
+                    : `0`;
+            }
             
             const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
             const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
