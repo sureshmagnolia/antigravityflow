@@ -4864,10 +4864,11 @@ window.viewActivityLogs = function () {
     };
     
     fetchLogs(); // Initial explicit fetch
-    const actInterval = setInterval(fetchLogs, 60000);
-    activityLogUnsubscribe = () => clearInterval(actInterval);
+    // 🚫 FIXED COST LEAK: Removed 60s polling interval. Logs will now only fetch on load.
+    activityLogUnsubscribe = () => {};
 
 };
+
 
 // Helper to render the logs (Paste this below viewActivityLogs)
 function filterDisplayedLogs(query) {
@@ -8583,9 +8584,9 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
 
         if (presenceUnsubscribe) presenceUnsubscribe();
         
-        // 3. COST SAVER: Poll Presence Every 60s Instead of Real-Time Sync
-        const fetchPresence = async () => {
-            const snapshot = await getDocs(q);
+        // 🚫 FIXED COST LEAK: Replaced expensive 60s polling with efficient onSnapshot.
+        // onSnapshot only downloads data when someone's status ACTUALLY changes.
+        presenceUnsubscribe = onSnapshot(q, (snapshot) => {
             const now = Date.now();
             globalLiveUsers = {}; 
             let onlineCount = 0;
@@ -8618,11 +8619,7 @@ window.initLivePresence = function(myEmail, myName, isAdmin) {
                 if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
                 if (typeof renderStaffTable === 'function') renderStaffTable(); 
             }, 500);
-        };
-
-        fetchPresence(); // Pull live status immediately when Admin opens view
-        const presInterval = setInterval(fetchPresence, 60000); // Check again exactly every 60s
-        presenceUnsubscribe = () => clearInterval(presInterval); // Clean up background tasks
+        }); // Close onSnapshot listener
 
     } else {
         console.log("🟢 Live Presence: Staff Mode (Broadcasting only)");
