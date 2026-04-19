@@ -1860,7 +1860,7 @@ async function deleteSessionFromCloud(sessionKey) {
             id: sessionId,
             date: cleanDate,
             time: cleanTime,
-            students: students, // REMOVED TO SAVE EGRESS COSTS
+            // 🚫 FIXED COST LEAK: Actually removed students to prevent duplicate heavy bandwidth
             roomAllotment: sessionAllotment,
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
