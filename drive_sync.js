@@ -206,7 +206,7 @@ async function findLatestBackupTime() {
     try {
         const folderId = await getBackupFolder();
         const res = await gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and trashed=false`,
+            q: `('${folderId}' in parents or name contains 'Backup') and mimeType='application/json' and trashed=false`,
             orderBy: 'createdTime desc',
             fields: 'files(createdTime)',
             pageSize: 1
@@ -353,7 +353,7 @@ async function restoreFromDrive() {
     try {
         const folderId = await getBackupFolder();
         const res = await gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and trashed=false`,
+            q: `('${folderId}' in parents or name contains 'Backup') and mimeType='application/json' and trashed=false`,
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
@@ -405,10 +405,17 @@ window.executeRestore = async function(fileId) {
 
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
-        const cloudData = response.result;
+        let cloudData = response.result;
+        
+        // Google API client sometimes returns large JSONs as raw strings instead of objects
+        if (typeof cloudData === 'string') {
+            try { cloudData = JSON.parse(cloudData); } 
+            catch (e) { cloudData = JSON.parse(response.body); }
+        }
         
         // Ask user for Restore Mode
         const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported Google Drive data with your existing local data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
+
 
         // If REPLACE, wipe local data for a clean slate
         if (!isMerge) {
