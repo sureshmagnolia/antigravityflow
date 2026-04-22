@@ -167,15 +167,11 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-document.getElementById('login-btn').addEventListener('click', () => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-        signInWithRedirect(auth, provider);
-    } else {
-        signInWithPopup(auth, provider).catch(err => {
-            if (err.code === 'auth/popup-blocked') signInWithRedirect(auth, provider);
-        });
-    }
+    signInWithPopup(auth, provider).catch(err => {
+        console.warn("Popup blocked or failed, attempting redirect...", err);
+        // Only fallback to redirect if the user's browser strictly blocked the popup tab
+        if (err.code === 'auth/popup-blocked') signInWithRedirect(auth, provider);
+    });
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
@@ -10628,6 +10624,4 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
-
-
 
