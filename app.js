@@ -731,8 +731,8 @@ async function migrateFromLocalStorage() {
         const timeBStr = splitB[1].trim();
 
         // 1. Compare Dates
-        const [dA, mA, yA] = dateAStr.split('.');
-        const [dB, mB, yB] = dateBStr.split('.');
+        const [dA, mA, yA] = dateAStr.split(/[.-]/);
+        const [dB, mB, yB] = dateBStr.split(/[.-]/);
 
         const dateA = new Date(yA, mA - 1, dA);
         const dateB = new Date(yB, mB - 1, dB);
@@ -9272,7 +9272,7 @@ window.real_populate_session_dropdown = function () {
                 const [datePart, timePart] = session.split('|').map(s => s.trim());
                 if (!datePart || !timePart) return;
 
-                const [dd, mm, yyyy] = datePart.split('.');
+                const [dd, mm, yyyy] = datePart.split(/[.-]/);
                 const [timeStr, period] = timePart.split(' ');
                 let [hours, minutes] = timeStr.split(':').map(Number);
                 if (period && period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
