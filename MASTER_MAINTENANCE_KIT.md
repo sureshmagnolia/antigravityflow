@@ -25,7 +25,8 @@ This document contains the "Emergency Tools" required to migrate, backup, and re
             firestore: {
                 collegeDoc: {},
                 subcollections: {},
-                publicSeating: {}
+                publicSeating: {},
+                globalWhitelist: null
             }
         };
 
@@ -60,7 +61,14 @@ This document contains the "Emergency Tools" required to migrate, backup, and re
             }
         }
 
-        // 4. DOWNLOAD
+        // 4. BACKUP: Global Whitelist (Super Admins)
+        console.log("📡 Downloading Global Whitelist...");
+        const whitelistSnap = await getDoc(doc(db, "global", "whitelist"));
+        if (whitelistSnap.exists()) {
+            backup.firestore.globalWhitelist = whitelistSnap.data();
+        }
+
+        // 5. DOWNLOAD
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -109,6 +117,11 @@ This document contains the "Emergency Tools" required to migrate, backup, and re
                 console.log("📡 Restoring Public Seating...");
                 for (const [docId, data] of Object.entries(backup.firestore.publicSeating || {})) {
                     await setDoc(doc(db, "public_seating", docId), data, { merge: true });
+                }
+
+                if (backup.firestore.globalWhitelist) {
+                    console.log("🌍 Restoring Global Whitelist...");
+                    await setDoc(doc(db, "global", "whitelist"), backup.firestore.globalWhitelist, { merge: true });
                 }
 
                 alert("🎉 SYSTEM FULLY RESTORED!");
