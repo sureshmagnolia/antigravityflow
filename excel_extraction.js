@@ -42,8 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await file.arrayBuffer();
                 const workbook = XLSX.read(data);
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
+                // SheetJS automatically detects if it's CSV or Excel
+                const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
                 let examDate = "", paperName = "";
                 let studentStartIndex = -1;
 
