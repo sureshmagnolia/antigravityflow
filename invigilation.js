@@ -27,7 +27,7 @@ if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.includes("1
 // 2. START APP CHECK
 const appCheck = initializeAppCheck(app, {
     // Your public Site Key
-    provider: new ReCaptchaV3Provider('6LcMiSQsAAAAABfK5nXqVJ_vo6GwU4DFfBN7-u5K'),
+        provider: new ReCaptchaV3Provider('6LdD78MsAAAAABesH03GhDS38SaGyS4zOecvYPve'),
 
     // Automatically refresh the token in the background
     isTokenAutoRefreshEnabled: true 
