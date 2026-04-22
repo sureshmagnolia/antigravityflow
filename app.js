@@ -18023,10 +18023,31 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         const slot = invigSlots[sessionKey];
 
-        if (!slot || !slot.assigned || slot.assigned.length === 0) {
-            list.innerHTML = '<p class="text-xs text-red-500 text-center py-4 bg-red-50 rounded border border-red-100">No staff assigned to this session in Invigilation Portal.</p>';
-            return;
-        }
+    // GUEST/CUSTOM FALLBACK: If no portal data exists, allow manual typing
+    if (!slot || !slot.assigned || slot.assigned.length === 0) {
+        const renderCustomOnly = (query = "") => {
+            const safeRoom = roomName.replace(/'/g, "\\'");
+            const safeName = query.trim().replace(/'/g, "\\'");
+            list.innerHTML = `
+                <div class="p-4 bg-blue-50 border border-blue-100 rounded-lg text-center">
+                    <p class="text-[10px] text-blue-600 font-bold uppercase mb-2">Guest Mode / Manual Entry</p>
+                    <p class="text-xs text-gray-600 mb-3">Type a name in the search box above and click below.</p>
+                    ${query.trim().length > 2 ? `
+                        <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
+                                class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded shadow hover:bg-blue-700 transition">
+                            Assign "${query}"
+                        </button>
+                    ` : `
+                        <div class="text-[10px] text-gray-400 italic">Enter at least 3 characters...</div>
+                    `}
+                </div>
+            `;
+        };
+        renderCustomOnly("");
+        input.oninput = (e) => renderCustomOnly(e.target.value);
+        return;
+    }
+
 
         const assignedSet = new Set(Object.values(currentInvigMapping));
 
@@ -18068,10 +18089,22 @@ window.toggleAllArchiveCheckboxes = function(check) {
                 }
             });
 
-            if (!hasResults) {
-                html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
-            }
-            list.innerHTML = html;
+        if (!hasResults && q.length > 2) {
+            const safeRoom = roomName.replace(/'/g, "\\'");
+            const safeName = input.value.trim().replace(/'/g, "\\'");
+            html = `
+                <div class="p-3 bg-gray-50 border border-dashed border-gray-300 rounded text-center">
+                    <p class="text-[10px] text-gray-500 mb-2">No staff found matching "${input.value}"</p>
+                    <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
+                            class="bg-gray-800 text-white text-[10px] font-bold px-4 py-1.5 rounded hover:bg-black transition">
+                        Assign as Custom Name
+                    </button>
+                </div>
+            `;
+        } else if (!hasResults) {
+            html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
+        }
+        list.innerHTML = html;
         };
 
         renderList();
