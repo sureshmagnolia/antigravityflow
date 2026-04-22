@@ -9241,6 +9241,23 @@ window.real_populate_session_dropdown = function () {
             knownRegistry.forEach(k => sessions.add(k));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
+            // OFFLINE REGISTRY SYNC: Ensure Guest users see these sessions in the Archive list
+            try {
+            const currentRegistry = new Set(JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]'));
+            let changed = false;
+                allStudentSessions.forEach(s => {
+                    if (!currentRegistry.has(s)) {
+                    currentRegistry.add(s);
+                    changed = true;
+                }
+            });
+            if (changed) {
+            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(currentRegistry)));
+            console.log("Registry updated with new sessions for Archive.");
+            }
+            } catch (e) { console.error("Registry Sync Failed:", e); }
+
+
 
 
             // Clear Options
