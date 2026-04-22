@@ -11281,8 +11281,10 @@ window.real_populate_qp_code_session_dropdown = function () {
                 
                 const label = document.createElement('label');
                 label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
-                label.innerHTML = `
-                    <input type="checkbox" class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
+            // SMART PRE-SELECT: If this room is already in use for this session, check it!
+            const isAlreadyInUse = (currentSessionAllotment || []).some(rm => rm.name === roomName);     
+            label.innerHTML = `
+                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-800">${roomName}${location}</div>
                         <div class="text-xs text-gray-500 font-medium">Standard Capacity: ${room.capacity}</div>
@@ -11324,9 +11326,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         const checkedBoxes = Array.from(document.querySelectorAll('.auto-allot-room-cb:checked'));
         if (checkedBoxes.length === 0) return;
         
-        document.getElementById('auto-allot-modal').classList.add('hidden');
-        
-        // Randomly shuffle selected rooms (Prevents deterministic daily neighboring)
+    document.getElementById('auto-allot-modal').classList.add('hidden');
+    // RE-ALLOTMENT CLEANUP: Clear current students from memory before applying new strategy
+    currentSessionAllotment = []; 
+    // Randomly shuffle selected rooms
         const selectedRooms = checkedBoxes.map(cb => ({
             name: cb.value,
             capacity: parseInt(cb.getAttribute('data-cap')) || 30
