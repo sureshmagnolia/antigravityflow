@@ -93,13 +93,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (allStudents.length > 0) {
                 log(`Merging ${allStudents.length} students into database...`);
-                // Use the global function from app.js to save data
-                if (typeof window.processUploadedData === 'function') {
-                    await window.processUploadedData(allStudents, selectedExamName);
-                    log(`🎉 Successfully loaded all data!`, 'success');
+                
+                // 1. Check if the app's internal function exists
+                if (typeof window.loadStudentData === 'function') {
+                    // This function is what app.js uses to save to database
+                    await window.loadStudentData(allStudents);
+                    log(`🎉 Successfully loaded ${allStudents.length} students!`, 'success');
+                    
+                    // 2. Trigger a UI refresh so the counts update
+                    if (typeof window.refreshAllStats === 'function') window.refreshAllStats();
+                    
+                    // 3. Trigger a Cloud Sync
+                    if (typeof window.syncDataToCloud === 'function') window.syncDataToCloud('heavy');
+                    
+                    alert(`✅ Successfully loaded ${allStudents.length} students! \nCheck your Dashboard.`);
                 } else {
-                    log(`⚠️ Data extracted, but 'processUploadedData' not found in app.js. Check console.`, 'error');
-                    console.log("Extracted Data:", allStudents);
+                    log(`❌ Error: System function 'loadStudentData' not found.`, 'error');
                 }
             }
 
