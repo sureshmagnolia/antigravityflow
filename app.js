@@ -731,8 +731,8 @@ async function migrateFromLocalStorage() {
         const timeBStr = splitB[1].trim();
 
         // 1. Compare Dates
-        const [dA, mA, yA] = dateAStr.split('.');
-        const [dB, mB, yB] = dateBStr.split('.');
+        const [dA, mA, yA] = dateAStr.split(/[.-]/);
+        const [dB, mB, yB] = dateBStr.split(/[.-]/);
 
         const dateA = new Date(yA, mA - 1, dA);
         const dateB = new Date(yB, mB - 1, dB);
@@ -9272,20 +9272,20 @@ window.real_populate_session_dropdown = function () {
                 const [datePart, timePart] = session.split('|').map(s => s.trim());
                 if (!datePart || !timePart) return;
 
-                const [dd, mm, yyyy] = datePart.split('.');
+                const [dd, mm, yyyy] = datePart.split(/[.-]/);
                 const [timeStr, period] = timePart.split(' ');
                 let [hours, minutes] = timeStr.split(':').map(Number);
                 if (period && period.toUpperCase() === 'PM' && hours !== 12) hours += 12;
                 if (period && period.toUpperCase() === 'AM' && hours === 12) hours = 0;
 
                 const sessionStart = new Date(yyyy, mm - 1, dd, hours, minutes);
-                // EXTENDED: Keep "Today" session active for 7 hours from start (covers full exam duration)
-                const sessionEndWindow = new Date(sessionStart.getTime() + (7 * 60 * 60 * 1000));
+                // SMART DEFAULT: Keep "Today" session active only if it started less than 1 hour ago
+                const sessionEndWindow = new Date(sessionStart.getTime() + (1 * 60 * 60 * 1000));
 
-                if (datePart === todayStr && nowTime < sessionEndWindow.getTime()) {
+                if (datePart === todayStr && nowTime <= sessionEndWindow.getTime() && nowTime >= sessionStart.getTime()) {
+                     // Current session is active (Started < 1hr ago and hasn't ended)
                      if (!activeTodaySession) activeTodaySession = session; 
                 }
-
                 const diff = sessionStart.getTime() - nowTime;
                 if (diff > 0 && diff < minDiff) { 
                     minDiff = diff;
@@ -9298,7 +9298,8 @@ window.real_populate_session_dropdown = function () {
                 }
 
             });
-            let defaultSession = activeTodaySession || nextUpcomingSession || mostRecentPastSession || allStudentSessions[0] || "";
+            // Priority: 1. Current Active, 2. Next Upcoming, 3. Most Recent Past
+            let defaultSession = activeTodaySession || nextUpcomingSession || mostRecentPastSession || allStudentSessions[allStudentSessions.length - 1] || "";
 
 
 
