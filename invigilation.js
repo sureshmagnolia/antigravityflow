@@ -259,7 +259,7 @@ async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
         if (isSilentCacheCheck) return false; // Silently fail and let the main login function search the DB
         
         alert("⛔ Login Failed: " + e.message);
-        signOut(auth);
+        //signOut(auth);
         document.getElementById('login-btn').innerText = "Login with Google";
         return false;
     }
