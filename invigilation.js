@@ -198,9 +198,10 @@ async function handleLogin(user) {
     const cachedId = localStorage.getItem('my_college_id');
     if (cachedId) {
         console.log("⚡ Fast Login via Cache:", cachedId);
-        await verifyAndLaunch(cachedId, user);
-        return;
+        const success = await verifyAndLaunch(cachedId, user, true);
+        if (success) return; // If cache is bad, silently fall through to Database Search
     }
+
 
     // 3. Database Search (Fallback - Costs Reads)
     try {
@@ -230,7 +231,7 @@ async function handleLogin(user) {
 }
 
 // Helper: Verify permission and launch dashboard
-async function verifyAndLaunch(collegeId, user) {
+async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
     try {
         const docRef = doc(db, "colleges", collegeId);
         const snap = await getDoc(docRef);
@@ -249,6 +250,7 @@ async function verifyAndLaunch(collegeId, user) {
                 localStorage.setItem('my_college_id', collegeId);
                 const role = isAdmin ? "Admin" : "Staff";
                 initializeSession(collegeId, isAdmin, role);
+                return true;
             } else {
                 throw new Error("Permission Denied.");
             }
@@ -258,12 +260,14 @@ async function verifyAndLaunch(collegeId, user) {
     } catch (e) {
         console.error("Launch Error:", e);
         localStorage.removeItem('my_college_id'); // Clear invalid cache
+        if (isSilentCacheCheck) return false; // Silently fail and let the main login function search the DB
+        
         alert("⛔ Login Failed: " + e.message);
         signOut(auth);
         document.getElementById('login-btn').innerText = "Login with Google";
+        return false;
     }
 }
-
 function initializeSession(id, adminStatus, roleName) {
     console.log(`✅ Initializing Session: ${id} as ${roleName}`);
     currentCollegeId = id;
