@@ -173,6 +173,7 @@ document.getElementById('login-btn').addEventListener('click', () => {
         if (err.code === 'auth/popup-blocked') signInWithRedirect(auth, provider);
     });
 });
+
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
@@ -258,7 +259,7 @@ async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
         if (isSilentCacheCheck) return false; // Silently fail and let the main login function search the DB
         
         alert("⛔ Login Failed: " + e.message);
-        signOut(auth);
+        //signOut(auth);
         document.getElementById('login-btn').innerText = "Login with Google";
         return false;
     }
@@ -10623,4 +10624,3 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
-
