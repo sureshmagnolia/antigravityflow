@@ -9241,6 +9241,23 @@ window.real_populate_session_dropdown = function () {
             knownRegistry.forEach(k => sessions.add(k));
             allStudentSessions = Array.from(sessions).sort(compareSessionStrings);
 
+            // OFFLINE REGISTRY SYNC: Ensure Guest users see these sessions in the Archive list
+            try {
+            const currentRegistry = new Set(JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]'));
+            let changed = false;
+                allStudentSessions.forEach(s => {
+                    if (!currentRegistry.has(s)) {
+                    currentRegistry.add(s);
+                    changed = true;
+                }
+            });
+            if (changed) {
+            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(currentRegistry)));
+            console.log("Registry updated with new sessions for Archive.");
+            }
+            } catch (e) { console.error("Registry Sync Failed:", e); }
+
+
 
 
             // Clear Options
@@ -21048,5 +21065,52 @@ window.triggerSessionExport = function() {
         alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
     }
 };
+
+// --- BROWSER EXTENSION SYNC RECEIVER ---
+window.addEventListener('message', async (event) => {
+    // Only accept messages from the same window (Extension -> App)
+    if (event.data.type === 'SYNC_EXAM_DATA') {
+        const incomingData = event.data.data;
+        
+        if (!incomingData || incomingData.length === 0) {
+            console.warn("Received empty data from extension.");
+            return;
+        }
+
+        console.log(`Extension Sync Triggered: Received ${incomingData.length} students.`);
+
+        try {
+            // 1. Load data into local database
+            if (typeof loadStudentData === 'function') {
+                await loadStudentData(incomingData);
+                console.log("✅ Data merged into local storage.");
+            }
+
+            // 2. TRIGGER CLOUD SYNC FOR AFFECTED SESSIONS
+            const affectedSessions = new Set();
+            incomingData.forEach(s => {
+                if (s.Date && s.Time) {
+                    affectedSessions.add(`${s.Date} | ${s.Time}`);
+                }
+            });
+
+            console.log(`Pushing ${affectedSessions.size} sessions to Invigilation Portal...`);
+            for (const sessionKey of affectedSessions) {
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(sessionKey);
+                }
+            }
+
+            // 3. REFRESH UI
+            if (typeof refreshAllStats === 'function') refreshAllStats();
+            if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
+
+            alert(`✅ Extension Sync Successful!\n\n${incomingData.length} students loaded and pushed to Invigilation Portal.`);
+        } catch (err) {
+            console.error("Extension Sync Failed:", err);
+            alert("❌ Extension Sync Failed. Check console for details.");
+        }
+    }
+});
 
 
