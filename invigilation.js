@@ -177,6 +177,7 @@ document.getElementById('login-btn').addEventListener('click', () => {
         });
     }
 });
+
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
 // --- CORE FUNCTIONS ---
@@ -10627,4 +10628,3 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
-
