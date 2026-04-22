@@ -94,21 +94,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (allStudents.length > 0) {
                 log(`Merging ${allStudents.length} students into database...`);
                 
-                // 1. Check if the app's internal function exists
-                if (typeof window.loadStudentData === 'function') {
-                    // This function is what app.js uses to save to database
-                    await window.loadStudentData(allStudents);
-                    log(`🎉 Successfully loaded ${allStudents.length} students!`, 'success');
+                log(`🚀 Sending ${allStudents.length} students to the System Receiver...`);
+                
+                // We use the EXACT same function the PDF extractor uses!
+                if (typeof window.handlePythonExtraction === 'function') {
+                    // We pass the data as a JSON string just like the Python script does
+                    await window.handlePythonExtraction(JSON.stringify(allStudents));
                     
-                    // 2. Trigger a UI refresh so the counts update
-                    if (typeof window.refreshAllStats === 'function') window.refreshAllStats();
-                    
-                    // 3. Trigger a Cloud Sync
-                    if (typeof window.syncDataToCloud === 'function') window.syncDataToCloud('heavy');
-                    
-                    alert(`✅ Successfully loaded ${allStudents.length} students! \nCheck your Dashboard.`);
+                    log(`🎉 Successfully integrated with ExamFlow!`, 'success');
+                    alert(`✅ SUCCESS!\n\n${allStudents.length} students loaded and synced via the System Receiver.`);
                 } else {
-                    log(`❌ Error: System function 'loadStudentData' not found.`, 'error');
+                    log(`❌ Error: 'handlePythonExtraction' not found in app.js.`, 'error');
+                    // Fallback to basic load if the receiver is missing
+                    if (typeof window.loadStudentData === 'function') {
+                        await window.loadStudentData(allStudents);
+                        log(`⚠️ Used fallback loader.`, 'warning');
+                    }
                 }
             }
 
