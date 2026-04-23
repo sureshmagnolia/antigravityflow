@@ -21116,6 +21116,21 @@ window.downloadInvigilationListPDF = async function () {
     };
 
     // --- END GLOBALLY AVAILABLE FUNCTIONS ---
+// GLOBAL STRATEGY SYNC: Keeps Main Tab and Auto-Allot Modal radio buttons in sync
+document.addEventListener('change', (e) => {
+    if (e.target.name === 'mixing-strategy' || e.target.name === 'modal-mixing-strategy') {
+        const newValue = e.target.value;
+        const targetName = (e.target.name === 'mixing-strategy') ? 'modal-mixing-strategy' : 'mixing-strategy';
+        const targetRadio = document.querySelector(`input[name="${targetName}"][value="${newValue}"]`);
+        if (targetRadio) targetRadio.checked = true;
+
+        // CRITICAL: Re-compute mixingParts whenever strategy changes from EITHER radio
+        // This ensures manual "+ Add Room" also picks up the new strategy immediately
+        if (currentSessionKey && typeof precomputeSessionParts === 'function') {
+            precomputeSessionParts(currentSessionKey, newValue);
+        }
+    }
+});
 
 }); // <-- Closes the DOMContentLoaded block from the top of the file
 
@@ -21292,19 +21307,5 @@ window.addEventListener('message', async (event) => {
         }
     }
 });
-// GLOBAL STRATEGY SYNC: Keeps Main Tab and Auto-Allot Modal radio buttons in sync
-document.addEventListener('change', (e) => {
-    if (e.target.name === 'mixing-strategy' || e.target.name === 'modal-mixing-strategy') {
-        const newValue = e.target.value;
-        const targetName = (e.target.name === 'mixing-strategy') ? 'modal-mixing-strategy' : 'mixing-strategy';
-        const targetRadio = document.querySelector(`input[name="${targetName}"][value="${newValue}"]`);
-        if (targetRadio) targetRadio.checked = true;
 
-        // CRITICAL: Re-compute mixingParts whenever strategy changes from EITHER radio
-        // This ensures manual "+ Add Room" also picks up the new strategy immediately
-        if (currentSessionKey && typeof precomputeSessionParts === 'function') {
-            precomputeSessionParts(currentSessionKey, newValue);
-        }
-    }
-});
 
