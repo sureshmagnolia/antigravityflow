@@ -453,7 +453,7 @@ let sessionsUnsub = null; // [NEW] For real-time session updates
 let hasUnsavedScribes = false; // NEW FLAG
 // --- MIXING ENGINE STATE (Session-Level Pre-Split) ---
 let mixingParts = {};        // Per-stream: { 'Regular': {partA,partB,pA,pB}, 'Distance': {...} }
-let mixingActiveStrategy = 'none'; // The strategy locked in for this session
+let mixingActiveStrategy = localStorage.getItem('examMixingStrategy') || 'none'; // The strategy locked in for this session
 let mixingPartA = [], mixingPartB = [], mixingPointerA = 0, mixingPointerB = 0; // legacy aliases
 // -----------------------------------------------------
 
@@ -466,6 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const ABSENTEE_LIST_KEY = 'examAbsenteeList';
     const QP_CODE_LIST_KEY = 'examQPCodes';
     const BASE_DATA_KEY = 'examBaseData';
+    // --- Restore Mixing Strategy UI ---
+    const savedMixingStrategy = localStorage.getItem('examMixingStrategy') || 'none';
+    const mixingRadio = document.querySelector(`input[name="mixing-strategy"][value="${savedMixingStrategy}"]`);
+    if (mixingRadio) mixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -11935,6 +11939,8 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Re-compute session parts whenever the mixing strategy changes
     document.querySelectorAll('input[name="mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
+            // Save to localStorage so it persists after refresh
+            localStorage.setItem('examMixingStrategy', radio.value);
             if (currentSessionKey) {
                 precomputeSessionParts(currentSessionKey, radio.value);
             }
