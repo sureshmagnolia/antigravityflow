@@ -338,8 +338,12 @@ async function autoCleanPastGhostData() {
                 try {
                     await getDownloadURL(storageRef);
                     alreadyArchived = true;
-                } catch (e) { /* Not archived yet */ }
-
+                } catch (e) {
+                    // 404 = not archived yet. Any other error = log it.
+                    if (e?.code !== 'storage/object-not-found') {
+                        console.warn('Storage check error:', e?.code);
+                    }
+                }
                 if (alreadyArchived) continue;
 
                 // Fetch heavy student data from Firestore
