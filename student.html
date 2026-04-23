@@ -381,7 +381,7 @@ function parseSessionTime(dateStr, timeStr) {
     }
   }
 
-          // --- 🕒 REAL-TIME NETWORK CLOCK UPDATER (Forced IST) ---
+          // --- 🕒 REAL-TIME NETWORK CLOCK UPDATER (IST + AM/PM) ---
           function startNetworkClock() {
               const clockEl = document.getElementById('network-clock');
               const dateEl = document.getElementById('network-date');
@@ -389,22 +389,23 @@ function parseSessionTime(dateStr, timeStr) {
               setInterval(() => {
                   const now = window.getExamsNow ? window.getExamsNow() : new Date();
 
-                  // Force Indian Standard Time (IST) for the display
-                  const timeOptions = { 
-                      timeZone: 'Asia/Kolkata', 
-                      hour12: false, 
-                      hour: '2-digit', 
-                      minute: '2-digit', 
-                      second: '2-digit' 
+                  // Force Indian Standard Time (IST) with 12-hour AM/PM format
+                  const timeOptions = {
+                      timeZone: 'Asia/Kolkata',
+                      hour12: true,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
                   };
-                  const dateOptions = { 
-                      timeZone: 'Asia/Kolkata', 
-                      day: '2-digit', 
-                      month: 'short', 
-                      year: 'numeric' 
+                  const dateOptions = {
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
                   };
 
-                  clockEl.textContent = now.toLocaleTimeString('en-GB', timeOptions);
+                  // Use 'en-US' for the time string to ensure AM/PM is formatted correctly
+                  clockEl.textContent = now.toLocaleTimeString('en-US', timeOptions);
                   dateEl.textContent = now.toLocaleDateString('en-GB', dateOptions).replace(/,/g, '');
               }, 1000);
           }
