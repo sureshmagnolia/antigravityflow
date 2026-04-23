@@ -381,7 +381,7 @@ function parseSessionTime(dateStr, timeStr) {
     }
   }
 
-          // --- 🕒 REAL-TIME NETWORK CLOCK UPDATER ---
+          // --- 🕒 REAL-TIME NETWORK CLOCK UPDATER (Forced IST) ---
           function startNetworkClock() {
               const clockEl = document.getElementById('network-clock');
               const dateEl = document.getElementById('network-date');
@@ -389,15 +389,23 @@ function parseSessionTime(dateStr, timeStr) {
               setInterval(() => {
                   const now = window.getExamsNow ? window.getExamsNow() : new Date();
 
-                  // Format Time: HH:MM:SS
-                  const hh = String(now.getHours()).padStart(2, '0');
-                  const mm = String(now.getMinutes()).padStart(2, '0');
-                  const ss = String(now.getSeconds()).padStart(2, '0');
-                  clockEl.textContent = ${hh}:${mm}:${ss};
+                  // Force Indian Standard Time (IST) for the display
+                  const timeOptions = { 
+                      timeZone: 'Asia/Kolkata', 
+                      hour12: false, 
+                      hour: '2-digit', 
+                      minute: '2-digit', 
+                      second: '2-digit' 
+                  };
+                  const dateOptions = { 
+                      timeZone: 'Asia/Kolkata', 
+                      day: '2-digit', 
+                      month: 'short', 
+                      year: 'numeric' 
+                  };
 
-                  // Format Date: DD MMM YYYY
-                  const options = { day: '2-digit', month: 'short', year: 'numeric' };
-                  dateEl.textContent = now.toLocaleDateString('en-GB', options).replace(/,/g, '');
+                  clockEl.textContent = now.toLocaleTimeString('en-GB', timeOptions);
+                  dateEl.textContent = now.toLocaleDateString('en-GB', dateOptions).replace(/,/g, '');
               }, 1000);
           }
 
