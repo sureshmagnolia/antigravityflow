@@ -1823,6 +1823,18 @@
             <p class="text-gray-600 mb-4">
                 Add students who require scribe assistance. This list is global and will apply to all exam sessions.
             </p>
+
+            <!-- RECALC SLOTS: Push updated scribe counts to Invigilation Portal -->
+            <div class="mb-5 p-3 bg-violet-50 border border-violet-200 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <p class="text-xs font-bold text-violet-800 uppercase mb-0.5">Invigilation Slot Sync</p>
+                    <p class="text-[10px] text-violet-600">After adding or removing scribe students, click this to update staffing requirements in the Invigilation Portal.</p>
+                </div>
+                <button id="recalc-invig-slots-btn" onclick="window.recalcInvigSlots()"
+                    class="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-lg shadow transition shrink-0">
+                    🔄 Recalculate &amp; Push Slots
+                </button>
+            </div>
             <div class="mb-6">
                 <label for="scribe-search" class="block text-sm font-medium text-gray-700 mb-1">Search Student (Register Number or Name):</label>
                 <div class="autocomplete-container relative">
@@ -2158,10 +2170,9 @@
                                 </h2>
                                 <div class="flex gap-2 w-full sm:w-auto">
                                     <button onclick="autoAssignInvigilators()"
-                                        class="flex-1 sm:flex-none justify-center text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded hover:bg-indigo-100 font-bold transition flex items-center gap-1">
-                                        <span>⚡</span> Auto
-                                    </button>
-
+                                         class="flex-1 sm:flex-none justify-center text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded hover:bg-indigo-100 font-bold transition flex items-center gap-1">
+                                         <span>⚡</span> Auto
+                                     </button>
                                     <button onclick="unassignAllInvigilators()"
                                         class="flex-1 sm:flex-none justify-center text-xs bg-white text-red-600 border border-red-200 px-3 py-2 rounded hover:bg-red-50 font-bold transition flex items-center gap-1">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -2255,6 +2266,24 @@
         <div class="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
             <h3 class="text-lg font-bold text-gray-800">⚡ Auto Allot Rooms (Randomized)</h3>
             <p class="text-sm text-gray-500">Select available rooms. Streams will be allotted using your paper mixing strategy into randomly shuffled rooms to prevent students from having identical neighbors each day.</p>
+        </div>
+        <!-- STRATEGY PANEL INSIDE MODAL: Synced with Main Tab -->
+        <div class="px-4 py-3 bg-indigo-50 border-b border-indigo-100" id="modal-mixing-strategy-container">
+            <p class="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-2">Paper Mixing Strategy</p>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="none" checked class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>No Mix</strong> — Fill room with one paper only (default)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="ratio_1_1" class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>1:1 Mix</strong> — Equal split of 2 papers (50% : 50%)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="ratio_2_1" class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>2:1 Mix</strong> — Two-thirds Paper A, one-third Paper B</span>
+                </label>
+            </div>
         </div>
         <div class="border-b border-gray-100 bg-white shrink-0">
             <div class="px-3 pt-3 pb-2 flex justify-between items-center gap-3">

@@ -338,14 +338,22 @@ async function autoCleanPastGhostData() {
                 try {
                     await getDownloadURL(storageRef);
                     alreadyArchived = true;
-                } catch (e) { /* Not archived yet */ }
-
+                } catch (e) {
+                    // 404 = not archived yet. Any other error = log it.
+                    if (e?.code !== 'storage/object-not-found') {
+                        console.warn('Storage check error:', e?.code);
+                    }
+                }
                 if (alreadyArchived) continue;
-
                 // Fetch heavy student data from Firestore
                 const studentDoc = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
-                if (!studentDoc.exists()) continue;
-
+                // GHOST CLEANUP: Student data is gone but sessions index still exists.
+                // Delete the orphaned sessions index doc so this never fires again.
+                if (!studentDoc.exists()) {
+                    console.log(`🧹 Ghost Session Detected: ${sessionKey} — removing orphaned index entry.`);
+                    await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', docSnap.id));
+                    continue;
+                }
                 const data = studentDoc.data();
                 let students = [];
                 if (data.isChunked) {
@@ -445,7 +453,7 @@ let sessionsUnsub = null; // [NEW] For real-time session updates
 let hasUnsavedScribes = false; // NEW FLAG
 // --- MIXING ENGINE STATE (Session-Level Pre-Split) ---
 let mixingParts = {};        // Per-stream: { 'Regular': {partA,partB,pA,pB}, 'Distance': {...} }
-let mixingActiveStrategy = 'none'; // The strategy locked in for this session
+let mixingActiveStrategy = localStorage.getItem('examMixingStrategy') || 'none'; // The strategy locked in for this session
 let mixingPartA = [], mixingPartB = [], mixingPointerA = 0, mixingPointerB = 0; // legacy aliases
 // -----------------------------------------------------
 
@@ -458,6 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const ABSENTEE_LIST_KEY = 'examAbsenteeList';
     const QP_CODE_LIST_KEY = 'examQPCodes';
     const BASE_DATA_KEY = 'examBaseData';
+    // --- Restore Mixing Strategy UI ---
+    const savedMixingStrategy = localStorage.getItem('examMixingStrategy') || 'none';
+    const mixingRadio = document.querySelector(`input[name="mixing-strategy"][value="${savedMixingStrategy}"]`);
+    if (mixingRadio) mixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -1147,15 +1159,32 @@ async function updateLocalSlotsFromStudents() {
     }
     return false;
 }
+// --- MANUAL SLOT RECALCULATION (For logged-in admins after scribe marking) ---
+window.recalcInvigSlots = async function () {
+    if (!currentUser) return alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
 
-    
+    const btn = document.getElementById('recalc-invig-slots-btn');
+    const origText = btn ? btn.innerHTML : '';
+    if (btn) { btn.innerHTML = '⏳ Recalculating...'; btn.disabled = true; }
 
-    
+    try {
+        const changed = await updateLocalSlotsFromStudents();
 
-
-
-
-    
+        if (changed) {
+            if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('slots');
+            }
+            alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
+        } else {
+            alert('ℹ️ No changes detected. Slots are already up to date.');
+        }
+    } catch (e) {
+        console.error('Slot Recalc Error:', e);
+        alert('❌ Recalculation failed. Check console for details.');
+    } finally {
+        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+    }
+};
     // ==========================================
     // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
     // ==========================================
@@ -2039,6 +2068,7 @@ async function deleteSessionFromCloud(sessionKey) {
                     examRulesConfig: get('examRulesConfig'),
                     examRemunerationConfig: get('examRemunerationConfig'),
                     examAllKnownSessions: get('examAllKnownSessions'),
+                    examMixingStrategy: get('examMixingStrategy'), // <--- ADD THIS LINE
                     lastUpdated: timestamp
                 };
 
@@ -4816,14 +4846,30 @@ function getExamName(date, time, stream) {
             return null; // Return null on failure
         }
     }
-    // --- Helper: Generate QP Key (Course + Stream) ---
-    function getQpKey(courseName, streamName) {
-        // Default to Regular if stream is missing/null
-        const s = streamName || "Regular";
-        // Create a unique key combining both
-        return btoa(unescape(encodeURIComponent(`${courseName}|${s}`)));
+    // MOJIBAKE SANITIZER: Fixes UTF-8 characters misread as Latin-1 from PDF extraction
+    function sanitizeCourseName(name) {
+        if (!name) return name;
+        return name
+            .split('\u00e2\u0080\u0094').join('\u2014')   // em dash
+            .split('\u00e2\u0080\u0093').join('\u2013')   // en dash
+            .split('\u00e2\u0080\u0098').join('\u2018')   // left single quote
+            .split('\u00e2\u0080\u0099').join('\u2019')   // right single quote
+            .split('\u00e2\u0080\u009c').join('\u201c')   // left double quote
+            .split('\u00e2\u0080\u009d').join('\u201d')   // right double quote
+            .split('\u00e2\u0080\u00a6').join('\u2026')   // ellipsis
+            .split('\u00c3\u00a9').join('\u00e9')         // é
+            .split('\u00c3\u00a0').join('\u00e0')         // à
+            .trim();
     }
-    window.getQpKey = getQpKey; // Expose globally for archive generator
+    window.sanitizeCourseName = sanitizeCourseName;
+
+    function getQpKey(courseName, streamName) {
+        const s = streamName || "Regular";
+        const cleanName = sanitizeCourseName(courseName);
+        return btoa(unescape(encodeURIComponent(`${cleanName}|${s}`)));
+    }
+    window.getQpKey = getQpKey;
+
 
     // --- Helper function to numerically sort room keys ---
     function getNumericSortKey(key) {
@@ -5180,10 +5226,26 @@ function getExamName(date, time, stream) {
           // --- 4. POPULATE SMART DATE DROPDOWN ---
         // Clean out undefined/null dates to prevent sorting crashes!
         const validLocalDates = allStudentData.map(s => s.Date).filter(d => Boolean(d));
+        const validLocalDatesSet = new Set(validLocalDates);
+
+        // GHOST DATE FIX: Only keep historicalMeta entries that do NOT exist in local IDB.
+        // If a date exists in both, it means the session was restored locally — meta entry is redundant.
+        // If a date exists ONLY in meta but NOT in IDB, it is a deleted ghost — exclude it.
         const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+        // Auto-clean stale meta entries for dates that no longer exist anywhere
+        let metaCleaned = false;
+        Object.keys(historicalMeta).forEach(key => {
+            const dateStr = key.split(' | ')[0].trim();
+            // If this date is NOT in local IDB and NOT in Storage (Storage Scanner will add it separately),
+            // remove it from meta to prevent ghost entries
+            if (!validLocalDatesSet.has(dateStr)) {
+                delete historicalMeta[key];
+                metaCleaned = true;
+            }
+        });
+        if (metaCleaned) localStorage.setItem('examHistoricalMeta', JSON.stringify(historicalMeta));
         const historicalDates = Object.keys(historicalMeta).map(key => key.split(' | ')[0].trim()).filter(d => Boolean(d));
         const uniqueDaysSet = new Set([...validLocalDates, ...historicalDates]);
-
         const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
             const d1 = String(a).split('.').reverse().join('');
             const d2 = String(b).split('.').reverse().join('');
@@ -11227,15 +11289,75 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
-    const autoAllotBtn = document.getElementById('auto-allot-button');
-    if (autoAllotBtn) {
-        autoAllotBtn.addEventListener('click', () => {
-            getRoomCapacitiesFromStorage();
-            const listDiv = document.getElementById('auto-allot-room-list');
-            listDiv.innerHTML = '';
-            
-            // Calculate Needed Rooms Stream-wise and Total
-            const [date, time] = currentSessionKey.split(' | ');
+      const autoAllotBtn = document.getElementById('auto-allot-button');
+      if (autoAllotBtn) {
+          autoAllotBtn.addEventListener('click', () => {
+
+              // ⏰ ALLOTMENT LOCK: Warn logged-in users if allotting within 45 min of exam start
+              if (currentUser && currentSessionKey) {
+                  try {
+                      const [lockDate, lockTime] = currentSessionKey.split(' | ');
+                      // Parse date: "22.04.2026" → [22, 04, 2026]
+                      const [dd, mm, yyyy] = lockDate.split(/[.\-]/);
+                      // Parse time: "10:00 AM" → hours + minutes
+                      const timeParts = lockTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                      if (timeParts) {
+                          let hours = parseInt(timeParts[1]);
+                          const minutes = parseInt(timeParts[2]);
+                          const period = timeParts[3].toUpperCase();
+                          if (period === 'PM' && hours !== 12) hours += 12;
+                          if (period === 'AM' && hours === 12) hours = 0;
+
+                          const examStart = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd), hours, minutes);
+                          const now = Date.now();
+                          const diffMs = examStart.getTime() - now;
+                          const diffMins = diffMs / 60000;
+
+                          // Within 45-min window before exam start
+                          if (diffMins >= 0 && diffMins <= 45) {
+                              const minsLeft = Math.round(diffMins);
+                              // WARNING 1
+                              const warn1 = confirm(
+                                  `⚠️ ALLOTMENT LOCK WARNING\n\n` +
+                                  `The student portal opens in ${minsLeft} minute(s).\n\n` +
+                                  `Changing the allotment now will update live seating on the Student Portal.\n\n` +
+                                  `Are you sure you want to continue?`
+                              );
+                              if (!warn1) return;
+
+                              // WARNING 2
+                              const warn2 = confirm(
+                                  `⚠️ FINAL WARNING\n\n` +
+                                  `Students may already be checking their seat numbers.\n\n` +
+                                  `This action CANNOT be undone once saved to the portal.\n\n` +
+                                  `Proceed with re-allotment?`
+                              );
+                              if (!warn2) return;
+
+                              // TYPED CONFIRMATION
+                              const typed = prompt(
+                                  `🔒 TYPE CONFIRMATION REQUIRED\n\n` +
+                                  `Type the word   Allot   exactly to confirm re-allotment:`
+                              );
+                              if (!typed || typed.trim() !== 'Allot') {
+                                  alert('❌ Confirmation failed. Allotment cancelled.');
+                                  return;
+                              }
+                          }
+                      }
+                  } catch (lockErr) {
+                      console.warn('Allotment lock check failed:', lockErr);
+                      // Fail silently — allow allotment to proceed
+                  }
+              }
+              // ⏰ END ALLOTMENT LOCK
+
+              getRoomCapacitiesFromStorage();
+              const listDiv = document.getElementById('auto-allot-room-list');
+              listDiv.innerHTML = '';
+              
+              // Calculate Needed Rooms Stream-wise and Total
+              const [date, time] = currentSessionKey.split(' | ');
             const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
             
             const streamStats = {};
@@ -11274,15 +11396,21 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return (parseInt(a.replace(/\\D/g, ''), 10) || 0) - (parseInt(b.replace(/\\D/g, ''), 10) || 0);
             });
 
-            sortedRoomNames.forEach(roomName => {
-                if (allottedRoomNames.includes(roomName) || scribeRoomNames.includes(roomName)) return;
-                const room = currentRoomConfig[roomName];
-                const location = room.location ? ` (${room.location})` : '';
-                
-                const label = document.createElement('label');
-                label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
-                label.innerHTML = `
-                    <input type="checkbox" class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
+              sortedRoomNames.forEach(roomName => {
+                  // REMOVED: Old skip logic that excluded allotted rooms from the list entirely.
+                  // Scribe-only rooms are still excluded; allotted rooms now appear pre-checked.
+                  if (scribeRoomNames.includes(roomName) && !allottedRoomNames.includes(roomName)) return;
+
+                  const room = currentRoomConfig[roomName];
+                  const location = room.location ? ` (${room.location})` : '';
+                  
+                  const label = document.createElement('label');
+                  label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
+
+                  // SMART PRE-SELECT: Use correct property name 'roomName' (not 'name')
+                  const isAlreadyInUse = allottedRoomNames.includes(roomName);
+                  label.innerHTML = `
+                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-800">${roomName}${location}</div>
                         <div class="text-xs text-gray-500 font-medium">Standard Capacity: ${room.capacity}</div>
@@ -11301,9 +11429,16 @@ window.real_populate_qp_code_session_dropdown = function () {
             };
             
             updateAutoAllotCounter();
+
+            // SYNC: Read current Main Tab strategy and pre-select in modal
+            const currentMainVal = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+            const modalRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${currentMainVal}"]`);
+            if (modalRadio) modalRadio.checked = true;
+
             document.getElementById('auto-allot-modal').classList.remove('hidden');
         });
     }
+
 
     function updateAutoAllotCounter() {
         let count = 0, cap = 0;
@@ -11324,17 +11459,27 @@ window.real_populate_qp_code_session_dropdown = function () {
         const checkedBoxes = Array.from(document.querySelectorAll('.auto-allot-room-cb:checked'));
         if (checkedBoxes.length === 0) return;
         
-        document.getElementById('auto-allot-modal').classList.add('hidden');
-        
-        // Randomly shuffle selected rooms (Prevents deterministic daily neighboring)
+    document.getElementById('auto-allot-modal').classList.add('hidden');
+    // RE-ALLOTMENT CLEANUP: Clear current students from memory before applying new strategy
+    currentSessionAllotment = []; 
+    // Randomly shuffle selected rooms
         const selectedRooms = checkedBoxes.map(cb => ({
             name: cb.value,
             capacity: parseInt(cb.getAttribute('data-cap')) || 30
         })).sort(() => Math.random() - 0.5); 
         
-        const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
-        let roomIndex = 0;
+        // READ from modal; SYNC back to Main Tab so it stays in agreement
+        const activeStrategy = document.querySelector('input[name="modal-mixing-strategy"]:checked')?.value || 'none';
+        const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
+        if (mainRadio) mainRadio.checked = true;
 
+        // CRITICAL: Re-compute mixing parts with the NEW strategy BEFORE the allotment loop
+        // Without this, mixingParts is stale and mixing never activates correctly
+        if (typeof precomputeSessionParts === 'function') {
+            precomputeSessionParts(currentSessionKey, activeStrategy);
+        }
+
+        let roomIndex = 0;
         // Process sequentially to respect Paper Mixing Engine internally
         for (const stream of currentStreamConfig) {
             let remainingForStream = true;
@@ -11795,6 +11940,12 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Re-compute session parts whenever the mixing strategy changes
     document.querySelectorAll('input[name="mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
+            // Save to localStorage so it persists after refresh
+            localStorage.setItem('examMixingStrategy', radio.value);
+            // Trigger Cloud Sync for Pro users
+            if (typeof syncDataToCloud === 'function') {
+                syncDataToCloud('settings');
+                }
             if (currentSessionKey) {
                 precomputeSessionParts(currentSessionKey, radio.value);
             }
@@ -14925,8 +15076,8 @@ function parseCsvRaw(csvText, streamName = "Regular") {
 
             parsedData.push({
                 'Date': values[dateIndex],
-                'Time': cleanTime, // <--- Now this variable exists!
-                'Course': values[courseIndex],
+                'Time': cleanTime,
+                'Course': sanitizeCourseName(values[courseIndex]), // FIX: Clean encoding issues
                 'Register Number': values[regNumIndex],
                 'Name': values[nameIndex],
                 'Stream': rowStream,
@@ -15087,10 +15238,12 @@ window.handlePythonExtraction = async function (jsonString) {
         // 2. Normalize & Tag Data (Apply selected Stream/Exam to new data)
         newJsonData = newJsonData.map(item => ({
             ...item,
+            "Course": sanitizeCourseName(item.Course), // FIX: Clean mojibake from PDF
             "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
-            "Stream": selectedStream, // <--- TAGGING WITH STREAM
+            "Stream": selectedStream,
             "Exam Name": selectedExamName
         }));
+
 
         // 3. Identify Affected Sessions & Scopes
         const affectedSessions = new Set();
@@ -18023,10 +18176,31 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         const slot = invigSlots[sessionKey];
 
-        if (!slot || !slot.assigned || slot.assigned.length === 0) {
-            list.innerHTML = '<p class="text-xs text-red-500 text-center py-4 bg-red-50 rounded border border-red-100">No staff assigned to this session in Invigilation Portal.</p>';
-            return;
-        }
+    // GUEST/CUSTOM FALLBACK: If no portal data exists, allow manual typing
+    if (!slot || !slot.assigned || slot.assigned.length === 0) {
+        const renderCustomOnly = (query = "") => {
+            const safeRoom = roomName.replace(/'/g, "\\'");
+            const safeName = query.trim().replace(/'/g, "\\'");
+            list.innerHTML = `
+                <div class="p-4 bg-blue-50 border border-blue-100 rounded-lg text-center">
+                    <p class="text-[10px] text-blue-600 font-bold uppercase mb-2">Guest Mode / Manual Entry</p>
+                    <p class="text-xs text-gray-600 mb-3">Type a name in the search box above and click below.</p>
+                    ${query.trim().length > 2 ? `
+                        <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
+                                class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded shadow hover:bg-blue-700 transition">
+                            Assign "${query}"
+                        </button>
+                    ` : `
+                        <div class="text-[10px] text-gray-400 italic">Enter at least 3 characters...</div>
+                    `}
+                </div>
+            `;
+        };
+        renderCustomOnly("");
+        input.oninput = (e) => renderCustomOnly(e.target.value);
+        return;
+    }
+
 
         const assignedSet = new Set(Object.values(currentInvigMapping));
 
@@ -18068,10 +18242,22 @@ window.toggleAllArchiveCheckboxes = function(check) {
                 }
             });
 
-            if (!hasResults) {
-                html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
-            }
-            list.innerHTML = html;
+        if (!hasResults && q.length > 2) {
+            const safeRoom = roomName.replace(/'/g, "\\'");
+            const safeName = input.value.trim().replace(/'/g, "\\'");
+            html = `
+                <div class="p-3 bg-gray-50 border border-dashed border-gray-300 rounded text-center">
+                    <p class="text-[10px] text-gray-500 mb-2">No staff found matching "${input.value}"</p>
+                    <button onclick="window.saveInvigAssignment('${safeRoom}', '${safeName}')" 
+                            class="bg-gray-800 text-white text-[10px] font-bold px-4 py-1.5 rounded hover:bg-black transition">
+                        Assign as Custom Name
+                    </button>
+                </div>
+            `;
+        } else if (!hasResults) {
+            html = '<p class="text-center text-gray-400 text-xs py-2">No matching invigilators found.</p>';
+        }
+        list.innerHTML = html;
         };
 
         renderList();
@@ -20887,8 +21073,9 @@ window.downloadInvigilationListPDF = async function () {
             let matched = 0;
 
             // ⚡ FUZZY ASSIGNMENT LAYER
-            document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                const uiCourseName = input.dataset.course.trim().toUpperCase();
+              document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
+                  // Sanitize mojibake from PDF before comparing
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
@@ -20940,6 +21127,21 @@ window.downloadInvigilationListPDF = async function () {
     };
 
     // --- END GLOBALLY AVAILABLE FUNCTIONS ---
+// GLOBAL STRATEGY SYNC: Keeps Main Tab and Auto-Allot Modal radio buttons in sync
+document.addEventListener('change', (e) => {
+    if (e.target.name === 'mixing-strategy' || e.target.name === 'modal-mixing-strategy') {
+        const newValue = e.target.value;
+        const targetName = (e.target.name === 'mixing-strategy') ? 'modal-mixing-strategy' : 'mixing-strategy';
+        const targetRadio = document.querySelector(`input[name="${targetName}"][value="${newValue}"]`);
+        if (targetRadio) targetRadio.checked = true;
+
+        // CRITICAL: Re-compute mixingParts whenever strategy changes from EITHER radio
+        // This ensures manual "+ Add Room" also picks up the new strategy immediately
+        if (currentSessionKey && typeof precomputeSessionParts === 'function') {
+            precomputeSessionParts(currentSessionKey, newValue);
+        }
+    }
+});
 
 }); // <-- Closes the DOMContentLoaded block from the top of the file
 
@@ -21080,6 +21282,10 @@ window.addEventListener('message', async (event) => {
         console.log(`Extension Sync Triggered: Received ${incomingData.length} students.`);
 
         try {
+                        // FIX: Sanitize mojibake in Course names from extension scraping
+            incomingData.forEach(s => {
+                if (s.Course) s.Course = sanitizeCourseName(s.Course);
+            });
             // 1. Load data into local database
             if (typeof loadStudentData === 'function') {
                 await loadStudentData(incomingData);

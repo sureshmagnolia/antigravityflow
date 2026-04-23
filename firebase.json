@@ -3,32 +3,8 @@
     "public": ".",
     "ignore": [
       "firebase.json",
+      "**/.*",
       "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/invigilation",
-        "destination": "/invigilation.html"
-      },
-      {
-        "source": "/student",
-        "destination": "/student.html"
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          {
-            "key": "Content-Security-Policy",
-            "value": "frame-ancestors 'self' https://*.google.com https://accounts.google.com"
-          }
-        ]
-      }
     ]
   }
 }
