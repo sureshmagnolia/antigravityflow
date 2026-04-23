@@ -345,11 +345,15 @@ async function autoCleanPastGhostData() {
                     }
                 }
                 if (alreadyArchived) continue;
-
                 // Fetch heavy student data from Firestore
                 const studentDoc = await getDoc(doc(db, 'colleges', window.currentCollegeId, 'session_students', sessionIdStr));
-                if (!studentDoc.exists()) continue;
-
+                // GHOST CLEANUP: Student data is gone but sessions index still exists.
+                // Delete the orphaned sessions index doc so this never fires again.
+                if (!studentDoc.exists()) {
+                    console.log(`🧹 Ghost Session Detected: ${sessionKey} — removing orphaned index entry.`);
+                    await deleteDoc(doc(db, 'colleges', window.currentCollegeId, 'sessions', docSnap.id));
+                    continue;
+                }
                 const data = studentDoc.data();
                 let students = [];
                 if (data.isChunked) {
