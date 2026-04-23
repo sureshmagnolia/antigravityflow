@@ -2256,6 +2256,24 @@
             <h3 class="text-lg font-bold text-gray-800">⚡ Auto Allot Rooms (Randomized)</h3>
             <p class="text-sm text-gray-500">Select available rooms. Streams will be allotted using your paper mixing strategy into randomly shuffled rooms to prevent students from having identical neighbors each day.</p>
         </div>
+        <!-- STRATEGY PANEL INSIDE MODAL: Synced with Main Tab -->
+        <div class="px-4 py-3 bg-indigo-50 border-b border-indigo-100" id="modal-mixing-strategy-container">
+            <p class="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-2">Paper Mixing Strategy</p>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="none" checked class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>No Mix</strong> — Fill room with one paper only (default)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="ratio_1_1" class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>1:1 Mix</strong> — Equal split of 2 papers (50% : 50%)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="modal-mixing-strategy" value="ratio_2_1" class="accent-indigo-600 h-4 w-4">
+                    <span class="text-xs text-gray-700"><strong>2:1 Mix</strong> — Two-thirds Paper A, one-third Paper B</span>
+                </label>
+            </div>
+        </div>
         <div class="border-b border-gray-100 bg-white shrink-0">
             <div class="px-3 pt-3 pb-2 flex justify-between items-center gap-3">
                 <div class="text-sm font-bold text-amber-700 whitespace-nowrap bg-amber-50 px-3 py-1.5 rounded border border-amber-100">
