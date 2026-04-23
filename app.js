@@ -4841,14 +4841,30 @@ function getExamName(date, time, stream) {
             return null; // Return null on failure
         }
     }
-    // --- Helper: Generate QP Key (Course + Stream) ---
-    function getQpKey(courseName, streamName) {
-        // Default to Regular if stream is missing/null
-        const s = streamName || "Regular";
-        // Create a unique key combining both
-        return btoa(unescape(encodeURIComponent(`${courseName}|${s}`)));
+    // MOJIBAKE SANITIZER: Fixes UTF-8 characters misread as Latin-1 from PDF extraction
+    function sanitizeCourseName(name) {
+        if (!name) return name;
+        return name
+            .replace(/â€"/g, '—')   // em dash
+            .replace(/â€"/g, '–')   // en dash
+            .replace(/â€˜/g, ''')   // left single quote
+            .replace(/â€™/g, ''')   // right single quote
+            .replace(/â€œ/g, '"')   // left double quote
+            .replace(/â€/g, '"')    // right double quote
+            .replace(/â€¦/g, '…')   // ellipsis
+            .replace(/Ã©/g, 'é')    // accented e
+            .replace(/Ã /g, 'à')    // accented a
+            .trim();
     }
-    window.getQpKey = getQpKey; // Expose globally for archive generator
+    window.sanitizeCourseName = sanitizeCourseName;
+
+    function getQpKey(courseName, streamName) {
+        const s = streamName || "Regular";
+        const cleanName = sanitizeCourseName(courseName);
+        return btoa(unescape(encodeURIComponent(`${cleanName}|${s}`)));
+    }
+    window.getQpKey = getQpKey;
+
 
     // --- Helper function to numerically sort room keys ---
     function getNumericSortKey(key) {
@@ -21021,8 +21037,9 @@ window.downloadInvigilationListPDF = async function () {
             let matched = 0;
 
             // ⚡ FUZZY ASSIGNMENT LAYER
-            document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                const uiCourseName = input.dataset.course.trim().toUpperCase();
+              document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
+                  // Sanitize mojibake from PDF before comparing
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
