@@ -2068,6 +2068,7 @@ async function deleteSessionFromCloud(sessionKey) {
                     examRulesConfig: get('examRulesConfig'),
                     examRemunerationConfig: get('examRemunerationConfig'),
                     examAllKnownSessions: get('examAllKnownSessions'),
+                    examMixingStrategy: get('examMixingStrategy'), // <--- ADD THIS LINE
                     lastUpdated: timestamp
                 };
 
@@ -11941,6 +11942,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         radio.addEventListener('change', () => {
             // Save to localStorage so it persists after refresh
             localStorage.setItem('examMixingStrategy', radio.value);
+            // Trigger Cloud Sync for Pro users
+            if (typeof syncDataToCloud === 'function') {
+                syncDataToCloud('settings');
+                }
             if (currentSessionKey) {
                 precomputeSessionParts(currentSessionKey, radio.value);
             }
