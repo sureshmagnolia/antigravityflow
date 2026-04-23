@@ -15042,8 +15042,8 @@ function parseCsvRaw(csvText, streamName = "Regular") {
 
             parsedData.push({
                 'Date': values[dateIndex],
-                'Time': cleanTime, // <--- Now this variable exists!
-                'Course': values[courseIndex],
+                'Time': cleanTime,
+                'Course': sanitizeCourseName(values[courseIndex]), // FIX: Clean encoding issues
                 'Register Number': values[regNumIndex],
                 'Name': values[nameIndex],
                 'Stream': rowStream,
@@ -15204,10 +15204,12 @@ window.handlePythonExtraction = async function (jsonString) {
         // 2. Normalize & Tag Data (Apply selected Stream/Exam to new data)
         newJsonData = newJsonData.map(item => ({
             ...item,
+            "Course": sanitizeCourseName(item.Course), // FIX: Clean mojibake from PDF
             "Time": (typeof normalizeTime === 'function') ? normalizeTime(item.Time) : item.Time,
-            "Stream": selectedStream, // <--- TAGGING WITH STREAM
+            "Stream": selectedStream,
             "Exam Name": selectedExamName
         }));
+
 
         // 3. Identify Affected Sessions & Scopes
         const affectedSessions = new Set();
@@ -21231,6 +21233,10 @@ window.addEventListener('message', async (event) => {
         console.log(`Extension Sync Triggered: Received ${incomingData.length} students.`);
 
         try {
+                        // FIX: Sanitize mojibake in Course names from extension scraping
+            incomingData.forEach(s => {
+                if (s.Course) s.Course = sanitizeCourseName(s.Course);
+            });
             // 1. Load data into local database
             if (typeof loadStudentData === 'function') {
                 await loadStudentData(incomingData);
