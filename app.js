@@ -11303,9 +11303,16 @@ window.real_populate_qp_code_session_dropdown = function () {
             };
             
             updateAutoAllotCounter();
+
+            // SYNC: Read current Main Tab strategy and pre-select in modal
+            const currentMainVal = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+            const modalRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${currentMainVal}"]`);
+            if (modalRadio) modalRadio.checked = true;
+
             document.getElementById('auto-allot-modal').classList.remove('hidden');
         });
     }
+
 
     function updateAutoAllotCounter() {
         let count = 0, cap = 0;
@@ -11335,9 +11342,11 @@ window.real_populate_qp_code_session_dropdown = function () {
             capacity: parseInt(cb.getAttribute('data-cap')) || 30
         })).sort(() => Math.random() - 0.5); 
         
-        const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+        // READ from modal; SYNC back to Main Tab so it stays in agreement
+        const activeStrategy = document.querySelector('input[name="modal-mixing-strategy"]:checked')?.value || 'none';
+        const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
+        if (mainRadio) mainRadio.checked = true;
         let roomIndex = 0;
-
         // Process sequentially to respect Paper Mixing Engine internally
         for (const stream of currentStreamConfig) {
             let remainingForStream = true;
@@ -21148,5 +21157,13 @@ window.addEventListener('message', async (event) => {
         }
     }
 });
-
+// GLOBAL STRATEGY SYNC: Keeps Main Tab and Auto-Allot Modal radio buttons in sync
+document.addEventListener('change', (e) => {
+    if (e.target.name === 'mixing-strategy' || e.target.name === 'modal-mixing-strategy') {
+        const newValue = e.target.value;
+        const targetName = (e.target.name === 'mixing-strategy') ? 'modal-mixing-strategy' : 'mixing-strategy';
+        const targetRadio = document.querySelector(`input[name="${targetName}"][value="${newValue}"]`);
+        if (targetRadio) targetRadio.checked = true;
+    }
+});
 
