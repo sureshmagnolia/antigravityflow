@@ -11274,16 +11274,20 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return (parseInt(a.replace(/\\D/g, ''), 10) || 0) - (parseInt(b.replace(/\\D/g, ''), 10) || 0);
             });
 
-            sortedRoomNames.forEach(roomName => {
-                if (allottedRoomNames.includes(roomName) || scribeRoomNames.includes(roomName)) return;
-                const room = currentRoomConfig[roomName];
-                const location = room.location ? ` (${room.location})` : '';
-                
-                const label = document.createElement('label');
-                label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
-            // SMART PRE-SELECT: If this room is already in use for this session, check it!
-            const isAlreadyInUse = (currentSessionAllotment || []).some(rm => rm.name === roomName);     
-            label.innerHTML = `
+              sortedRoomNames.forEach(roomName => {
+                  // REMOVED: Old skip logic that excluded allotted rooms from the list entirely.
+                  // Scribe-only rooms are still excluded; allotted rooms now appear pre-checked.
+                  if (scribeRoomNames.includes(roomName) && !allottedRoomNames.includes(roomName)) return;
+
+                  const room = currentRoomConfig[roomName];
+                  const location = room.location ? ` (${room.location})` : '';
+                  
+                  const label = document.createElement('label');
+                  label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
+
+                  // SMART PRE-SELECT: Use correct property name 'roomName' (not 'name')
+                  const isAlreadyInUse = allottedRoomNames.includes(roomName);
+                  label.innerHTML = `
                 <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-800">${roomName}${location}</div>
