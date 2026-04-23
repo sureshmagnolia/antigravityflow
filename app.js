@@ -4845,15 +4845,15 @@ function getExamName(date, time, stream) {
     function sanitizeCourseName(name) {
         if (!name) return name;
         return name
-            .replace(/â€"/g, '—')   // em dash
-            .replace(/â€"/g, '–')   // en dash
-            .replace(/â€˜/g, ''')   // left single quote
-            .replace(/â€™/g, ''')   // right single quote
-            .replace(/â€œ/g, '"')   // left double quote
-            .replace(/â€/g, '"')    // right double quote
-            .replace(/â€¦/g, '…')   // ellipsis
-            .replace(/Ã©/g, 'é')    // accented e
-            .replace(/Ã /g, 'à')    // accented a
+            .split('\u00e2\u0080\u0094').join('\u2014')   // em dash
+            .split('\u00e2\u0080\u0093').join('\u2013')   // en dash
+            .split('\u00e2\u0080\u0098').join('\u2018')   // left single quote
+            .split('\u00e2\u0080\u0099').join('\u2019')   // right single quote
+            .split('\u00e2\u0080\u009c').join('\u201c')   // left double quote
+            .split('\u00e2\u0080\u009d').join('\u201d')   // right double quote
+            .split('\u00e2\u0080\u00a6').join('\u2026')   // ellipsis
+            .split('\u00c3\u00a9').join('\u00e9')         // é
+            .split('\u00c3\u00a0').join('\u00e0')         // à
             .trim();
     }
     window.sanitizeCourseName = sanitizeCourseName;
