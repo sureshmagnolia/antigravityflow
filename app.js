@@ -21299,6 +21299,12 @@ document.addEventListener('change', (e) => {
         const targetName = (e.target.name === 'mixing-strategy') ? 'modal-mixing-strategy' : 'mixing-strategy';
         const targetRadio = document.querySelector(`input[name="${targetName}"][value="${newValue}"]`);
         if (targetRadio) targetRadio.checked = true;
+
+        // CRITICAL: Re-compute mixingParts whenever strategy changes from EITHER radio
+        // This ensures manual "+ Add Room" also picks up the new strategy immediately
+        if (currentSessionKey && typeof precomputeSessionParts === 'function') {
+            precomputeSessionParts(currentSessionKey, newValue);
+        }
     }
 });
 
