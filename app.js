@@ -5221,10 +5221,26 @@ function getExamName(date, time, stream) {
           // --- 4. POPULATE SMART DATE DROPDOWN ---
         // Clean out undefined/null dates to prevent sorting crashes!
         const validLocalDates = allStudentData.map(s => s.Date).filter(d => Boolean(d));
+        const validLocalDatesSet = new Set(validLocalDates);
+
+        // GHOST DATE FIX: Only keep historicalMeta entries that do NOT exist in local IDB.
+        // If a date exists in both, it means the session was restored locally — meta entry is redundant.
+        // If a date exists ONLY in meta but NOT in IDB, it is a deleted ghost — exclude it.
         const historicalMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+        // Auto-clean stale meta entries for dates that no longer exist anywhere
+        let metaCleaned = false;
+        Object.keys(historicalMeta).forEach(key => {
+            const dateStr = key.split(' | ')[0].trim();
+            // If this date is NOT in local IDB and NOT in Storage (Storage Scanner will add it separately),
+            // remove it from meta to prevent ghost entries
+            if (!validLocalDatesSet.has(dateStr)) {
+                delete historicalMeta[key];
+                metaCleaned = true;
+            }
+        });
+        if (metaCleaned) localStorage.setItem('examHistoricalMeta', JSON.stringify(historicalMeta));
         const historicalDates = Object.keys(historicalMeta).map(key => key.split(' | ')[0].trim()).filter(d => Boolean(d));
         const uniqueDaysSet = new Set([...validLocalDates, ...historicalDates]);
-
         const uniqueDays = Array.from(uniqueDaysSet).sort((a, b) => {
             const d1 = String(a).split('.').reverse().join('');
             const d2 = String(b).split('.').reverse().join('');
