@@ -11227,15 +11227,75 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
-    const autoAllotBtn = document.getElementById('auto-allot-button');
-    if (autoAllotBtn) {
-        autoAllotBtn.addEventListener('click', () => {
-            getRoomCapacitiesFromStorage();
-            const listDiv = document.getElementById('auto-allot-room-list');
-            listDiv.innerHTML = '';
-            
-            // Calculate Needed Rooms Stream-wise and Total
-            const [date, time] = currentSessionKey.split(' | ');
+      const autoAllotBtn = document.getElementById('auto-allot-button');
+      if (autoAllotBtn) {
+          autoAllotBtn.addEventListener('click', () => {
+
+              // ⏰ ALLOTMENT LOCK: Warn logged-in users if allotting within 45 min of exam start
+              if (currentUser && currentSessionKey) {
+                  try {
+                      const [lockDate, lockTime] = currentSessionKey.split(' | ');
+                      // Parse date: "22.04.2026" → [22, 04, 2026]
+                      const [dd, mm, yyyy] = lockDate.split(/[.\-]/);
+                      // Parse time: "10:00 AM" → hours + minutes
+                      const timeParts = lockTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+                      if (timeParts) {
+                          let hours = parseInt(timeParts[1]);
+                          const minutes = parseInt(timeParts[2]);
+                          const period = timeParts[3].toUpperCase();
+                          if (period === 'PM' && hours !== 12) hours += 12;
+                          if (period === 'AM' && hours === 12) hours = 0;
+
+                          const examStart = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd), hours, minutes);
+                          const now = Date.now();
+                          const diffMs = examStart.getTime() - now;
+                          const diffMins = diffMs / 60000;
+
+                          // Within 45-min window before exam start
+                          if (diffMins >= 0 && diffMins <= 45) {
+                              const minsLeft = Math.round(diffMins);
+                              // WARNING 1
+                              const warn1 = confirm(
+                                  `⚠️ ALLOTMENT LOCK WARNING\n\n` +
+                                  `The student portal opens in ${minsLeft} minute(s).\n\n` +
+                                  `Changing the allotment now will update live seating on the Student Portal.\n\n` +
+                                  `Are you sure you want to continue?`
+                              );
+                              if (!warn1) return;
+
+                              // WARNING 2
+                              const warn2 = confirm(
+                                  `⚠️ FINAL WARNING\n\n` +
+                                  `Students may already be checking their seat numbers.\n\n` +
+                                  `This action CANNOT be undone once saved to the portal.\n\n` +
+                                  `Proceed with re-allotment?`
+                              );
+                              if (!warn2) return;
+
+                              // TYPED CONFIRMATION
+                              const typed = prompt(
+                                  `🔒 TYPE CONFIRMATION REQUIRED\n\n` +
+                                  `Type the word   Allot   exactly to confirm re-allotment:`
+                              );
+                              if (!typed || typed.trim() !== 'Allot') {
+                                  alert('❌ Confirmation failed. Allotment cancelled.');
+                                  return;
+                              }
+                          }
+                      }
+                  } catch (lockErr) {
+                      console.warn('Allotment lock check failed:', lockErr);
+                      // Fail silently — allow allotment to proceed
+                  }
+              }
+              // ⏰ END ALLOTMENT LOCK
+
+              getRoomCapacitiesFromStorage();
+              const listDiv = document.getElementById('auto-allot-room-list');
+              listDiv.innerHTML = '';
+              
+              // Calculate Needed Rooms Stream-wise and Total
+              const [date, time] = currentSessionKey.split(' | ');
             const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
             
             const streamStats = {};
