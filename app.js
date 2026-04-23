@@ -11467,6 +11467,13 @@ window.real_populate_qp_code_session_dropdown = function () {
         const activeStrategy = document.querySelector('input[name="modal-mixing-strategy"]:checked')?.value || 'none';
         const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
         if (mainRadio) mainRadio.checked = true;
+
+        // CRITICAL: Re-compute mixing parts with the NEW strategy BEFORE the allotment loop
+        // Without this, mixingParts is stale and mixing never activates correctly
+        if (typeof precomputeSessionParts === 'function') {
+            precomputeSessionParts(currentSessionKey, activeStrategy);
+        }
+
         let roomIndex = 0;
         // Process sequentially to respect Paper Mixing Engine internally
         for (const stream of currentStreamConfig) {
