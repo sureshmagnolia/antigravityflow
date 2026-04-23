@@ -1147,15 +1147,32 @@ async function updateLocalSlotsFromStudents() {
     }
     return false;
 }
+// --- MANUAL SLOT RECALCULATION (For logged-in admins after scribe marking) ---
+window.recalcInvigSlots = async function () {
+    if (!currentUser) return alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
 
-    
+    const btn = document.getElementById('recalc-invig-slots-btn');
+    const origText = btn ? btn.innerHTML : '';
+    if (btn) { btn.innerHTML = '⏳ Recalculating...'; btn.disabled = true; }
 
-    
+    try {
+        const changed = await updateLocalSlotsFromStudents();
 
-
-
-
-    
+        if (changed) {
+            if (typeof syncDataToCloud === 'function') {
+                await syncDataToCloud('slots');
+            }
+            alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
+        } else {
+            alert('ℹ️ No changes detected. Slots are already up to date.');
+        }
+    } catch (e) {
+        console.error('Slot Recalc Error:', e);
+        alert('❌ Recalculation failed. Check console for details.');
+    } finally {
+        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+    }
+};
     // ==========================================
     // ☁️ CLOUD SYNC FUNCTIONS (Fixed & Updated)
     // ==========================================
