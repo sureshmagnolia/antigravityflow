@@ -2157,11 +2157,14 @@
                                     Assign Invigilators
                                 </h2>
                                 <div class="flex gap-2 w-full sm:w-auto">
+                                    <button id="recalc-invig-slots-btn" onclick="window.recalcInvigSlots()"
+                                         class="flex-1 sm:flex-none justify-center text-xs bg-violet-600 text-white border border-violet-700 px-3 py-2 rounded hover:bg-violet-700 font-bold transition flex items-center gap-1">
+                                         <span>🔄</span> Recalc Slots
+                                     </button>
                                     <button onclick="autoAssignInvigilators()"
-                                        class="flex-1 sm:flex-none justify-center text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded hover:bg-indigo-100 font-bold transition flex items-center gap-1">
-                                        <span>⚡</span> Auto
-                                    </button>
-
+                                         class="flex-1 sm:flex-none justify-center text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded hover:bg-indigo-100 font-bold transition flex items-center gap-1">
+                                         <span>⚡</span> Auto
+                                     </button>
                                     <button onclick="unassignAllInvigilators()"
                                         class="flex-1 sm:flex-none justify-center text-xs bg-white text-red-600 border border-red-200 px-3 py-2 rounded hover:bg-red-50 font-bold transition flex items-center gap-1">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
