@@ -157,9 +157,11 @@
 
 
 
-            window.searchStudent = async function() {
-            activeIntervals.forEach(clearInterval);
-            activeIntervals = [];
+  window.searchStudent = async function() {
+      // Reset session memory so we can re-check the 45-minute gate
+      allSessions = []; 
+      activeIntervals.forEach(clearInterval);
+      activeIntervals = [];
 
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
@@ -326,13 +328,19 @@ if (session.isLockedByGate) {
                                 <p class="text-[10px] text-gray-400 mt-2">(Available 45m before exam)</p>
                             </div>`;
                         
-                        const interval = setInterval(() => {
-                            const nowTick = window.getExamsNow();
-                            const diff = unlockTime - nowTick;
-                            if (diff <= 0) {
-                                clearInterval(interval);
-                                searchStudent(); 
-                            } else {
+                          const interval = setInterval(() => {
+                              const nowTick = window.getExamsNow();
+                              const diff = unlockTime - nowTick;
+                              if (diff <= 0) {
+                                  clearInterval(interval);
+                                  // Ask the student to reveal the data
+                                  const el = document.getElementById(timerId);
+                                  if (el) {
+                                      el.parentElement.innerHTML = '<button onclick="searchStudent()"
+  class="bg-green-600 text-white px-4 py-1 rounded-full text-xs font-bold animate-bounce shadow-lg">REVEAL     
+  SEATING NOW</button>';
+                                  }
+                              } else {
                                 const el = document.getElementById(timerId);
                                 if (el) {
                                     const mins = Math.floor(diff / 60000);
