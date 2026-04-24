@@ -6597,6 +6597,7 @@ function getExamName(date, time, stream) {
                         rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden; width:42px;">
                         <div style="${tdStyles} ${rotatedMaxWidth} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
                     </td>`;
+                        }
                     // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
                     rowsHtml += `
                         <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>                    
