@@ -448,11 +448,27 @@ window.executeRestore = async function(fileId) {
                     if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
                     else localStorage.setItem(key, val);
                 } else {
-                    // MERGE mode: only write if key is completely absent locally
-                    // (never overwrite existing Scribe List, Room Allotment, Invigilator data etc.)
-                    if (!localStorage.getItem(key)) {
+                    // MERGE mode: Smart Deep Merge for configuration layers (QP Codes, Allotments, etc.)
+                    const localRaw = localStorage.getItem(key);
+                    if (!localRaw) {
+                        // Key is completely absent locally, write it directly
                         if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
                         else localStorage.setItem(key, val);
+                    } else {
+                        // Key exists locally. Safely merge if it's a Dictionary/Object mapping
+                        if (typeof val === 'object' && !Array.isArray(val)) {
+                            try {
+                                const localObj = JSON.parse(localRaw);
+                                // Merge logic: local data takes priority over backup for colliding sessions, 
+                                // but missing historical sessions are recovered from the backup.
+                                const mergedObj = { ...val, ...localObj }; 
+                                localStorage.setItem(key, JSON.stringify(mergedObj));
+                            } catch (e) {
+                                console.warn(`Could not merge ${key}, keeping local version.`);
+                            }
+                        }
+                        // Note: If it's an Array or string, we strictly preserve the local version 
+                        // to prevent accidental duplicates during merge.
                     }
                 }
             }
