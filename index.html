@@ -2287,12 +2287,17 @@
         </div>
         <div class="border-b border-gray-100 bg-white shrink-0">
             <div class="px-3 pt-3 pb-2 flex justify-between items-center gap-3">
-                <div class="text-sm font-bold text-amber-700 whitespace-nowrap bg-amber-50 px-3 py-1.5 rounded border border-amber-100">
-                    Needed Rooms (~30/rm): <span id="auto-allot-needed-capacity" class="inline-flex items-center">0</span>
+                <div class="flex gap-2 items-center flex-wrap">
+                    <div class="text-sm font-bold text-amber-700 whitespace-nowrap bg-amber-50 px-3 py-1.5 rounded border border-amber-100">
+                        Needed: <span id="auto-allot-needed-capacity" class="inline-flex items-center">0</span>
+                    </div>
+                    <div class="text-sm font-bold text-teal-700 whitespace-nowrap bg-teal-50 px-3 py-1.5 rounded border border-teal-100">
+                        Selected: <span id="auto-allot-selected-count">0</span>
+                    </div>
                 </div>
-                <div class="text-sm font-bold text-teal-700 whitespace-nowrap bg-teal-50 px-3 py-1.5 rounded border border-teal-100">
-                    Selected Rooms: <span id="auto-allot-selected-count">0</span>
-                </div>
+                <button type="button" onclick="selectFrequentRoomsAutoAllot()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded font-bold transition whitespace-nowrap shadow-sm">
+                    ⭐ Select Frequent
+                </button>
             </div>
             <div class="px-3 pb-3 relative">
                 <input type="text" id="auto-allot-search" placeholder="🔍 Search room..." class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-sm">
