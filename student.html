@@ -332,9 +332,9 @@ if (session.isLockedByGate) {
                               const nowTick = window.getExamsNow();
                               const diff = unlockTime - nowTick;
 
-                              // 🕵️‍♂️ CHEAT DETECTION: Check if device time is artificially pushed into the future
+                              // 🕵️‍♂️ CHEAT DETECTION: Check for artificial clock manipulation (Forward OR Backward)
                               const el = document.getElementById(timerId);
-                              if (el && (Date.now() - nowTick.getTime() > 300000)) { // 2+ mins into the future
+                              if (el && (Math.abs(Date.now() - nowTick.getTime()) > 300000)) { // 5+ mins deviation
                                   const cardEl = el.parentElement.parentElement;
                                   if (!cardEl.querySelector('.cheat-warning')) {
                                       const warning = document.createElement('div');
@@ -397,7 +397,9 @@ function parseSessionTime(dateStr, timeStr) {
         if (modifier === 'PM' && hours < 12) hours += 12;
         if (modifier === 'AM' && hours === 12) hours = 0;
         
-        return new Date(y, m - 1, d, hours, minutes);
+        // 🛡️ SECURITY FIX: Force IST (+05:30) so timezone manipulation fails
+        const isoString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`;
+        return new Date(isoString);
     } catch(e) { 
         console.error("Time Parse Error:", e);
         return new Date(); 
