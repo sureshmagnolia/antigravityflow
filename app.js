@@ -6043,6 +6043,7 @@ function getExamName(date, time, stream) {
                         'Room No': room.roomName, // Physical Room
                         seatNumber: s.seat || '?', // The STICKY SEAT
                         isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
+                        isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
                         Stream: room.stream || 'Regular'
                     });
             });
