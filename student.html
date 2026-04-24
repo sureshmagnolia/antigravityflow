@@ -334,7 +334,7 @@ if (session.isLockedByGate) {
 
                               // 🕵️‍♂️ CHEAT DETECTION: Check if device time is artificially pushed into the future
                               const el = document.getElementById(timerId);
-                              if (el && (Date.now() - nowTick.getTime() > 120000)) { // 2+ mins into the future
+                              if (el && (Date.now() - nowTick.getTime() > 300000)) { // 2+ mins into the future
                                   const cardEl = el.parentElement.parentElement;
                                   if (!cardEl.querySelector('.cheat-warning')) {
                                       const warning = document.createElement('div');
