@@ -18865,8 +18865,8 @@ if (displayLoc) {
                 <thead>
                     <tr>
                         <th style="width: 5%;">Sl</th>
-                        <th style="width: 25%; text-align:left;">Hall / Location</th>
-                        <th style="width: 20%; text-align:left;">Invigilator</th>
+                        <th style="width: 20%; text-align:left;">Hall / Location</th>
+                        <th style="width: 25%; text-align:left;">Invigilator</th>
                         <th style="width: 16%;">RNBB</th>
                         <th style="width: 6%;">Asgd</th>
                         <th style="width: 6%;">Used</th>
