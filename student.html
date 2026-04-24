@@ -426,7 +426,7 @@ function parseSessionTime(dateStr, timeStr) {
                           cheatBanner = document.createElement('div');
                           cheatBanner.id = 'global-cheat-warning';
                           cheatBanner.className = "w-full max-w-[280px] mx-auto bg-orange-50 border border-orange-200 text-orange-700 p-1.5 rounded-lg mt-3 text-[10px] font-bold text-center shadow-sm animate-fade-in";
-                          cheatBanner.innerHTML = "⚠️ Device time mismatch detected.<br>.";
+                          cheatBanner.innerHTML = "⏳ <b>Nice try, Time Traveler!</b><br>Changing your phone's clock won't unlock the gate early! 😉";
                           
                           const clockPanel = document.getElementById('network-clock-panel');
                           if (clockPanel) clockPanel.insertAdjacentElement('afterend', cheatBanner);
