@@ -11410,15 +11410,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                   const location = room.location ? ` (${room.location})` : '';
                   
                   const label = document.createElement('label');
-                  label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
+                  label.className = "flex items-center gap-2 p-2 px-3 border border-gray-200 rounded-md cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
 
                   // SMART PRE-SELECT: Use correct property name 'roomName' (not 'name')
                   const isAlreadyInUse = allottedRoomNames.includes(roomName);
                   label.innerHTML = `
-                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
-                    <div class="flex-1">
-                        <div class="font-bold text-gray-800">${roomName}${location}</div>
-                        <div class="text-xs text-gray-500 font-medium">Standard Capacity: ${room.capacity}</div>
+                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
+                    <div class="flex-1 flex justify-between items-center">
+                        <div class="text-sm font-bold text-gray-800">${roomName}<span class="font-normal text-xs text-gray-500 ml-1">${location}</span></div>
+                        <div class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">${room.capacity}</div>
                     </div>
                 `;
                 label.querySelector('input').addEventListener('change', updateAutoAllotCounter);
@@ -11764,25 +11764,28 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
 
             const roomOption = document.createElement('div');
-            roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 mb-2 ${isUnavailable ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`;
+            roomOption.className = `p-2 px-3 border border-gray-200 rounded-md cursor-pointer hover:bg-blue-50 mb-1.5 shadow-sm ${isUnavailable ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'bg-white'}`;
 
             // Status Message Logic
             let statusMsg = "";
             if (isRegularAllotted) {
-                statusMsg = '<div class="text-xs text-red-600 mt-1 font-bold">Already Allotted</div>';
+                statusMsg = '<span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold ml-2">Allotted</span>';
             } else if (isScribeAllotted) {
-                statusMsg = '<div class="text-xs text-orange-600 mt-1 font-bold">Occupied by Scribe</div>';
+                statusMsg = '<span class="text-[10px] bg-orange-100 text-orange-700 px-1 rounded font-bold ml-2">Scribe</span>';
             }
 
             roomOption.innerHTML = `
             <div class="flex justify-between items-center">
-                <div class="font-medium text-gray-800">${roomName}${location}</div>
-                ${capBadge}
+                <div class="text-sm font-bold text-gray-800 flex items-center">
+                    ${roomName}<span class="font-normal text-xs text-gray-500 ml-1">${location}</span>
+                    ${statusMsg}
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">${room.capacity}</span>
+                    ${capBadge}
+                </div>
             </div>
-            <div class="text-sm text-gray-600 mt-1">Standard Capacity: ${room.capacity}</div>
-            ${statusMsg}
         `;
-
             if (!isUnavailable) {
                 roomOption.onclick = () => {
                     const selectedStream = document.getElementById('allotment-stream-select').value;
