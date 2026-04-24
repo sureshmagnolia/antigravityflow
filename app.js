@@ -6609,7 +6609,7 @@ function getExamName(date, time, stream) {
                             ${row.student.Name}
                         </td>
                         
-                        <td style="padding: 1px 4px; text-align: center; font-weight: bold; border: 1px solid #000;">${row.seatNo}</td>
+                        <td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">${row.seatNo}</td>
                     </tr>
                 `;
                 });
