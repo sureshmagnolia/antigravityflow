@@ -11467,13 +11467,20 @@ window.real_populate_qp_code_session_dropdown = function () {
     document.getElementById('auto-allot-modal').classList.add('hidden');
     // RE-ALLOTMENT CLEANUP: Clear current students from memory before applying new strategy
     currentSessionAllotment = []; 
-    // Randomly shuffle selected rooms
-        const selectedRooms = checkedBoxes.map(cb => ({
-            name: cb.value,
-            capacity: parseInt(cb.getAttribute('data-cap')) || 30
-        })).sort(() => Math.random() - 0.5); 
+    
+    // Map selected rooms
+    let selectedRooms = checkedBoxes.map(cb => ({
+        name: cb.value,
+        capacity: parseInt(cb.getAttribute('data-cap')) || 30
+    }));
+    
+    // Shuffle ONLY if the Randomise checkbox is ticked
+    const isRandomize = document.getElementById('auto-allot-randomize-cb')?.checked;
+    if (isRandomize !== false) { // Defaults to true if missing
+        selectedRooms.sort(() => Math.random() - 0.5); 
+    }
         
-        // READ from modal; SYNC back to Main Tab so it stays in agreement
+    // READ from modal; SYNC back to Main Tab so it stays in agreement
         const activeStrategy = document.querySelector('input[name="modal-mixing-strategy"]:checked')?.value || 'none';
         const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
         if (mainRadio) mainRadio.checked = true;
