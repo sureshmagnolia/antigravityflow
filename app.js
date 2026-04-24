@@ -11394,10 +11394,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
             const scribeRoomNames = Object.values(allScribeAllotments[currentSessionKey] || {});
             
+            const freqs = getRoomFrequencies();
             const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
-                return (parseInt(a.replace(/\\D/g, ''), 10) || 0) - (parseInt(b.replace(/\\D/g, ''), 10) || 0);
+                const freqA = freqs[a] || 0;
+                const freqB = freqs[b] || 0;
+                if (freqB !== freqA) return freqB - freqA; // Sort by frequency first
+                return (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0);
             });
-
               sortedRoomNames.forEach(roomName => {
                   // REMOVED: Old skip logic that excluded allotted rooms from the list entirely.
                   // Scribe-only rooms are still excluded; allotted rooms now appear pre-checked.
@@ -11634,6 +11637,40 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // Show room selection modal (Updated: Excludes Scribe Rooms)
+    // Helper: Calculate room usage frequency across all saved sessions
+    function getRoomFrequencies() {
+        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        const freqs = {};
+        Object.values(allAllotments).forEach(rooms => {
+            rooms.forEach(r => freqs[r.roomName] = (freqs[r.roomName] || 0) + 1);
+        });
+        return freqs;
+    }
+
+    // Global helper for Auto Allot button
+    window.selectFrequentRoomsAutoAllot = function() {
+        const freqs = getRoomFrequencies();
+        const cbs = Array.from(document.querySelectorAll('.auto-allot-room-cb:not(:disabled)'));
+        // Sort checkboxes so highest frequency is first
+        cbs.sort((a, b) => (freqs[b.value] || 0) - (freqs[a.value] || 0));
+        
+        // Find how many we need
+        const neededText = document.getElementById('auto-allot-needed-capacity').textContent;
+        let targetNeeded = parseInt(neededText.replace(/[^0-9]/g, '')) || 0;
+        let selectedCount = 0;
+
+        // Check the highest frequency rooms until we hit the target
+        cbs.forEach(cb => {
+            if (selectedCount < targetNeeded && (freqs[cb.value] || 0) > 0) {
+                cb.checked = true;
+                selectedCount++;
+            }
+        });
+        
+        // Trigger UI update
+        if(cbs[0]) cbs[0].dispatchEvent(new Event('change'));
+    };
+
     function showRoomSelectionModal() {
         getRoomCapacitiesFromStorage();
         roomSelectionList.innerHTML = '';
@@ -11698,12 +11735,16 @@ window.real_populate_qp_code_session_dropdown = function () {
         const sessionScribeMap = allScribeAllotments[currentSessionKey] || {};
         const scribeRoomNames = Object.values(sessionScribeMap); // Array of rooms used by scribes
 
+        const freqs = getRoomFrequencies();
         const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
+            const freqA = freqs[a] || 0;
+            const freqB = freqs[b] || 0;
+            if (freqB !== freqA) return freqB - freqA; // Sort by frequency first (highest at top)
+            
             const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
             const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
             return numA - numB;
         });
-
         sortedRoomNames.forEach(roomName => {
             const room = currentRoomConfig[roomName];
             const location = room.location ? ` (${room.location})` : '';
