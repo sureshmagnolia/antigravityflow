@@ -469,7 +469,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Restore Mixing Strategy UI ---
     const savedMixingStrategy = localStorage.getItem('examMixingStrategy') || 'none';
     const mixingRadio = document.querySelector(`input[name="mixing-strategy"][value="${savedMixingStrategy}"]`);
+    const modalMixingRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${savedMixingStrategy}"]`);
     if (mixingRadio) mixingRadio.checked = true;
+    if (modalMixingRadio) modalMixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -11938,7 +11940,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         showRoomSelectionModal();
     });
     // Re-compute session parts whenever the mixing strategy changes
-    document.querySelectorAll('input[name="mixing-strategy"]').forEach(radio => {
+    document.querySelectorAll('input[name="mixing-strategy"], input[name="modal-mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
             // Save to localStorage so it persists after refresh
             localStorage.setItem('examMixingStrategy', radio.value);
