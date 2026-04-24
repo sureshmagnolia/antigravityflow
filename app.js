@@ -6213,9 +6213,9 @@ function getExamName(date, time, stream) {
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background-color: #f0f0f0;">
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">QP Code</th>
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">Course Name</th>
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: center;">Count</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left; width: 16%;">QP Code</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left; width: 68%;">Course Name</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: center; width: 16%;">Count</th>
                                 </tr>
                             </thead>
                             <tbody>${courseSummaryRows}</tbody>
