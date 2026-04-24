@@ -11650,13 +11650,26 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Global helper for Auto Allot button
     window.selectFrequentRoomsAutoAllot = function() {
         const freqs = getRoomFrequencies();
+        
+        // Alert if history is completely empty
+        if (Object.keys(freqs).length === 0) {
+            alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
+            return;
+        }
+
         const cbs = Array.from(document.querySelectorAll('.auto-allot-room-cb:not(:disabled)'));
+        
+        // Uncheck all boxes first to start fresh
+        cbs.forEach(cb => cb.checked = false);
+
         // Sort checkboxes so highest frequency is first
         cbs.sort((a, b) => (freqs[b.value] || 0) - (freqs[a.value] || 0));
         
-        // Find how many we need
+        // Safely parse the FIRST number from the text (e.g. "~2 Regular: ~2" -> 2)
         const neededText = document.getElementById('auto-allot-needed-capacity').textContent;
-        let targetNeeded = parseInt(neededText.replace(/[^0-9]/g, '')) || 0;
+        let targetNeeded = parseInt(neededText.match(/\d+/)?.[0]) || 0;
+        if (targetNeeded === 0) targetNeeded = 1; // Always grab at least 1
+        
         let selectedCount = 0;
 
         // Check the highest frequency rooms until we hit the target
@@ -11666,10 +11679,17 @@ window.real_populate_qp_code_session_dropdown = function () {
                 selectedCount++;
             }
         });
+
+        if (selectedCount === 0) {
+            alert("None of your frequently used rooms are currently available.");
+        }
         
-        // Trigger UI update
-        if(cbs[0]) cbs[0].dispatchEvent(new Event('change'));
+        // Trigger UI update directly
+        if (typeof updateAutoAllotCounter === 'function') {
+            updateAutoAllotCounter();
+        }
     };
+
 
     function showRoomSelectionModal() {
         getRoomCapacitiesFromStorage();
