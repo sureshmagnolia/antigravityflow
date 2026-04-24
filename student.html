@@ -331,6 +331,23 @@ if (session.isLockedByGate) {
                           const interval = setInterval(() => {
                               const nowTick = window.getExamsNow();
                               const diff = unlockTime - nowTick;
+
+                              // 🕵️‍♂️ CHEAT DETECTION: Check if device time is artificially pushed into the future
+                              const el = document.getElementById(timerId);
+                              if (el && (Date.now() - nowTick.getTime() > 120000)) { // 2+ mins into the future
+                                  const cardEl = el.parentElement.parentElement;
+                                  if (!cardEl.querySelector('.cheat-warning')) {
+                                      const warning = document.createElement('div');
+                                      warning.className = "cheat-warning mt-3 mx-4 p-2 bg-yellow-50 border border-yellow-300 rounded-lg text-xs text-yellow-800 font-medium shadow-sm animate-pulse";
+                                      warning.innerHTML = "⏳ <b>Nice try, Time Traveler!</b><br>Changing your phone's clock won't unlock the gate early! 😉";
+                                      cardEl.appendChild(warning);
+                                  }
+                              } else if (el) {
+                                  // Remove warning if they fix their clock
+                                  const warning = el.parentElement.parentElement.querySelector('.cheat-warning');
+                                  if (warning) warning.remove();
+                              }
+
                               if (diff <= 0) {
                                   clearInterval(interval);
                                   // Ask the student to reveal the data
