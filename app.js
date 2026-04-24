@@ -2927,11 +2927,10 @@ function generateDayWisePDF() {
         const COL_W = (USABLE_W - COL_GAP) / 2; 
         
         // Column Offsets (Precision Grid)
-        const OFF_LOC = 0;  const W_LOC = 25;
-        const OFF_REG = 25; const W_REG = 30;
-        const OFF_NAME= 55; const W_NAME= 30;
-        const OFF_SEAT= 85; const W_SEAT= 7.5;
-
+        const OFF_LOC = 0;  const W_LOC = 22;  // mm
+        const OFF_REG = 22; const W_REG = 36;  // Wider Reg No
+        const OFF_NAME= 58; const W_NAME= 27;  // Narrower Name
+        const OFF_SEAT= 85; const W_SEAT= 7.5; // mm
         // Limits
         const ROWS_PER_SIDE = 38; 
         const ROWS_PER_PAGE = ROWS_PER_SIDE * 2; 
@@ -3270,35 +3269,31 @@ function generateDayWisePDF() {
                         if (span > 4) {
                             // Rotate 90 degrees (Bottom-to-Top) for spans > 4
                             pdf.setFont("helvetica", "bold");
-                            let locFontSize = 8;
+                            let locFontSize = 7.5;
                             pdf.setFontSize(locFontSize);
-                            let rotatedText = String(row.loc);
                             
-                            // 1. DYNAMIC FONT: Shrink the font first before truncating
-                            while(pdf.getTextWidth(rotatedText) > (totalMergeH - 4) && locFontSize > 4.5) {
-                                locFontSize -= 0.5;
+                            // 1. Split text (Height is the constraint for rotated lines)
+                            let rotatedLines = pdf.splitTextToSize(String(row.loc), totalMergeH - 4);
+                            
+                            // 2. If too many lines, shrink font slightly to fit better
+                            if (rotatedLines.length > 2 && locFontSize > 5) {
+                                locFontSize = 5.5;
                                 pdf.setFontSize(locFontSize);
+                                rotatedLines = pdf.splitTextToSize(String(row.loc), totalMergeH - 4);
                             }
                             
-                            // 2. TRUNCATE: Only chop characters if it's STILL too long at the smallest font
-                            while(pdf.getTextWidth(rotatedText) > (totalMergeH - 4) && rotatedText.length > 2) {
-                                rotatedText = rotatedText.substring(0, rotatedText.length - 1);
-                            }
-                            if (rotatedText !== row.loc) rotatedText = rotatedText.substring(0, rotatedText.length-2) + '..';
+                            // 3. Draw each line as a vertical column side-by-side
+                            const lineSpacing = locFontSize * 0.45; // mm spacing between columns
+                            const totalBlockWidth = rotatedLines.length * lineSpacing;
+                            let startXBase = xLoc + (W_LOC / 2) + (totalBlockWidth / 2) - (lineSpacing / 2);
 
                             pdf.setTextColor(0);
-                            
-                            // jsPDF Math: Manually center rotated text because 'align: center' breaks with angles
-                            const txtWidth = pdf.getTextWidth(rotatedText);
-                            // Font height estimation (1 pt = ~0.35mm)
-                            const fontHeightMm = (locFontSize * 0.35); 
-                            
-                            // Anchor coordinates for 90-deg CCW rotation (reads bottom to top)
-                            const startX = xLoc + (W_LOC / 2) + (fontHeightMm / 2.5);
-                            const startY = mergeCenterY + (txtWidth / 2);
-                            
-                            // Draw raw text using strict coordinates and strict angle flag
-                            pdf.text(rotatedText, startX, startY, { angle: 90 });
+                            rotatedLines.forEach((lineText, idx) => {
+                                const txtWidth = pdf.getTextWidth(lineText);
+                                const curX = startXBase - (idx * lineSpacing);
+                                const curY = mergeCenterY + (txtWidth / 2);
+                                pdf.text(lineText, curX, curY, { angle: 90 });
+                            });
                         } else {
                             drawSmartText(row.loc, xLoc, mergeCenterY, W_LOC, totalMergeH, "center", false, 7);
                     }
