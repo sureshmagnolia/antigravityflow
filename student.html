@@ -178,10 +178,9 @@
             localStorage.setItem('myExamRegNo', regNo);
 
             // --- ⚡ LAZY LOAD TODAY'S DATA (Only when Find is clicked) ---
-
-            const nowTotal = new Date();
-            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
-            
+            // 🛡️ SECURITY FIX: Base "Today" entirely on network time, not the phone's manipulable clock.
+            const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();
+            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;         
             if (allSessions.length === 0 && indexCache) {
     statusEl.textContent = "Verifying sessions...";
     const sessions = indexCache.sessions || {};
@@ -236,8 +235,8 @@
 
             let studentName = "";
             let myExams = [];
-            const todayMidnight = new Date();
-            todayMidnight.setHours(0, 0, 0, 0);
+            // 🛡️ SECURITY FIX: Calculate midnight strictly based on network "today" in IST.
+            const todayMidnight = parseSessionTime(todayString, "00:00 AM");
 
             allSessions.forEach(session => {
                 const dateStr = session.date;
