@@ -18867,12 +18867,12 @@ if (displayLoc) {
                         <th style="width: 5%;">Sl</th>
                         <th style="width: 25%; text-align:left;">Hall / Location</th>
                         <th style="width: 20%; text-align:left;">Invigilator</th>
-                        <th style="width: 8%;">RNBB</th>
+                        <th style="width: 16%;">RNBB</th>
                         <th style="width: 6%;">Asgd</th>
                         <th style="width: 6%;">Used</th>
                         <th style="width: 6%;">Retd</th>
-                        <th style="width: 10%;">Remarks</th>
-                        <th style="width: 15%;">Sign</th>
+                        <th style="width: 5%;">Remarks</th>
+                        <th style="width: 11%;">Sign</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
