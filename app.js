@@ -6591,11 +6591,15 @@ function getExamName(date, time, stream) {
                             
                             tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                         }
-                        // FIXED: TD borders are intact. Rotating a DIV inside the TD prevents collapse bugs.
-                        const spanHeightPx = row.span * 18; // ~18px per row — forces text wrapping at correct height
-                        const rotatedMaxWidth = (row.span > 4) ? `max-width:${spanHeightPx}px;` : '';
-                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden; width:42px;">
-                        <div style="${tdStyles} ${rotatedMaxWidth} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
+                        // In writing-mode:vertical-rl, HEIGHT constrains inline axis (forces wrap),
+                        // WIDTH accommodates multiple vertical text columns.
+                        const spanHeightPx = row.span * 18; // physical pixel height available
+                        // Estimate columns needed: each column ~13px wide at 7-9pt font
+                        const estimatedCols = (row.span > 4) ? Math.ceil(charLen / (row.span * 2.5)) : 1;
+                        const tdWidthPx = (row.span > 4) ? Math.min(65, 30 + estimatedCols * 14) : 42;
+                        const heightConstraint = (row.span > 4) ? `height:${spanHeightPx}px;` : '';
+                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden; width:${tdWidthPx}px;">
+                        <div style="${tdStyles} ${heightConstraint} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
                     </td>`;
                         }
                     // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
@@ -6613,7 +6617,7 @@ function getExamName(date, time, stream) {
                 return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:8pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 42px;"> <col style="width: 96px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
+                        <col style="width: 65px;"> <col style="width: 92px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
                     <thead>
                         <tr style="height:1.3em;">
                             <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Location</th>
