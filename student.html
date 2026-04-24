@@ -430,7 +430,7 @@ function parseSessionTime(dateStr, timeStr) {
           window.verifyCaptcha = function() {
               const val = parseInt(document.getElementById('captcha-input').value);
               if (val === captchaAnswer) {
-                  sessionStorage.setItem('captchaVerified', '1');
+                  localStorage.setItem('captchaVerified', Date.now().toString());
                   document.getElementById('captcha-gate').classList.add('hidden');
                   loadData();
               } else {
@@ -449,7 +449,8 @@ function parseSessionTime(dateStr, timeStr) {
               if (e.key === 'Enter') verifyCaptcha();
           });
 
-          if (sessionStorage.getItem('captchaVerified') === '1') {
+          const captchaTs = parseInt(localStorage.getItem('captchaVerified') || '0');
+            if (Date.now() - captchaTs < 24 * 60 * 60 * 1000) { // 24 hours
               loadData(); // Already verified this session — skip CAPTCHA
           } else {
               showCaptcha(); // First visit — show CAPTCHA before any Firebase reads
