@@ -1431,19 +1431,33 @@ window.recalcInvigSlots = async function () {
                             const isTodayOrFuture = examTimestamp >= midnightObj;
 
                             // 1. Load Metadata (Lightweight Icons/Calendar)
-                            if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
-                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
-                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                           
-                            // 🛡️ SMART MERGE SHIELD: Only overwrite if cloud data has MORE or EQUAL records
+                            // 🛡️ SMART MERGE SHIELD APPLIED TO ALL LAYERS: 
+                            // Only allow cloud to overwrite local if cloud has >= records (prevents empty {} wiping local data)
+                            
+                            const cloudRooms = s.roomAllotment || {};
+                            if (Object.keys(cloudRooms).length >= Object.keys(allAllotments[sessionKey] || {}).length) {
+                                allAllotments[sessionKey] = cloudRooms;
+                            }
+
+                            const cloudQPs = s.qpCodes || {};
+                            if (Object.keys(cloudQPs).length >= Object.keys(allQPCodes[sessionKey] || {}).length) {
+                                allQPCodes[sessionKey] = cloudQPs;
+                            }
+
+                            const cloudAbs = s.absentees || [];
+                            if (cloudAbs.length >= (allAbsentees[sessionKey] || []).length) {
+                                allAbsentees[sessionKey] = cloudAbs;
+                            }
+
                             const cloudScribes = s.scribeAllotment || {};
-                            const localScribes = allScribeAllotments[sessionKey] || {};
-                            if (Object.keys(cloudScribes).length >= Object.keys(localScribes).length) {
+                            if (Object.keys(cloudScribes).length >= Object.keys(allScribeAllotments[sessionKey] || {}).length) {
                                 allScribeAllotments[sessionKey] = cloudScribes;
                             }
 
-                            if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
-
+                            const cloudInvig = s.invigilatorMapping || {};
+                            if (Object.keys(cloudInvig).length >= Object.keys(allInvigMapping[sessionKey] || {}).length) {
+                                allInvigMapping[sessionKey] = cloudInvig;
+                            }
                             // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
                             if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
