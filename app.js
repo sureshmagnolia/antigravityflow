@@ -6627,6 +6627,7 @@ function getExamName(date, time, stream) {
                     <tbody>${rowsHtml}</tbody>
                 </table>
             `;
+            } // end buildColumnTable
             // Build a Set of scribe Reg Nos for fast lookup
             const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
             const scribeRegSet = new Set(globalScribeList.map(s => s.regNo));
