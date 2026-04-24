@@ -6469,16 +6469,39 @@ function getExamName(date, time, stream) {
             // --- CUSTOM STYLES: Remove Shadow/Border in Print ---
             let allPagesHtml = `
             <style>
+                @page { size: A4 portrait; margin: 10mm; }
+                .print-page-daywise {
+                    width: 190mm;
+                    min-height: 277mm;
+                    max-height: 277mm;
+                    overflow: hidden;
+                    page-break-after: always;
+                    page-break-inside: avoid;
+                    box-sizing: border-box;
+                    padding: 6mm;
+                    font-family: Arial, sans-serif;
+                }
+                .daywise-report-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+                .daywise-report-table tr { height: 1.45em; max-height: 1.45em; }
+                .daywise-report-table td, .daywise-report-table th {
+                    padding: 0px 3px;
+                    font-size: 8pt;
+                    line-height: 1.35;
+                    border: 1px solid #000;
+                    overflow: hidden;
+                }
+                .daywise-report-table th { font-size: 7.5pt; background: #eee; }
                 @media print {
                     .print-page, .print-page-daywise {
                         box-shadow: none !important;
                         border: none !important;
-                        margin: 0 auto !important;
+                        margin: 0 !important;
+                        padding: 8mm !important;
                     }
+                    .print-page-daywise { page-break-after: always; page-break-inside: avoid; }
                 }
             </style>
         `;
-
             let totalPagesGenerated = 0;
 
             // Layout Constants (Dynamic from UI)
@@ -6504,7 +6527,7 @@ function getExamName(date, time, stream) {
                         const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                         const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[student['Register Number']];
                         if (scribeRoom) roomName = scribeRoom;
-                        seatNo = 'Scribe';
+                        seatNo = 'SCR';
                         rowStyle = 'font-weight: bold; color: #c2410c;';
                     }
 
@@ -6560,7 +6583,7 @@ function getExamName(date, time, stream) {
                             if (charLen > maxChars + 8) dynFontSize = 6.5;
                             else if (charLen > maxChars) dynFontSize = 7.5;
                             
-                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; line-height:1.1; white-space:nowrap; margin:auto;';
+                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; line-height:1.2; white-space:normal; overflow-wrap:break-word; word-break:break-word; margin:auto;';
                         } else {
                             // Keep horizontal for short spans
                             if (charLen > 25) dynFontSize = 6.5;
@@ -6589,23 +6612,21 @@ function getExamName(date, time, stream) {
                 });
 
                 return `
-                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
+                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:8pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 45px;"> <col style="width: 85px;"> <col style="width: auto;"> <col style="width: 32px;"> </colgroup>
+                        <col style="width: 42px;"> <col style="width: 80px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
 
                     <thead>
-                        <tr>
-                            <th style="border: 1px solid #000;">Location</th>
-                            <th style="border: 1px solid #000;">Reg No</th>
-                            <th style="border: 1px solid #000;">Name</th>
-                            <th style="border: 1px solid #000;">Seat</th>
+                        <tr style="height:1.3em;">
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Location</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Reg No</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Name</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Seat</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
             `;
-            }
-
             // Build a Set of scribe Reg Nos for fast lookup
             const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
             const scribeRegSet = new Set(globalScribeList.map(s => s.regNo));
