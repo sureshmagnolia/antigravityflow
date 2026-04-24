@@ -157,9 +157,11 @@
 
 
 
-            window.searchStudent = async function() {
-            activeIntervals.forEach(clearInterval);
-            activeIntervals = [];
+  window.searchStudent = async function() {
+      // Reset session memory so we can re-check the 45-minute gate
+      allSessions = []; 
+      activeIntervals.forEach(clearInterval);
+      activeIntervals = [];
 
             const regInput = document.getElementById('reg-input');
             const regNo = regInput.value.trim().toUpperCase();
@@ -326,13 +328,17 @@ if (session.isLockedByGate) {
                                 <p class="text-[10px] text-gray-400 mt-2">(Available 45m before exam)</p>
                             </div>`;
                         
-                        const interval = setInterval(() => {
-                            const nowTick = window.getExamsNow();
-                            const diff = unlockTime - nowTick;
-                            if (diff <= 0) {
-                                clearInterval(interval);
-                                searchStudent(); 
-                            } else {
+                          const interval = setInterval(() => {
+                              const nowTick = window.getExamsNow();
+                              const diff = unlockTime - nowTick;
+                              if (diff <= 0) {
+                                  clearInterval(interval);
+                                  // Ask the student to reveal the data
+                                  const el = document.getElementById(timerId);
+                                  if (el) {
+                                      el.parentElement.innerHTML = '<button onclick="searchStudent()"class="bg-green-600 text-white px-4 py-1 rounded-full text-xs font-bold animate-bounce shadow-lg">REVEAL SEATING NOW</button>';
+                                  }
+                              } else {
                                 const el = document.getElementById(timerId);
                                 if (el) {
                                     const mins = Math.floor(diff / 60000);
@@ -410,7 +416,45 @@ function parseSessionTime(dateStr, timeStr) {
               }, 1000);
           }
 
-          loadData();
+          // 🛡️ CAPTCHA GATE: Only bypass if already verified this session
+          let captchaAnswer = 0;
+
+          function showCaptcha() {
+              const a = Math.floor(Math.random() * 9) + 1;
+              const b = Math.floor(Math.random() * 9) + 1;
+              captchaAnswer = a + b;
+              document.getElementById('captcha-question').textContent = `${a} + ${b} = ?`;
+              document.getElementById('captcha-gate').classList.remove('hidden');
+          }
+
+          window.verifyCaptcha = function() {
+              const val = parseInt(document.getElementById('captcha-input').value);
+              if (val === captchaAnswer) {
+                  localStorage.setItem('captchaVerified', Date.now().toString());
+                  document.getElementById('captcha-gate').classList.add('hidden');
+                  loadData();
+              } else {
+                  document.getElementById('captcha-error').classList.remove('hidden');
+                  document.getElementById('captcha-input').value = '';
+                  // Regenerate question to prevent brute force
+                  const a = Math.floor(Math.random() * 9) + 1;
+                  const b = Math.floor(Math.random() * 9) + 1;
+                  captchaAnswer = a + b;
+                  document.getElementById('captcha-question').textContent = `${a} + ${b} = ?`;
+              }
+          };
+
+          // Allow Enter key to submit CAPTCHA
+          document.getElementById('captcha-input')?.addEventListener('keydown', e => {
+              if (e.key === 'Enter') verifyCaptcha();
+          });
+
+          const captchaTs = parseInt(localStorage.getItem('captchaVerified') || '0');
+            if (Date.now() - captchaTs < 24 * 60 * 60 * 1000) { // 24 hours
+              loadData(); // Already verified this session — skip CAPTCHA
+          } else {
+              showCaptcha(); // First visit — show CAPTCHA before any Firebase reads
+          }
           startNetworkClock();
     </script>
 </head>
@@ -439,6 +483,17 @@ function parseSessionTime(dateStr, timeStr) {
   </div>
 
   <div id="status" class="text-center text-sm font-medium text-indigo-600 mb-2 animate-pulse"></div>
+  <!-- 🛡️ Bot CAPTCHA Gate (shown once per browser session) -->
+  <div id="captcha-gate" class="hidden bg-white p-6 rounded-2xl shadow-xl border border-indigo-100 mb-4 text-center">
+    <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Quick Verification</p>
+    <p class="text-sm font-bold text-gray-700 mb-4">Solve to continue: <span id="captcha-question" class="text-indigo-600 font-black text-base"></span></p>
+    <div class="flex gap-2 justify-center">
+      <input type="number" id="captcha-input" class="w-24 p-2 border border-gray-200 rounded-xl text-center text-lg font-bold focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="?">
+      <button onclick="verifyCaptcha()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-bold hover:bg-indigo-700 transition shadow-md">Go</button>
+    </div>
+    <p id="captcha-error" class="text-red-500 text-xs mt-2 font-bold hidden">Wrong answer. Try again!</p>
+  </div>
+
 
 
             

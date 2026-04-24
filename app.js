@@ -469,7 +469,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Restore Mixing Strategy UI ---
     const savedMixingStrategy = localStorage.getItem('examMixingStrategy') || 'none';
     const mixingRadio = document.querySelector(`input[name="mixing-strategy"][value="${savedMixingStrategy}"]`);
+    const modalMixingRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${savedMixingStrategy}"]`);
     if (mixingRadio) mixingRadio.checked = true;
+    if (modalMixingRadio) modalMixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
@@ -6041,6 +6043,7 @@ function getExamName(date, time, stream) {
                         'Room No': room.roomName, // Physical Room
                         seatNumber: s.seat || '?', // The STICKY SEAT
                         isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
+                        isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
                         Stream: room.stream || 'Regular'
                     });
             });
@@ -6211,9 +6214,9 @@ function getExamName(date, time, stream) {
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background-color: #f0f0f0;">
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">QP Code</th>
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left;">Course Name</th>
-                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: center;">Count</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left; width: 16%;">QP Code</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: left; width: 68%;">Course Name</th>
+                                    <th style="border: 1px solid #ccc; padding: 2px; text-align: center; width: 16%;">Count</th>
                                 </tr>
                             </thead>
                             <tbody>${courseSummaryRows}</tbody>
@@ -6466,16 +6469,39 @@ function getExamName(date, time, stream) {
             // --- CUSTOM STYLES: Remove Shadow/Border in Print ---
             let allPagesHtml = `
             <style>
+                @page { size: A4 portrait; margin: 10mm; }
+                .print-page-daywise {
+                    width: 190mm;
+                    min-height: 277mm;
+                    max-height: 277mm;
+                    overflow: hidden;
+                    page-break-after: always;
+                    page-break-inside: avoid;
+                    box-sizing: border-box;
+                    padding: 6mm;
+                    font-family: Arial, sans-serif;
+                }
+                .daywise-report-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+                .daywise-report-table tr { height: 1.45em; max-height: 1.45em; }
+                .daywise-report-table td, .daywise-report-table th {
+                    padding: 0px 3px;
+                    font-size: 8pt;
+                    line-height: 1.35;
+                    border: 1px solid #000;
+                    overflow: hidden;
+                }
+                .daywise-report-table th { font-size: 7.5pt; background: #eee; }
                 @media print {
                     .print-page, .print-page-daywise {
                         box-shadow: none !important;
                         border: none !important;
-                        margin: 0 auto !important;
+                        margin: 0 !important;
+                        padding: 8mm !important;
                     }
+                    .print-page-daywise { page-break-after: always; page-break-inside: avoid; }
                 }
             </style>
         `;
-
             let totalPagesGenerated = 0;
 
             // Layout Constants (Dynamic from UI)
@@ -6501,7 +6527,7 @@ function getExamName(date, time, stream) {
                         const sessionKeyPipe = `${student.Date} | ${student.Time}`;
                         const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[student['Register Number']];
                         if (scribeRoom) roomName = scribeRoom;
-                        seatNo = 'Scribe';
+                        seatNo = 'SCR';
                         rowStyle = 'font-weight: bold; color: #c2410c;';
                     }
 
@@ -6557,7 +6583,7 @@ function getExamName(date, time, stream) {
                             if (charLen > maxChars + 8) dynFontSize = 6.5;
                             else if (charLen > maxChars) dynFontSize = 7.5;
                             
-                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; line-height:1.1; white-space:nowrap; margin:auto;';
+                            tdStyles = 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; line-height:1.2; white-space:normal; overflow-wrap:break-word; word-break:break-word; margin:auto;';
                         } else {
                             // Keep horizontal for short spans
                             if (charLen > 25) dynFontSize = 6.5;
@@ -6565,44 +6591,45 @@ function getExamName(date, time, stream) {
                             
                             tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                         }
-
-                        // FIXED: TD borders are intact. Rotating a DIV inside the TD prevents collapse bugs.
-                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden;">
-                        <div style="${tdStyles} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
+                        // In writing-mode:vertical-rl, HEIGHT constrains inline axis (forces wrap),
+                        // WIDTH accommodates multiple vertical text columns.
+                        const spanHeightPx = row.span * 18; // physical pixel height available
+                        // Estimate columns needed: each column ~13px wide at 7-9pt font
+                        const estimatedCols = (row.span > 4) ? Math.ceil(charLen / (row.span * 2.5)) : 1;
+                        const tdWidthPx = (row.span > 4) ? Math.min(65, 30 + estimatedCols * 14) : 42;
+                        const heightConstraint = (row.span > 4) ? `height:${spanHeightPx}px;` : '';
+                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden; width:${tdWidthPx}px;">
+                        <div style="${tdStyles} ${heightConstraint} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
                     </td>`;
-                    }
-
+                        }
                     // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
                     rowsHtml += `
-                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>
-                        
-                        <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; border: 1px solid #000;">
+                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>                    
+                        <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">
                             ${row.student.Name}
                         </td>
                         
-                        <td style="padding: 1px 4px; text-align: center; font-weight: bold; border: 1px solid #000;">${row.seatNo}</td>
+                        <td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">${row.seatNo}</td>
                     </tr>
                 `;
                 });
 
                 return `
-                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:9pt; table-layout: fixed;">
+                <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:8pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 45px;"> <col style="width: 85px;"> <col style="width: auto;"> <col style="width: 32px;"> </colgroup>
-
+                        <col style="width: 65px;"> <col style="width: 92px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
                     <thead>
-                        <tr>
-                            <th style="border: 1px solid #000;">Location</th>
-                            <th style="border: 1px solid #000;">Reg No</th>
-                            <th style="border: 1px solid #000;">Name</th>
-                            <th style="border: 1px solid #000;">Seat</th>
+                        <tr style="height:1.3em;">
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Location</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Reg No</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Name</th>
+                            <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Seat</th>
                         </tr>
                     </thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
             `;
-            }
-
+            } // end buildColumnTable
             // Build a Set of scribe Reg Nos for fast lookup
             const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
             const scribeRegSet = new Set(globalScribeList.map(s => s.regNo));
@@ -11392,10 +11419,13 @@ window.real_populate_qp_code_session_dropdown = function () {
             const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
             const scribeRoomNames = Object.values(allScribeAllotments[currentSessionKey] || {});
             
+            const freqs = getRoomFrequencies();
             const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
-                return (parseInt(a.replace(/\\D/g, ''), 10) || 0) - (parseInt(b.replace(/\\D/g, ''), 10) || 0);
+                const freqA = freqs[a] || 0;
+                const freqB = freqs[b] || 0;
+                if (freqB !== freqA) return freqB - freqA; // Sort by frequency first
+                return (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0);
             });
-
               sortedRoomNames.forEach(roomName => {
                   // REMOVED: Old skip logic that excluded allotted rooms from the list entirely.
                   // Scribe-only rooms are still excluded; allotted rooms now appear pre-checked.
@@ -11405,15 +11435,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                   const location = room.location ? ` (${room.location})` : '';
                   
                   const label = document.createElement('label');
-                  label.className = "flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
+                  label.className = "flex items-center gap-2 p-2 px-3 border border-gray-200 rounded-md cursor-pointer hover:bg-teal-50 transition bg-white shadow-sm";
 
                   // SMART PRE-SELECT: Use correct property name 'roomName' (not 'name')
                   const isAlreadyInUse = allottedRoomNames.includes(roomName);
                   label.innerHTML = `
-                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-5 h-5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
-                    <div class="flex-1">
-                        <div class="font-bold text-gray-800">${roomName}${location}</div>
-                        <div class="text-xs text-gray-500 font-medium">Standard Capacity: ${room.capacity}</div>
+                <input type="checkbox" ${isAlreadyInUse ? 'checked' : ''} class="auto-allot-room-cb w-4 h-4 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" value="${roomName}" data-cap="${room.capacity}">
+                    <div class="flex-1 flex justify-between items-center">
+                        <div class="text-sm font-bold text-gray-800">${roomName}<span class="font-normal text-xs text-gray-500 ml-1">${location}</span></div>
+                        <div class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">${room.capacity}</div>
                     </div>
                 `;
                 label.querySelector('input').addEventListener('change', updateAutoAllotCounter);
@@ -11462,13 +11492,20 @@ window.real_populate_qp_code_session_dropdown = function () {
     document.getElementById('auto-allot-modal').classList.add('hidden');
     // RE-ALLOTMENT CLEANUP: Clear current students from memory before applying new strategy
     currentSessionAllotment = []; 
-    // Randomly shuffle selected rooms
-        const selectedRooms = checkedBoxes.map(cb => ({
-            name: cb.value,
-            capacity: parseInt(cb.getAttribute('data-cap')) || 30
-        })).sort(() => Math.random() - 0.5); 
+    
+    // Map selected rooms
+    let selectedRooms = checkedBoxes.map(cb => ({
+        name: cb.value,
+        capacity: parseInt(cb.getAttribute('data-cap')) || 30
+    }));
+    
+    // Shuffle ONLY if the Randomise checkbox is ticked
+    const isRandomize = document.getElementById('auto-allot-randomize-cb')?.checked;
+    if (isRandomize !== false) { // Defaults to true if missing
+        selectedRooms.sort(() => Math.random() - 0.5); 
+    }
         
-        // READ from modal; SYNC back to Main Tab so it stays in agreement
+    // READ from modal; SYNC back to Main Tab so it stays in agreement
         const activeStrategy = document.querySelector('input[name="modal-mixing-strategy"]:checked')?.value || 'none';
         const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
         if (mainRadio) mainRadio.checked = true;
@@ -11632,6 +11669,60 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
     // Show room selection modal (Updated: Excludes Scribe Rooms)
+    // Helper: Calculate room usage frequency across all saved sessions
+    function getRoomFrequencies() {
+        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        const freqs = {};
+        Object.values(allAllotments).forEach(rooms => {
+            rooms.forEach(r => freqs[r.roomName] = (freqs[r.roomName] || 0) + 1);
+        });
+        return freqs;
+    }
+
+    // Global helper for Auto Allot button
+    window.selectFrequentRoomsAutoAllot = function() {
+        const freqs = getRoomFrequencies();
+        
+        // Alert if history is completely empty
+        if (Object.keys(freqs).length === 0) {
+            alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
+            return;
+        }
+
+        const cbs = Array.from(document.querySelectorAll('.auto-allot-room-cb:not(:disabled)'));
+        
+        // Uncheck all boxes first to start fresh
+        cbs.forEach(cb => cb.checked = false);
+
+        // Sort checkboxes so highest frequency is first
+        cbs.sort((a, b) => (freqs[b.value] || 0) - (freqs[a.value] || 0));
+        
+        // Safely parse the FIRST number from the text (e.g. "~2 Regular: ~2" -> 2)
+        const neededText = document.getElementById('auto-allot-needed-capacity').textContent;
+        let targetNeeded = parseInt(neededText.match(/\d+/)?.[0]) || 0;
+        if (targetNeeded === 0) targetNeeded = 1; // Always grab at least 1
+        
+        let selectedCount = 0;
+
+        // Check the highest frequency rooms until we hit the target
+        cbs.forEach(cb => {
+            if (selectedCount < targetNeeded && (freqs[cb.value] || 0) > 0) {
+                cb.checked = true;
+                selectedCount++;
+            }
+        });
+
+        if (selectedCount === 0) {
+            alert("None of your frequently used rooms are currently available.");
+        }
+        
+        // Trigger UI update directly
+        if (typeof updateAutoAllotCounter === 'function') {
+            updateAutoAllotCounter();
+        }
+    };
+
+
     function showRoomSelectionModal() {
         getRoomCapacitiesFromStorage();
         roomSelectionList.innerHTML = '';
@@ -11696,12 +11787,16 @@ window.real_populate_qp_code_session_dropdown = function () {
         const sessionScribeMap = allScribeAllotments[currentSessionKey] || {};
         const scribeRoomNames = Object.values(sessionScribeMap); // Array of rooms used by scribes
 
+        const freqs = getRoomFrequencies();
         const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
+            const freqA = freqs[a] || 0;
+            const freqB = freqs[b] || 0;
+            if (freqB !== freqA) return freqB - freqA; // Sort by frequency first (highest at top)
+            
             const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
             const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
             return numA - numB;
         });
-
         sortedRoomNames.forEach(roomName => {
             const room = currentRoomConfig[roomName];
             const location = room.location ? ` (${room.location})` : '';
@@ -11721,25 +11816,28 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
 
             const roomOption = document.createElement('div');
-            roomOption.className = `p-3 border border-gray-300 rounded-md cursor-pointer hover:bg-blue-50 mb-2 ${isUnavailable ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`;
+            roomOption.className = `p-2 px-3 border border-gray-200 rounded-md cursor-pointer hover:bg-blue-50 mb-1.5 shadow-sm ${isUnavailable ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'bg-white'}`;
 
             // Status Message Logic
             let statusMsg = "";
             if (isRegularAllotted) {
-                statusMsg = '<div class="text-xs text-red-600 mt-1 font-bold">Already Allotted</div>';
+                statusMsg = '<span class="text-[10px] bg-red-100 text-red-700 px-1 rounded font-bold ml-2">Allotted</span>';
             } else if (isScribeAllotted) {
-                statusMsg = '<div class="text-xs text-orange-600 mt-1 font-bold">Occupied by Scribe</div>';
+                statusMsg = '<span class="text-[10px] bg-orange-100 text-orange-700 px-1 rounded font-bold ml-2">Scribe</span>';
             }
 
             roomOption.innerHTML = `
             <div class="flex justify-between items-center">
-                <div class="font-medium text-gray-800">${roomName}${location}</div>
-                ${capBadge}
+                <div class="text-sm font-bold text-gray-800 flex items-center">
+                    ${roomName}<span class="font-normal text-xs text-gray-500 ml-1">${location}</span>
+                    ${statusMsg}
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">${room.capacity}</span>
+                    ${capBadge}
+                </div>
             </div>
-            <div class="text-sm text-gray-600 mt-1">Standard Capacity: ${room.capacity}</div>
-            ${statusMsg}
         `;
-
             if (!isUnavailable) {
                 roomOption.onclick = () => {
                     const selectedStream = document.getElementById('allotment-stream-select').value;
@@ -11938,7 +12036,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         showRoomSelectionModal();
     });
     // Re-compute session parts whenever the mixing strategy changes
-    document.querySelectorAll('input[name="mixing-strategy"]').forEach(radio => {
+    document.querySelectorAll('input[name="mixing-strategy"], input[name="modal-mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
             // Save to localStorage so it persists after refresh
             localStorage.setItem('examMixingStrategy', radio.value);
@@ -18792,14 +18890,14 @@ if (displayLoc) {
                 <thead>
                     <tr>
                         <th style="width: 5%;">Sl</th>
-                        <th style="width: 25%; text-align:left;">Hall / Location</th>
-                        <th style="width: 20%; text-align:left;">Invigilator</th>
-                        <th style="width: 8%;">RNBB</th>
+                        <th style="width: 20%; text-align:left;">Hall / Location</th>
+                        <th style="width: 25%; text-align:left;">Invigilator</th>
+                        <th style="width: 16%;">RNBB</th>
                         <th style="width: 6%;">Asgd</th>
                         <th style="width: 6%;">Used</th>
                         <th style="width: 6%;">Retd</th>
-                        <th style="width: 10%;">Remarks</th>
-                        <th style="width: 15%;">Sign</th>
+                        <th style="width: 5%;">Remarks</th>
+                        <th style="width: 11%;">Sign</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
