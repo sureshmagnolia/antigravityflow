@@ -6591,18 +6591,16 @@ function getExamName(date, time, stream) {
                             
                             tdStyles = 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                         }
-
                         // FIXED: TD borders are intact. Rotating a DIV inside the TD prevents collapse bugs.
-                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden;">
-                        <div style="${tdStyles} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
+                        const spanHeightPx = row.span * 18; // ~18px per row — forces text wrapping at correct height
+                        const rotatedMaxWidth = (row.span > 4) ? `max-width:${spanHeightPx}px;` : '';
+                        rowsHtml += `<td ${rowspanAttr} style="background-color:#fff; border:1px solid #000; vertical-align:middle; padding:0; overflow:hidden; width:42px;">
+                        <div style="${tdStyles} ${rotatedMaxWidth} font-size:${dynFontSize}pt; font-weight:bold;">${row.displayRoom}</div>
                     </td>`;
-                    }
-
                     // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
                     rowsHtml += `
-                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>
-                        
-                        <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; border: 1px solid #000;">
+                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>                    
+                        <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">
                             ${row.student.Name}
                         </td>
                         
@@ -6614,8 +6612,7 @@ function getExamName(date, time, stream) {
                 return `
                 <table class="daywise-report-table" style="width:100%; border-collapse:collapse; font-size:8pt; table-layout: fixed;">
                     <colgroup>
-                        <col style="width: 42px;"> <col style="width: 80px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
-
+                        <col style="width: 42px;"> <col style="width: 96px;"> <col style="width: auto;"> <col style="width: 28px;"> </colgroup>
                     <thead>
                         <tr style="height:1.3em;">
                             <th style="border: 1px solid #000; padding:1px 2px; font-size:7pt;">Location</th>
