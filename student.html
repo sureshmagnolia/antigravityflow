@@ -122,7 +122,11 @@
 
                 // --- 🛡️ UI LOCK GATE: Check if there are ANY exams today ---
                 const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();
-                const todayStr = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
+                
+                // 🛡️ Force IST Date extraction so Timezone changes don't hide the search box
+                const formatter1 = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+                const p1 = {}; formatter1.formatToParts(nowTotal).forEach(p => p1[p.type] = p.value);
+                const todayStr = `${p1.day}.${p1.month}.${p1.year}`;
                 
                 const sessionsObj = indexCache ? (indexCache.sessions || {}) : {};
                 const hasExamsToday = Object.keys(sessionsObj).some(key => key.startsWith(todayStr));
@@ -178,9 +182,11 @@
             localStorage.setItem('myExamRegNo', regNo);
 
             // --- ⚡ LAZY LOAD TODAY'S DATA (Only when Find is clicked) ---
-            // 🛡️ SECURITY FIX: Base "Today" entirely on network time, not the phone's manipulable clock.
-            const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();
-            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;         
+            // 🛡️ SECURITY FIX: Base "Today" strictly on network time in IST (+05:30)
+            const nowTotal = window.getExamsNow ? window.getExamsNow() : new Date();     
+            const formatter2 = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+            const p2 = {}; formatter2.formatToParts(nowTotal).forEach(p => p2[p.type] = p.value);
+            const todayString = `${p2.day}.${p2.month}.${p2.year}`;     
             if (allSessions.length === 0 && indexCache) {
     statusEl.textContent = "Verifying sessions...";
     const sessions = indexCache.sessions || {};
@@ -412,6 +418,23 @@ function parseSessionTime(dateStr, timeStr) {
 
               setInterval(() => {
                   const now = window.getExamsNow ? window.getExamsNow() : new Date();
+
+                  // 🕵️‍♂️ SUBTLE CHEAT BANNER: Appears under the clock if dragged 5+ mins
+                  let cheatBanner = document.getElementById('global-cheat-warning');
+                  if (Math.abs(Date.now() - now.getTime()) > 300000) {
+                      if (!cheatBanner) {
+                          cheatBanner = document.createElement('div');
+                          cheatBanner.id = 'global-cheat-warning';
+                          cheatBanner.className = "w-full max-w-[280px] mx-auto bg-orange-50 border border-orange-200 text-orange-700 p-1.5 rounded-lg mt-3 text-[10px] font-bold text-center shadow-sm animate-fade-in";
+                          cheatBanner.innerHTML = "⚠️ Device time mismatch detected.<br>.";
+                          
+                          const clockPanel = document.getElementById('network-clock-panel');
+                          if (clockPanel) clockPanel.insertAdjacentElement('afterend', cheatBanner);
+                      }
+                  } else if (cheatBanner) {
+                      cheatBanner.remove();
+                  }
+
 
                   // Force Indian Standard Time (IST) with 12-hour AM/PM format
                   const timeOptions = {
