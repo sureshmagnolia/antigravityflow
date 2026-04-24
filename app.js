@@ -3047,7 +3047,7 @@ function generateDayWisePDF() {
 
 
         const scribeRegNos = new Set((globalScribeList || []).map(s => s.regNo));
-
+        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         const sessionsMap = {};
         dataWithRooms.forEach(row => {
             const stream = row.Stream || "Regular";
@@ -3086,10 +3086,17 @@ function generateDayWisePDF() {
                         lastCourse = s.Course;
                     }
                     
-                    const roomName = s['Room No'];
+                    let roomName = s['Room No'];
+                    const isScribe = scribeRegNos.has(s['Register Number']);
+                    
+                    if (isScribe) {
+                        const sessionKeyPipe = `${sData.date} | ${sData.time}`;
+                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
+                        if (scribeRoom) roomName = scribeRoom;
+                    }
+
                     const roomInfo = (typeof currentRoomConfig !== 'undefined' && currentRoomConfig[roomName]) ? currentRoomConfig[roomName] : {};
                     const locText = roomInfo.location ? `${roomName} (${roomInfo.location})` : roomName;
-                    const isScribe = scribeRegNos.has(s['Register Number']);
 
                     printRows.push({
                         type: 'data',
@@ -3147,8 +3154,11 @@ function generateDayWisePDF() {
                     let sY = drawReportHeader(stream, sData.date, sData.time, "Scribe Assistance Summary", currentCollegeName);
                     
                     const map = {};
+                    const sessionKeyPipe = `${sData.date} | ${sData.time}`;
+                    const currentSessionScribes = allScribeAllotments[sessionKeyPipe] || {};
+
                     sData.scribes.forEach(s => {
-                        const r = s['Room No'];
+                        const r = currentSessionScribes[s['Register Number']] || s['Room No'];
                         if(!map[r]) map[r] = [];
                         map[r].push(`${s.Name} (${s['Register Number']})`);
                     });
