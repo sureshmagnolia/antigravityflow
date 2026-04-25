@@ -1278,43 +1278,37 @@ window.recalcInvigSlots = async function () {
                 location.reload();
             } // <-- TO HERE
         });
-
-        // 2. SETTINGS
-
-
-        // 2. SETTINGS
-        settingsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "settings"), (snap) => {
+        // 2. LAZY CONFIG FETCHERS (Settings, Staff, Slots) - Saves Billing!
+        window.fetchSettingsData = async () => {
+            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "settings"));
             if (snap.exists()) {
                 syncLocal(snap.data());
                 if (typeof loadRoomConfig === 'function') loadRoomConfig();
                 if (typeof loadStreamConfig === 'function') loadStreamConfig();
                 if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
             }
-        });
+        };
 
-        // 3. OPERATIONS (Absentees/QP - V1 Listener)
+        window.fetchStaffData = async () => {
+            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "staff"));
+            if (snap.exists()) syncLocal(snap.data());
+        };
+
+        window.fetchSlotsData = async () => {
+            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "slots"));
+            if (snap.exists()) syncLocal(snap.data());
+        };
+
+        // Fetch settings once on load (so initial room capacities are ready)
+        fetchSettingsData();
+
+        // 3. OPERATIONS (Absentees/QP) - KEPT ON LIVE SYNC
         opsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "operations"), (snap) => {
-            // Only sync if we haven't switched to V2 mode yet, or to keep legacy sync alive
             if (snap.exists()) syncLocal(snap.data());
         });
 
         // 4. ALLOCATIONS (Scribes)
-        // 🛡️ ARCHITECTURAL UNIFICATION: Removed legacy Global Listener.
-        // Scribe allotments are now managed solely by the Sessions collection (Line 1378).
-        // This prevents the legacy global document from wiping modular session data.
         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-
-
-        // 5. STAFF
-        staffUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "staff"), (snap) => {
-            if (snap.exists()) syncLocal(snap.data());
-        });
-
-        // 6. SLOTS
-        slotsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "slots"), (snap) => {
-            if (snap.exists()) syncLocal(snap.data());
-        });
-
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
@@ -8796,14 +8790,15 @@ function getExamName(date, time, stream) {
     showView(viewExtractor, navExtractor);
     populateUploadExamDropdown(); // <--- ADD THIS CALL
     });
-    navEditData.addEventListener('click', () => showView(viewEditData, navEditData)); // <-- ADD THIS
+    // 🛡️ SECURITY/COST OPTIMIZATION: Data is fetched only when tab is accessed
+    navEditData.addEventListener('click', () => { showView(viewEditData, navEditData); window.fetchStaffData(); }); 
     navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
-    navRoomAllotment.addEventListener('click', () => showView(viewRoomAllotment, navRoomAllotment));
+    navRoomAllotment.addEventListener('click', () => { showView(viewRoomAllotment, navRoomAllotment); window.fetchSettingsData(); window.fetchSlotsData(); });
     navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
-    navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); // <-- ADD THIS
+    navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); 
     navReports.addEventListener('click', () => showView(viewReports, navReports));
     navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
-    navSettings.addEventListener('click', () => showView(viewSettings, navSettings));
+    navSettings.addEventListener('click', () => { showView(viewSettings, navSettings); window.fetchSettingsData(); });
     // Add this line with your other navigation listeners
     if (navHelp) {
     navHelp.addEventListener('click', () => showView(viewHelp, navHelp));
