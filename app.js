@@ -8795,7 +8795,13 @@ function getExamName(date, time, stream) {
     navEditData.addEventListener('click', () => { showView(viewEditData, navEditData); window.fetchStaffData(); }); 
     navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
     navRoomAllotment.addEventListener('click', () => { showView(viewRoomAllotment, navRoomAllotment); window.fetchSettingsData(); window.fetchSlotsData(); });
-    navQPCodes.addEventListener('click', () => showView(viewQPCodes, navQPCodes));
+    navQPCodes.addEventListener('click', () => { 
+        showView(viewQPCodes, navQPCodes);
+        const qpSelect = document.getElementById('qp-session-select');
+        if (qpSelect && qpSelect.value && typeof window.fetchQPDataForSession === 'function') {
+            window.fetchQPDataForSession(qpSelect.value);
+        }
+    });
     navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); 
     navReports.addEventListener('click', () => showView(viewReports, navReports));
     navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
@@ -9852,48 +9858,39 @@ window.real_populate_session_dropdown = function () {
     }
 
 
-    // --- NEW: Real-time Cloud Listener ---
-    function subscribeToQPSession(sessionKey) {
-        // 🛡️ DEDUP GUARD: Bail if already listening to this exact session
-        if (window._activeQPSession === sessionKey && qpSessionUnsubscribe) {
-            return;
-        }
-        window._activeQPSession = sessionKey;
-        // 1. Unsubscribe from previous session if any
-        if (qpSessionUnsubscribe) {
-            qpSessionUnsubscribe();
-            qpSessionUnsubscribe = null;
-        }
-        if (!sessionKey || !window.firebase) return;
+       // --- COST-OPTIMIZED: On-Demand QP Code Fetcher ---
+    window.fetchQPDataForSession = async function(sessionKey) {
+        if (!sessionKey || !window.firebase || !window.currentCollegeId) return;
 
-        const { db, doc, onSnapshot } = window.firebase;
-        if (!currentCollegeId) return;
-
-        // 2. Generate ID and Ref
+        const { db, doc, getDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
-        const docRef = doc(db, 'colleges', currentCollegeId, 'sessions', sessionId);
+        const docRef = doc(db, 'colleges', window.currentCollegeId, 'sessions', sessionId);
 
-        console.log(`📡 Listening for QP Updates on ${sessionId}...`);
+        console.log(`☁️ Fetching QP Updates for ${sessionId}...`);
 
-        // 3. Start Listening
-        qpSessionUnsubscribe = onSnapshot(docRef, (docSnap) => {
+        try {
+            const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const cloudQPs = data.qpCodes || {};
 
-                // 4. Update Local Storage with Cloud Data
-                if (typeof qpCodeMap === 'undefined') qpCodeMap = {};
+                // Update Local Storage with Cloud Data
+                if (typeof qpCodeMap === 'undefined') window.qpCodeMap = {};
                 
                 qpCodeMap[sessionKey] = cloudQPs;
                 localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
                 
-                // 5. Refresh UI (Only if user is still looking at this session)
-                if (sessionSelectQP.value === sessionKey) {
+                // Refresh UI (Only if user is still looking at this session)
+                const qpSelect = document.getElementById('qp-session-select');
+                if (qpSelect && qpSelect.value === sessionKey) {
                      render_qp_code_list(sessionKey);
                 }
             }
-        });
+        } catch (e) {
+            console.error("Error fetching QP codes:", e);
+        }
     }
+
 
     
 window.real_populate_qp_code_session_dropdown = function () {
@@ -9989,28 +9986,20 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         sessionSelectQP.value = savedSession;
-
-
         const sessionKey = sessionSelectQP.value;
         if (sessionKey) {
             qpEntrySection.classList.remove('hidden');
             render_qp_code_list(sessionKey);
             
-            // --- ADD THIS LINE ---
-            subscribeToQPSession(sessionKey); 
-            // --------------------
+            // --- ON-DEMAND FETCH ---
+            if (typeof window.fetchQPDataForSession === 'function') window.fetchQPDataForSession(sessionKey);
+            // -----------------------
 
         } else {
             qpEntrySection.classList.add('hidden');
             qpCodeContainer.innerHTML = '';
             qpCodeStatus.textContent = '';
             saveQpCodesButton.disabled = true;
-
-            // --- OPTIONAL: Stop listening if cleared ---
-            if (qpSessionUnsubscribe) {
-                qpSessionUnsubscribe();
-                qpSessionUnsubscribe = null;
-            }
         }
     });
 
