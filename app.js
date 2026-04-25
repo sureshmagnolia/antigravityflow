@@ -1254,12 +1254,12 @@ window.recalcInvigSlots = async function () {
                 localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
             });
         };
-
-
-        // 1. METADATA (Root Doc)
-        cloudSyncUnsubscribe = onSnapshot(doc(db, "colleges", collegeId), (snap) => {
+          // 1. METADATA (Root Doc) - Converted to one-time fetch!
+        const checkCollegeMetadata = async () => {
+            const { getDoc, doc } = window.firebase;
+            const snap = await getDoc(doc(db, "colleges", collegeId));
             if (snap.exists()) {
-                clearTimeout(connectionTimeout); // <-- PASTE THIS LINE HERE
+                clearTimeout(connectionTimeout);
                 currentCollegeData = snap.data();
                 const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
                 const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
@@ -1269,15 +1269,16 @@ window.recalcInvigSlots = async function () {
 
                 updateHeaderCollegeName();
                 if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
-            } else { // <-- PASTE FROM HERE DOWN
+            } else {
                 console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
                 localStorage.clear();
                 sessionStorage.clear();
                 alert("Session corrupted or expired. Please log in again.");
                 if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
                 location.reload();
-            } // <-- TO HERE
-        });
+            }
+        };
+        checkCollegeMetadata();
         // 2. LAZY CONFIG FETCHERS (Settings, Staff, Slots) - Saves Billing!
         window.fetchSettingsData = async () => {
             const { getDoc, doc } = window.firebase;
