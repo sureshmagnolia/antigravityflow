@@ -10506,11 +10506,16 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
 
     // --- BACKGROUND POLLING ---
+    window._currentSyncHandle = null; // Track handle for visibility resumes
     function startCloudPolling(handle) {
+        window._currentSyncHandle = handle;
         console.log("Started Cloud Polling...");
 
         // Run immediately
         performSyncCheck(handle, false); // false = silent mode (no alerts, just button update)
+
+        // Clear existing to prevent duplicate loops
+        if (typeof cloudPollInterval !== 'undefined' && cloudPollInterval) clearInterval(cloudPollInterval);
 
         // Run every 30 seconds
         cloudPollInterval = setInterval(async () => {
@@ -21419,6 +21424,45 @@ window.addEventListener('message', async (event) => {
         } catch (err) {
             console.error("Extension Sync Failed:", err);
             alert("❌ Extension Sync Failed. Check console for details.");
+        }
+    }
+});
+
+// 🧠 SMART PAUSE & AUTO-REFRESH: Global Visibility Manager
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+        console.log("🙈 Browser inactive. Pausing background pulses and freezing data calls.");
+        
+        // 1. Kill the Settings Backup Pulse
+        if (typeof cloudPollInterval !== 'undefined' && cloudPollInterval) {
+            clearInterval(cloudPollInterval);
+            cloudPollInterval = null;
+        }
+    } else {
+        console.log("👀 Browser active. Resuming pulses and auto-refreshing current view...");
+        
+        // 1. Resume the Settings Backup Pulse (if it was active)
+        if (typeof window._currentSyncHandle !== 'undefined' && window._currentSyncHandle && typeof startCloudPolling === 'function') {
+            startCloudPolling(window._currentSyncHandle);
+        }
+        
+        // 2. Auto-Refresh the exact data for the tab you are currently looking at
+        if (typeof viewQPCodes !== 'undefined' && !viewQPCodes.classList.contains('hidden')) {
+            const qpSelect = document.getElementById('qp-session-select');
+            if (qpSelect && qpSelect.value && typeof window.fetchQPDataForSession === 'function') window.fetchQPDataForSession(qpSelect.value);
+        }
+        else if (typeof viewAbsentees !== 'undefined' && !viewAbsentees.classList.contains('hidden')) {
+            if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData();
+        }
+        else if (typeof viewReports !== 'undefined' && !viewReports.classList.contains('hidden')) {
+            if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData();
+        }
+        else if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden')) {
+            if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData();
+            if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData();
+        }
+        else if (typeof viewEditData !== 'undefined' && !viewEditData.classList.contains('hidden')) {
+            if (typeof window.fetchStaffData === 'function') window.fetchStaffData();
         }
     }
 });
