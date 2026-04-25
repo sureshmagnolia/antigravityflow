@@ -1280,6 +1280,7 @@ window.recalcInvigSlots = async function () {
         });
         // 2. LAZY CONFIG FETCHERS (Settings, Staff, Slots) - Saves Billing!
         window.fetchSettingsData = async () => {
+            const { getDoc, doc } = window.firebase;
             const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "settings"));
             if (snap.exists()) {
                 syncLocal(snap.data());
@@ -1290,11 +1291,13 @@ window.recalcInvigSlots = async function () {
         };
 
         window.fetchStaffData = async () => {
+            const { getDoc, doc } = window.firebase;
             const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "staff"));
             if (snap.exists()) syncLocal(snap.data());
         };
 
         window.fetchSlotsData = async () => {
+            const { getDoc, doc } = window.firebase;
             const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "slots"));
             if (snap.exists()) syncLocal(snap.data());
         };
