@@ -1302,14 +1302,15 @@ window.recalcInvigSlots = async function () {
             if (snap.exists()) syncLocal(snap.data());
         };
 
+        // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
+        window.fetchOperationsData = async () => {
+            const { getDoc, doc } = window.firebase;
+            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "operations"));
+            if (snap.exists()) syncLocal(snap.data());
+        };
+
         // Fetch settings once on load (so initial room capacities are ready)
         fetchSettingsData();
-
-        // 3. OPERATIONS (Absentees/QP) - KEPT ON LIVE SYNC
-        opsUnsub = onSnapshot(doc(db, "colleges", collegeId, "system_data", "operations"), (snap) => {
-            if (snap.exists()) syncLocal(snap.data());
-        });
-
         // 4. ALLOCATIONS (Scribes)
         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
@@ -8803,8 +8804,8 @@ function getExamName(date, time, stream) {
         }
     });
     navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); 
-    navReports.addEventListener('click', () => showView(viewReports, navReports));
-    navAbsentees.addEventListener('click', () => showView(viewAbsentees, navAbsentees));
+    navReports.addEventListener('click', () => { showView(viewReports, navReports); if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData(); });
+    navAbsentees.addEventListener('click', () => { showView(viewAbsentees, navAbsentees); if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData(); });
     navSettings.addEventListener('click', () => { showView(viewSettings, navSettings); window.fetchSettingsData(); });
     // Add this line with your other navigation listeners
     if (navHelp) {
