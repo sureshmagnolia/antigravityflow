@@ -1623,8 +1623,6 @@ window.recalcInvigSlots = async function () {
 
 // Final UI Load — guaranteed to run
 loadInitialData();
-if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-
 };
 
 
