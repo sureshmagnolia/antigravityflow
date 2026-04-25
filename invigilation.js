@@ -443,6 +443,24 @@ if (adminView && !adminView.classList.contains('hidden')) {
 
 }
 
+// 🧠 SMART PAUSE: Page Visibility API
+// Executes all active listeners if the browser tab is hidden to save massive costs!
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+        console.log("🙈 Tab hidden. Pausing live Invigilation sync...");
+        if (typeof cloudUnsubscribe !== 'undefined' && cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+        if (typeof slotsUnsubscribe !== 'undefined' && slotsUnsubscribe) { slotsUnsubscribe(); slotsUnsubscribe = null; }
+        if (typeof staffUnsubscribe !== 'undefined' && staffUnsubscribe) { staffUnsubscribe(); staffUnsubscribe = null; }
+        if (typeof sessionsUnsubscribe !== 'undefined' && sessionsUnsubscribe) { sessionsUnsubscribe(); sessionsUnsubscribe = null; }
+        if (typeof presenceUnsubscribe !== 'undefined' && presenceUnsubscribe) { presenceUnsubscribe(); presenceUnsubscribe = null; }
+    } else {
+        console.log("👀 Tab active. Resuming live Invigilation sync...");
+        if (typeof currentCollegeId !== 'undefined' && currentCollegeId && typeof currentUser !== 'undefined' && currentUser) {
+            setupLiveSync(currentCollegeId, typeof isAdmin !== 'undefined' && isAdmin ? 'admin' : 'staff');
+        }
+    }
+});
+
 // Helper to apply config (Shared by Cache & Live)
 function applyCollegeConfig(data, mode, triggerRender) {
     collegeData = data;
