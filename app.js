@@ -1169,7 +1169,13 @@ window.recalcInvigSlots = async function () {
     const origText = btn ? btn.innerHTML : '';
     if (btn) { btn.innerHTML = '⏳ Recalculating...'; btn.disabled = true; }
 
-    try {
+       try {
+        // 🛡️ CRITICAL: Force fetch latest slots from cloud BEFORE recalculating
+        // to prevent erasing existing teacher willingness data if local memory is empty.
+        if (typeof window.fetchSlotsData === 'function') {
+            await window.fetchSlotsData();
+        }
+
         const changed = await updateLocalSlotsFromStudents();
 
         if (changed) {
@@ -2068,25 +2074,31 @@ async function deleteSessionFromCloud(sessionKey) {
         const cid = currentCollegeId;
         const timestamp = new Date().toISOString();
 
-        try {
-            const get = (k) => localStorage.getItem(k);
+         try {
+                        const get = (k) => localStorage.getItem(k);
+
+            // 🛡️ SAFEGUARD: Prevent overwriting cloud data with nulls if lazy-loaded local storage is empty
+            const buildPayload = (keys) => {
+                const payload = {};
+                keys.forEach(k => {
+                    const val = get(k);
+                    if (val !== null) payload[k] = val;
+                });
+                return payload;
+            };
 
         // 1. SETTINGS (Global Config)
             if (targetSection === 'settings') {
-                const data = {
-                    examCollegeName: get('examCollegeName'),
-                    examRoomConfig: get('examRoomConfig'),
-                    examStreamsConfig: get('examStreamsConfig'),
-                    examSessionNames: get('examSessionNames'),
-                    examRulesConfig: get('examRulesConfig'),
-                    examRemunerationConfig: get('examRemunerationConfig'),
-                    examAllKnownSessions: get('examAllKnownSessions'),
-                    examMixingStrategy: get('examMixingStrategy'), // <--- ADD THIS LINE
-                    lastUpdated: timestamp
-                };
-
+                const data = buildPayload([
+                    'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
+                    'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
+                    'examAllKnownSessions', 'examMixingStrategy'
+                ]);
+                data.lastUpdated = timestamp;
                 
-                await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
+                if (Object.keys(data).length > 1) { // Only sync if there's data beside timestamp
+                    await setDoc(doc(db, "colleges", cid, "system_data", "settings"), data, { merge: true });
+                }
 
               
                 // 🚫 DELETED: Shadow Mirror to GAS
@@ -2097,24 +2109,24 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // 2. OPERATIONS (Global Lists)
             else if (targetSection === 'ops') {
-                const data = {
-                    examAbsenteeList: get('examAbsenteeList'),
-                    examQPCodes: get('examQPCodes')
-                };
-                await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
+                const data = buildPayload([
+                    'examAbsenteeList', 'examQPCodes'
+                ]);
+                if (Object.keys(data).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
+                }
                 // 🚫 DELETED: Shadow Mirror to GAS
             }
 
 
             // 3. ALLOCATION (Scribes + Room Allotments)
             else if (targetSection === 'allocation') {
-                const data = {
-                    examScribeList: get('examScribeList'),
-                    examScribeAllotment: get('examScribeAllotment'),
-                    examScribeAllotmentV2: get('examScribeAllotmentV2'),
-                    examAllotmentData: get('examAllotmentData')
-                };
-                await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
+                const data = buildPayload([
+                    'examScribeList', 'examScribeAllotment', 'examScribeAllotmentV2', 'examAllotmentData'
+                ]);
+                if (Object.keys(data).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
+                }
 
                          // 🚫 DELETED: Shadow Mirror to GAS
             }
@@ -2122,22 +2134,23 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // 4. STAFF (Invigilators)
             else if (targetSection === 'staff') {
-                const data = {
-                    examStaffData: get('examStaffData'),
-                    examInvigilatorMapping: get('examInvigilatorMapping')
-                };
-                await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
+                const data = buildPayload([
+                    'examStaffData', 'examInvigilatorMapping'
+                ]);
+                if (Object.keys(data).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
+                }
             }
 
             // 5. SLOTS (Invigilation Requirements)
             else if (targetSection === 'slots') {
-                const data = {
-                    examInvigilationSlots: get('examInvigilationSlots'),
-                    invigAdvanceUnavailability: get('invigAdvanceUnavailability')
-                };
-                await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
+                const data = buildPayload([
+                    'examInvigilationSlots', 'invigAdvanceUnavailability'
+                ]);
+                if (Object.keys(data).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
+                }
             }
-
                  // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
