@@ -370,6 +370,13 @@
                             <span>🕒</span> Activity
                         </button>
 
+                        <button onclick="window.openFacultyPeriodReport()"
+                            class="bg-teal-50 text-teal-700 border border-teal-200 px-3 py-2 rounded-md text-xs font-bold hover:bg-teal-100 shadow-sm flex items-center gap-1"
+                            title="Faculty Duty Report for a Period">
+                            <span>📋</span> Period Report
+                        </button>
+
+
                         <button onclick="lockAllSessions()"
                             class="bg-red-600 text-white px-3 py-2 rounded-md text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1275,6 +1282,71 @@
             </div>
         </div>
     </div>
+
+<!-- ── FACULTY PERIOD REPORT MODAL ─────────────────────────────────── -->
+<div id="faculty-period-modal"
+    class="hidden fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+    <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200 shrink-0">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800">📋 Faculty Period Report</h3>
+                <p class="text-xs text-gray-500">Assignment & unavailability summary for a selected session range</p>
+            </div>
+            <button onclick="closeModal('faculty-period-modal')" class="text-gray-400 hover:text-gray-700 text-3xl leading-none">&times;</button>
+        </div>
+
+        <!-- Filters -->
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div class="flex-1 min-w-[180px]">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">From Session</label>
+                    <select id="period-from" class="w-full p-2 border border-gray-300 rounded bg-white text-xs font-medium"></select>
+                </div>
+                <div class="flex-1 min-w-[180px]">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">To Session</label>
+                    <select id="period-to" class="w-full p-2 border border-gray-300 rounded bg-white text-xs font-medium"></select>
+                </div>
+                <button onclick="window.generateFacultyPeriodReport()"
+                    class="bg-teal-600 text-white px-5 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 shadow transition">
+                    Generate Report
+                </button>
+                <button onclick="window.printFacultyPeriodReport()"
+                    class="bg-white border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 shadow transition">
+                    🖨️ Print
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-auto flex-1 custom-scroll">
+            <div id="faculty-period-placeholder" class="text-center py-16 text-gray-400 italic text-sm">
+                Select a date range and click Generate Report.
+            </div>
+            <table id="faculty-period-table" class="hidden min-w-full divide-y divide-gray-200 text-xs">
+                <thead class="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-bold text-gray-600 uppercase tracking-wider">#</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-600 uppercase tracking-wider">Dept</th>
+                        <th class="px-4 py-3 text-center font-bold text-gray-600 uppercase tracking-wider">Assigned/<br>Volunteered</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-600 uppercase tracking-wider">Sessions Assigned</th>
+                        <th class="px-4 py-3 text-center font-bold text-gray-600 uppercase tracking-wider">Unavailable<br>Days</th>
+                        <th class="px-4 py-3 text-left font-bold text-gray-600 uppercase tracking-wider">Unavailability Dates</th>
+                    </tr>
+                </thead>
+                <tbody id="faculty-period-tbody" class="bg-white divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+
+        <!-- Footer Summary -->
+        <div id="faculty-period-footer" class="hidden px-6 py-3 bg-gray-50 border-t border-gray-200 text-xs text-gray-500 shrink-0">
+            <span id="faculty-period-summary"></span>
+        </div>
+    </div>
+</div>
+<!-- ── END FACULTY PERIOD REPORT MODAL ──────────────────────────────── -->
 
 
 
