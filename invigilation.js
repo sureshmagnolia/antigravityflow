@@ -4809,7 +4809,9 @@ window.viewAutoAssignLogs = async function () {
 }
 
 window.openFacultyPeriodReport = function() {
-    const keys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
+        const keys = Object.keys(invigilationSlots)
+        .filter(k => !invigilationSlots[k].isHidden)
+        .sort((a, b) => parseDate(a) - parseDate(b));
     const fromSel = document.getElementById('period-from');
     const toSel = document.getElementById('period-to');
     fromSel.innerHTML = '';
