@@ -4807,6 +4807,144 @@ window.viewAutoAssignLogs = async function () {
         window.openModal('inconvenience-modal');
     }
 }
+
+window.openFacultyPeriodReport = function() {
+    const keys = Object.keys(invigilationSlots).sort((a, b) => parseDate(a) - parseDate(b));
+    const fromSel = document.getElementById('period-from');
+    const toSel = document.getElementById('period-to');
+    fromSel.innerHTML = '';
+    toSel.innerHTML = '';
+    keys.forEach(k => {
+        fromSel.innerHTML += `<option value="${k}">${k}</option>`;
+        toSel.innerHTML   += `<option value="${k}">${k}</option>`;
+    });
+    if (keys.length > 0) toSel.value = keys[keys.length - 1];
+    document.getElementById('faculty-period-table').classList.add('hidden');
+    document.getElementById('faculty-period-placeholder').classList.remove('hidden');
+    document.getElementById('faculty-period-footer').classList.add('hidden');
+    window.openModal('faculty-period-modal');
+};
+
+window.generateFacultyPeriodReport = function() {
+    const fromKey = document.getElementById('period-from').value;
+    const toKey   = document.getElementById('period-to').value;
+    if (!fromKey || !toKey) return alert('Please select both From and To sessions.');
+
+    const fromDate = parseDate(fromKey);
+    const toDate   = parseDate(toKey);
+    if (fromDate > toDate) return alert('From session must be before To session.');
+
+    const slotKeysInRange = Object.keys(invigilationSlots).filter(k => {
+        const d = parseDate(k);
+        return d >= fromDate && d <= toDate;
+    });
+
+    const report = staffData
+        .filter(s => s.status !== 'archived')
+        .map(s => {
+            const assignedSessions = slotKeysInRange.filter(k =>
+                (invigilationSlots[k].assigned || []).includes(s.email)
+            );
+
+            // Collect session-level unavailability
+            const unavSessions = slotKeysInRange.filter(k => {
+                const slot = invigilationSlots[k];
+                return slot.unavailable && slot.unavailable.some(u =>
+                    (typeof u === 'string' ? u : u.email) === s.email
+                );
+            });
+
+            // Collect advance unavailability dates in range
+            const unavDates = Object.keys(advanceUnavailability || {}).filter(dateStr => {
+                const d = parseDate(dateStr + ' | 09:00 AM');
+                if (isNaN(d)) return false;
+                if (d < fromDate || d > toDate) return false;
+                const sessions = advanceUnavailability[dateStr];
+                return (sessions.FN || []).includes(s.email) || (sessions.AN || []).includes(s.email);
+            });
+
+            const allUnavDates = [...new Set([
+                ...unavSessions.map(k => k.split(' | ')[0]),
+                ...unavDates
+            ])].sort();
+
+            return {
+                name:       s.name,
+                dept:       s.dept || '—',
+                count:      assignedSessions.length,
+                sessions:   assignedSessions,
+                unavCount:  allUnavDates.length,
+                unavDates:  allUnavDates
+            };
+        })
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+    const tbody = document.getElementById('faculty-period-tbody');
+    tbody.innerHTML = '';
+
+    report.forEach((r, i) => {
+        const sessionList = r.sessions.length
+            ? r.sessions.map(k => `<span class="inline-block bg-teal-50 border border-teal-200 text-teal-700 rounded px-1.5 py-0.5 mr-1 mb-1">${k}</span>`).join('')
+            : '<span class="text-gray-400 italic">None</span>';
+
+        const unavList = r.unavDates.length
+            ? r.unavDates.map(d => `<span class="inline-block bg-red-50 border border-red-200 text-red-600 rounded px-1.5 py-0.5 mr-1 mb-1">${d}</span>`).join('')
+            : '<span class="text-gray-300 italic">None</span>';
+
+        const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        tbody.innerHTML += `
+            <tr class="${rowBg}">
+                <td class="px-4 py-2 text-gray-400">${i + 1}</td>
+                <td class="px-4 py-2 font-bold text-gray-800">${r.name}</td>
+                <td class="px-4 py-2 text-gray-500">${r.dept}</td>
+                <td class="px-4 py-2 text-center">
+                    <span class="text-lg font-black ${r.count > 0 ? 'text-teal-700' : 'text-gray-300'}">${r.count}</span>
+                </td>
+                <td class="px-4 py-2">${sessionList}</td>
+                <td class="px-4 py-2 text-center">
+                    <span class="font-bold ${r.unavCount > 0 ? 'text-red-600' : 'text-gray-300'}">${r.unavCount}</span>
+                </td>
+                <td class="px-4 py-2">${unavList}</td>
+            </tr>`;
+    });
+
+    const totalSessions = slotKeysInRange.length;
+    const totalAssigned = report.reduce((s, r) => s + r.count, 0);
+    document.getElementById('faculty-period-summary').textContent =
+        `Period: ${fromKey}  →  ${toKey}  |  ${totalSessions} session(s)  |  ${report.length} faculty  |  ${totalAssigned} total assignments`;
+
+    document.getElementById('faculty-period-placeholder').classList.add('hidden');
+    document.getElementById('faculty-period-table').classList.remove('hidden');
+    document.getElementById('faculty-period-footer').classList.remove('hidden');
+};
+
+window.printFacultyPeriodReport = function() {
+    const table = document.getElementById('faculty-period-table');
+    if (table.classList.contains('hidden')) return alert('Generate the report first.');
+    const summary = document.getElementById('faculty-period-summary').textContent;
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>Faculty Period Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 11px; margin: 15mm; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+        th { background: #f0f4ff; font-weight: bold; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .footer { margin-top: 12px; font-size: 10px; color: #666; }
+    </style></head><body>
+    <h2 style="margin-bottom:4px">Faculty Period Report</h2>
+    <p style="font-size:10px;color:#666;margin-bottom:12px">${summary}</p>
+    ${table.outerHTML}
+    <div class="footer">Printed: ${new Date().toLocaleString()}</div>
+    </body></html>`);
+    w.document.close();
+    w.print();
+};
+
+
+
+
+
 // --- OPTIMIZED ACTIVITY LOGGING (Sub-Collection Strategy) ---
 async function logActivity(action, details) {
     if (!currentCollegeId) return;
