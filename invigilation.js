@@ -6610,7 +6610,7 @@ window.renderManualCards = function() {
         // Hide unavailable from Available pane
         if (isUnavailable && !s.isChecked) return; 
 
-        const disabledState = !window.manualState.isFullEditMode ? 'opacity-60 cursor-not-allowed pointer-events-none bg-gray-50' : 'cursor-pointer hover:shadow-md hover:border-indigo-300';
+        const disabledState = (!window.manualState.isFullEditMode && !s.isChecked) ? 'opacity-60 cursor-not-allowed pointer-events-none bg-gray-50' : 'cursor-pointer hover:shadow-md hover:border-indigo-300';
         const pendingColor = s.pending > 0 ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50';
         
         const warningHtml = s.badges.map(b => `<span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded shadow-sm border border-amber-200 font-bold">${b}</span>`).join('');
@@ -6642,7 +6642,8 @@ window.renderManualCards = function() {
                     <!-- Hidden checkbox powers saveManualAllocation effortlessly -->
                     <input type="checkbox" class="manual-chk hidden" value="${s.email}" ${s.isChecked ? 'checked' : ''}>
                     
-                    <button class="text-[10px] font-black uppercase px-3 py-1.5 rounded-lg border ${actionColor} transition shadow-sm w-full" onclick="event.stopPropagation(); window.toggleManualStaffCard('${s.email}')">${actionText}</button>
+                    <button class="text-[10px] font-black uppercase px-3 py-1.5 rounded-lg border ${actionColor} transition shadow-sm w-full" onclick="event.stopPropagation(); ${s.isChecked ? `window.adminForceRemoveFromSlot('${s.email}')` : `window.toggleManualStaffCard('${s.email}')`}">${actionText}</button>
+
                     
                     ${s.isChecked ? '' : `<button onclick="event.stopPropagation(); adminMarkUnavailable('${window.manualState.key}', '${s.email}')" class="text-[9px] text-gray-500 bg-gray-100 hover:text-white hover:bg-red-500 hover:border-red-600 border border-gray-200 px-2 py-1 rounded transition w-full font-bold shadow-sm">⛔ Unavail.</button>`}
                 </div>
@@ -6664,6 +6665,37 @@ window.toggleManualStaffCard = function(email) {
         renderManualCards();
     }
 }
+
+window.adminForceRemoveFromSlot = async function(email) {
+    const key = window.manualState.key;
+    const name = typeof getNameFromEmail === 'function' ? getNameFromEmail(email) : email;
+    if (!confirm('⚠️ Force Remove: ' + name + '\n\nThis removes them from slot:\n' + key + '\n\nNo lock required. Proceed?')) return;
+
+    const slot = invigilationSlots[key];
+    if (!slot) return;
+
+    // Remove from assigned and exchange requests
+    slot.assigned = (slot.assigned || []).filter(e => e !== email);
+    if (slot.exchangeRequests) {
+        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
+    }
+
+    // Update duty count
+    const staffMember = staffData.find(s => s.email === email);
+    if (staffMember && staffMember.dutiesAssigned > 0) staffMember.dutiesAssigned--;
+
+    logActivity('Admin Force Remove', name + ' force-removed from ' + key + ' by admin (no lock required).');
+
+    // Also update manualState so UI reflects it immediately
+    const stateEntry = window.manualState.rankedStaff.find(s => s.email === email);
+    if (stateEntry) stateEntry.isChecked = false;
+
+    await syncSlotsToCloud();
+    await syncStaffToCloud();
+    window.renderManualCards();
+    console.log('%c✅ Removed & saved.', 'color:green;font-weight:bold');
+};
+
 
 window.openManualAllocationModal = function (key) {
     const slot = invigilationSlots[key];
