@@ -3840,7 +3840,13 @@ async function volunteer(key, email) {
         return alert("🚫 Slot Locked! Contact Admin.");
     }
     
+    // 3. Prevent Double Volunteering Check
+    if (slot.assigned && slot.assigned.includes(email)) {
+        return alert("You are already assigned to this slot.");
+    }
+    
     const [datePart] = key.split(' | ');
+
 
     // Check conflicts
     const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
