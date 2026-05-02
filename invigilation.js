@@ -91,6 +91,8 @@ let currentCollegeId = null;
 let collegeData = null;
 let staffData = [];
 let invigilationSlots = {};
+window._debugSlots = () => invigilationSlots;
+window._debugSyncSlots = () => syncSlotsToCloud();
 let collegeName = 'Loading College...';
 let collegeSettings = {};
 let designationsConfig = {};
