@@ -9708,23 +9708,28 @@ window.sendCustomEmail = async function() {
         let sent = 0;
         let failed = 0;
 
-        for (const email of emailList) {
+        // Group emails into chunks of 50 to avoid Google limits, but send as a single bulk email per chunk
+        const chunkSize = 50;
+        for (let i = 0; i < emailList.length; i += chunkSize) {
+            const chunk = emailList.slice(i, i + chunkSize);
+            const combinedEmails = chunk.join(','); // Joins 8 emails into "email1,email2..."
+            
             try {
                 await fetch(googleScriptUrl, {
                     method: 'POST',
                     mode: 'no-cors',
                     cache: 'no-cache',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: email, subject: subject, body: htmlBody })
+                    body: JSON.stringify({ to: combinedEmails, subject: subject, body: htmlBody })
                 });
-                sent++;
+                sent += chunk.length;
             } catch (e) {
-                failed++;
+                failed += chunk.length;
             }
         }
 
         updateSyncStatus("Sent Custom Emails", "success");
-        alert(`✅ Finished sending.\n\nSuccessfully sent: ${sent}\nFailed: ${failed}`);
+        alert(`✅ Finished sending Bulk Email to ${sent} recipients.`);
         closeModal('custom-email-modal');
 
     } catch (err) {
