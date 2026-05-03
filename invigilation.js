@@ -3447,6 +3447,15 @@ window.saveRoleConfig = async function () {
     const newUrl = document.getElementById('google-script-url').value.trim();
     googleScriptUrl = newUrl;
     logActivity("Settings Updated", `Admin updated Global Target to ${globalDutyTarget} and Guest Target to ${guestGlobalTarget}.`);
+   
+        // 💾 Sync to Local Storage for Backups
+    localStorage.setItem('invigDepartments', JSON.stringify(departmentsConfig));
+    localStorage.setItem('invigRoles', JSON.stringify(rolesConfig));
+    localStorage.setItem('invigGlobalTarget', globalDutyTarget);
+    localStorage.setItem('invigGuestTarget', guestGlobalTarget);
+    localStorage.setItem('invigVacationTarget', vacationDutyTarget);
+    localStorage.setItem('invigGoogleScriptUrl', googleScriptUrl);
+
     // Save to Cloud
     const ref = doc(db, "colleges", currentCollegeId);
     await updateDoc(ref, {
