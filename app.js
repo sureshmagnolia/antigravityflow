@@ -1008,11 +1008,15 @@ async function updateLocalSlotsFromStudents() {
 
         // 1. Process Student Data
         students.forEach(s => {
-            const d = s.Date ? s.Date.trim() : "";
+            let d = s.Date ? s.Date.trim() : "";
             const t = s.Time ? s.Time.trim() : "";
             if (!d || !t) return;
 
+            // Normalize date separators to dots (DD.MM.YYYY)
+            d = d.replace(/[-/]/g, '.');
+
             const key = `${d} | ${t}`;
+
             
             if (!sessionStats[key]) {
                 sessionStats[key] = {
@@ -1063,11 +1067,14 @@ async function updateLocalSlotsFromStudents() {
                 // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
                 const virtualMatchKey = Object.keys(existingSlots).find(k => {
                     if (!k.includes('|')) return false;
-                    const [exDate, exTime] = k.split('|').map(s => s.trim());
+                    let [exDate, exTime] = k.split('|').map(s => s.trim());
+                    
+                    // Normalize existing key date for comparison
+                    exDate = exDate.replace(/[-/]/g, '.');
+                    const targetDate = stats.dateStr.replace(/[-/]/g, '.');
                     
                     // Must be same Date
-                    if (exDate !== stats.dateStr) return false;
-                    
+                    if (exDate !== targetDate) return false;                   
                     // Must be same Period (FN or AN)
                     if (getPeriod(exTime) !== genPeriod) return false;
 
