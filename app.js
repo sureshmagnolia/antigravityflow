@@ -1864,9 +1864,16 @@ async function deleteSessionFromCloud(sessionKey) {
         }
         // ---------------------------------------------------------------
         
+        // Update the Master Registry to remove from all dropdowns
+        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        known = known.filter(k => k !== sessionKey);
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
+
         updateSyncStatus("Deleted from Cloud", "success");
 
     } catch (e) {
+
         console.error("Session Delete Error:", e);
         updateSyncStatus("Delete Failed", "error");
     }
@@ -20714,9 +20721,14 @@ window.executeBulkDelete = async function() {
             await syncDataToCloud('allocation'); 
         }
         
+        // Update Master Registry for all deleted sessions in the range
+        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+        const toDeleteSet = new Set(sessionsToDelete);
+        known = known.filter(k => !toDeleteSet.has(k));
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
-
     } catch (error) {
         console.error("Delete Error:", error);
         alert("An error occurred: " + error.message);
