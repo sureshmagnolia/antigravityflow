@@ -73,7 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!r[1] || !r[2]) continue; // Skip empty rows
 
                     const dateParts = (examDate || "").split(' ');
-                    const finalDate = dateParts[0] || "";
+                    // Normalizing date to dots for Invigilation compatibility
+                    const finalDate = (dateParts[0] || "").replace(/[-/]/g, '.');
                     const finalTime = dateParts.slice(1).join(' ') || "";
 
                     allStudents.push({
@@ -101,8 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     // We pass the data as a JSON string just like the Python script does
                     await window.handlePythonExtraction(JSON.stringify(allStudents));
                     
+                    // NEW: Force Invigilation Slot update
+                    if (typeof window.updateLocalSlotsFromStudents === 'function') {
+                        log(`🛡️ Updating Invigilation Slots...`);
+                        await window.updateLocalSlotsFromStudents();
+                    }
+
                     log(`🎉 Successfully integrated with ExamFlow!`, 'success');
-                    alert(`✅ SUCCESS!\n\n${allStudents.length} students loaded and synced via the System Receiver.`);
+                    alert(`✅ SUCCESS!\n\n${allStudents.length} students loaded.\nInvigilation slots updated.`);
                 } else {
                     log(`❌ Error: 'handlePythonExtraction' not found in app.js.`, 'error');
                     // Fallback to basic load if the receiver is missing
