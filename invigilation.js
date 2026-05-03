@@ -5119,6 +5119,42 @@ if (exchangeSearch) {
         if (currentUser) renderExchangeMarket(currentUser.email);
     });
 }
+window.openAllUpcomingNotificationModal = function () {
+    const list = document.getElementById('notif-list-container');
+    const title = document.getElementById('notif-modal-title');
+    const subtitle = document.getElementById('notif-modal-subtitle');
+
+    title.textContent = "📢 Notify All Upcoming Duties";
+    subtitle.textContent = "Today onwards • All Sessions";
+    list.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div onclick="triggerBulkStaffEmail(null, null)" class="group bg-white border border-gray-200 hover:border-indigo-500 rounded-xl p-5 cursor-pointer transition-all shadow-sm">
+                <div class="flex items-center gap-4 mb-3">
+                    <div class="h-12 w-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">👮</div>
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-lg group-hover:text-indigo-700">Invigilators</h3>
+                        <p class="text-xs text-gray-500">All Upcoming Alerts</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Send personalized reminders for ALL upcoming sessions to each faculty.</p>
+                <div class="text-right text-xs font-bold text-indigo-600 uppercase group-hover:underline">Proceed &rarr;</div>
+            </div>
+
+            <div onclick="triggerBulkDeptEmail(null, null)" class="group bg-white border border-gray-200 hover:border-teal-500 rounded-xl p-5 cursor-pointer transition-all shadow-sm">
+                <div class="flex items-center gap-4 mb-3">
+                    <div class="h-12 w-12 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">🏢</div>
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-lg group-hover:text-teal-700">Departments</h3>
+                        <p class="text-xs text-gray-500">Upcoming Summaries</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Send consolidated upcoming duty lists to HoDs.</p>
+                <div class="text-right text-xs font-bold text-teal-600 uppercase group-hover:underline">Proceed &rarr;</div>
+            </div>
+        </div>
+    `;
+    window.openModal('notification-modal');
+};
 
 // ==========================================
 // 📢 MESSAGING MENU (Selection Screen)
@@ -9332,13 +9368,19 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     // --- FIX: Safe College Name Retrieval ---
     const collegeName = localStorage.getItem('examCollegeName') || "University of Calicut";
 
+    const todayStart = new Date().setHours(0,0,0,0);
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
+        
+        // Match condition: Specific week OR (All Upcoming AND date >= today)
+        const isUpcoming = (!monthStr && date.getTime() >= todayStart);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
+        const isMatch = (mStr === monthStr && wNum === weekNum) || isUpcoming;
 
-        if (mStr === monthStr && wNum === weekNum) {
+        if (isMatch) {
+
             const [dStr, tStr] = key.split(' | ');
             const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("13:") || tStr.startsWith("14:"));
             const sessionCode = isAN ? "AN" : "FN";
@@ -9371,7 +9413,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 
         // Generate Beautiful Email Body (HTML)
         const dutyLines = duties.map(d => `   • ${d.date} (${d.day}) - ${d.session} [${d.time}]`).join('<br>'); // Use <br> for HTML email
-        const subject = `Exam Duty Assignment - Week ${weekNum}`;
+        const subject = weekNum ? `Exam Duty Assignment - Week ${weekNum}` : `Upcoming Exam Duty Schedule`;
         const btnId = `email-btn-${index}`;
         
         // Use the HTML Email Generator Helper (Defined below)
@@ -9514,13 +9556,18 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     const rawDeptDuties = {}; 
     window.currentDeptEmailQueue = []; // Reset Queue
     
+    const todayStart = new Date().setHours(0,0,0,0);
     Object.keys(invigilationSlots).forEach(key => {
         if (invigilationSlots[key].isHidden) return;
         const date = parseDate(key);
+        
+        // Match condition: Specific week OR (All Upcoming AND date >= today)
+        const isUpcoming = (!monthStr && date.getTime() >= todayStart);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
+        const isMatch = (mStr === monthStr && wNum === weekNum) || isUpcoming;
 
-        if (mStr === monthStr && wNum === weekNum) {
+        if (isMatch) {
             const [dStr, tStr] = key.split(' | ');
             const isAN = (tStr.includes("PM") || tStr.startsWith("12:"));
             const session = isAN ? "AN" : "FN";
