@@ -6463,9 +6463,13 @@ window.downloadMasterBackup = function () {
             designationsConfig,
             departmentsConfig,
             globalDutyTarget,
+            guestGlobalTarget,
+            vacationDutyTarget,
+            vacationDutyDates,
             googleScriptUrl
         }
     };
+
 
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
     const link = document.createElement('a');
@@ -6527,6 +6531,9 @@ window.handleMasterRestore = function (input) {
                 designationsConfig = d.designationsConfig || {};
                 departmentsConfig = d.departmentsConfig || [];
                 globalDutyTarget = d.globalDutyTarget || 2;
+                guestGlobalTarget = d.guestGlobalTarget || 1;
+                vacationDutyTarget = d.vacationDutyTarget || 0;
+                vacationDutyDates = d.vacationDutyDates || [];
                 googleScriptUrl = d.googleScriptUrl || "";
 
                 // Prepare Full Payload
@@ -6538,6 +6545,9 @@ window.handleMasterRestore = function (input) {
                     invigDesignations: JSON.stringify(designationsConfig),
                     invigDepartments: JSON.stringify(departmentsConfig),
                     invigGlobalTarget: globalDutyTarget,
+                    invigGuestTarget: guestGlobalTarget,
+                    invigVacationTarget: vacationDutyTarget,
+                    invigVacationDutyDates: JSON.stringify(vacationDutyDates),
                     invigGoogleScriptUrl: googleScriptUrl
                 };
             } 
