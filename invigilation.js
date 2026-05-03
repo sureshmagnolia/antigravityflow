@@ -4050,27 +4050,54 @@ function renderDepartmentsList() {
     if (!container) return;
 
     container.innerHTML = '';
-
-    // Handle legacy string data (convert to object on fly if needed)
     const cleanDepts = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
-
     cleanDepts.sort((a, b) => a.name.localeCompare(b.name));
 
     cleanDepts.forEach(dept => {
-        // If Locked: Hide 'x' button
-        const deleteBtn = isDeptLocked ? '' :
-            `<button onclick="deleteDepartment('${dept.name}')" class="text-red-400 hover:text-red-600 font-bold ml-1 hover:bg-red-50 rounded px-1">&times;</button>`;
+        // Only show buttons if NOT locked
+        const actionBtns = isDeptLocked ? '' : `
+            <div class="flex items-center gap-1 ml-2">
+                <button onclick="editDepartment('${dept.name}')" class="text-blue-400 hover:text-blue-600 font-bold px-1" title="Edit Email">✏️</button>
+                <button onclick="deleteDepartment('${dept.name}')" class="text-red-400 hover:text-red-600 font-bold px-1">&times;</button>
+            </div>
+        `;
 
-        const emailBadge = dept.email ? `<span class="text-[9px] text-gray-400 ml-1">&lt;${dept.email}&gt;</span>` : "";
+        const emailDisplay = dept.email ? `<span class="text-[9px] text-gray-400 ml-1 italic">&lt;${dept.email}&gt;</span>` : "";
 
         container.innerHTML += `
-            <div class="flex items-center gap-1 bg-white px-2 py-1 rounded text-xs border border-gray-200 shadow-sm" title="${dept.email || 'No Email'}">
-                <span class="font-bold text-gray-700">${dept.name}</span>
-                ${emailBadge}
-                ${deleteBtn}
+            <div class="flex items-center justify-between bg-white px-2 py-1.5 rounded text-xs border border-gray-100 shadow-sm">
+                <div class="flex items-center truncate">
+                    <span class="font-bold text-gray-700">${dept.name}</span>
+                    ${emailDisplay}
+                </div>
+                ${actionBtns}
             </div>`;
     });
 }
+window.editDepartment = function (name) {
+    const dept = departmentsConfig.find(d => (typeof d === 'object' ? d.name : d) === name);
+    const oldEmail = (typeof dept === 'object') ? dept.email : "";
+    
+    const newEmail = prompt(`Update HOD Email for ${name}:`, oldEmail);
+    
+    if (newEmail === null) return; // User cancelled
+    
+    // Email Validation Lock
+    if (newEmail !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        return alert("❌ Invalid Email Format. Please enter a valid email (e.g., hod@college.com)");
+    }
+
+    // Update the config
+    departmentsConfig = departmentsConfig.map(d => {
+        const dName = (typeof d === 'object') ? d.name : d;
+        if (dName === name) return { name: dName, email: newEmail.trim() };
+        return d;
+    });
+
+    logActivity("Department Updated", `Edited email for ${name}.`);
+    renderDepartmentsList();
+};
+
 
 window.addNewDepartment = function () {
     const nameInput = document.getElementById('new-dept-name');
@@ -4080,6 +4107,10 @@ window.addNewDepartment = function () {
     const email = emailInput.value.trim();
 
     if (!name) return alert("Enter department name");
+    // Email Validation Lock
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return alert("❌ Invalid Email Format. Please enter a valid email address.");
+    }
 
     // Convert legacy strings if present
     departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
