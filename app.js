@@ -718,8 +718,17 @@ async function migrateFromLocalStorage() {
         // --- NEW KEYS FOR MODULAR ARCHITECTURE ---
         'examInvigilationSlots',
         'examStaffData',
-        'examInvigilatorMapping'// <--- ADD THIS LINE (To include in Backup/Restore)
+        'examInvigilatorMapping',
+        // --- INVIGILATION SETTINGS FOR BACKUP ---
+        'invigDepartments',
+        'invigRoles',
+        'invigGlobalTarget',
+        'invigGuestTarget',
+        'invigVacationTarget',
+        'invigVacationDutyDates',
+        'invigGoogleScriptUrl'
     ];
+
     // **********************************
 
     // --- Debounce Helper Function ---
