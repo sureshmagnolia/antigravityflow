@@ -4809,18 +4809,28 @@ window.viewAutoAssignLogs = async function () {
 }
 
 window.openFacultyPeriodReport = function() {
-        const keys = Object.keys(invigilationSlots)
+    const normalizeKey = k => k.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+    const seenNorm = new Set();
+    const keys = Object.keys(invigilationSlots)
         .filter(k => !invigilationSlots[k].isHidden)
+        .filter(k => {
+            const nk = normalizeKey(k);
+            if (seenNorm.has(nk)) return false;
+            seenNorm.add(nk);
+            return true;
+        })
         .sort((a, b) => parseDate(a) - parseDate(b));
     const fromSel = document.getElementById('period-from');
     const toSel = document.getElementById('period-to');
     fromSel.innerHTML = '';
     toSel.innerHTML = '';
     keys.forEach(k => {
-        fromSel.innerHTML += `<option value="${k}">${k}</option>`;
-        toSel.innerHTML   += `<option value="${k}">${k}</option>`;
+        const display = normalizeKey(k);
+        fromSel.innerHTML += `<option value="${display}">${display}</option>`;
+        toSel.innerHTML   += `<option value="${display}">${display}</option>`;
     });
-    if (keys.length > 0) toSel.value = keys[keys.length - 1];
+    if (keys.length > 0) toSel.value = normalizeKey(keys[keys.length - 1]);
+
     document.getElementById('faculty-period-table').classList.add('hidden');
     document.getElementById('faculty-period-placeholder').classList.remove('hidden');
     document.getElementById('faculty-period-footer').classList.add('hidden');
@@ -4836,10 +4846,18 @@ window.generateFacultyPeriodReport = function() {
     const toDate   = parseDate(toKey);
     if (fromDate > toDate) return alert('From session must be before To session.');
 
+    const normalizeKey = k => k.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+    const seenRange = new Set();
     const slotKeysInRange = Object.keys(invigilationSlots).filter(k => {
+        if (invigilationSlots[k].isHidden) return false;
         const d = parseDate(k);
-        return d >= fromDate && d <= toDate;
+        if (isNaN(d) || d < fromDate || d > toDate) return false;
+        const nk = normalizeKey(k);
+        if (seenRange.has(nk)) return false;
+        seenRange.add(nk);
+        return true;
     });
+
 
     const report = staffData
         .filter(s => s.status !== 'archived')
@@ -4886,7 +4904,7 @@ window.generateFacultyPeriodReport = function() {
 
     report.forEach((r, i) => {
         const sessionList = r.sessions.length
-            ? r.sessions.map(k => `<span class="inline-block bg-teal-50 border border-teal-200 text-teal-700 rounded px-1.5 py-0.5 mr-1 mb-1">${k}</span>`).join('')
+            ? r.sessions.map(k => `<span class="inline-block bg-teal-50 border border-teal-200 text-teal-700 rounded px-1.5 py-0.5 mr-1 mb-1">${normalizeKey(k)}</span>`).join('')
             : '<span class="text-gray-400 italic">None</span>';
 
         const unavList = r.unavDates.length
@@ -4910,7 +4928,7 @@ window.generateFacultyPeriodReport = function() {
             </tr>`;
     });
 
-    const totalSessions = slotKeysInRange.length;
+    const totalSessions = slotKeysInRange.length; // already deduplicated above
     const totalAssigned = report.reduce((s, r) => s + r.count, 0);
     document.getElementById('faculty-period-summary').textContent =
         `Period: ${fromKey}  →  ${toKey}  |  ${totalSessions} session(s)  |  ${report.length} faculty  |  ${totalAssigned} total assignments`;
