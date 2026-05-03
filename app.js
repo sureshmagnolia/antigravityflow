@@ -1379,7 +1379,7 @@ window.recalcInvigSlots = async function () {
                 
                 const restoredData = await loadExamDataIDB() || [];
                 const sessionsToSync = new Set();
-                restoredData.forEach(s => sessionsToSync.add(`${s.Date} | ${s.Time}`));
+                restoredData.forEach(s => sessionsToSync.add(`${s.Date.replace(/[-/]/g, '.')} | ${s.Time}`));
                 
                 allStudentData = restoredData; // Temporarily update global memory for the sync function
                 
