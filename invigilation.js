@@ -4904,11 +4904,11 @@ window.generateFacultyPeriodReport = function() {
 
     report.forEach((r, i) => {
         const sessionList = r.sessions.length
-            ? r.sessions.map(k => `<span class="inline-block bg-teal-50 border border-teal-200 text-teal-700 rounded px-1.5 py-0.5 mr-1 mb-1">${normalizeKey(k)}</span>`).join('')
+            ? `<div class="flex flex-wrap gap-1.5">${r.sessions.map(k => `<span class="period-badge text-teal-700 bg-teal-50 border border-teal-100 rounded px-2 py-0.5 font-bold shadow-sm">${normalizeKey(k)}</span>`).join('')}</div>`
             : '<span class="text-gray-400 italic">None</span>';
 
         const unavList = r.unavDates.length
-            ? r.unavDates.map(d => `<span class="inline-block bg-red-50 border border-red-200 text-red-600 rounded px-1.5 py-0.5 mr-1 mb-1">${d}</span>`).join('')
+            ? `<div class="flex flex-wrap gap-1.5">${r.unavDates.map(d => `<span class="period-badge text-red-600 bg-red-50 border border-red-100 rounded px-2 py-0.5 font-bold shadow-sm">${d}</span>`).join('')}</div>`
             : '<span class="text-gray-300 italic">None</span>';
 
         const rowBg = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -4945,13 +4945,28 @@ window.printFacultyPeriodReport = function() {
     const w = window.open('', '_blank');
     w.document.write(`<html><head><title>Faculty Period Report</title>
     <style>
-        body { font-family: Arial, sans-serif; font-size: 11px; margin: 15mm; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-        th { background: #f0f4ff; font-weight: bold; }
-        tr:nth-child(even) { background: #f9f9f9; }
-        .footer { margin-top: 12px; font-size: 10px; color: #666; }
-    </style></head><body>
+        body { font-family: Segoe UI, Arial, sans-serif; font-size: 10px; margin: 10mm; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #eee; padding: 8px 10px; text-align: left; vertical-align: top; }
+        th { background: #f8fafc; font-weight: 800; color: #475569; text-transform: uppercase; font-size: 9px; }
+        tr:nth-child(even) { background: #fcfcfc; }
+        .period-badge { 
+            display: inline-block; 
+            padding: 2px 6px; 
+            margin: 2px; 
+            border-radius: 4px; 
+            font-weight: bold; 
+            font-size: 9px; 
+            white-space: nowrap;
+            border: 1px solid #e2e8f0;
+            background: #f1f5f9;
+        }
+        .footer { margin-top: 20px; font-size: 9px; color: #94a3b8; border-top: 1px solid #eee; padding-top: 10px; }
+        h2 { color: #1e293b; margin-bottom: 2px; }
+        .summary-header { font-size: 10px; color: #64748b; margin-bottom: 15px; font-weight: 500; }
+    </style>
+    </head>
+    <body>
     <h2 style="margin-bottom:4px">Faculty Period Report</h2>
     <p style="font-size:10px;color:#666;margin-bottom:12px">${summary}</p>
     ${table.outerHTML}
