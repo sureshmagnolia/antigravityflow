@@ -5425,7 +5425,7 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `─────────────────────\n\n`;
     
     msg += `${greeting} *${name}*,\n\n`;
-    msg += `This is an official intimation regarding your invigilation duties for the upcoming week. Please find the schedule below:\n\n`;
+    msg += `This is an official intimation regarding your assigned invigilation duties. Please find the schedule below:\n\n`;
 
     duties.forEach(d => {
         const rTime = window.calculateReportTime(d.time);
@@ -10102,7 +10102,8 @@ window.generateHtmlEmailBody = function(name, duties) {
         </div>
         <div style="padding:20px;">
             <p style="font-size:15px;">Dear <b>${name}</b>,</p>
-            <p style="line-height:1.5;">You have been assigned the following exam invigilation duties for this week:</p>
+            <p style="line-height:1.5;">You have been assigned the following exam invigilation duties:</p>
+
             
             <table style="width:100%;border-collapse:collapse;margin:15px 0;background:#f9fafb;">
                 <thead>
