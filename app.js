@@ -744,10 +744,9 @@ async function migrateFromLocalStorage() {
         const dateBStr = splitB[0].trim();
         const timeBStr = splitB[1].trim();
 
-        // 1. Compare Dates
-        const [dA, mA, yA] = dateAStr.split(/[.-]/);
-        const [dB, mB, yB] = dateBStr.split(/[.-]/);
-
+        // 1. Compare Dates (Normalize separators for split)
+        const [dA, mA, yA] = dateAStr.replace(/[-/]/g, '.').split('.');
+        const [dB, mB, yB] = dateBStr.replace(/[-/]/g, '.').split('.');
         const dateA = new Date(yA, mA - 1, dA);
         const dateB = new Date(yB, mB - 1, dB);
 
@@ -1356,8 +1355,11 @@ window.recalcInvigSlots = async function () {
                     await saveExamDataIDB(students, true); // ⚡ BUG FIX: TRUE prevents it from uselessly uploading back to the cloud
                     updateSyncStatus("Synced (Storage)", "success");
                     
-                    // Rebuild Metadata Registry for Dropdowns
-                    const sessions = new Set(students.map(s => `${s.Date} | ${s.Time}`));
+                    // Rebuild Metadata Registry for Dropdowns (Normalize to Dots)
+                    const sessions = new Set(students.map(s => {
+                        const d = (s.Date || "").trim().replace(/[-/]/g, '.');
+                        return `${d} | ${s.Time}`;
+                    }));
                     localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
                     
                     // Bootstrap UI (Prevents timeout and populates dropdowns)
@@ -1787,10 +1789,10 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
 // --- PHASE 4: MODULAR WRITE HELPERS ---
 
     function generateSessionId(sessionKey) {
-        // Reverted to Exact Time format: "DD.MM.YYYY | HH:MM AM"
-        // This ensures compatibility with Google Drive Backups and prevents AN/FN duplicates
-        return sessionKey;
+        // Normalizing to DD.MM.YYYY format to prevent duplicate session records
+        return sessionKey.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
     }
+
 
 
     // --- NEW: Universal Student Matcher (Handles all date/time formats) ---
@@ -1876,10 +1878,14 @@ async function deleteSessionFromCloud(sessionKey) {
 
     
    async function syncSessionToCloud(sessionKey) {
+        // Normalization Guard: Ensure all session keys use dots before cloud upload
+        sessionKey = sessionKey.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+
         // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
         if (!currentCollegeId || !navigator.onLine) return;
         
         updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
+
         const { db, doc, setDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
         
