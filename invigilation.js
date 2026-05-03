@@ -9449,7 +9449,7 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
     let html = `
     <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4">
         <div class="flex items-center justify-between">
-            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                <button onclick="${monthStr ? `openWeeklyNotificationModal('${monthStr}', ${weekNum})` : `openAllUpcomingNotificationModal()`}" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
             </button>
             <span class="text-xs font-bold text-gray-500">${window.currentEmailQueue.length} Staff Members</span>
@@ -9615,7 +9615,8 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
 
         // Generate HTML Body
         const htmlBody = generateDepartmentConsolidatedEmail(dept, groupedFacultyList, weekNum, monthStr);
-        const subject = `Consolidated Duty List: ${dept} - Week ${weekNum}`;
+        const subject = weekNum ? `Consolidated Duty List: ${dept} - Week ${weekNum}` : `Consolidated Upcoming Duty List: ${dept}`;
+
 
         // Add to Queue
         window.currentDeptEmailQueue.push({
@@ -9635,7 +9636,7 @@ window.triggerBulkDeptEmail = function(monthStr, weekNum) {
     let html = `
     <div class="flex flex-col gap-3 mb-4 border-b border-gray-100 pb-4 sticky top-0 bg-white z-10 pt-2">
         <div class="flex items-center justify-between">
-            <button onclick="openWeeklyNotificationModal('${monthStr}', ${weekNum})" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
+            <button onclick="${monthStr ? `openWeeklyNotificationModal('${monthStr}', ${weekNum})` : `openAllUpcomingNotificationModal()`}" class="text-xs font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back
             </button>
             <span class="text-xs font-bold text-gray-500">${window.currentDeptEmailQueue.length} Departments</span>
