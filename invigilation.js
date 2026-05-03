@@ -4076,27 +4076,38 @@ function renderDepartmentsList() {
 }
 window.editDepartment = function (name) {
     const dept = departmentsConfig.find(d => (typeof d === 'object' ? d.name : d) === name);
-    const oldEmail = (typeof dept === 'object') ? dept.email : "";
-    
-    const newEmail = prompt(`Update HOD Email for ${name}:`, oldEmail);
-    
-    if (newEmail === null) return; // User cancelled
-    
-    // Email Validation Lock
-    if (newEmail !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    const email = (typeof dept === 'object') ? (dept.email || "") : "";
+
+    // Populate and Open Modal
+    document.getElementById('edit-dept-name').value = name;
+    document.getElementById('edit-dept-email').value = email;
+    window.openModal('dept-edit-modal');
+};
+
+window.saveDepartmentEdit = function() {
+    const name = document.getElementById('edit-dept-name').value;
+    const email = document.getElementById('edit-dept-email').value.trim();
+
+    // 🛡️ Email Validation Lock
+    if (email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return alert("❌ Invalid Email Format. Please enter a valid email (e.g., hod@college.com)");
     }
 
-    // Update the config
+    // Update Config
     departmentsConfig = departmentsConfig.map(d => {
         const dName = (typeof d === 'object') ? d.name : d;
-        if (dName === name) return { name: dName, email: newEmail.trim() };
+        if (dName === name) return { name: dName, email: email };
         return d;
     });
 
-    logActivity("Department Updated", `Edited email for ${name}.`);
+    logActivity("Department Updated", `Edited email for ${name} via professional modal.`);
+    closeModal('dept-edit-modal');
     renderDepartmentsList();
+    
+    // Sync to Cloud
+    if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
 };
+
 
 
 window.addNewDepartment = function () {
