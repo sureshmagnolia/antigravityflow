@@ -9604,6 +9604,136 @@ window.triggerBulkStaffEmail = function(monthStr, weekNum) {
 // Global Queue for Departments
 window.currentDeptEmailQueue = [];
 
+// --- CUSTOM EMAIL SYSTEM ---
+window.openCustomEmailModal = function() {
+    // Populate departments list
+    const select = document.getElementById('email-specific-dept-select');
+    select.innerHTML = '';
+    
+    const sortedDepts = [...departmentsConfig].sort((a,b) => a.name.localeCompare(b.name));
+    sortedDepts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = `${d.name} ${d.email ? `(${d.email})` : ''}`;
+        select.appendChild(opt);
+    });
+
+    // Reset UI
+    document.getElementById('email-target-hods').checked = false;
+    document.getElementById('email-target-faculty').checked = false;
+    document.getElementById('email-target-specific-dept').checked = false;
+    window.toggleSpecificDeptDropdown();
+    
+    document.getElementById('custom-email-subject').value = '';
+    document.getElementById('custom-email-body').value = '';
+
+    window.openModal('custom-email-modal');
+};
+
+window.toggleSpecificDeptDropdown = function() {
+    const isChecked = document.getElementById('email-target-specific-dept').checked;
+    const container = document.getElementById('email-specific-dept-container');
+    if (isChecked) {
+        container.classList.remove('hidden');
+    } else {
+        container.classList.add('hidden');
+    }
+};
+
+window.sendCustomEmail = async function() {
+    const toHods = document.getElementById('email-target-hods').checked;
+    const toFaculty = document.getElementById('email-target-faculty').checked;
+    const toSpecificDepts = document.getElementById('email-target-specific-dept').checked;
+    
+    const subject = document.getElementById('custom-email-subject').value.trim();
+    const bodyText = document.getElementById('custom-email-body').value.trim();
+
+    if (!toHods && !toFaculty && !toSpecificDepts) return alert("Please select at least one recipient group.");
+    if (!subject || !bodyText) return alert("Please enter both a Subject and a Message Body.");
+    if (!googleScriptUrl) return alert("Email sending is not configured. Please set the AppScript URL in System Integrations.");
+
+    let recipients = new Set();
+    const selectedDepts = [];
+
+    // Gather selected specific departments
+    if (toSpecificDepts) {
+        const select = document.getElementById('email-specific-dept-select');
+        for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].selected) selectedDepts.push(select.options[i].value);
+        }
+        if (selectedDepts.length === 0) return alert("Please select at least one department from the dropdown list.");
+    }
+
+    // 1. Gather HoD Emails
+    if (toHods || toSpecificDepts) {
+        departmentsConfig.forEach(d => {
+            if (d.email && (toHods || (toSpecificDepts && selectedDepts.includes(d.name)))) {
+                recipients.add(d.email);
+            }
+        });
+    }
+
+    // 2. Gather Faculty Emails
+    if (toFaculty || toSpecificDepts) {
+        staffData.forEach(s => {
+            if (s.email && s.status === 'active' && (toFaculty || (toSpecificDepts && selectedDepts.includes(s.dept)))) {
+                recipients.add(s.email);
+            }
+        });
+    }
+
+    const emailList = Array.from(recipients).filter(e => e && e.trim() !== '');
+
+    if (emailList.length === 0) return alert("No valid email addresses found for the selected targets.");
+    if (!confirm(`You are about to send this custom email to ${emailList.length} recipients.\n\nProceed?`)) return;
+
+    // Send emails
+    const btn = document.getElementById('btn-send-custom-email');
+    btn.innerHTML = `<span>⏳</span> Sending... Please wait`;
+    btn.disabled = true;
+    updateSyncStatus("Sending Custom Emails...", "neutral");
+
+    try {
+        const htmlBody = `
+            <div style="font-family: sans-serif; padding: 20px; color: #333; max-width: 600px;">
+                <h3 style="color: #4F46E5; margin-top: 0;">${subject}</h3>
+                <p style="font-size: 14px; line-height: 1.6;">${bodyText.replace(/\n/g, '<br>')}</p>
+                <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
+                <p style="font-size: 11px; color: #888; text-align: center;">This is an automated communication from the Exam Invigilation Portal.</p>
+            </div>
+        `;
+
+        let sent = 0;
+        let failed = 0;
+
+        for (const email of emailList) {
+            try {
+                await fetch(googleScriptUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: email, subject: subject, body: htmlBody })
+                });
+                sent++;
+            } catch (e) {
+                failed++;
+            }
+        }
+
+        updateSyncStatus("Sent Custom Emails", "success");
+        alert(`✅ Finished sending.\n\nSuccessfully sent: ${sent}\nFailed: ${failed}`);
+        closeModal('custom-email-modal');
+
+    } catch (err) {
+        alert("❌ Error sending emails: " + err.message);
+        updateSyncStatus("Failed to send emails", "error");
+    } finally {
+        btn.innerHTML = `<span>📤</span> Send Message`;
+        btn.disabled = false;
+    }
+};
+
 
 // --- 2. DEPARTMENT BULK MESSAGING UI (APPS SCRIPT) ---
 window.triggerBulkDeptEmail = function(monthStr, weekNum) {
