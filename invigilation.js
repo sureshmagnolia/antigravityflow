@@ -9606,16 +9606,18 @@ window.currentDeptEmailQueue = [];
 
 // --- CUSTOM EMAIL SYSTEM ---
 window.openCustomEmailModal = function() {
-    // Populate departments list
-    const select = document.getElementById('email-specific-dept-select');
-    select.innerHTML = '';
+    // Populate departments list as Checkboxes
+    const listContainer = document.getElementById('email-specific-dept-list');
+    listContainer.innerHTML = '';
     
     const sortedDepts = [...departmentsConfig].sort((a,b) => a.name.localeCompare(b.name));
     sortedDepts.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.name;
-        opt.textContent = `${d.name} ${d.email ? `(${d.email})` : ''}`;
-        select.appendChild(opt);
+        listContainer.innerHTML += `
+            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded">
+                <input type="checkbox" value="${d.name}" class="dept-checkbox rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 cursor-pointer">
+                <span class="text-xs text-gray-700 font-medium">${d.name} ${d.email ? `<span class="text-[9px] text-gray-400 italic">(${d.email})</span>` : ''}</span>
+            </label>
+        `;
     });
 
     // Reset UI
@@ -9655,14 +9657,14 @@ window.sendCustomEmail = async function() {
     let recipients = new Set();
     const selectedDepts = [];
 
-    // Gather selected specific departments
+    // Gather selected specific departments via Checkboxes
     if (toSpecificDepts) {
-        const select = document.getElementById('email-specific-dept-select');
-        for (let i = 0; i < select.options.length; i++) {
-            if (select.options[i].selected) selectedDepts.push(select.options[i].value);
-        }
-        if (selectedDepts.length === 0) return alert("Please select at least one department from the dropdown list.");
+        const checkedBoxes = document.querySelectorAll('#email-specific-dept-list .dept-checkbox:checked');
+        checkedBoxes.forEach(cb => selectedDepts.push(cb.value));
+        
+        if (selectedDepts.length === 0) return alert("Please tick at least one department from the list.");
     }
+
 
     // 1. Gather HoD Emails
     if (toHods || toSpecificDepts) {
