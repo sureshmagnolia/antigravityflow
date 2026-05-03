@@ -382,6 +382,12 @@
                             📢 Notify All
                         </button>
 
+                        <button onclick="window.openCustomEmailModal()"
+                            class="bg-indigo-600 text-white px-3 py-2 rounded-md text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-1 transition">
+                            ✉️ Custom Email
+                        </button>
+
+
                         <button onclick="lockAllSessions()"
                             class="bg-red-600 text-white px-3 py-2 rounded-md text-xs font-bold hover:bg-red-700 shadow-sm flex items-center gap-1 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1437,6 +1443,61 @@
         </div>
     </div>
 
+    <!-- Custom Email Modal -->
+    <div id="custom-email-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto custom-scroll">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2"><span>✉️</span> Send Custom Email</h3>
+                <button onclick="closeModal('custom-email-modal')" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="space-y-4">
+                <!-- Targets -->
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-3 border-b border-gray-200 pb-2">Select Recipients</label>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="email-target-hods" class="rounded text-indigo-600 w-4 h-4 cursor-pointer focus:ring-indigo-500">
+                            <span class="text-sm font-medium text-gray-800">All Department Heads (HoDs)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="email-target-faculty" class="rounded text-indigo-600 w-4 h-4 cursor-pointer focus:ring-indigo-500">
+                            <span class="text-sm font-medium text-gray-800">All Faculty Members</span>
+                        </label>
+                        <div class="border-t border-gray-200 pt-3 mt-1">
+                            <label class="flex items-center gap-2 cursor-pointer mb-2">
+                                <input type="checkbox" id="email-target-specific-dept" onchange="toggleSpecificDeptDropdown()" class="rounded text-indigo-600 w-4 h-4 cursor-pointer focus:ring-indigo-500">
+                                <span class="text-sm font-medium text-gray-800">Faculty & HoD of Specific Department(s)</span>
+                            </label>
+                            <div id="email-specific-dept-container" class="hidden pl-6">
+                                <select id="email-specific-dept-select" multiple class="w-full border border-gray-300 rounded text-sm p-2 focus:ring-2 focus:ring-indigo-500 outline-none h-32 custom-scroll">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <p class="text-[10px] text-gray-500 mt-1">Hold Ctrl (Windows) or Cmd (Mac) to select multiple.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message -->
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Subject</label>
+                    <input type="text" id="custom-email-subject" class="w-full border border-gray-300 px-3 py-2 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Important Update: Exam Duty...">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Message Body</label>
+                    <textarea id="custom-email-body" rows="6" class="w-full border border-gray-300 px-3 py-2 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none custom-scroll" placeholder="Type your message here..."></textarea>
+                </div>
+
+                <button id="btn-send-custom-email" onclick="sendCustomEmail()" class="w-full bg-indigo-600 text-white py-2.5 rounded font-bold hover:bg-indigo-700 shadow-sm transition flex items-center justify-center gap-2">
+                    <span>📤</span> Send Message
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    
     <!-- Professional Dept Edit Modal -->
     <div id="dept-edit-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex justify-center items-center z-50">
         <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm m-4">
