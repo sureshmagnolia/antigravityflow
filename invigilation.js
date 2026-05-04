@@ -4874,7 +4874,7 @@ window.openFacultyPeriodReport = function() {
             seenNorm.add(nk);
             return true;
         })
-        .sort((a, b) => parseDate(a) - parseDate(b));
+        .sort((a, b) => parseDate(normalizeKey(a)) - parseDate(normalizeKey(b))); // 🛡️ Fix: Normalize before sorting
     const fromSel = document.getElementById('period-from');
     const toSel = document.getElementById('period-to');
     fromSel.innerHTML = '';
