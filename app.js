@@ -1331,6 +1331,17 @@ window.recalcInvigSlots = async function () {
             if (snap.exists()) syncLocal(snap.data());
         };
 
+        // 4. ALLOCATION (Scribes/Rooms) - On-Demand Fetcher
+        window.fetchAllocationData = async () => {
+            const { getDoc, doc } = window.firebase;
+            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "allocation"));
+            if (snap.exists()) {
+                syncLocal(snap.data());
+                if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+                if (typeof renderRoomAllotmentList === 'function' && typeof currentSessionKey !== 'undefined') renderRoomAllotmentList(currentSessionKey);
+            }
+        };
+
         // Fetch settings once on load (so initial room capacities are ready)
         fetchSettingsData();
         // 4. ALLOCATIONS (Scribes)
@@ -2151,7 +2162,7 @@ async function deleteSessionFromCloud(sessionKey) {
             // 3. ALLOCATION (Scribes + Room Allotments)
             else if (targetSection === 'allocation') {
                 const data = buildPayload([
-                    'examScribeList', 'examScribeAllotment', 'examScribeAllotmentV2', 'examAllotmentData'
+                    'examScribeList', 'examScribeAllotment', 'examScribeAllotmentV2', 'examAllotmentData', 'examRoomAllotment'
                 ]);
                 if (Object.keys(data).length > 0) {
                     await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
@@ -8837,8 +8848,8 @@ function getExamName(date, time, stream) {
     });
     // 🛡️ SECURITY/COST OPTIMIZATION: Data is fetched only when tab is accessed
     navEditData.addEventListener('click', () => { showView(viewEditData, navEditData); window.fetchStaffData(); }); 
-    navScribeSettings.addEventListener('click', () => showView(viewScribeSettings, navScribeSettings));
-    navRoomAllotment.addEventListener('click', () => { showView(viewRoomAllotment, navRoomAllotment); window.fetchSettingsData(); window.fetchSlotsData(); });
+    navScribeSettings.addEventListener('click', () => { showView(viewScribeSettings, navScribeSettings); if (window.fetchAllocationData) window.fetchAllocationData(); });
+    navRoomAllotment.addEventListener('click', () => { showView(viewRoomAllotment, navRoomAllotment); window.fetchSettingsData(); window.fetchSlotsData(); if (window.fetchAllocationData) window.fetchAllocationData(); });
     navQPCodes.addEventListener('click', () => { 
         showView(viewQPCodes, navQPCodes);
         const qpSelect = document.getElementById('qp-session-select');
