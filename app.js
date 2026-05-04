@@ -1104,8 +1104,15 @@ async function updateLocalSlotsFromStudents() {
                     return (!slot.studentCount || slot.studentCount === 0);
                 }) : null;
 
+                // ✅ CRITICAL: Apply virtualMatchKey to targetKey so CASE B runs instead of CASE A
+                if (virtualMatchKey) {
+                    existingSlots[generatedKey] = { ...existingSlots[virtualMatchKey] };
+                    delete existingSlots[virtualMatchKey];
+                    hasChanges = true;
+                }
 
             // --- DATE CHECK (Robust Parsing) ---
+
             let isPastSession = false;
             try {
                 // Handle DD.MM.YYYY or YYYY-MM-DD or DD/MM/YYYY
@@ -1173,9 +1180,23 @@ async function updateLocalSlotsFromStudents() {
         });
 
         if (hasChanges) {
+            // 🛡️ ABSOLUTE GUARD: Never save fewer volunteers than currently stored
+            const previousRaw = localStorage.getItem('examInvigilationSlots');
+            if (previousRaw) {
+                const previous = JSON.parse(previousRaw);
+                Object.keys(previous).forEach(k => {
+                    if (existingSlots[k]) {
+                        if ((existingSlots[k].assigned||[]).length < (previous[k].assigned||[]).length)
+                            existingSlots[k].assigned = previous[k].assigned;
+                        if ((existingSlots[k].unavailable||[]).length < (previous[k].unavailable||[]).length)
+                            existingSlots[k].unavailable = previous[k].unavailable;
+                    }
+                });
+            }
             localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
             return true;
         }
+
     } catch (e) {
         console.error("Slot Calc Error:", e);
     }
@@ -2187,15 +2208,35 @@ async function deleteSessionFromCloud(sessionKey) {
                 }
             }
 
-            // 5. SLOTS (Invigilation Requirements)
+            // 5. SLOTS — 🛡️ SAFE MERGE: Never wipe cloud volunteers with empty local data
             else if (targetSection === 'slots') {
-                const data = buildPayload([
-                    'examInvigilationSlots', 'invigAdvanceUnavailability'
-                ]);
-                if (Object.keys(data).length > 0) {
-                    await setDoc(doc(db, "colleges", cid, "system_data", "slots"), data, { merge: true });
+                const localRaw = localStorage.getItem('examInvigilationSlots');
+                if (localRaw) {
+                    const { getDoc: _getDoc } = window.firebase;
+                    const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "slots"));
+                    const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
+                    const localSlots = JSON.parse(localRaw);
+
+                    // For each slot in cloud, if cloud has MORE volunteers than local, keep cloud's
+                    Object.keys(cloudSlots).forEach(k => {
+                        if (localSlots[k]) {
+                            if ((cloudSlots[k].assigned||[]).length > (localSlots[k].assigned||[]).length)
+                                localSlots[k].assigned = cloudSlots[k].assigned;
+                            if ((cloudSlots[k].unavailable||[]).length > (localSlots[k].unavailable||[]).length)
+                                localSlots[k].unavailable = cloudSlots[k].unavailable;
+                        } else {
+                            localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                        }
+                    });
+
+                    localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
+                    const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
+                    if (localStorage.getItem('invigAdvanceUnavailability'))
+                        payload.invigAdvanceUnavailability = localStorage.getItem('invigAdvanceUnavailability');
+                    await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
                 }
             }
+
                  // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
