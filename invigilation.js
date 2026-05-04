@@ -3555,12 +3555,18 @@ function populateAttendanceSessions() {
     if (!ui.attSessionSelect) return;
 
     // Sort Sessions: Latest Date/Time First (Descending)
-    const sortedKeys = Object.keys(invigilationSlots).sort((a, b) => {
-        const dateA = parseDate(a); // Uses the helper to get full Date object with time
-        const dateB = parseDate(b);
-        return dateB - dateA; // Descending (B - A)
-    });
-
+    const sortedKeys = Object.keys(invigilationSlots)
+        // 🛡️ FILTER: Hide ghost data & sessions without invigilators
+        .filter(k => {
+            const slot = invigilationSlots[k];
+            return !slot.isHidden && slot.assigned && slot.assigned.length > 0;
+        })
+        .sort((a, b) => {
+            // Normalize dates to prevent sort failure on hyphens/slashes
+            const normA = a.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+            const normB = b.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+            return parseDate(normB) - parseDate(normA); // Descending (B - A)
+        });
     ui.attSessionSelect.innerHTML = '<option value="">-- Select Session --</option>';
 
     sortedKeys.forEach(key => {
