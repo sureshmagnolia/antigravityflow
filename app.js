@@ -1071,34 +1071,39 @@ async function updateLocalSlotsFromStudents() {
             // --- 🟢 SMART MATCH: Find existing Virtual Slot in same FN/AN block ---
             let targetKey = generatedKey;
             
-            if (!existingSlots[generatedKey]) {
-                // No exact match? Look for a "Virtual" slot (0 students) on same Date & Period
-                const virtualMatchKey = Object.keys(existingSlots).find(k => {
+                    if (!existingSlots[generatedKey]) {
+                // No exact match? Look for ANY slot on same Date & Period (dot OR dash format)
+                // 🛡️ FIX: Also check for same date with different separator (11-05-2026 vs 11.05.2026)
+                const normalizedGenDate = stats.dateStr.replace(/[-/]/g, '.');
+                const existingMatchKey = Object.keys(existingSlots).find(k => {
                     if (!k.includes('|')) return false;
                     let [exDate, exTime] = k.split('|').map(s => s.trim());
-                    
-                    // Normalize existing key date for comparison
                     exDate = exDate.replace(/[-/]/g, '.');
-                    const targetDate = stats.dateStr.replace(/[-/]/g, '.');
-                    
-                    // Must be same Date
-                    if (exDate !== targetDate) return false;                   
-                    // Must be same Period (FN or AN)
+                    if (exDate !== normalizedGenDate) return false;
                     if (getPeriod(exTime) !== genPeriod) return false;
-
-                    // Must be "Virtual" (Created by attendance, so 0 students or undefined)
-                    const slot = existingSlots[k];
-                    return (!slot.studentCount || slot.studentCount === 0);
+                    return true; // Any match on same date+period, regardless of volunteers
                 });
 
-                if (virtualMatchKey) {
-                    // FOUND IT! We will Migrate this virtual slot to the real time key
-                    targetKey = generatedKey; // We use the new (Correct) time
-                    existingSlots[targetKey] = { ...existingSlots[virtualMatchKey] }; // Copy staff data
-                    delete existingSlots[virtualMatchKey]; // Remove the old 9:30 slot
-                    hasChanges = true; 
+                // 🛡️ GUARD: If a matching slot already exists (even with a different key format),
+                // DO NOT create a new empty slot. Just update counts on the existing one instead.
+                if (existingMatchKey && existingMatchKey !== generatedKey) {
+                    // Safely migrate: copy existing slot (with its volunteers!) to the new key
+                    existingSlots[generatedKey] = { ...existingSlots[existingMatchKey] };
+                    delete existingSlots[existingMatchKey];
+                    hasChanges = true;
                 }
-            }
+
+                const virtualMatchKey = !existingSlots[generatedKey] ? Object.keys(existingSlots).find(k => {
+                    if (!k.includes('|')) return false;
+                    let [exDate, exTime] = k.split('|').map(s => s.trim());
+                    exDate = exDate.replace(/[-/]/g, '.');
+                    const targetDate = stats.dateStr.replace(/[-/]/g, '.');
+                    if (exDate !== targetDate) return false;                   
+                    if (getPeriod(exTime) !== genPeriod) return false;
+                    const slot = existingSlots[k];
+                    return (!slot.studentCount || slot.studentCount === 0);
+                }) : null;
+
 
             // --- DATE CHECK (Robust Parsing) ---
             let isPastSession = false;
