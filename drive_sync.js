@@ -224,6 +224,7 @@ async function findLatestBackupTime() {
 }
 
 async function syncData(source = "AUTO") {
+    window.isDriveSyncInProgress = true; // 🛡️ Raise the Busy Flag
     const btn = document.getElementById('btn-manual-sync');
     const originalText = btn ? btn.innerHTML : '';
     
@@ -308,11 +309,17 @@ async function syncData(source = "AUTO") {
         document.getElementById('last-sync-time').textContent = now.toLocaleString();
         
         btn.innerHTML = "✅ Saved!";
-        setTimeout(() => btn.innerHTML = originalText, 2000);
-        
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 2000);
 
-} catch (e) {
+    } catch (e) {
         console.error(e);
+    } finally {
+        window.isDriveSyncInProgress = false; // 🛡️ Lower the Busy Flag
+    }
+
         // Show a friendly message for token/auth errors
         if (e.message && e.message.includes('expired')) {
             alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
