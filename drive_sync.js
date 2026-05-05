@@ -462,16 +462,24 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
         return;
     }
 
-    clearTimeout(autoSyncTimer);
+    const saveBtn = document.getElementById('btn-manual-push');
+    const saveBtnText = document.getElementById('save-btn-text');
 
     if (isImmediate) {
         console.log("Manual trigger: Pushing immediately to Google Drive...");
+        if (saveBtnText) saveBtnText.textContent = "Saving...";
+        if (saveBtn) {
+            saveBtn.classList.replace('bg-amber-500', 'bg-blue-600');
+            saveBtn.classList.remove('animate-pulse');
+        }
         syncDataSilent();
     } else {
-        autoSyncTimer = setTimeout(() => {
-            console.log("60s elapsed since last edit. Auto-syncing to Google Drive...");
-            syncDataSilent();
-        }, 60000); // 60 seconds
+        // Change button to Amber to notify user there are unsaved changes
+        if (saveBtn) {
+            if (saveBtnText) saveBtnText.textContent = "Save Changes Now";
+            saveBtn.classList.replace('bg-gray-700', 'bg-amber-500');
+            saveBtn.classList.add('animate-pulse');
+        }
     }
 };
 
@@ -510,11 +518,16 @@ async function syncDataSilent() {
         const lastSyncElem = document.getElementById('last-sync-time');
         if(lastSyncElem) lastSyncElem.textContent = now.toLocaleString();
 
-        // Update Ribbon Log
-        const ribbonLog = document.getElementById('drive-sync-log-ribbon');
-        if(ribbonLog) ribbonLog.textContent = "Synced: " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        // Reset Button to Neutral
+        const saveBtn = document.getElementById('btn-manual-push');
+        const saveBtnText = document.getElementById('save-btn-text');
+        if (saveBtn) {
+            if (saveBtnText) saveBtnText.textContent = "Cloud Saved: " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            saveBtn.classList.remove('bg-amber-500', 'bg-blue-600', 'animate-pulse');
+            saveBtn.classList.add('bg-gray-700');
+        }
 
-        console.log("Silent Auto-Sync Complete.");
+        console.log("Manual Sync Complete.");
     } catch(e) {
         console.error("Silent Auto-Sync failed:", e);
     }
