@@ -229,11 +229,15 @@ async function findLatestBackupTime() {
             fields: 'files(createdTime)',
             pageSize: 1
         });
-        if(res.result.files.length > 0) {
-            document.getElementById('last-sync-time').textContent = new Date(res.result.files[0].createdTime).toLocaleString();
-        } else {
-            document.getElementById('last-sync-time').textContent = "No backups found";
+        const syncLabel = document.getElementById('last-sync-time');
+        if (syncLabel) {
+            if(res.result.files.length > 0) {
+                syncLabel.textContent = new Date(res.result.files[0].createdTime).toLocaleString();
+            } else {
+                syncLabel.textContent = "No backups found";
+            }
         }
+
     } catch(e) { console.error(e); }
 }
 
@@ -326,7 +330,8 @@ async function syncData(source = "AUTO") {
 
         await manageRetention(folderId);
         localStorage.setItem('lastGoogleSync', Date.now());
-        document.getElementById('last-sync-time').textContent = now.toLocaleString();
+        const syncLabel = document.getElementById('last-sync-time');
+        if (syncLabel) syncLabel.textContent = now.toLocaleString();
         
         btn.innerHTML = "✅ Saved!";
         setTimeout(() => {
