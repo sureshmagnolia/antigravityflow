@@ -8948,10 +8948,15 @@ function getExamName(date, time, stream) {
     showView(viewExtractor, navExtractor);
     populateUploadExamDropdown(); // <--- ADD THIS CALL
     });
-    // 🛡️ SECURITY/COST OPTIMIZATION: Data is fetched only when tab is accessed
-    navEditData.addEventListener('click', () => { showView(viewEditData, navEditData); window.fetchStaffData(); }); 
-    navScribeSettings.addEventListener('click', () => { showView(viewScribeSettings, navScribeSettings); if (window.fetchAllocationData) window.fetchAllocationData(); });
-    navRoomAllotment.addEventListener('click', () => { showView(viewRoomAllotment, navRoomAllotment); window.fetchSettingsData(); window.fetchSlotsData(); if (window.fetchAllocationData) window.fetchAllocationData(); });
+// 🛡️ SECURITY/COST OPTIMIZATION: Data is fetched only when tab is accessed
+    navEditData.addEventListener('click', () => { showView(viewEditData, navEditData); if (typeof window.fetchStaffData === 'function') window.fetchStaffData(); }); 
+    navScribeSettings.addEventListener('click', () => { showView(viewScribeSettings, navScribeSettings); if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); });
+    navRoomAllotment.addEventListener('click', () => { 
+        showView(viewRoomAllotment, navRoomAllotment); 
+        if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); 
+        if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData(); 
+        if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); 
+    });
     navQPCodes.addEventListener('click', () => { 
         showView(viewQPCodes, navQPCodes);
         const qpSelect = document.getElementById('qp-session-select');
@@ -8962,7 +8967,7 @@ function getExamName(date, time, stream) {
     navSearch.addEventListener('click', () => showView(viewSearch, navSearch)); 
     navReports.addEventListener('click', () => { showView(viewReports, navReports); if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData(); });
     navAbsentees.addEventListener('click', () => { showView(viewAbsentees, navAbsentees); if (typeof window.fetchOperationsData === 'function') window.fetchOperationsData(); });
-    navSettings.addEventListener('click', () => { showView(viewSettings, navSettings); window.fetchSettingsData(); });
+    navSettings.addEventListener('click', () => { showView(viewSettings, navSettings); if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); });
     // Add this line with your other navigation listeners
     if (navHelp) {
     navHelp.addEventListener('click', () => showView(viewHelp, navHelp));
