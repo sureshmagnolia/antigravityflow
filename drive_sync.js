@@ -308,14 +308,34 @@ async function syncData(source = "AUTO") {
         // -----------------------------------------------------------
 
         const localData = {};
-        for (const k of DATA_KEYS) {
-        if (k === 'examBaseData') {
-            localData[k] = await loadExamDataIDB();
-        } else {
-            const v = localStorage.getItem(k);
-            if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
+        
+        // 🛡️ Filter keys based on the source of the backup
+        let targetKeys = DATA_KEYS;
+        if (source.startsWith('INVIG')) {
+            targetKeys = [
+                'examCollegeName', 
+                'examInvigilationSlots', 
+                'examStaffData', 
+                'examInvigilatorMapping', 
+                'invigAdvanceUnavailability',
+                'invigDepartments', 
+                'invigRoles', 
+                'invigGlobalTarget', 
+                'invigGuestTarget', 
+                'invigVacationTarget', 
+                'invigGoogleScriptUrl'
+            ];
         }
-    }
+
+        for (const k of targetKeys) {
+            if (k === 'examBaseData') {
+                localData[k] = await loadExamDataIDB();
+            } else {
+                const v = localStorage.getItem(k);
+                if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
+            }
+        }
+
 
         
         const now = new Date();
