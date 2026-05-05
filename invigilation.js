@@ -3468,6 +3468,8 @@ window.saveRoleConfig = async function () {
 
         invigGoogleScriptUrl: googleScriptUrl
     });
+    
+    if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
 
     window.closeModal('role-config-modal');
     updateAdminUI();
@@ -8487,7 +8489,8 @@ async function saveVacationConfig() {
     try {
         const ref = doc(db, "colleges", currentCollegeId);
         await updateDoc(ref, { invigVacationConfig: JSON.stringify(config) });
-        // Optional: console.log("Vacation config saved.");
+        updateSyncStatus("Synced", "success");
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch(err) {
         console.error("Failed to save vacation config", err);
     }
@@ -8845,7 +8848,8 @@ window.startNewAcademicYear = async function() {
             autoAssignLogs: []                        // Clear logic logs
             // NOTE: We do NOT clear 'staffAccessList' so staff can still log in.
         });
-
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+        
         // 6. Clear Activity Log (Sub-collection)
         const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
         await setDoc(logRef, { entries: [] });
