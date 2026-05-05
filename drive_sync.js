@@ -572,16 +572,24 @@ async function checkForNewerDataOnDrive(isManual = false) {
         let localTime = 0;
         if (localTimeString) localTime = new Date(localTimeString).getTime();
 
-        const isNewBrowser = (localTime === 0);
+        // 🛡️ NEW: Check if IndexedDB is actually empty (Total Students)
+        const localStudents = await loadExamDataIDB();
+        const isLocalEmpty = (!localStudents || localStudents.length === 0);
+
+        // 💡 LOGIC:
+        // 1. If local is EMPTY, Cloud ALWAYS wins (New Browser / Cleared Data).
+        // 2. Otherwise, Cloud must be newer by at least 1 minute.
         const isCloudNewer = (cloudTime > localTime + 60000);
 
-        if (isNewBrowser || isCloudNewer) {
+        console.log(`🔍 Sync Check: Cloud(${new Date(cloudTime).toLocaleString()}) vs Local(${new Date(localTime).toLocaleString()}). Empty: ${isLocalEmpty}`);
+
+        if (isLocalEmpty || isCloudNewer) {
             console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
 
             // 🚨 CRITICAL PROTECTION:
             // If local is EMPTY but Cloud has DATA, keep the sync LOCKED   
             // until they restore or overwrite to prevent wiping the cloud. 
-            if (isNewBrowser && cloudTime > 0) isReadyToPush = false;       
+            if (isLocalEmpty && cloudTime > 0) isReadyToPush = false;   
 
             const mergeBtn = document.getElementById('btn-drive-merge-prompt');
             if (mergeBtn) {
