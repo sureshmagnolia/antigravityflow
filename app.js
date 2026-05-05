@@ -888,6 +888,8 @@ async function migrateFromLocalStorage() {
                   if(driveRibbonBtn) driveRibbonBtn.classList.add('hidden');
                 const driveStatus = document.getElementById('drive-sync-status-ribbon');
                   if (driveStatus) driveStatus.classList.add('hidden');
+                  const driveSyncBtn = document.getElementById('btn-drive-sync-ribbon');
+                  if (driveSyncBtn) driveSyncBtn.classList.add('hidden');
                   // Force hide any pending merge prompts for Pro users
                   const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                   if (mergeBtn) mergeBtn.classList.add('hidden');
