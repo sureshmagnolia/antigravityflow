@@ -4932,11 +4932,12 @@ window.generateFacultyPeriodReport = function() {
             // Collect session-level unavailability
             const unavSessions = slotKeysInRange.filter(k => {
                 const slot = invigilationSlots[k];
-                return slot.unavailable && slot.unavailable.some(u =>
-                    (typeof u === 'string' ? u : u.email) === s.email
-                );
+                const myEmail = s.email.toLowerCase();
+                return slot.unavailable && slot.unavailable.some(u => {
+                    const uEmail = (typeof u === 'string' ? u : u.email).toLowerCase();
+                    return uEmail === myEmail;
+                });
             });
-
             // Collect advance unavailability dates in range
             const unavDates = Object.keys(advanceUnavailability || {}).filter(dateStr => {
                 const d = parseDate(dateStr + ' | 00:01 AM'); // Set to very start of day
@@ -4949,7 +4950,10 @@ window.generateFacultyPeriodReport = function() {
                 if (d < startLimit || d > endLimit) return false;
                 
                 const sessions = advanceUnavailability[dateStr];
-                return (sessions.FN || []).includes(s.email) || (sessions.AN || []).includes(s.email);
+                const fn = (sessions.FN || []).map(e => e.toLowerCase());
+                const an = (sessions.AN || []).map(e => e.toLowerCase());
+                const myEmail = s.email.toLowerCase();
+                return fn.includes(myEmail) || an.includes(myEmail);
             });
 
 
