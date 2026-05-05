@@ -234,6 +234,12 @@ async function syncData(source = "AUTO") {
     }
 
     try {
+        // 🛡️ Safety Guard: Wait for Google API to initialize if it's still waking up
+        if (!window.gapi || !gapi.client) {
+            console.log("⏳ Google API not ready. Retrying in 2 seconds...");
+            await new Promise(r => setTimeout(r, 2000));
+            if (!gapi.client) throw new Error("Google Drive API failed to initialize. Please refresh the page.");
+        }
 
         // Check if token is still valid, refresh silently if needed
         const currentToken = gapi.client.getToken();
