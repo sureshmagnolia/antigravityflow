@@ -159,13 +159,19 @@ function showReconnectState() {
 
 function showDisconnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    btn.innerHTML = "🔗 Connect Google Drive";
-    btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
-    btn.onclick = handleAuthClick;
+    if (btn) {
+        btn.innerHTML = "🔗 Connect Google Drive";
+        btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
+        btn.onclick = handleAuthClick;
+    }
     
-    document.getElementById('drive-controls').classList.add('hidden');
-    document.getElementById('last-sync-time').textContent = "";
+    const controls = document.getElementById('drive-controls');
+    if (controls) controls.classList.add('hidden');
+    
+    const syncLabel = document.getElementById('last-sync-time');
+    if (syncLabel) syncLabel.textContent = "";
 }
+
 
 // --- AUTH ACTIONS ---
 
@@ -262,7 +268,7 @@ async function syncData(source = "AUTO") {
         // Check if token is still valid, refresh silently if needed
         const currentToken = gapi.client.getToken();
         if (!currentToken || !currentToken.access_token) {
-            btn.innerHTML = "🔄 Refreshing login...";
+            if (btn) btn.innerHTML = "🔄 Refreshing login...";
             await new Promise((resolve, reject) => {
                 tokenClient.callback = (resp) => {
                     if (resp.error) reject(new Error('Login refresh failed. Please reconnect Drive.'));
@@ -284,20 +290,20 @@ async function syncData(source = "AUTO") {
                 const alreadyLoaded = (await loadExamDataIDB()).some(s => s.Date === d.trim() && s.Time === t.trim());
                 if (!alreadyLoaded) {
                     fetchCount++;
-                    btn.innerHTML = `⏳ Fetching session ${fetchCount}/${allKnownSessions.length}...`;
+                    if (btn) btn.innerHTML = `⏳ Fetching session ${fetchCount}/${allKnownSessions.length}...`;
                     await window.fetchHeavyDataOnDemand(sessionKey);
                     await new Promise(r => setTimeout(r, 300));
                 }
             }
         }
-        btn.innerHTML = "⏳ Mirroring to Firebase...";
+        if (btn) btn.innerHTML = "⏳ Mirroring to Firebase...";
         // --- Plan A: Ensure Firebase has the latest Master Chunks ---
         if (window.syncDataToCloud) {
             await window.syncDataToCloud('baseData');
             await window.syncDataToCloud('settings');
             await window.syncDataToCloud('staff');
         }
-        btn.innerHTML = "⏳ Building Drive backup...";
+        if (btn) btn.innerHTML = "⏳ Building Drive backup...";
         // -----------------------------------------------------------
         // -----------------------------------------------------------
 
@@ -747,13 +753,13 @@ window.startHistoricalMigration = async function() {
             // 2. Upload Chunks loop
             let successCount = 0;
             const btn = document.querySelector('button[onclick="window.startHistoricalMigration()"]');
-            const originalText = btn.innerHTML;
+            const originalText = btn ? btn.innerHTML : '';
 
             for (let i = 0; i < uniqueDates.length; i++) {
                 const dateKey = uniqueDates[i];
                 if (dateKey === "Unknown_Date") continue; // Skip bad data
 
-                btn.innerHTML = `Uploading: ${i + 1} / ${uniqueDates.length}...`;
+                if (btn) btn.innerHTML = `Uploading: ${i + 1} / ${uniqueDates.length}...`;
                 
                 // Format the chunk
                 // Build complete date context package
@@ -795,7 +801,7 @@ window.startHistoricalMigration = async function() {
                 successCount++;
             }
 
-            btn.innerHTML = originalText;
+            if (btn) btn.innerHTML = originalText;
             alert(`✅ Migration Complete! Successfully uploaded ${successCount} date chunks to Firebase Storage.`);
             
         } catch (err) {
