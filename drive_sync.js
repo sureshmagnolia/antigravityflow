@@ -223,7 +223,7 @@ async function findLatestBackupTime() {
     } catch(e) { console.error(e); }
 }
 
-async function syncData() {
+async function syncData(source = "AUTO") {
     const btn = document.getElementById('btn-manual-sync');
     const originalText = btn ? btn.innerHTML : '';
     
