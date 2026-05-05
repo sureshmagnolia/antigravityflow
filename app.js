@@ -2262,10 +2262,12 @@ async function deleteSessionFromCloud(sessionKey) {
             
             // ⚡ SMART DRIVE TRIGGER:
             // Only backup if we are saving configuration or assignments (not background pulses)
+            // Only backup if a HUMAN made the change (isManualChange === true)
             const activeSections = ['settings', 'staff', 'slots', 'allocation', 'ops'];
-            if (activeSections.includes(targetSection) && typeof window.triggerReactiveDriveSync === 'function') {
+            if (isManualChange && activeSections.includes(targetSection) && typeof window.triggerReactiveDriveSync === 'function') {
                 window.triggerReactiveDriveSync();
             }
+
 
         } catch (e) {
 
