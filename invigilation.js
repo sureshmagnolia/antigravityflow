@@ -4934,8 +4934,8 @@ window.generateFacultyPeriodReport = function() {
                 const slot = invigilationSlots[k];
                 const myEmail = s.email.toLowerCase();
                 return slot.unavailable && slot.unavailable.some(u => {
-                    const uEmail = (typeof u === 'string' ? u : u.email).toLowerCase();
-                    return uEmail === myEmail;
+                    const uRaw = (typeof u === 'string' ? u : u.email || '');
+                    return uRaw.toLowerCase() === myEmail;
                 });
             });
             // Collect advance unavailability dates in range
@@ -4950,9 +4950,14 @@ window.generateFacultyPeriodReport = function() {
                 if (d < startLimit || d > endLimit) return false;
                 
                 const sessions = advanceUnavailability[dateStr];
-                const fn = (sessions.FN || []).map(e => e.toLowerCase());
-                const an = (sessions.AN || []).map(e => e.toLowerCase());
+                const sessions = advanceUnavailability[dateStr];
                 const myEmail = s.email.toLowerCase();
+                
+                // Safety: Extract email string from either "string" or {email: "..."} object
+                const getEmail = (item) => (typeof item === 'string' ? item : item.email || '').toLowerCase();
+                
+                const fn = (sessions.FN || []).map(getEmail);
+                const an = (sessions.AN || []).map(getEmail);
                 return fn.includes(myEmail) || an.includes(myEmail);
             });
 
