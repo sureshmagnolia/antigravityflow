@@ -2259,8 +2259,11 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
             updateSyncStatus("Saved", "success");
-            // ⚡ Trigger Google Drive Shadow Backup ONLY on real user changes
-            if (isManualChange && typeof window.triggerReactiveDriveSync === 'function') {
+            
+            // ⚡ SMART DRIVE TRIGGER:
+            // Only backup if we are saving configuration or assignments (not background pulses)
+            const activeSections = ['settings', 'staff', 'slots', 'allocation', 'ops'];
+            if (activeSections.includes(targetSection) && typeof window.triggerReactiveDriveSync === 'function') {
                 window.triggerReactiveDriveSync();
             }
 
