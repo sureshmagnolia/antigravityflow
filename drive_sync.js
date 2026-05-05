@@ -500,8 +500,13 @@ async function syncDataSilent() {
     }
 }
 
+// Global pointer for the ribbon button to call
+window.executeDriveRestore = null;
+
 async function checkForNewerDataOnDrive() {
-    if(window.currentCollegeId) return; // Skip for Firebase users
+    // 🛡️ DOUBLE GUARD: Ensure Firebase users NEVER see this
+    if (window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true') return;
+
     try {
         const folderId = await getBackupFolder();
         const res = await gapi.client.drive.files.list({
@@ -515,16 +520,20 @@ async function checkForNewerDataOnDrive() {
             const latestCloudFile = res.result.files[0];
             const cloudTime = new Date(latestCloudFile.createdTime).getTime();
 
-            // Check latest local edit time
             const localTimeString = localStorage.getItem('lastUpdated');
             let localTime = 0;
             if(localTimeString) localTime = new Date(localTimeString).getTime();
 
-            // If cloud is newer by more than a minute, prompt
+            // If cloud is newer by more than a minute, show the ribbon button
             if (cloudTime > localTime + 60000) {
-                const doUpdate = confirm(`Newer data found on Google Drive (${new Date(cloudTime).toLocaleString()}).\n\nWould you like to fetch and merge this update?`);
-                if(doUpdate) {
-                    window.executeRestore(latestCloudFile.id);
+                const mergeBtn = document.getElementById('btn-drive-merge-prompt');
+                if (mergeBtn) {
+                    mergeBtn.classList.remove('hidden');
+                    // Define what happens when they click the ribbon button
+                    window.executeDriveRestore = () => {
+                        mergeBtn.classList.add('hidden');
+                        window.executeRestore(latestCloudFile.id);
+                    };
                 }
             }
         }
