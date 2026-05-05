@@ -563,7 +563,6 @@ async function checkForNewerDataOnDrive(isManual = false) {
                 if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
 
                 const mergeBtn = document.getElementById('btn-drive-merge-prompt');
-                const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                 if (mergeBtn) {
                     mergeBtn.classList.remove('hidden');
                     // Define what happens when they click the ribbon button
