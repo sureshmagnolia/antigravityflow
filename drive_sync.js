@@ -226,10 +226,6 @@ try {
         console.warn("Drive connection check deferred:", e);
         throw e;
     }
-        // For other errors (like API not ready yet), just warn in console
-        console.warn("Drive connection check deferred:", e);
-        throw e;
-    }
     if (res.status === 401) {
         localStorage.removeItem('drive_access_token');
         localStorage.removeItem('drive_token_expiry');
