@@ -14,8 +14,12 @@ const DATA_KEYS = [
     'examRoomAllotment', 'examScribeList', 'examScribeAllotment', 
     'examRulesConfig', 'examInvigilationSlots', 'examStaffData', 
     'examInvigilatorMapping', 'invigAdvanceUnavailability',
-    'examSessionNames', 'examRemunerationConfig'
+    'examSessionNames', 'examRemunerationConfig',
+    'invigDepartments', 'invigRoles', 'invigGlobalTarget', 
+    'invigGuestTarget', 'invigVacationTarget', 'invigGoogleScriptUrl',
+    'examHistoricalMeta'
 ];
+
 
 // --- IndexedDB Configuration (Sync with app.js) ---
 const IDB_NAME = 'AntigravityDB';
