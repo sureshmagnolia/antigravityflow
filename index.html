@@ -204,10 +204,24 @@
                 </svg>
             </button>
 
-            <button id="login-btn"
-                class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 md:px-3 md:py-2 rounded transition">
-                Login
-            </button>
+<!-- Drive Sync Status for Basic Users -->
+              <div id="drive-sync-status-ribbon" class="hidden flex items-center gap-2 mr-2 px-2 py-1 bg-gray-800 rounded border border-gray-700">
+                  <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                  <span id="drive-sync-log-ribbon" class="text-[10px] text-gray-300 font-medium tracking-tight">Drive Linked</span>
+              </div>
+
+              <button id="btn-drive-sync-ribbon" onclick="if(window.handleAuthClick) window.handleAuthClick()"
+                  class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 md:px-3 md:py-2 rounded transition mr-2 flex items-center gap-1 shadow-sm border border-emerald-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 hidden sm:block">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+                  </svg>
+                  <span class="font-bold">Add Google Drive Sync</span>
+              </button>
+
+              <button id="login-btn"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 md:px-3 md:py-2 rounded transition">
+                  Login
+              </button>
 
             <button id="logout-btn"
                 class="hidden bg-red-600 hover:bg-red-700 text-white p-1.5 md:px-3 md:py-2 rounded-md transition flex items-center gap-1 shadow-sm border border-red-800"
