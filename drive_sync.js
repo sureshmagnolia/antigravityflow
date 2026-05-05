@@ -221,11 +221,15 @@ async function findLatestBackupTime() {
 
 async function syncData() {
     const btn = document.getElementById('btn-manual-sync');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "⏳ Saving...";
-    btn.disabled = true;
+    const originalText = btn ? btn.innerHTML : '';
+    
+    if (btn) {
+        btn.innerHTML = "⏳ Saving...";
+        btn.disabled = true;
+    }
 
     try {
+
         // Check if token is still valid, refresh silently if needed
         const currentToken = gapi.client.getToken();
         if (!currentToken || !currentToken.access_token) {
@@ -311,11 +315,14 @@ async function syncData() {
         } else {
             alert("Backup Failed: " + e.message);
         }
-        btn.innerHTML = "❌ Error";
-        setTimeout(() => btn.innerHTML = originalText, 3000);
+        if (btn) {
+            btn.innerHTML = "❌ Error";
+            setTimeout(() => btn.innerHTML = originalText, 3000);
+        }
     }
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
 }
+
 
 // --- ⚡ REACTIVE SYNC (Triggered by data changes) ---
 let reactiveSyncTimer = null;
