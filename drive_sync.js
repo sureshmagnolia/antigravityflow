@@ -210,15 +210,21 @@ function handleAuthClick() {
 async function getBackupFolder() {
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     let res;
-    try {
+try {
         res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     } catch(e) {
-        localStorage.removeItem('drive_access_token');
-        localStorage.removeItem('drive_token_expiry');
-        localStorage.removeItem('isDriveConnected');
-        gapi.client.setToken(null);
-        showReconnectState();
-        throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+        // Only wipe session if it's a genuine 401 Unauthorized error from Google
+        if (e.status === 401 || (e.result && e.result.error && e.result.error.code === 401)) {
+            localStorage.removeItem('drive_access_token');
+            localStorage.removeItem('drive_token_expiry');
+            localStorage.removeItem('isDriveConnected');
+            gapi.client.setToken(null);
+            showReconnectState();
+            throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+        }
+        // For other errors (like API not ready yet), just warn in console
+        console.warn("Drive connection check deferred:", e);
+        throw e;
     }
     if (res.status === 401) {
         localStorage.removeItem('drive_access_token');
@@ -540,6 +546,12 @@ window.checkForNewerDataOnDrive = checkForNewerDataOnDrive;
 async function checkForNewerDataOnDrive(isManual = false) {
     // 🛡️ DOUBLE GUARD: Ensure Firebase users NEVER see this
     if (window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true') return;
+
+    // 🛡️ API GUARD: Don't check if the API is still initializing or unauthenticated
+    if (!window.gapi || !gapi.client || !gapi.client.drive || !gapi.client.getToken()) {
+        console.log("⏳ Sync Check: Waiting for Google API to stabilize...");
+        return;
+    }
 
     const log = document.getElementById('drive-sync-log-ribbon');
     const originalLog = log ? log.textContent : "Drive Linked";
