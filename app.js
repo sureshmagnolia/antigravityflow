@@ -875,6 +875,10 @@ async function migrateFromLocalStorage() {
                 const portalSection = document.getElementById('student-portal-section');
                 if (portalSection) portalSection.classList.remove('hidden');
 
+                // Show Invigilation Slot Sync (Pro feature - login required)
+                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
+
                 // --- SHOW User Info & Sync Status ---
                 userInfoDiv.classList.add('md:block'); // Show on Desktop
                 if (mobileSyncDot) mobileSyncDot.classList.remove('hidden'); // Show on Mobile
