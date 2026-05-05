@@ -139,7 +139,9 @@ function showConnectedState() {
     const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
     if(ribbonBtn) ribbonBtn.classList.add('hidden');
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
-    if(ribbonStatus) ribbonStatus.classList.remove('hidden');
+    // 🛡️ Guard: Only show status on ribbon if NOT a Pro user
+    if(ribbonStatus && !window.currentCollegeId) ribbonStatus.classList.remove('hidden');
+    else if(ribbonStatus) ribbonStatus.classList.add('hidden');
     
     findLatestBackupTime();
 }
@@ -167,8 +169,10 @@ function showDisconnectedState() {
     document.getElementById('drive-controls').classList.add('hidden');
     document.getElementById('last-sync-time').textContent = "";
 
-    const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+    // 🛡️ Guard: Only show "Add Sync" button if NOT a Pro user
     if(ribbonBtn && !window.currentCollegeId) ribbonBtn.classList.remove('hidden');
+    else if(ribbonBtn) ribbonBtn.classList.add('hidden');
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
     if(ribbonStatus) ribbonStatus.classList.add('hidden');
 }
