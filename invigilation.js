@@ -857,7 +857,8 @@ function isUserUnavailable(slot, email, key) {
 // --- DATE HELPERS ---
 function parseDate(key) {
     try {
-        const [dStr, tStr] = key.split(' | ');
+        const [dRaw, tStr] = key.split(' | ');
+        const dStr = dRaw.replace(/-/g, '.'); // Convert hyphens to dots automatically
         const [d, m, y] = dStr.split('.');
         let [time, mod] = tStr.split(' ');
         let [h, min] = time.split(':');
@@ -4938,12 +4939,19 @@ window.generateFacultyPeriodReport = function() {
 
             // Collect advance unavailability dates in range
             const unavDates = Object.keys(advanceUnavailability || {}).filter(dateStr => {
-                const d = parseDate(dateStr + ' | 09:00 AM');
+                const d = parseDate(dateStr + ' | 00:01 AM'); // Set to very start of day
+                const startLimit = new Date(fromDate);
+                startLimit.setHours(0, 0, 0, 0); // Start of fromDate
+                const endLimit = new Date(toDate);
+                endLimit.setHours(23, 59, 59, 999); // End of toDate
+                
                 if (isNaN(d)) return false;
-                if (d < fromDate || d > toDate) return false;
+                if (d < startLimit || d > endLimit) return false;
+                
                 const sessions = advanceUnavailability[dateStr];
                 return (sessions.FN || []).includes(s.email) || (sessions.AN || []).includes(s.email);
             });
+
 
             const allUnavDates = [...new Set([
                 ...unavSessions.map(k => k.split(' | ')[0]),
