@@ -884,6 +884,7 @@ async function migrateFromLocalStorage() {
                 findMyCollege(user);
             } else {
                 currentUser = null;
+                localStorage.setItem('isAdminUser', 'false'); // 🛡️ Stop Drive Sync on Logout
                 loginBtn.classList.remove('hidden');
                 logoutBtn.classList.add('hidden');
 
