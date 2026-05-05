@@ -289,7 +289,7 @@ async function syncData() {
         
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `${source}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
@@ -345,7 +345,8 @@ window.triggerReactiveDriveSync = function() {
     reactiveSyncTimer = setTimeout(async () => {
         try {
             console.log("🚀 Reactive Auto-Sync: Commencing Drive backup...");
-            await syncData(); 
+            const source = window.location.pathname.includes('invigilation') ? 'INVIG' : 'ADMIN';
+            await syncData(source); 
         } catch (e) {
             console.warn("⚠️ Reactive Sync failed:", e.message);
         }
