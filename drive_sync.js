@@ -333,11 +333,13 @@ async function syncData(source = "AUTO") {
         const syncLabel = document.getElementById('last-sync-time');
         if (syncLabel) syncLabel.textContent = now.toLocaleString();
         
-        btn.innerHTML = "✅ Saved!";
-        setTimeout(() => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }, 2000);
+        if (btn) {
+            btn.innerHTML = "✅ Saved!";
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 2000);
+        }
 
     } catch (e) {
         console.error(e);
@@ -349,7 +351,10 @@ async function syncData(source = "AUTO") {
         }
         if (btn) {
             btn.innerHTML = "❌ Error";
-            setTimeout(() => btn.innerHTML = originalText, 3000);
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 3000);
         }
     } finally {
         window.isDriveSyncInProgress = false; // 🛡️ Lower the Busy Flag
