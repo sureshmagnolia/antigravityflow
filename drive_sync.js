@@ -135,14 +135,13 @@ function showConnectedState() {
     btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
     btn.onclick = disconnectDrive;
     document.getElementById('drive-controls').classList.remove('hidden');
-
+    
     const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
     if(ribbonBtn) ribbonBtn.classList.add('hidden');
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
     if(ribbonStatus) ribbonStatus.classList.remove('hidden');
-
+    
     findLatestBackupTime();
-    checkForNewerDataOnDrive();
 }
 
 
@@ -500,12 +499,18 @@ async function syncDataSilent() {
     }
 }
 
-// Global pointer for the ribbon button to call
+// Global pointers for the ribbon to call
 window.executeDriveRestore = null;
+window.checkForNewerDataOnDrive = checkForNewerDataOnDrive;
 
-async function checkForNewerDataOnDrive() {
+async function checkForNewerDataOnDrive(isManual = false) {
     // 🛡️ DOUBLE GUARD: Ensure Firebase users NEVER see this
     if (window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true') return;
+
+    const log = document.getElementById('drive-sync-log-ribbon');
+    const originalLog = log ? log.textContent : "Drive Linked";
+    
+    if (isManual && log) log.textContent = "Checking...";
 
     try {
         const folderId = await getBackupFolder();
@@ -524,7 +529,7 @@ async function checkForNewerDataOnDrive() {
             let localTime = 0;
             if(localTimeString) localTime = new Date(localTimeString).getTime();
 
-            // If cloud is newer by more than a minute, show the ribbon button
+// If cloud is newer by more than a minute, show the ribbon button
             if (cloudTime > localTime + 60000) {
                 const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                 if (mergeBtn) {
@@ -535,10 +540,18 @@ async function checkForNewerDataOnDrive() {
                         window.executeRestore(latestCloudFile.id);
                     };
                 }
+                if (isManual && log) log.textContent = originalLog;
+            } else if (isManual && log) {
+                log.textContent = "Already Up to Date";
+                setTimeout(() => { log.textContent = originalLog; }, 3000);
             }
         }
     } catch(e) {
         console.error("Drive Check Failed:", e);
+        if (isManual && log) {
+            log.textContent = "Check Failed";
+            setTimeout(() => { log.textContent = originalLog; }, 3000);
+        }
     }
 }
 
