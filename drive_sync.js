@@ -316,10 +316,6 @@ async function syncData(source = "AUTO") {
 
     } catch (e) {
         console.error(e);
-    } finally {
-        window.isDriveSyncInProgress = false; // 🛡️ Lower the Busy Flag
-    }
-
         // Show a friendly message for token/auth errors
         if (e.message && e.message.includes('expired')) {
             alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
@@ -330,9 +326,12 @@ async function syncData(source = "AUTO") {
             btn.innerHTML = "❌ Error";
             setTimeout(() => btn.innerHTML = originalText, 3000);
         }
+    } finally {
+        window.isDriveSyncInProgress = false; // 🛡️ Lower the Busy Flag
+        if (btn) btn.disabled = false;
     }
-    if (btn) btn.disabled = false;
 }
+
 
 
 // --- ⚡ REACTIVE SYNC (Triggered by data changes) ---
