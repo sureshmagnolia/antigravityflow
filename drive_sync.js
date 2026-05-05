@@ -317,6 +317,31 @@ async function syncData() {
     btn.disabled = false;
 }
 
+// --- ⚡ REACTIVE SYNC (Triggered by data changes) ---
+let reactiveSyncTimer = null;
+window.triggerReactiveDriveSync = function() {
+    const isAdmin = localStorage.getItem('isAdminUser') === 'true';
+    const isDriveConnected = localStorage.getItem('isDriveConnected') === 'true';
+
+    // 🛡️ Guard: Only queue if Admin is active, Drive is linked, and Online
+    if (!isAdmin || !isDriveConnected || !navigator.onLine) return;
+
+    // Reset the timer (Debounce)
+    if (reactiveSyncTimer) clearTimeout(reactiveSyncTimer);
+    
+    console.log("⚡ Change detected. Google Drive backup queued (60s delay)...");
+    
+    reactiveSyncTimer = setTimeout(async () => {
+        try {
+            console.log("🚀 Reactive Auto-Sync: Commencing Drive backup...");
+            await syncData(); 
+        } catch (e) {
+            console.warn("⚠️ Reactive Sync failed:", e.message);
+        }
+    }, 60 * 1000); // Wait 60 seconds after the LAST change
+};
+
+
 async function manageRetention(folderId) {
     const res = await gapi.client.drive.files.list({
         q: `'${folderId}' in parents and trashed=false`, 
