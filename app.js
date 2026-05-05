@@ -607,7 +607,9 @@ function loadExamDataIDB() {
 const originalSetItem = localStorage.setItem;
 localStorage.setItem = function(key, value) {
     originalSetItem.apply(this, arguments);
-    if (typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
+    if (key !== 'lastUpdated' && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
+        // Automatically update the timestamp for conflict detection
+        originalSetItem.apply(this, ['lastUpdated', new Date().toISOString()]);
         window.triggerDriveAutoSync();
     }
 };
