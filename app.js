@@ -902,6 +902,10 @@ async function migrateFromLocalStorage() {
                 // Hide Invigilation Button
                 if (btnInvigilation) btnInvigilation.classList.add('hidden');
 
+                // Hide Invigilation Slot Sync (requires login)
+                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+                if (invigSlotWrapper) invigSlotWrapper.classList.add('hidden');
+
                 // Load Local Data & Finalize
                 await loadInitialData();
                 finalizeAppLoad();
