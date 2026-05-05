@@ -626,116 +626,105 @@ function showRestoreModal(files) {
 window.executeRestore = async function(fileId) {
     const modal = document.getElementById('drive-restore-modal');
     if (modal) modal.remove();
+
+    // 1. Fetch File Content First
+    let cloudData;
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
-        let cloudData = response.result;
-        
-        // Google API client sometimes returns large JSONs as raw strings instead of objects
+        cloudData = response.result;
         if (typeof cloudData === 'string') {
             try { cloudData = JSON.parse(cloudData); } 
             catch (e) { cloudData = JSON.parse(response.body); }
         }
-        
-        // Ask user for Restore Mode
-        const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported Google Drive data with your existing local data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
+    } catch (e) { return alert("Fetch Error: " + e.message); }
 
+    // 2. SHOW CUSTOM UI MODAL (Instead of confirm)
+    const promptModal = document.createElement('div');
+    promptModal.id = "drive-restore-prompt";
+    promptModal.className = "fixed inset-0 bg-black bg-opacity-70 backdrop-blur-md flex items-center justify-center z-[200]";
+    promptModal.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[30rem] border border-gray-100 animate-fadeIn">
+            <h3 class="text-xl font-black text-gray-900 mb-2 italic underline decoration-blue-500 underline-offset-4">RESTORE DATA</h3>
+            <p class="text-sm text-gray-600 mb-6 font-medium leading-relaxed">
+                Choose how you want to bring the data from <span class="text-blue-600 font-bold">Google Drive</span> into this browser.
+            </p>
 
-        // If REPLACE, wipe local data for a clean slate
+            <div class="space-y-3">
+                <button id="restore-merge" class="w-full text-left p-4 rounded-xl border-2 border-emerald-50 hover:border-emerald-500 hover:bg-emerald-50 transition-all group">
+                    <div class="font-bold text-emerald-800">🧩 Smart Merge</div>
+                    <div class="text-[10px] text-emerald-600 opacity-80 group-hover:opacity-100">Keep current local edits and add only missing data from Drive. (Safest)</div>
+                </button>
+
+                <button id="restore-replace" class="w-full text-left p-4 rounded-xl border-2 border-red-50 hover:border-red-500 hover:bg-red-50 transition-all group">
+                    <div class="font-bold text-red-800">🔥 Full Overwrite</div>
+                    <div class="text-[10px] text-red-600 opacity-80 group-hover:opacity-100">Wipe ALL local data and replace it entirely with the Drive version.</div>
+                </button>
+
+                <button id="restore-cancel" class="w-full text-center py-3 text-sm font-bold text-gray-400 hover:text-gray-700 transition-colors uppercase tracking-widest">
+                    Cancel (Do Nothing)
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(promptModal);
+
+    // Handle Clicks
+    return new Promise((resolve) => {
+        document.getElementById('restore-cancel').onclick = () => { promptModal.remove(); resolve(); };
+        document.getElementById('restore-merge').onclick = async () => { promptModal.remove(); await processRestore(cloudData, true); resolve(); };
+        document.getElementById('restore-replace').onclick = async () => { promptModal.remove(); await processRestore(cloudData, false); resolve(); };
+    });
+};
+
+async function processRestore(cloudData, isMerge) {
+    try {
+        // --- 1. CLEANUP ---
         if (!isMerge) {
+            // SAFE WIPE: Preserve Drive Connection & Key Settings
+            const whitelist = ['isDriveConnected', 'drive_access_token', 'drive_token_expiry', 'lastGoogleSync', 'currentCollegeId', 'isAdminUser'];
+            const saved = {};
+            whitelist.forEach(k => { const v = localStorage.getItem(k); if(v) saved[k] = v; });
+
             localStorage.clear();
-            await saveExamDataIDB([]); 
+
+            // Restore Whitelisted Keys
+            Object.keys(saved).forEach(k => localStorage.setItem(k, saved[k]));
+            await saveExamDataIDB([]);
         }
 
+        // --- 2. DATA IMPORT ---
         for (const key of Object.keys(cloudData)) {
-        if (DATA_KEYS.includes(key)) {
-            const val = cloudData[key];
-            
-            if (key === 'examBaseData') {
-                // Smart Merge Logic for Student Data
-                if (isMerge) {
-                    const existingData = await loadExamDataIDB() || [];
-                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
-                    const existingKeys = new Set(existingData.map(getRowKey));
-                    
-                    const newUniqueData = val.filter(student => !existingKeys.has(getRowKey(student)));
-                    await saveExamDataIDB([...existingData, ...newUniqueData]);
-                } else {
-                    // Replace strictly
-                    await saveExamDataIDB(val);
-                }
-                        } else {
-                // In MERGE mode: preserve all existing local config keys.
-                // Only write this key if user chose REPLACE, OR if the key doesn't exist locally yet.
-                if (!isMerge) {
-                    // REPLACE mode: overwrite everything
-                    if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
-                    else localStorage.setItem(key, val);
-                } else {
-                    // MERGE mode: only write if key is completely absent locally
-                    // (never overwrite existing Scribe List, Room Allotment, Invigilator data etc.)
-                    if (!localStorage.getItem(key)) {
-                        if (typeof val === 'object') localStorage.setItem(key, JSON.stringify(val));
-                        else localStorage.setItem(key, val);
+            if (DATA_KEYS.includes(key)) {
+                const val = cloudData[key];
+
+                if (key === 'examBaseData') {
+                    if (isMerge) {
+                        const existingData = await loadExamDataIDB() || [];
+                        const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                        const existingKeys = new Set(existingData.map(getRowKey));
+                        const newUniqueData = val.filter(student => !existingKeys.has(getRowKey(student)));
+                        await saveExamDataIDB([...existingData, ...newUniqueData]);
+                    } else {
+                        await saveExamDataIDB(val);
                     }
+                } else {
+                    // CONFIG DATA (Staff, Rooms, Settings):
+                    // Even in Merge mode, we treat Cloud as the "Truth" for these small files
+                    const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;
+                    localStorage.setItem(key, stringVal);
                 }
-            }
-
-        }
-    }
-
-    // KILL GHOST DATA BEFORE RELOAD
-        localStorage.removeItem('examBaseData');
-        localStorage.removeItem('examData_v2');
-
-                // NEW: Offer to also push examBaseData to Firebase Storage as date-chunks
-        if (window.currentCollegeId && navigator.onLine && cloudData.examBaseData && Array.isArray(cloudData.examBaseData)) {
-            const pushToCloud = confirm("☁️ Cloud Storage Sync:\n\nDo you also want to push the restored student data to Firebase Storage as on-demand date chunks?\n\nThis allows historical data to be lazy-loaded on other devices.\nClick [OK] to Push, [Cancel] to skip.");
-
-            if (pushToCloud) {
-                const { storage, ref, uploadString, getDownloadURL } = window.firebase;
-                const pushIsMerge = confirm("CLOUD PUSH MODE:\n\nClick [OK] to MERGE with existing cloud chunks.\nClick [Cancel] to OVERWRITE existing cloud chunks.");
-
-                // Group restored data by Date
-                const groupedByDate = {};
-                cloudData.examBaseData.forEach(student => {
-                    const d = student.Date ? student.Date.trim() : "Unknown_Date";
-                    if (!groupedByDate[d]) groupedByDate[d] = [];
-                    groupedByDate[d].push(student);
-                });
-
-                let cloudPushCount = 0;
-                for (const dateKey of Object.keys(groupedByDate)) {
-                    if (dateKey === "Unknown_Date") continue;
-                    const fileRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateKey}.json`);
-                    let finalData = groupedByDate[dateKey];
-
-                    if (pushIsMerge) {
-                        try {
-                            const url = await getDownloadURL(fileRef);
-                            const existing = await fetch(url).then(r => r.json());
-                            const getKey = r => `${r.Date || ''}|${r.Time || ''}|${r['Register Number'] || ''}`.toUpperCase();
-                            const existingKeys = new Set(existing.map(getKey));
-                            const newOnly = finalData.filter(r => !existingKeys.has(getKey(r)));
-                            finalData = [...existing, ...newOnly];
-                        } catch (e) { /* No existing chunk, first upload */ }
-                    }
-
-                    await uploadString(fileRef, JSON.stringify(finalData), 'raw', { contentType: 'application/json' });
-                    cloudPushCount++;
-                }
-                alert(`☁️ Cloud Push Complete: ${cloudPushCount} date chunks pushed to Firebase Storage.`);
             }
         }
 
-        localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
-        alert("✅ Restored successfully! Reloading...");
-        // Mark that we just restored from Drive so app.js can "Heal" Firebase
+        // --- 3. FINALIZE ---
+        localStorage.removeItem('examBaseData'); // Clean ghost legacy key
         localStorage.setItem('pendingDriveRestoreSync', 'true');
+
+        alert("✅ Restored successfully! Reloading to apply changes.");
         location.reload();
 
-
-    } catch (e) { alert("Restore Error: " + e.message); }
-};
+    } catch (e) { alert("Execution Error: " + e.message); }
+}
 
 if (!document.getElementById('drive-anim-style')) {
     const style = document.createElement('style');
