@@ -247,6 +247,8 @@ async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
                 // Success: Cache ID and Start
                 localStorage.setItem('my_college_id', collegeId);
                 const role = isAdmin ? "Admin" : "Staff";
+                // 🛡️ Save Admin status for Drive Reactive Sync
+                localStorage.setItem('isAdminUser', isAdmin ? 'true' : 'false');
                 initializeSession(collegeId, isAdmin, role);
                 return true;
             } else {
@@ -2094,6 +2096,7 @@ async function syncSlotsToCloud() {
             examInvigilationSlots: JSON.stringify(invigilationSlots) 
         }, { merge: true });
         updateSyncStatus("Synced", "success");
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch (e) {
         console.error(e);
         updateSyncStatus("Save Failed", "error");
@@ -2111,6 +2114,7 @@ async function syncStaffToCloud() {
             examStaffData: JSON.stringify(staffData) 
         }, { merge: true });
         updateSyncStatus("Synced", "success");
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch (e) {
         console.error(e);
         updateSyncStatus("Save Failed", "error");
