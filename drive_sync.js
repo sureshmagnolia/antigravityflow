@@ -618,7 +618,6 @@ if (isNewBrowser || isCloudNewer) {
                     setTimeout(() => { log.textContent = originalLog; }, 3000);
                 }
             }
-        }
     } catch(e) {
         console.error("Drive Check Failed:", e);
         if (isManual && log) {
