@@ -208,6 +208,10 @@
               <div id="drive-sync-status-ribbon" class="hidden flex items-center gap-2 mr-2 px-2 py-1 bg-gray-800 rounded border border-gray-700">
                   <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                   <span id="drive-sync-log-ribbon" class="text-[10px] text-gray-300 font-medium tracking-tight">Drive Linked</span>
+                  <button id="btn-drive-merge-prompt" onclick="if(window.executeDriveRestore) window.executeDriveRestore()" 
+                      class="hidden ml-1 px-1.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold rounded animate-bounce">
+                      Update Available: Click to Merge
+                  </button>
               </div>
 
               <button id="btn-drive-sync-ribbon" onclick="if(window.handleAuthClick) window.handleAuthClick()"
