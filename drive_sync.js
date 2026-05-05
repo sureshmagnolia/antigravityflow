@@ -17,7 +17,7 @@ const DATA_KEYS = [
     'examSessionNames', 'examRemunerationConfig',
     'invigDepartments', 'invigRoles', 'invigGlobalTarget', 
     'invigGuestTarget', 'invigVacationTarget', 'invigGoogleScriptUrl',
-    'examHistoricalMeta'
+    'examHistoricalMeta', 'lastUpdated'
 ];
 
 
@@ -130,17 +130,18 @@ function handleTokenResponse(resp) {
 
 function showConnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    const controls = document.getElementById('drive-controls');
-    
-    // 🛡️ Safety checks for UI elements
-    if (btn) {
-        btn.innerHTML = "🔗 Disconnect Drive";
-        btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
-        btn.onclick = disconnectDrive;
-    }
-    if (controls) controls.classList.remove('hidden');
-    
+    btn.innerHTML = "❌ Disconnect Drive";
+    btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
+    btn.onclick = disconnectDrive;
+    document.getElementById('drive-controls').classList.remove('hidden');
+
+    const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+    if(ribbonBtn) ribbonBtn.classList.add('hidden');
+    const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
+    if(ribbonStatus) ribbonStatus.classList.remove('hidden');
+
     findLatestBackupTime();
+    checkForNewerDataOnDrive();
 }
 
 
@@ -159,17 +160,17 @@ function showReconnectState() {
 
 function showDisconnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    if (btn) {
-        btn.innerHTML = "🔗 Connect Google Drive";
-        btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
-        btn.onclick = handleAuthClick;
-    }
-    
-    const controls = document.getElementById('drive-controls');
-    if (controls) controls.classList.add('hidden');
-    
-    const syncLabel = document.getElementById('last-sync-time');
-    if (syncLabel) syncLabel.textContent = "";
+    btn.innerHTML = "🔗 Connect Google Drive";
+    btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
+    btn.onclick = handleAuthClick;
+
+    document.getElementById('drive-controls').classList.add('hidden');
+    document.getElementById('last-sync-time').textContent = "";
+
+    const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+    if(ribbonBtn && !window.currentCollegeId) ribbonBtn.classList.remove('hidden');
+    const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
+    if(ribbonStatus) ribbonStatus.classList.add('hidden');
 }
 
 
@@ -440,6 +441,96 @@ async function manageRetention(folderId) {
 }
 
 
+
+// --- AUTO SYNC & CONFLICT RESOLUTION ---
+let autoSyncTimer = null;
+
+window.triggerDriveAutoSync = function() {
+    if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
+
+    clearTimeout(autoSyncTimer);
+    autoSyncTimer = setTimeout(() => {
+        console.log("60s elapsed since last edit. Auto-syncing to Google Drive...");
+        syncDataSilent();
+    }, 60000); // 60 seconds
+};
+
+async function syncDataSilent() {
+    try {
+        const folderId = await getBackupFolder();
+        const localData = {};
+        for (const k of DATA_KEYS) {
+            if (k === 'examBaseData') {
+                localData[k] = await loadExamDataIDB();
+            } else {
+                const v = localStorage.getItem(k);
+                if(v) { try { localData[k] = JSON.parse(v); } catch(e) { localData[k] = v; } }
+            }
+        }
+
+        const now = new Date();
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+
+        const createRes = await gapi.client.drive.files.create({
+            resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
+            fields: 'id'
+        });
+
+        const accessToken = gapi.client.getToken().access_token;
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${createRes.result.id}?uploadType=media`, {
+            method: 'PATCH',
+            headers: new Headers({ 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }),
+            body: JSON.stringify(localData, null, 2)
+        });
+
+        await manageRetention(folderId);
+        localStorage.setItem('lastGoogleSync', Date.now());
+        const lastSyncElem = document.getElementById('last-sync-time');
+        if(lastSyncElem) lastSyncElem.textContent = now.toLocaleString();
+
+        // Update Ribbon Log
+        const ribbonLog = document.getElementById('drive-sync-log-ribbon');
+        if(ribbonLog) ribbonLog.textContent = "Synced: " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        console.log("Silent Auto-Sync Complete.");
+    } catch(e) {
+        console.error("Silent Auto-Sync failed:", e);
+    }
+}
+
+async function checkForNewerDataOnDrive() {
+    if(window.currentCollegeId) return; // Skip for Firebase users
+    try {
+        const folderId = await getBackupFolder();
+        const res = await gapi.client.drive.files.list({
+            q: `('${folderId}' in parents or name contains 'Backup') and mimeType='application/json' and trashed=false`,
+            orderBy: 'createdTime desc',
+            fields: 'files(id, name, createdTime)',
+            pageSize: 1
+        });
+
+        if (res.result.files.length > 0) {
+            const latestCloudFile = res.result.files[0];
+            const cloudTime = new Date(latestCloudFile.createdTime).getTime();
+
+            // Check latest local edit time
+            const localTimeString = localStorage.getItem('lastUpdated');
+            let localTime = 0;
+            if(localTimeString) localTime = new Date(localTimeString).getTime();
+
+            // If cloud is newer by more than a minute, prompt
+            if (cloudTime > localTime + 60000) {
+                const doUpdate = confirm(`Newer data found on Google Drive (${new Date(cloudTime).toLocaleString()}).\n\nWould you like to fetch and merge this update?`);
+                if(doUpdate) {
+                    window.executeRestore(latestCloudFile.id);
+                }
+            }
+        }
+    } catch(e) {
+        console.error("Drive Check Failed:", e);
+    }
+}
 
 // --- RESTORE UI ---
 
