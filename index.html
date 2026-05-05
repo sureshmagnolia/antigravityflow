@@ -205,11 +205,15 @@
             </button>
 
 <!-- Drive Sync Status for Basic Users -->
-              <div id="drive-sync-status-ribbon" onclick="if(window.checkForNewerDataOnDrive) window.checkForNewerDataOnDrive(true)"
+            <div id="drive-sync-status-ribbon" onclick="if(window.checkForNewerDataOnDrive) window.checkForNewerDataOnDrive(true)"
                   class="hidden flex items-center gap-2 mr-2 px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 cursor-pointer transition-colors"
                   title="Click to check for updates from Google Drive">
                   <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                    <button id="btn-manual-push" onclick="event.stopPropagation(); if(window.triggerDriveAutoSync) window.triggerDriveAutoSync(true)" 
+
+                  <!-- Added back the status text span -->
+                  <span id="drive-sync-log-ribbon" class="text-[10px] text-gray-300 font-medium tracking-tight">Drive Linked</span>
+
+                  <button id="btn-manual-push" onclick="event.stopPropagation(); if(window.triggerDriveAutoSync) window.triggerDriveAutoSync(true)" 
                       class="px-2 py-0.5 bg-gray-700 hover:bg-blue-600 text-[10px] text-white font-bold rounded transition-all border border-gray-600 flex items-center gap-1 shadow-inner">
                       <span id="save-btn-icon">☁️</span> <span id="save-btn-text">Save to Cloud</span>
                   </button>
