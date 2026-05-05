@@ -19,6 +19,7 @@ const DATA_KEYS = [
     'invigGuestTarget', 'invigVacationTarget', 'invigGoogleScriptUrl',
     'examHistoricalMeta', 'lastUpdated'
 ];
+window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
 
 // --- IndexedDB Configuration (Sync with app.js) ---
