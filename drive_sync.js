@@ -445,14 +445,20 @@ async function manageRetention(folderId) {
 // --- AUTO SYNC & CONFLICT RESOLUTION ---
 let autoSyncTimer = null;
 
-window.triggerDriveAutoSync = function() {
+window.triggerDriveAutoSync = function(isImmediate = false) {
     if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
 
     clearTimeout(autoSyncTimer);
-    autoSyncTimer = setTimeout(() => {
-        console.log("60s elapsed since last edit. Auto-syncing to Google Drive...");
+
+    if (isImmediate) {
+        console.log("Manual trigger: Pushing immediately to Google Drive...");
         syncDataSilent();
-    }, 60000); // 60 seconds
+    } else {
+        autoSyncTimer = setTimeout(() => {
+            console.log("60s elapsed since last edit. Auto-syncing to Google Drive...");
+            syncDataSilent();
+        }, 60000); // 60 seconds
+    }
 };
 
 async function syncDataSilent() {
