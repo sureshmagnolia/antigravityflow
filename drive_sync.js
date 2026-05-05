@@ -624,8 +624,8 @@ function showRestoreModal(files) {
 }
 
 window.executeRestore = async function(fileId) {
-    document.getElementById('drive-restore-modal').remove();
-
+    const modal = document.getElementById('drive-restore-modal');
+    if (modal) modal.remove();
     try {
         const response = await gapi.client.drive.files.get({ fileId: fileId, alt: 'media' });
         let cloudData = response.result;
