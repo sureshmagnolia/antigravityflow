@@ -7,6 +7,7 @@ const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/res
 let tokenClient;
 let gapiInited = false;
 let gisInited = false;
+let isReadyToPush = false; // 🛡️ Safety Lock: Prevent pushing until cloud is checked
 
 const DATA_KEYS = [
     'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
@@ -143,7 +144,9 @@ function showConnectedState() {
     if(ribbonStatus && !window.currentCollegeId) ribbonStatus.classList.remove('hidden');
     else if(ribbonStatus) ribbonStatus.classList.add('hidden');
     
-    findLatestBackupTime();
+findLatestBackupTime();
+    // 🚀 NEW: Auto-check for data the moment Drive is connected
+    checkForNewerDataOnDrive(false);
 }
 
 
@@ -452,6 +455,13 @@ let autoSyncTimer = null;
 window.triggerDriveAutoSync = function(isImmediate = false) {
     if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
 
+    // 🛡️ Guard: Prevent pushing if we haven't verified Cloud data yet
+    if (!isReadyToPush) {
+        console.warn("Sync blocked: Waiting for initial Cloud data check...");
+        checkForNewerDataOnDrive(false);
+        return;
+    }
+
     clearTimeout(autoSyncTimer);
 
     if (isImmediate) {
@@ -468,6 +478,7 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
 async function syncDataSilent() {
     try {
         const folderId = await getBackupFolder();
+        isReadyToPush = true; // 🔓 UNLOCK: We have successfully talked to the Cloud
         const localData = {};
         for (const k of DATA_KEYS) {
             if (k === 'examBaseData') {
@@ -537,10 +548,21 @@ async function checkForNewerDataOnDrive(isManual = false) {
 
             const localTimeString = localStorage.getItem('lastUpdated');
             let localTime = 0;
-            if(localTimeString) localTime = new Date(localTimeString).getTime();
+            if (localTimeString) localTime = new Date(localTimeString).getTime();
 
-// If cloud is newer by more than a minute, show the ribbon button
-            if (cloudTime > localTime + 60000) {
+            // 💡 LOGIC: 
+            // 1. If local is 0 (Brand New Browser), Cloud ALWAYS wins.
+            // 2. Otherwise, Cloud must be newer by at least 1 minute.
+            const isNewBrowser = (localTime === 0);
+            const isCloudNewer = (cloudTime > localTime + 60000);
+
+            if (isNewBrowser || isCloudNewer) {
+                // 🚨 CRITICAL PROTECTION: 
+                // If local is EMPTY but Cloud has DATA, force the "Update Available" 
+                // button and keep the sync LOCKED until they restore or overwrite.
+                if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
+
+                const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                 const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                 if (mergeBtn) {
                     mergeBtn.classList.remove('hidden');
