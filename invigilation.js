@@ -4950,7 +4950,6 @@ window.generateFacultyPeriodReport = function() {
                 if (d < startLimit || d > endLimit) return false;
                 
                 const sessions = advanceUnavailability[dateStr];
-                const sessions = advanceUnavailability[dateStr];
                 const myEmail = s.email.toLowerCase();
                 
                 // Safety: Extract email string from either "string" or {email: "..."} object
