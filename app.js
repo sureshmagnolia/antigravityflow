@@ -2117,7 +2117,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
-    async function syncDataToCloud(targetSection) {
+        async function syncDataToCloud(targetSection, isManualChange = false) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
             console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
@@ -2259,8 +2259,8 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
             updateSyncStatus("Saved", "success");
-            // ⚡ Trigger Google Drive Shadow Backup
-            if (typeof window.triggerReactiveDriveSync === 'function') {
+            // ⚡ Trigger Google Drive Shadow Backup ONLY on real user changes
+            if (isManualChange && typeof window.triggerReactiveDriveSync === 'function') {
                 window.triggerReactiveDriveSync();
             }
 
