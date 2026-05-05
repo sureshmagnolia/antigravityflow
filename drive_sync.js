@@ -222,6 +222,10 @@ try {
             showReconnectState();
             throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
         }
+        // For other errors (like API not ready), warn but don't logout
+        console.warn("Drive connection check deferred:", e);
+        throw e;
+    }
         // For other errors (like API not ready yet), just warn in console
         console.warn("Drive connection check deferred:", e);
         throw e;
@@ -547,7 +551,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
     // 🛡️ DOUBLE GUARD: Ensure Firebase users NEVER see this
     if (window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true') return;
 
-    // 🛡️ API GUARD: Don't check if the API is still initializing or unauthenticated
+    // 🛡️ API GUARD: Don't check if the API is still initializing
     if (!window.gapi || !gapi.client || !gapi.client.drive || !gapi.client.getToken()) {
         console.log("⏳ Sync Check: Waiting for Google API to stabilize...");
         return;
@@ -595,13 +599,13 @@ async function checkForNewerDataOnDrive(isManual = false) {
 
         console.log(`🔍 Sync Check: Cloud(${new Date(cloudTime).toLocaleString()}) vs Local(${new Date(localTime).toLocaleString()}). Empty: ${isLocalEmpty}`);
 
-        if (isLocalEmpty || isCloudNewer) {
+       if (!hasStudents || isCloudNewer) {
             console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
 
-            // 🚨 CRITICAL PROTECTION:
-            // If local is EMPTY but Cloud has DATA, keep the sync LOCKED   
-            // until they restore or overwrite to prevent wiping the cloud. 
-            if (isLocalEmpty && cloudTime > 0) isReadyToPush = false;   
+            // 🚨 CRITICAL PROTECTION: 
+            // If browser is BLANK but Cloud has DATA, keep the sync LOCKED 
+            // until they restore or overwrite to prevent wiping the cloud.
+            if (!hasStudents && cloudTime > 0) isReadyToPush = false;
 
             const mergeBtn = document.getElementById('btn-drive-merge-prompt');
             if (mergeBtn) {
