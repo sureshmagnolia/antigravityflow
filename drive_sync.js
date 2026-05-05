@@ -572,33 +572,42 @@ async function checkForNewerDataOnDrive(isManual = false) {
         let localTime = 0;
         if (localTimeString) localTime = new Date(localTimeString).getTime();
 
-        // 💡 LOGIC:
-        // 1. If local is 0 (Brand New Browser), Cloud ALWAYS wins.
-        // 2. Otherwise, Cloud must be newer by at least 1 minute.
-        const isNewBrowser = (localTime === 0);
-        const isCloudNewer = (cloudTime > localTime + 60000);
+       // 💡 LOGIC: 
+            // 1. If local is 0 (Brand New Browser), Cloud ALWAYS wins.
+            // 2. Otherwise, Cloud must be newer by at least 1 minute.
+            const isNewBrowser = (localTime === 0);
+            const isCloudNewer = (cloudTime > localTime + 60000);
 
-        if (isNewBrowser || isCloudNewer) {
-            // 🚨 CRITICAL PROTECTION:
-            // If local is EMPTY but Cloud has DATA, force the "Update Available"
-            // button and keep the sync LOCKED until they restore or overwrite.
-            if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
+            if (isNewBrowser || isCloudNewer) {
+                console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
 
-            const mergeBtn = document.getElementById('btn-drive-merge-prompt');
-            if (mergeBtn) {
-                mergeBtn.classList.remove('hidden');
-                // Define what happens when they click the ribbon button
-                window.executeDriveRestore = () => {
-                    mergeBtn.classList.add('hidden');
-                    window.executeRestore(latestCloudFile.id);
-                };
-            }
-            if (isManual && log) log.textContent = originalLog;
-        } else {
-            // Found a file, but it's not newer
-            if (isManual && log) {
-                log.textContent = "Already Up to Date";
-                setTimeout(() => { log.textContent = originalLog; }, 3000);
+                // 🚨 CRITICAL PROTECTION: 
+                // If local is EMPTY but Cloud has DATA, keep the sync LOCKED 
+                // until they restore or overwrite to prevent wiping the cloud.
+                if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
+
+                const mergeBtn = document.getElementById('btn-drive-merge-prompt');
+                if (mergeBtn) {
+                    mergeBtn.classList.remove('hidden');
+                    // Define what happens when they click the ribbon button
+                    window.executeDriveRestore = () => {
+                        mergeBtn.classList.add('hidden');
+                        window.executeRestore(latestCloudFile.id);
+                    };
+                }
+
+                if (isManual && log) {
+                    log.textContent = "Updates Found";
+                    setTimeout(() => { log.textContent = originalLog; }, 3000);
+                }
+            } else {
+                console.log("✅ Sync Logic: Local data is up-to-date with Cloud.");
+                isReadyToPush = true; // 🔓 UNLOCK: Local is the latest version
+
+                if (isManual && log) {
+                    log.textContent = "Already Up to Date";
+                    setTimeout(() => { log.textContent = originalLog; }, 3000);
+                }
             }
         }
     } catch(e) {
