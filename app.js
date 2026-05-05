@@ -706,7 +706,7 @@ async function migrateFromLocalStorage() {
     // *** NEW: All keys for backup/restore ***
     const ALL_DATA_KEYS = [
         ROOM_CONFIG_KEY,
-        STREAM_CONFIG_KEY, // <-- Add this
+        STREAM_CONFIG_KEY,
         COLLEGE_NAME_KEY,
         ABSENTEE_LIST_KEY,
         QP_CODE_LIST_KEY,
@@ -715,20 +715,21 @@ async function migrateFromLocalStorage() {
         SCRIBE_LIST_KEY,
         SCRIBE_ALLOTMENT_KEY,
         EXAM_RULES_KEY,
-        // --- NEW KEYS FOR MODULAR ARCHITECTURE ---
         'examInvigilationSlots',
         'examStaffData',
         'examInvigilatorMapping',
-        // --- INVIGILATION SETTINGS FOR BACKUP ---
         'invigDepartments',
         'invigRoles',
         'invigGlobalTarget',
         'invigGuestTarget',
         'invigVacationTarget',
         'invigVacationDutyDates',
-        'invigGoogleScriptUrl'
+        'invigGoogleScriptUrl',
+        'invigAdvanceUnavailability',
+        'invigDesignations',
+        'examHistoricalMeta',
+        'examAllKnownSessions'
     ];
-
     // **********************************
 
     // --- Debounce Helper Function ---
@@ -10697,16 +10698,8 @@ window.real_populate_qp_code_session_dropdown = function () {
     // --- ACTION HELPERS ---
     async function performSmartBackup(folderHandle) {
         const backupData = {};
-        const ALL_DATA_KEYS = [
-            'examRoomConfig', 'examStreamsConfig', 'examCollegeName',
-            'examAbsenteeList', 'examQPCodes', 'examBaseData',
-            'examRoomAllotment', 'examScribeList', 'examScribeAllotment',
-            'examRulesConfig', 'examInvigilatorMapping', 'examInvigilationSlots', 'examStaffData'
-        ];
-
         const now = new Date().toISOString();
         localStorage.setItem('lastUpdated', now);
-
         for (const key of ALL_DATA_KEYS) {
             if (key === BASE_DATA_KEY) {
                 const idbData = await loadExamDataIDB();
@@ -10746,10 +10739,14 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
+        // 🚨 CRITICAL FIX: Tell Firebase to accept this data on reload
+        localStorage.setItem('pendingDriveRestoreSync', 'true');
+        localStorage.removeItem('searchIndex');
 
         alert(`✅ Restored from ${file.name}.\nPage will reload.`);
         window.location.reload();
     }
+
 
 
 
