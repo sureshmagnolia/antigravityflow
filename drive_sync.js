@@ -548,6 +548,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
 
     try {
         const folderId = await getBackupFolder();
+        isReadyToPush = true; // 🔓 UNLOCK: We have successfully talked to the Cloud
         const res = await gapi.client.drive.files.list({
             q: `('${folderId}' in parents or name contains 'Backup') and mimeType='application/json' and trashed=false`,
             orderBy: 'createdTime desc',
@@ -555,37 +556,47 @@ async function checkForNewerDataOnDrive(isManual = false) {
             pageSize: 1
         });
 
-        if (res.result.files.length > 0) {
-            const latestCloudFile = res.result.files[0];
-            const cloudTime = new Date(latestCloudFile.createdTime).getTime();
+        // 💡 FEEDBACK: If no files found at all
+        if (res.result.files.length === 0) {
+            if (isManual && log) {
+                log.textContent = "No Cloud Data Found";
+                setTimeout(() => { log.textContent = originalLog; }, 3000);
+            }
+            return;
+        }
 
-            const localTimeString = localStorage.getItem('lastUpdated');
-            let localTime = 0;
-            if (localTimeString) localTime = new Date(localTimeString).getTime();
+        const latestCloudFile = res.result.files[0];
+        const cloudTime = new Date(latestCloudFile.createdTime).getTime();
 
-            // 💡 LOGIC: 
-            // 1. If local is 0 (Brand New Browser), Cloud ALWAYS wins.
-            // 2. Otherwise, Cloud must be newer by at least 1 minute.
-            const isNewBrowser = (localTime === 0);
-            const isCloudNewer = (cloudTime > localTime + 60000);
+        const localTimeString = localStorage.getItem('lastUpdated');
+        let localTime = 0;
+        if (localTimeString) localTime = new Date(localTimeString).getTime();
 
-            if (isNewBrowser || isCloudNewer) {
-                // 🚨 CRITICAL PROTECTION: 
-                // If local is EMPTY but Cloud has DATA, force the "Update Available" 
-                // button and keep the sync LOCKED until they restore or overwrite.
-                if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
+        // 💡 LOGIC:
+        // 1. If local is 0 (Brand New Browser), Cloud ALWAYS wins.
+        // 2. Otherwise, Cloud must be newer by at least 1 minute.
+        const isNewBrowser = (localTime === 0);
+        const isCloudNewer = (cloudTime > localTime + 60000);
 
-                const mergeBtn = document.getElementById('btn-drive-merge-prompt');
-                if (mergeBtn) {
-                    mergeBtn.classList.remove('hidden');
-                    // Define what happens when they click the ribbon button
-                    window.executeDriveRestore = () => {
-                        mergeBtn.classList.add('hidden');
-                        window.executeRestore(latestCloudFile.id);
-                    };
-                }
-                if (isManual && log) log.textContent = originalLog;
-            } else if (isManual && log) {
+        if (isNewBrowser || isCloudNewer) {
+            // 🚨 CRITICAL PROTECTION:
+            // If local is EMPTY but Cloud has DATA, force the "Update Available"
+            // button and keep the sync LOCKED until they restore or overwrite.
+            if (isNewBrowser && cloudTime > 0) isReadyToPush = false;
+
+            const mergeBtn = document.getElementById('btn-drive-merge-prompt');
+            if (mergeBtn) {
+                mergeBtn.classList.remove('hidden');
+                // Define what happens when they click the ribbon button
+                window.executeDriveRestore = () => {
+                    mergeBtn.classList.add('hidden');
+                    window.executeRestore(latestCloudFile.id);
+                };
+            }
+            if (isManual && log) log.textContent = originalLog;
+        } else {
+            // Found a file, but it's not newer
+            if (isManual && log) {
                 log.textContent = "Already Up to Date";
                 setTimeout(() => { log.textContent = originalLog; }, 3000);
             }
