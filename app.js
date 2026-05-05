@@ -886,8 +886,11 @@ async function migrateFromLocalStorage() {
                   logoutBtn.classList.remove('hidden');
                   const driveRibbonBtn = document.getElementById('btn-drive-sync-ribbon');
                   if(driveRibbonBtn) driveRibbonBtn.classList.add('hidden');
-                  const driveStatus = document.getElementById('drive-sync-status-ribbon');
-                  if(driveStatus) driveStatus.classList.add('hidden');
+                const driveStatus = document.getElementById('drive-sync-status-ribbon');
+                  if (driveStatus) driveStatus.classList.add('hidden');
+                  // Force hide any pending merge prompts for Pro users
+                  const mergeBtn = document.getElementById('btn-drive-merge-prompt');
+                  if (mergeBtn) mergeBtn.classList.add('hidden');
 
                 // [ADD THIS BLOCK] ---------------------------
                 // Show Cloud Features (Pro)
