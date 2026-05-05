@@ -578,7 +578,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
             const isNewBrowser = (localTime === 0);
             const isCloudNewer = (cloudTime > localTime + 60000);
 
-            if (isNewBrowser || isCloudNewer) {
+if (isNewBrowser || isCloudNewer) {
                 console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
 
                 // 🚨 CRITICAL PROTECTION: 
@@ -600,6 +600,15 @@ async function checkForNewerDataOnDrive(isManual = false) {
                     log.textContent = "Updates Found";
                     setTimeout(() => { log.textContent = originalLog; }, 3000);
                 }
+            } else {
+                console.log("✅ Sync Logic: Local data is up-to-date with Cloud.");
+                isReadyToPush = true; // 🔓 UNLOCK: Local is the latest version. Auto-sync is now safe.
+
+                if (isManual && log) {
+                    log.textContent = "Already Up to Date";
+                    setTimeout(() => { log.textContent = originalLog; }, 3000);
+                }
+            }
             } else {
                 console.log("✅ Sync Logic: Local data is up-to-date with Cloud.");
                 isReadyToPush = true; // 🔓 UNLOCK: Local is the latest version
