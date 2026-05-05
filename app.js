@@ -1310,6 +1310,8 @@ window.recalcInvigSlots = async function () {
                 currentCollegeData = snap.data();
                 const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
                 const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
+                // 🛡️ Save Admin status for Drive Reactive Sync
+                localStorage.setItem('isAdminUser', isAdminUser ? 'true' : 'false');
 
                 if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
                 if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
@@ -2255,6 +2257,10 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // 🚫 DELETED: Shadow Mirror to GAS (Now Pure Firebase Chunks)
             updateSyncStatus("Saved", "success");
+            // ⚡ Trigger Google Drive Shadow Backup
+            if (typeof window.triggerReactiveDriveSync === 'function') {
+                window.triggerReactiveDriveSync();
+            }
 
         } catch (e) {
 
