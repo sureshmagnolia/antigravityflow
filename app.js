@@ -557,12 +557,16 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
             const tx = db.transaction(IDB_STORE, 'readwrite');
             const store = tx.objectStore(IDB_STORE);
             store.put(dataArray, IDB_KEY);
-                      tx.oncomplete = () => {
-                db.close();
-                // --- Auto-sync to Cloud (if online user) ---
-                if (!skipCloudSync && typeof syncDataToCloud === 'function') {
-                    syncDataToCloud('baseData');
-                }
+                tx.oncomplete = () => {
+                  db.close();
+                  // --- Auto-sync to Cloud (if online user) ---
+                  if (!skipCloudSync && typeof syncDataToCloud === 'function') {
+                      syncDataToCloud('baseData');
+                  }
+                  // --- Google Drive Auto-Sync ---
+                  if (!skipCloudSync && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId) {
+                      window.triggerDriveAutoSync();
+                  }
                 // --- NEW: Trigger Basic User Pruning silently in background ---
                 if (!skipCloudSync) {
                     setTimeout(pruneOldDataForBasicUsers, 1500);
@@ -599,6 +603,15 @@ function loadExamDataIDB() {
         });
     });
 }
+// --- INTERCEPT LOCALSTORAGE FOR DRIVE SYNC ---
+const originalSetItem = localStorage.setItem;
+localStorage.setItem = function(key, value) {
+    originalSetItem.apply(this, arguments);
+    if (typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
+        window.triggerDriveAutoSync();
+    }
+};
+
 // --- NEW: BASIC USER AUTO-PRUNER ---
 async function pruneOldDataForBasicUsers() {
     // 1. Only run for Basic (Offline) Users
@@ -866,9 +879,13 @@ async function migrateFromLocalStorage() {
         updateLoaderProgress(10, "Verifying Authentication...");
             
             if (user) {
-                currentUser = user;
-                loginBtn.classList.add('hidden');
-                logoutBtn.classList.remove('hidden');
+                  currentUser = user;
+                  loginBtn.classList.add('hidden');
+                  logoutBtn.classList.remove('hidden');
+                  const driveRibbonBtn = document.getElementById('btn-drive-sync-ribbon');
+                  if(driveRibbonBtn) driveRibbonBtn.classList.add('hidden');
+                  const driveStatus = document.getElementById('drive-sync-status-ribbon');
+                  if(driveStatus) driveStatus.classList.add('hidden');
 
                 // [ADD THIS BLOCK] ---------------------------
                 // Show Cloud Features (Pro)
@@ -892,7 +909,15 @@ async function migrateFromLocalStorage() {
                 localStorage.setItem('isAdminUser', 'false'); // 🛡️ Stop Drive Sync on Logout
                 loginBtn.classList.remove('hidden');
                 logoutBtn.classList.add('hidden');
-
+                const driveRibbonBtn = document.getElementById('btn-drive-sync-ribbon');
+                  const driveStatus = document.getElementById('drive-sync-status-ribbon');
+                  if (localStorage.getItem('isDriveConnected') === 'true') {
+                      if(driveRibbonBtn) driveRibbonBtn.classList.add('hidden');
+                      if(driveStatus) driveStatus.classList.remove('hidden');
+                  } else {
+                      if(driveRibbonBtn) driveRibbonBtn.classList.remove('hidden');
+                      if(driveStatus) driveStatus.classList.add('hidden');
+                  }
                 // --- HIDE User Info & Sync Status ---
                 userInfoDiv.classList.remove('md:block'); // Hide on Desktop
                 if (mobileSyncDot) mobileSyncDot.classList.add('hidden'); // Hide on Mobile
