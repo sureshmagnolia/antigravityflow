@@ -75,7 +75,9 @@ function gisLoaded() {
 
 function checkAuth() {
     if (gapiInited && gisInited) {
-        document.getElementById('btn-connect-drive').classList.remove('hidden');
+        // 🛡️ Safety: Only show button if it exists (ExamFlow portal)
+        const connectBtn = document.getElementById('btn-connect-drive');
+        if (connectBtn) connectBtn.classList.remove('hidden');
         
         const storedToken = localStorage.getItem('drive_access_token');
         const expiry = localStorage.getItem('drive_token_expiry');
@@ -128,20 +130,32 @@ function handleTokenResponse(resp) {
 
 function showConnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    btn.innerHTML = "❌ Disconnect Drive";
-    btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
-    btn.onclick = disconnectDrive;
-    document.getElementById('drive-controls').classList.remove('hidden');
+    const controls = document.getElementById('drive-controls');
+    
+    // 🛡️ Safety checks for UI elements
+    if (btn) {
+        btn.innerHTML = "🔗 Disconnect Drive";
+        btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
+        btn.onclick = disconnectDrive;
+    }
+    if (controls) controls.classList.remove('hidden');
+    
     findLatestBackupTime();
 }
 
+
 function showReconnectState() {
     const btn = document.getElementById('btn-connect-drive');
-    btn.innerHTML = "⚠️ Reconnect Drive";
-    btn.className = "px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded transition";
-    btn.onclick = handleAuthClick; 
-    document.getElementById('drive-controls').classList.add('hidden');
+    const controls = document.getElementById('drive-controls');
+    
+    if (btn) {
+        btn.innerHTML = "🔄 Reconnect Drive";
+        btn.className = "px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition";
+        btn.onclick = handleAuthClick;
+    }
+    if (controls) controls.classList.add('hidden');
 }
+
 
 function showDisconnectedState() {
     const btn = document.getElementById('btn-connect-drive');
