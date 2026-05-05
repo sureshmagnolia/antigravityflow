@@ -2433,19 +2433,14 @@ window.lockAllSessions = async function () {
         }
     });
 
-    if (!confirm("Confirm duty?")) return;
-
-    const slot = invigilationSlots[key];
-    slot.assigned.push(email);
-
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
-    logActivity("Slot Booked", `${getNameFromEmail(email)} volunteered for ${key}.`);
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(email); // Refresh
+    if (changed) {
+        await syncSlotsToCloud();
+        alert("✅ All sessions have been LOCKED.");
+    } else {
+        alert("ℹ️ All sessions were already locked.");
+    }
 }
+
 
 window.changeSlotReq = async function (key, delta) {
     const slot = invigilationSlots[key];
