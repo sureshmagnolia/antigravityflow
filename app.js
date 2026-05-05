@@ -1093,6 +1093,7 @@ async function updateLocalSlotsFromStudents() {
                     delete existingSlots[existingMatchKey];
                     hasChanges = true;
                 }
+                    }
 
                 const virtualMatchKey = !existingSlots[generatedKey] ? Object.keys(existingSlots).find(k => {
                     if (!k.includes('|')) return false;
