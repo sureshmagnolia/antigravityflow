@@ -10440,13 +10440,13 @@ window.processBulkQueue = async function(mode = 'all') {
 
         // Update Row Success
         item.status = 'sent';
-        if (item.dutyKeys) window.markUserAlerted(item.email, item.dutyKeys, 'email'); // <-- INSERT THIS LINE
+        if (item.dutyKeys) window.markUserAlerted(item.email, item.dutyKeys, 'email');    
         sentCount++;
         if(rowStatus) { rowStatus.textContent = "✅ Sent"; rowStatus.className = "text-[10px] text-green-600 mt-0.5 font-bold"; }
-        if(rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }
+        if(rowBtn) { rowBtn.innerHTML = "Done"; rowBtn.classList.add('opacity-50'); }      
 
-        // Delay 1.2s
-        await new Promise(r => setTimeout(r, 1200)); 
+        // 🛡️ API THROTTLE FIX: Delay 2.5s to prevent Apps Script email rate limits        
+        await new Promise(r => setTimeout(r, 2500));
     }
 
     document.getElementById('bulk-status-text').textContent = "Process Finished.";
@@ -10810,7 +10810,9 @@ window.markUserAlerted = function(email, dutyKeys = [], channel = 'email') {
             }
         }
     });
-    if (changed && typeof syncSlotsToCloud === 'function') syncSlotsToCloud();
+    // 🛡️ BATCH SYNC FIX: Do not immediately sync to cloud to prevent Firebase exhaustion
+    // Instead, just trigger the debounced reactive sync to save everything in one batch later.
+    if (changed && typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
 };
 
 
