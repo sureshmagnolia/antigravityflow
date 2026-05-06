@@ -144,7 +144,24 @@ function showConnectedState() {
     if(ribbonStatus && !window.currentCollegeId) ribbonStatus.classList.remove('hidden');
     else if(ribbonStatus) ribbonStatus.classList.add('hidden');
     
-findLatestBackupTime();
+    findLatestBackupTime();
+
+    // 🚀 NEW: Offline Change Audit
+    // Detect if work was done while Drive was disconnected
+    const lastLocal = parseInt(localStorage.getItem('lastUpdated') || 0);
+    const lastCloudSync = parseInt(localStorage.getItem('lastGoogleSync') || 0);
+    
+    if (lastLocal > lastCloudSync + 5000) { // 5s buffer to avoid jitter
+        console.log("📂 Offline work detected. Notifying user to save.");
+        const saveBtn = document.getElementById('btn-manual-push');
+        const saveBtnText = document.getElementById('save-btn-text');
+        if (saveBtn) {
+            if (saveBtnText) saveBtnText.textContent = "Offline Changes Found: Save Now";
+            saveBtn.classList.replace('bg-gray-700', 'bg-amber-500');
+            saveBtn.classList.add('animate-pulse');
+        }
+    }
+
     // 🚀 NEW: Auto-check for data the moment Drive is connected
     checkForNewerDataOnDrive(false);
 }
@@ -603,9 +620,12 @@ async function checkForNewerDataOnDrive(isManual = false) {
         const latestCloudFile = res.result.files[0];
         const cloudTime = new Date(latestCloudFile.createdTime).getTime();
 
-        const localTimeString = localStorage.getItem('lastUpdated');        
+        const localUpdateVal = localStorage.getItem('lastUpdated');        
         let localTime = 0;
-        if (localTimeString) localTime = new Date(localTimeString).getTime();
+        if (localUpdateVal) {
+            // Handle both ISO strings and timestamps
+            localTime = isNaN(localUpdateVal) ? new Date(localUpdateVal).getTime() : parseInt(localUpdateVal);
+        }
 
 // 🛡️ NEW: Check if IndexedDB is actually empty (Total Students)
         const localStudents = await loadExamDataIDB();
