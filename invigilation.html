@@ -290,10 +290,16 @@
                                 class="bg-gray-100 text-gray-500 border border-gray-300 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1 hover:bg-gray-200">
                                 <span>🔒</span> Locked
                             </button>
-                        </div>
-                        <input type="text" id="staff-search" placeholder="Search..."
-                            class="pl-2 py-1 border border-gray-300 rounded text-sm w-48" oninput="filterStaffTable()">
-                    </div>
+                            </div>
+                          <div class="flex items-center gap-3">
+                              <label class="text-xs font-bold text-gray-500 flex items-center gap-1 cursor-pointer">
+                                  <input type="checkbox" id="show-inactive-staff" onchange="filterStaffTable()" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                  Show Inactive
+                              </label>
+                              <input type="text" id="staff-search" placeholder="Search..."
+                                  class="pl-2 py-1 border border-gray-300 rounded text-sm w-48" oninput="filterStaffTable()">
+                          </div>
+                      </div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50 hidden md:table-header-group">
