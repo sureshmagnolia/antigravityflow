@@ -219,6 +219,7 @@ const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
 
 // --- AUTH ACTIONS ---
 
+window.disconnectDrive = disconnectDrive;
 async function disconnectDrive() {
     // 🛡️ Guard: Confirm before disconnecting
     if (!(await UiModal.confirm("Disconnect Drive", "This will stop cloud syncing and remove access to your Google Drive. Your local data will remain safe. Continue?"))) return;
