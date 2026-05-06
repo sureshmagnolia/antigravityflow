@@ -607,16 +607,16 @@ async function checkForNewerDataOnDrive(isManual = false) {
         let localTime = 0;
         if (localTimeString) localTime = new Date(localTimeString).getTime();
 
-        // 🛡️ NEW: Check if IndexedDB is actually empty (Total Students)
+// 🛡️ NEW: Check if IndexedDB is actually empty (Total Students)
         const localStudents = await loadExamDataIDB();
-        const hasStudents = (localStudents && localStudents.length > 0);
+        const isLocalEmpty = (!localStudents || localStudents.length === 0);
 
         // 💡 LOGIC:
         // 1. If local is EMPTY, Cloud ALWAYS wins (New Browser / Cleared Data).
         // 2. Otherwise, Cloud must be newer by at least 1 minute.
         const isCloudNewer = (cloudTime > localTime + 60000);
 
-        console.log(`🔍 Sync Check: Cloud(${new Date(cloudTime).toLocaleString()}) | HasStudents: ${hasStudents} | CloudNewer: ${isCloudNewer}`);
+        console.log(`🔍 Sync Check: Cloud(${new Date(cloudTime).toLocaleString()}) | LocalEmpty: ${isLocalEmpty} | CloudNewer: ${isCloudNewer}`);
 
     if (isLocalEmpty || isCloudNewer) {
             console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
