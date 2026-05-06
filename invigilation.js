@@ -149,6 +149,17 @@ const ui = {
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
+
+        // 🛡️ Idle Lock Check: Prevent costly listeners if locked due to inactivity
+        if (sessionStorage.getItem('invig_idle_lock') === 'true') {
+            console.warn("Session paused due to inactivity. Awaiting manual resume.");
+            showView('login');
+            document.getElementById('auth-section').classList.add('hidden');
+            const loginBtn = document.getElementById('login-btn');
+            loginBtn.innerText = "Session Paused - Click to Resume";
+            return;
+        }
+
         // Fix: Verify function exists before calling
         if (typeof handleLogin === 'function') {
             await handleLogin(user);
@@ -163,32 +174,44 @@ onAuthStateChanged(auth, async (user) => {
         if (cloudUnsubscribe) cloudUnsubscribe();
         if (slotsUnsubscribe) slotsUnsubscribe();
         if (staffUnsubscribe) staffUnsubscribe();
-        
+
         showView('login');
         document.getElementById('auth-section').classList.add('hidden');
     }
 });
 
 document.getElementById('login-btn').addEventListener('click', () => {
+    // 🛡️ Idle Lock Resume
+    if (sessionStorage.getItem('invig_idle_lock') === 'true') {
+        sessionStorage.removeItem('invig_idle_lock');
+        document.getElementById('login-btn').innerText = "Resuming...";
+        window.location.reload();
+        return;
+    }
+
     signInWithPopup(auth, provider).catch(err => {
         console.warn("Popup blocked or failed, attempting redirect...", err);
         if (err.code === 'auth/popup-blocked') signInWithRedirect(auth, provider);
     });
 });
 
-document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
+document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('invig_idle_lock'); // Clear lock on manual logout
+    signOut(auth).then(() => window.location.reload());
+});
 
-// --- INACTIVITY AUTO-LOGOUT (Cost Saving & Security) ---
+// --- INACTIVITY IDLE LOCK (Cost Saving without Global Logout) ---
 let inactivityTimer;
 const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
 
 function resetInactivityTimer() {
     clearTimeout(inactivityTimer);
-    if (typeof currentUser !== 'undefined' && currentUser) {
+    if (typeof currentUser !== 'undefined' && currentUser && sessionStorage.getItem('invig_idle_lock') !== 'true') {
         inactivityTimer = setTimeout(() => {
-            console.warn("Auto-logging out due to 10 minutes of inactivity to save Firebase costs.");
-            alert("⏳ You have been logged out due to 10 minutes of inactivity.");
-            signOut(auth).then(() => window.location.reload());
+            console.warn("Auto-pausing Invigilation due to 10 mins inactivity. ExamFlow stays active.");
+            sessionStorage.setItem('invig_idle_lock', 'true');
+            alert("⏳ Your Invigilation session has been paused to save cloud costs due to 10 minutes of inactivity.\n\nYour ExamFlow session remains active.");
+            window.location.reload();
         }, INACTIVITY_LIMIT);
     }
 }
@@ -197,7 +220,6 @@ function resetInactivityTimer() {
 ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'].forEach(event => {
     window.addEventListener(event, resetInactivityTimer, { passive: true });
 });
-
 // --- CORE FUNCTIONS ---
 
 async function handleLogin(user) {
