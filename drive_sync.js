@@ -132,11 +132,16 @@ function handleTokenResponse(resp) {
 
 function showConnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    btn.innerHTML = "❌ Disconnect Drive";
-    btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
-    btn.onclick = disconnectDrive;
-    document.getElementById('drive-controls').classList.remove('hidden');
-    
+    const controls = document.getElementById('drive-controls');
+
+    // 🛡️ Safety Guard: Only update UI if elements are loaded in DOM
+    if (btn) {
+        btn.innerHTML = "❌ Disconnect Drive";
+        btn.className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition";
+        btn.onclick = disconnectDrive;
+    }
+    if (controls) controls.classList.remove('hidden');
+
     const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
     if(ribbonBtn) ribbonBtn.classList.add('hidden');
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
@@ -170,7 +175,7 @@ function showConnectedState() {
 function showReconnectState() {
     const btn = document.getElementById('btn-connect-drive');
     const controls = document.getElementById('drive-controls');
-    
+
     if (btn) {
         btn.innerHTML = "🔄 Reconnect Drive";
         btn.className = "px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded transition";
@@ -191,12 +196,17 @@ function showReconnectState() {
 
 function showDisconnectedState() {
     const btn = document.getElementById('btn-connect-drive');
-    btn.innerHTML = "🔗 Connect Google Drive";
-    btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
-    btn.onclick = handleAuthClick;
+    const controls = document.getElementById('drive-controls');
+    const lastSyncElem = document.getElementById('last-sync-time');
 
-    document.getElementById('drive-controls').classList.add('hidden');
-    document.getElementById('last-sync-time').textContent = "";
+    if (btn) {
+        btn.innerHTML = "🔗 Connect Google Drive";
+        btn.className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition";
+        btn.onclick = handleAuthClick;
+    }
+
+    if (controls) controls.classList.add('hidden');
+    if (lastSyncElem) lastSyncElem.textContent = "";
 
 const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
     // 🛡️ Guard: Only show "Add Sync" button if NOT a Pro user
