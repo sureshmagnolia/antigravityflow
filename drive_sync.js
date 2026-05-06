@@ -753,19 +753,24 @@ async function checkForNewerDataOnDrive(isManual = false) {
 // --- RESTORE UI ---
 window.restoreFromDrive = restoreFromDrive;
 async function restoreFromDrive() {
+    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+    const prefix = isProUser ? 'INVIG_PRO_Backup' : 'BASIC_Backup';
+
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
         if (!(await UiModal.confirm("Drive Restore", "⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?"))) return;
     }
 
-
     try {
         const folderId = await getBackupFolder();
         const res = await gapi.client.drive.files.list({
-            q: `('${folderId}' in parents or name contains 'Backup') and mimeType='application/json' and trashed=false`,
+            q: `'${folderId}' in parents and name contains '${prefix}' and mimeType='application/json' and trashed=false`,
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
-        if (res.result.files.length === 0) return alert("No backups found.");
+
+        if (res.result.files.length === 0) {
+            return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
+        }
         showRestoreModal(res.result.files);
     } catch (e) { alert("Error: " + e.message); }
 }
