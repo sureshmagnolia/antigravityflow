@@ -178,6 +178,26 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => signOut(auth).then(() => window.location.reload()));
 
+// --- INACTIVITY AUTO-LOGOUT (Cost Saving & Security) ---
+let inactivityTimer;
+const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
+
+function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    if (typeof currentUser !== 'undefined' && currentUser) {
+        inactivityTimer = setTimeout(() => {
+            console.warn("Auto-logging out due to 10 minutes of inactivity to save Firebase costs.");
+            alert("⏳ You have been logged out due to 10 minutes of inactivity.");
+            signOut(auth).then(() => window.location.reload());
+        }, INACTIVITY_LIMIT);
+    }
+}
+
+// Track user interaction to reset the timer (using passive listeners for performance)
+['mousemove', 'keydown', 'scroll', 'click', 'touchstart'].forEach(event => {
+    window.addEventListener(event, resetInactivityTimer, { passive: true });
+});
+
 // --- CORE FUNCTIONS ---
 
 async function handleLogin(user) {
