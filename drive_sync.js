@@ -551,13 +551,7 @@ async function manageRetention(folderId) {
 let autoSyncTimer = null;
 
 window.triggerDriveAutoSync = function(isImmediate = false) {
-    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
-
-    // In Basic ExamFlow, don't allow push if disconnected
-    if (!isProUser && localStorage.getItem('isDriveConnected') !== 'true') return;
-    
-    // In Pro mode, we only allow manual sync, never background loop auto-syncs from this function
-    if (isProUser && !isImmediate) return;
+    if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
 
     // 🛡️ Guard: If API is missing/expired, prompt reconnect
     if (!window.gapi || !gapi.client || !gapi.client.getToken()) {
@@ -567,8 +561,7 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     }
 
     // 🛡️ Guard: Prevent pushing if we haven't verified Cloud data yet
-    // Note: We bypass this for Pro users doing a manual immediate push as it is a dedicated backup
-    if (!isProUser && !isReadyToPush) {
+    if (!isReadyToPush) {
         console.warn("Sync blocked: Waiting for initial Cloud data check...");
         checkForNewerDataOnDrive(false);
         return;
@@ -578,13 +571,13 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     const saveBtnText = document.getElementById('save-btn-text');
 
     if (isImmediate) {
-        console.log(`Manual trigger: Pushing immediately to Google Drive (${isProUser ? 'PRO BACKUP' : 'BASIC SYNC'})...`);
+        console.log("Manual trigger: Pushing immediately to Google Drive...");
         if (saveBtnText) saveBtnText.textContent = "Saving...";
         if (saveBtn) {
             saveBtn.classList.replace('bg-amber-500', 'bg-blue-600');
             saveBtn.classList.remove('animate-pulse');
         }
-        syncDataSilent(isProUser ? 'INVIG_PRO' : 'BASIC');
+        syncDataSilent();
     } else {
         // Change button to Amber to notify user there are unsaved changes
         if (saveBtn) {
@@ -595,7 +588,7 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     }
 };
 
-async function syncDataSilent(source = 'BASIC') {
+async function syncDataSilent() {
     try {
         const folderId = await getBackupFolder();
         isReadyToPush = true; // 🔓 UNLOCK: We have successfully talked to the Cloud        
@@ -611,9 +604,7 @@ async function syncDataSilent(source = 'BASIC') {
 
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-
-        // Add prefix based on the source to segregate backups
-        const fileName = `${source}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
