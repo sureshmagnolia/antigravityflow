@@ -349,9 +349,10 @@ async function findLatestBackupTime() {
             }
         }
 
-    } catch(e) { console.error(e); }
+} catch(e) { console.error(e); }
 }
 
+window.syncData = syncData; // 🛡️ Expose to HTML buttons
 async function syncData(source = "AUTO") {
     window.isDriveSyncInProgress = true; // 🛡️ Raise the Busy Flag
     const btn = document.getElementById('btn-manual-sync');
@@ -751,10 +752,11 @@ async function checkForNewerDataOnDrive(isManual = false) {
     }
 }
 // --- RESTORE UI ---
+// --- RESTORE UI ---
 window.restoreFromDrive = restoreFromDrive;
 async function restoreFromDrive() {
     const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
-    const prefix = isProUser ? 'INVIG_PRO_Backup' : 'BASIC_Backup';
+    const prefix = isProUser ? 'INVIG_Backup' : 'ADMIN_Backup';
 
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
         if (!(await UiModal.confirm("Drive Restore", "⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?"))) return;
@@ -767,10 +769,7 @@ async function restoreFromDrive() {
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
-
-        if (res.result.files.length === 0) {
-            return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
-        }
+        if (res.result.files.length === 0) return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
         showRestoreModal(res.result.files);
     } catch (e) { alert("Error: " + e.message); }
 }
