@@ -1683,7 +1683,7 @@ function renderStaffCalendar(myEmail) {
                 } else if (isPast) {
                     badgeClass = "bg-gray-50 text-gray-400 border-gray-100 opacity-75"; icon = "⏹️"; statusText = "Done";
                 } else if (filled >= needed) {
-                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; icon = "✔️"; statusText = "Full";
+                    badgeClass = "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-400 border-gray-200"; icon = "👥"; statusText = "Full";
                 }
 
                 const paddingClass = isCompleted ? "p-[2px] md:p-1.5" : "p-0.5 md:p-1.5";
