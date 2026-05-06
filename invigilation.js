@@ -5109,9 +5109,12 @@ subtitleEl.innerHTML = `
                       LIVE
                   </div>
               </div>
-              <div class="flex items-center justify-between bg-gray-50 p-1.5 rounded border border-gray-200">
+                  <div class="flex items-center justify-between bg-gray-50 p-1.5 rounded border border-gray-200 relative">
                   <button id="log-prev" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">← Previous</button>
-                  <span id="log-page-info" class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Page 1</span>
+                  <div class="flex flex-col items-center">
+                      <span id="log-page-info" class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Page 1</span>
+                      <span id="log-loading-indicator" class="hidden text-[8px] text-indigo-600 font-bold animate-pulse">Fetching Data...</span>
+                  </div>
                   <button id="log-next" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
               </div>
           </div>
@@ -5132,8 +5135,18 @@ subtitleEl.innerHTML = `
       let currentPage = 1;
       const PAGE_SIZE = 100;
 
-      const fetchLogs = async (direction = 'initial') => {
-          list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Fetching page ' + currentPage + '...</div>';
+            const fetchLogs = async (direction = 'initial') => {
+          // 🛡️ Smooth UX: Fade the list and show indicator instead of clearing everything
+          const loader = document.getElementById('log-loading-indicator');
+          const btnNext = document.getElementById('log-next');
+          const btnPrev = document.getElementById('log-prev');
+
+          if (loader) loader.classList.remove('hidden');
+          list.style.opacity = "0.5";
+          list.style.pointerEvents = "none";
+          if (btnNext) btnNext.disabled = true;
+          if (btnPrev) btnPrev.disabled = true;
+
           const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
           let q;
 
@@ -5161,13 +5174,20 @@ subtitleEl.innerHTML = `
               window.cachedLogs = logs;
               filterDisplayedLogs(document.getElementById('act-search')?.value || "");
 
-              // Update UI State
+                // Update UI State
               document.getElementById('log-page-info').textContent = `Page ${currentPage}`;
               document.getElementById('log-prev').disabled = (currentPage === 1);
               document.getElementById('log-next').disabled = (snapshot.docs.length < PAGE_SIZE);
           } catch (error) {
               console.error("Log Read Error:", error);
               list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Error loading page ' + currentPage + '.</div>';
+          } finally {
+              // 🛡️ Cleanup: Restore visibility and hide loader
+              if (loader) loader.classList.add('hidden');
+              list.style.opacity = "1";
+              list.style.pointerEvents = "auto";
+              // Scroll to top of list for new page
+              list.parentElement.scrollTop = 0;
           }
       };
 
