@@ -5126,30 +5126,56 @@ subtitleEl.innerHTML = `
         searchInput.addEventListener('input', (e) => filterDisplayedLogs(e.target.value));
     }
 
-    // 3. Start Listener (Query last 100 docs)
-    if (activityLogUnsubscribe) activityLogUnsubscribe();
+// 3. Pagination State
+      let firstDoc = null;
+      let lastDoc = null;
+      let currentPage = 1;
+      const PAGE_SIZE = 100;
 
-    const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
-    // This query is much faster and safer than downloading the whole file
-    const q = query(logsColRef, orderBy("t", "desc"), limit(100)); 
+      const fetchLogs = async (direction = 'initial') => {
+          list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Fetching page ' + currentPage + '...</div>';
+          const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
+          let q;
 
-    // 3. COST SAVER: Poll Logs Every 60s
-    const fetchLogs = async () => {
-        try {
-            const snapshot = await getDocs(q);
-            const logs = [];
-            snapshot.forEach(doc => logs.push(doc.data()));
-            window.cachedLogs = logs; 
-            filterDisplayedLogs(document.getElementById('act-search')?.value || ""); 
-        } catch (error) {
-            console.error("Log Read Error:", error);
-            list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Access Denied or Connection Lost.</div>';
-        }
-    };
-    
-    fetchLogs(); // Initial explicit fetch
-    // 🚫 FIXED COST LEAK: Removed 60s polling interval. Logs will now only fetch on load.
-    activityLogUnsubscribe = () => {};
+          if (direction === 'next' && lastDoc) {
+              q = query(logsColRef, orderBy("t", "desc"), startAfter(lastDoc), limit(PAGE_SIZE));
+          } else if (direction === 'prev' && firstDoc) {
+              q = query(logsColRef, orderBy("t", "desc"), endBefore(firstDoc), limitToLast(PAGE_SIZE));
+          } else {
+              q = query(logsColRef, orderBy("t", "desc"), limit(PAGE_SIZE));
+          }
+
+          try {
+              const snapshot = await getDocs(q);
+              if (snapshot.empty) {
+                  if (direction !== 'initial') alert("No more activities found in this direction.");
+                  list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No logs found on this page.</div>';
+                  return;
+              }
+
+              firstDoc = snapshot.docs[0];
+              lastDoc = snapshot.docs[snapshot.docs.length - 1];
+
+              const logs = [];
+              snapshot.forEach(doc => logs.push(doc.data()));
+              window.cachedLogs = logs;
+              filterDisplayedLogs(document.getElementById('act-search')?.value || "");
+
+              // Update UI State
+              document.getElementById('log-page-info').textContent = `Page ${currentPage}`;
+              document.getElementById('log-prev').disabled = (currentPage === 1);
+              document.getElementById('log-next').disabled = (snapshot.docs.length < PAGE_SIZE);
+          } catch (error) {
+              console.error("Log Read Error:", error);
+              list.innerHTML = '<div class="text-center py-6 text-red-400 italic text-xs">Error loading page ' + currentPage + '.</div>';
+          }
+      };
+
+      // 4. Attach Navigation Listeners
+      document.getElementById('log-next').onclick = () => { currentPage++; fetchLogs('next'); };
+      document.getElementById('log-prev').onclick = () => { if (currentPage > 1) { currentPage--; fetchLogs('prev'); } };
+
+      fetchLogs(); // Initial load
 
 };
 
