@@ -5097,18 +5097,25 @@ window.viewActivityLogs = function () {
 
     // 1. Setup UI
     titleEl.textContent = "🕒 Live Activity Feed";
-    subtitleEl.innerHTML = `
-        <div class="flex gap-2 mt-2">
-            <input type="text" id="act-search" placeholder="Search logs..." class="flex-1 p-2 border border-gray-300 rounded text-xs shadow-inner focus:outline-none focus:border-indigo-500">
-            <div class="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2 rounded border border-green-100">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                LIVE
-            </div>
-        </div>
-    `;
+subtitleEl.innerHTML = `
+          <div class="flex flex-col gap-2 mt-2">
+              <div class="flex gap-2">
+                  <input type="text" id="act-search" placeholder="Search logs..." class="flex-1 p-2 border border-gray-300 rounded text-xs shadow-inner focus:outline-none focus:border-indigo-500">
+                  <div class="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2 rounded border border-green-100">
+                      <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                      </span>
+                      LIVE
+                  </div>
+              </div>
+              <div class="flex items-center justify-between bg-gray-50 p-1.5 rounded border border-gray-200">
+                  <button id="log-prev" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">← Previous</button>
+                  <span id="log-page-info" class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Page 1</span>
+                  <button id="log-next" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+              </div>
+          </div>
+      `;
 
     window.openModal('inconvenience-modal');
     list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Loading latest activities...</div>';
