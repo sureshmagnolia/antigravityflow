@@ -1,6 +1,6 @@
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged  }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit, startAfter, endBefore, limitToLast }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 // --- NEW IMPORTS FOR RECAPTCHA (Add this) ---
 import { initializeAppCheck, ReCaptchaV3Provider } 
