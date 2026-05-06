@@ -7208,18 +7208,27 @@ window.openManualAllocationModal = function (key) {
 
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
 
-            // 🛡️ Volunteer Bonus for THIS slot
+// 🛡️ Volunteer Bonus for THIS slot
             const hasVolunteered = slot.volunteers && slot.volunteers.includes(s.email);
             if (hasVolunteered) {
                 score += 10000;
                 badges.push("Volunteer");
             }
 
-            // 🛡️ Unavailability Penalty (Lowest Priority)
-            const isUnavailable = allUnavailable.some(u => (typeof u.email === 'undefined' ? u : u.email) === s.email);
-            if (isUnavailable) {
-                score -= 100000; // Sink to bottom
-                badges.push("Unavailable");
+            // 🛡️ Smart Unavailability Penalty (Prevent Dodging)
+            const unavailableRecord = allUnavailable.find(u => (typeof u.email === 'undefined' ? u : u.email) === s.email);
+            if (unavailableRecord) {
+                if (unavailableRecord.type === 'Role') {
+                    // Admin/Role Exclusions are fully excused
+                    score -= 100000; 
+                    badges.push("Role Excluded");
+                } else {
+                    // Self-reported unavailability gets a minor penalty (-500).
+                    // Since 1 pending duty = +100 or +1000 points, they will still rank 
+                    // above available staff if they are dodging their target!
+                    score -= 500; 
+                    badges.push("Unavailable");
+                }
             }
 
             // Spread Rules & Fatigue Penalties
