@@ -8950,9 +8950,17 @@ window.startNewAcademicYear = async function() {
         });
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
         
-        // 6. Clear Activity Log (Sub-collection)
-        const logRef = doc(db, "colleges", currentCollegeId, "logs", "activity_log");
-        await setDoc(logRef, { entries: [] });
+// 6. Clear Activity Log (Sub-collection - Iterative Delete)
+        if (btn) btn.innerHTML = "🧹 Wiping Old Logs...";
+        const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
+        const allLogsSnapshot = await getDocs(logsColRef);
+
+        // Execute deletions in parallel for speed
+        const deletePromises = [];
+        allLogsSnapshot.forEach(logDoc => {
+            deletePromises.push(deleteDoc(doc(db, "colleges", currentCollegeId, "logs", logDoc.id)));
+        });
+        await Promise.all(deletePromises);
 
         // 7. Log the Fresh Start (New Log Item)
         await logActivity("System Reset", `Started New Academic Year. Reset duty counts and set all staff joining dates to ${newJoinDate}.`);
