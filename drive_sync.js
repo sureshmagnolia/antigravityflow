@@ -715,7 +715,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
     }
 }
 // --- RESTORE UI ---
-
+window.restoreFromDrive = restoreFromDrive;
 async function restoreFromDrive() {
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
         if (!(await UiModal.confirm("Drive Restore", "⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?"))) return;
