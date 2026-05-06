@@ -5115,10 +5115,13 @@ subtitleEl.innerHTML = `
                       <span id="log-page-info" class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Page 1</span>
                       <span id="log-loading-indicator" class="hidden text-[8px] text-indigo-600 font-bold animate-pulse">Fetching Data...</span>
                   </div>
-                  <button id="log-next" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
-              </div>
-          </div>
-      `;
+                <button id="log-next" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+                </div>
+                <button onclick="if(window.downloadFullActivityLogs) window.downloadFullActivityLogs(this)" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-1.5 rounded text-[10px] font-bold shadow-sm transition flex items-center justify-center gap-1 mt-1">
+                    <span>⬇️</span> Download Full History Archive (JSON)
+                </button>
+            </div>
+        `;
 
     window.openModal('inconvenience-modal');
     list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Loading latest activities...</div>';
@@ -5191,7 +5194,7 @@ subtitleEl.innerHTML = `
           }
       };
 
-      // 4. Attach Navigation Listeners
+// 4. Attach Navigation Listeners
       document.getElementById('log-next').onclick = () => { currentPage++; fetchLogs('next'); };
       document.getElementById('log-prev').onclick = () => { if (currentPage > 1) { currentPage--; fetchLogs('prev'); } };
 
@@ -5199,6 +5202,49 @@ subtitleEl.innerHTML = `
 
 };
 
+// --- NEW: Global Log Downloader ---
+window.downloadFullActivityLogs = async function(btnElement) {
+    if (!currentCollegeId) return alert("❌ Error: College ID not found.");
+
+    const originalText = btnElement.innerHTML;
+    btnElement.innerHTML = "⏳ Compiling Archive (Please Wait)...";
+    btnElement.disabled = true;
+    btnElement.classList.add('opacity-50');
+
+    try {
+        const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
+        const q = query(logsColRef, orderBy("t", "desc"));
+        const snapshot = await getDocs(q);
+
+        const allLogs = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.t) data.readable_time = new Date(data.t).toLocaleString();
+            allLogs.push(data);
+        });
+
+        if (allLogs.length === 0) {
+            alert("⚠️ No logs found to download.");
+        } else {
+            const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Full_Activity_Logs_${currentCollegeId}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    } catch (error) {
+        console.error("Export Failed:", error);
+        alert("❌ Failed to download logs. Check console for details.");
+    } finally {
+        btnElement.innerHTML = originalText;
+        btnElement.disabled = false;
+        btnElement.classList.remove('opacity-50');
+    }
+};
 
 // Helper to render the logs (Paste this below viewActivityLogs)
 function filterDisplayedLogs(query) {
