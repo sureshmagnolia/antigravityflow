@@ -7112,76 +7112,11 @@ window.openManualAllocationModal = function (key) {
         });
     });
 
-    const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
+   const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
     const slotTargetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
     const targetStamp = new Date(slotTargetDateStr).getTime();
 
-    const rankedStaff = staffData
-        .filter(s => {
-            if (s.status === 'archived') return false;
-            
-            // 🔥 REMOVE ADMIN ROLES FROM SELECTION LIST
-            if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                const isExempt = s.roleHistory.some(r => {
-                    const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
-                });
-                if (isExempt) return false; 
-            }
-            return true;
-        })
-        .map(s => {
-
-            const slotDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
-            let done = 0, target = 0, pending = 0;
-            
-                // FIX: Also check if targetDate falls inside the main vacation start/end period
-                if (isDateInVacation(targetDate) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotDateStr))) {
-
-                done = getVacationDutiesDoneCount(s.email);
-                // FIX: Replaced window.vacationDefaultTarget with global vacationDutyTarget
-                target = vacationDutyTarget || 0; 
-                pending = Math.max(0, target - done);
-            } else {
-
-                done = getDutiesDoneCount(s.email);
-                target = calculateStaffTarget(s);
-                pending = Math.max(0, target - done);
-            }
-
-            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
-            let score = pending * 100;
-            let badges = [];
-
-            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
-            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
-            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
-            
-            const deptStaff = (slot.assigned || []).filter(e => staffData.find(st => st.email === e)?.dept === s.dept).length;
-            if (staffData.filter(st => st.dept === s.dept).length > 1 && ((deptStaff + 1) / ((slot.assigned || []).length + 1) > 0.5)) {
-                score -= 500; badges.push("Dept Sat");
-            }
-            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0) };
-        })
-        .sort((a, b) => b.score - a.score);
-
-    if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
-
-    const assignedSet = new Set(slot.assigned || []);
-    
-    // Only mark as checked if they are ALREADY in the saved assigned list
-    rankedStaff.forEach(s => {
-        s.isChecked = assignedSet.has(s.email);
-    });
-
-
-    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
-    renderManualCards();
-
-    // Render Unavailable List manually at bottom right
-    const unavList = document.getElementById('manual-unavailable-list');
-    unavList.innerHTML = '';
+    // 1. Build allUnavailable list FIRST so we can use it in the ranking
     const allUnavailable = [];
     if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
 
@@ -7198,41 +7133,128 @@ window.openManualAllocationModal = function (key) {
         });
     }
 
-    // --- START OF NEW CODE ---
-    // Check for active roles EXCL, Principal, CS, SAS
-   
+    // Role-based exclusions
     staffData.forEach(s => {
         if (s.roleHistory && Array.isArray(s.roleHistory)) {
             s.roleHistory.forEach(r => {
-                // Check if they hold one of the targeted roles
-                                // FIX: Added full spelling of CS and SAS roles to catch them properly
-                if (['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'].includes(r.role)) {
-                    // FIX: Process mathematically as exact timestamps to destroy formatting bugs
-                    const targetStamp = new Date(slotTargetDateStr).getTime();
+                if (exemptRoles.includes(r.role)) {
                     const startStamp = new Date(r.start).getTime();
                     const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-
                     if (targetStamp >= startStamp && targetStamp <= endStamp) {
-
-                        // Prevent duplicates if they were already marked unavailable
                         if (!allUnavailable.some(existing => (typeof existing.email === 'undefined' ? existing : existing.email) === s.email)) {
-                            allUnavailable.push({
-                                email: s.email,
-                                reason: `Admin Role: ${r.role}`,
-                                type: 'Role',
-                                role: r.role
-                            });
+                            allUnavailable.push({ email: s.email, reason: `Admin Role: ${r.role}`, type: 'Role', role: r.role });
                         }
                     }
                 }
             });
         }
     });
-    // --- END OF NEW CODE ---
 
+    // 2. Pre-calculate Volunteered Vacation Duties (Not Yet Assigned)
+    const vacationVolunteeredCount = {};
+    staffData.forEach(s => vacationVolunteeredCount[s.email] = 0);
+    Object.keys(invigilationSlots).forEach(k => {
+        const slotObj = invigilationSlots[k];
+        const dObj = parseDate(k);
+        const isoD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+        const isVacSlot = isDateInVacation(dObj) || (window.vacationDutyDates && window.vacationDutyDates.includes(isoD));
 
+        if (isVacSlot && slotObj.volunteers) {
+            slotObj.volunteers.forEach(email => {
+                // Count if they volunteered but aren't assigned yet
+                if (!(slotObj.assigned && slotObj.assigned.includes(email))) {
+                    if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                }
+            });
+        }
+    });
 
-    
+    const isCurrentSlotVacation = isDateInVacation(targetDate) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotTargetDateStr));
+
+    // 3. Filter and Rank Staff
+    const rankedStaff = staffData
+        .filter(s => {
+            if (s.status === 'archived') return false;
+            // Remove those strictly holding admin roles
+            if (s.roleHistory && Array.isArray(s.roleHistory)) {
+                const isExempt = s.roleHistory.some(r => {
+                    const startStamp = new Date(r.start).getTime();
+                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                });
+                if (isExempt) return false;
+            }
+            return true;
+        })
+        .map(s => {
+            let done = 0, target = 0, pending = 0, score = 0;
+            let badges = [];
+
+            if (isCurrentSlotVacation) {
+                // Vacation Logic: Calculate "Total Committed"
+                const doneVacation = getVacationDutiesDoneCount(s.email);
+                const volunteeredVacation = vacationVolunteeredCount[s.email] || 0;
+                done = doneVacation + volunteeredVacation; // Factor in what they already volunteered for!
+                target = vacationDutyTarget || 0;
+                pending = target - done;
+                score = pending * 1000; // High multiplier to strictly sort by deficit
+            } else {
+                // Standard Logic
+                done = getDutiesDoneCount(s.email);
+                target = calculateStaffTarget(s);
+                pending = Math.max(0, target - done);
+                score = pending * 100;
+            }
+
+            const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
+
+            // 🛡️ Volunteer Bonus for THIS slot
+            const hasVolunteered = slot.volunteers && slot.volunteers.includes(s.email);
+            if (hasVolunteered) {
+                score += 10000;
+                badges.push("Volunteer");
+            }
+
+            // 🛡️ Unavailability Penalty (Lowest Priority)
+            const isUnavailable = allUnavailable.some(u => (typeof u.email === 'undefined' ? u : u.email) === s.email);
+            if (isUnavailable) {
+                score -= 100000; // Sink to bottom
+                badges.push("Unavailable");
+            }
+
+            // Spread Rules & Fatigue Penalties
+            if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
+            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
+            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+
+            // Department Saturation (Skip during Vacation)
+            if (!isCurrentSlotVacation) {
+                const deptStaff = (slot.assigned || []).filter(e => staffData.find(st => st.email === e)?.dept === s.dept).length;
+                if (staffData.filter(st => st.dept === s.dept).length > 1 && ((deptStaff + 1) / ((slot.assigned || []).length + 1) > 0.5)) {
+                    score -= 500; badges.push("Dept Sat");
+                }
+            }
+
+            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0) };
+        })
+        .sort((a, b) => b.score - a.score);
+
+    if (typeof lastManualRanking !== 'undefined') lastManualRanking = rankedStaff;
+
+    const assignedSet = new Set(slot.assigned || []);
+
+    // Only mark as checked if they are ALREADY in the saved assigned list
+    rankedStaff.forEach(s => {
+        s.isChecked = assignedSet.has(s.email);
+    });
+
+    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
+    renderManualCards();
+
+    // Render Unavailable List manually at bottom right
+    const unavList = document.getElementById('manual-unavailable-list');
+    unavList.innerHTML = '';
+
     if (allUnavailable.length > 0) {
                 // --- REPLACE THE ORIGINAL FOREACH LOOP WITH THIS ONE ---
         allUnavailable.forEach(u => {
