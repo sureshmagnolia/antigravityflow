@@ -240,12 +240,12 @@
                                   Backup All Data (JSON)
                               </button>
 
-                              <!-- Added Google Drive Manual Sync Controls -->
-                              <div class="grid grid-cols-2 gap-2 mb-2">
-                                  <button onclick="if(window.triggerDriveAutoSync) window.triggerDriveAutoSync(true)"
-                                      class="bg-blue-600 text-white border border-blue-700 px-2 py-2 rounded text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm transition">
-                                      ☁️ Push to Drive
-                                  </button>
+                            <!-- Added Google Drive Manual Sync Controls -->
+                                <div class="grid grid-cols-2 gap-2 mb-2">
+                                    <button onclick="if(window.syncData) { const btn = this; const old = btn.innerHTML; btn.innerHTML='⏳...'; window.syncData('INVIG_MANUAL').then(()=>btn.innerHTML=old).catch(()=>btn.innerHTML=old); }"
+                                        class="bg-blue-600 text-white border border-blue-700 px-2 py-2 rounded text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm transition">
+                                        ☁️ Push to Drive
+                                    </button>
                                   <button onclick="if(window.executeDriveRestore) { alert('Updates available on ribbon!'); } else if(window.restoreFromDrive) { window.restoreFromDrive(); } else { alert('Drive not linked.'); }"
                                       class="bg-white text-blue-600 border border-blue-300 px-2 py-2 rounded text-xs font-bold hover:bg-blue-50 flex items-center justify-center gap-1 shadow-sm transition">
                                       📥 Fetch from Drive
