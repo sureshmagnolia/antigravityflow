@@ -103,14 +103,14 @@ function checkAuth() {
 function restoreSession() {
     tokenClient.callback = async (resp) => {
         if (resp.error) {
-            console.warn("Silent Auth Failed:", resp);
-            showReconnectState(); // Ask user to click
+            console.warn("Silent Auth Failed (Expected if browser blocks popups):", resp);
+            showReconnectState(); // Show "Reconnect" button for user to click
         } else {
             handleTokenResponse(resp);
         }
     };
-    tokenClient.requestAccessToken({ prompt: 'consent', select_account: true });
-
+    // 🛡️ SILENT REFRESH: Use prompt:'' to try background refresh first without popups
+    tokenClient.requestAccessToken({ prompt: '', select_account: false });
 }
 
 function handleTokenResponse(resp) {
@@ -160,6 +160,15 @@ function showReconnectState() {
         btn.onclick = handleAuthClick;
     }
     if (controls) controls.classList.add('hidden');
+
+    // 🎀 RIBBON FIX: Show reconnect button on top ribbon too
+    const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+    if (ribbonBtn && !window.currentCollegeId) {
+        ribbonBtn.innerHTML = `<span>🔄 Reconnect Drive</span>`;
+        ribbonBtn.classList.remove('hidden');
+    }
+    const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
+    if (ribbonStatus) ribbonStatus.classList.add('hidden');
 }
 
 
@@ -461,6 +470,13 @@ let autoSyncTimer = null;
 window.triggerDriveAutoSync = function(isImmediate = false) {
     if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
 
+    // 🛡️ Guard: If API is missing/expired, prompt reconnect
+    if (!window.gapi || !gapi.client || !gapi.client.getToken()) {
+        console.warn("Sync Blocked: Drive session expired. Reconnect needed.");
+        showReconnectState();
+        return;
+    }
+
     // 🛡️ Guard: Prevent pushing if we haven't verified Cloud data yet
     if (!isReadyToPush) {
         console.warn("Sync blocked: Waiting for initial Cloud data check...");
@@ -547,9 +563,16 @@ async function checkForNewerDataOnDrive(isManual = false) {
     // 🛡️ DOUBLE GUARD: Ensure Firebase users NEVER see this
     if (window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true') return;
 
-    // 🛡️ API GUARD: Don't check if the API is still initializing
-    if (!window.gapi || !gapi.client || !gapi.client.drive || !gapi.client.getToken()) {
-        console.log("⏳ Sync Check: Waiting for Google API to stabilize...");
+// 🛡️ API GUARD: If session is explicitly expired, prompt reconnect
+    if (localStorage.getItem('isDriveConnected') === 'true' && (!window.gapi || !gapi.client || !gapi.client.getToken())) {
+        console.warn("Sync Check Blocked: Drive session expired.");
+        showReconnectState();
+        return;
+    }
+
+    // 🛡️ API GUARD: Still loading GAPI
+    if (!window.gapi || !gapi.client || !gapi.client.drive) {
+        console.log("⏳ Sync Check: Waiting for Google API to initialize...");
         return;
     }
 
@@ -595,13 +618,13 @@ async function checkForNewerDataOnDrive(isManual = false) {
 
         console.log(`🔍 Sync Check: Cloud(${new Date(cloudTime).toLocaleString()}) | HasStudents: ${hasStudents} | CloudNewer: ${isCloudNewer}`);
 
-        if (!hasStudents || isCloudNewer) {
+    if (isLocalEmpty || isCloudNewer) {
             console.log("📢 Sync Logic: Newer data found on Cloud. Prompting user.");
 
             // 🚨 CRITICAL PROTECTION: 
             // If browser is BLANK but Cloud has DATA, keep the sync LOCKED 
             // until they restore or overwrite to prevent wiping the cloud.
-            if (!hasStudents && cloudTime > 0) isReadyToPush = false;
+            if (isLocalEmpty && cloudTime > 0) isReadyToPush = false;
 
             const mergeBtn = document.getElementById('btn-drive-merge-prompt');
             if (mergeBtn) {
