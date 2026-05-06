@@ -209,9 +209,18 @@ const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
 
 // --- AUTH ACTIONS ---
 
-function disconnectDrive() {
+async function disconnectDrive() {
+    // 🛡️ Guard: Confirm before disconnecting
+    if (!(await UiModal.confirm("Disconnect Drive", "This will stop cloud syncing and remove access to your Google Drive. Your local data will remain safe. Continue?"))) return;
+
     const token = gapi.client.getToken();
-    if (token) google.accounts.oauth2.revoke(token.access_token);
+    if (token) {
+        try {
+            google.accounts.oauth2.revoke(token.access_token);
+        } catch (e) {
+            console.warn("Token revocation failed (already expired):", e);
+        }
+    }
     gapi.client.setToken(null);
     localStorage.removeItem('isDriveConnected');
     localStorage.removeItem('drive_access_token');
@@ -221,11 +230,17 @@ function disconnectDrive() {
 
 function handleAuthClick() {
     tokenClient.callback = async (resp) => {
-        if (resp.error) throw resp;
+        if (resp.error) {
+            // If they closed the popup or canceled, don't throw an error, just stop
+            if (resp.error === 'access_denied') return;
+            throw resp;
+        }
         handleTokenResponse(resp);
     };
+    
+    // 🛡️ Always force account selection on manual click to allow switching accounts
     if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
     } else {
         tokenClient.requestAccessToken({ prompt: '' });
     }
