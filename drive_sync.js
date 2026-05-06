@@ -271,10 +271,24 @@ function handleAuthClick() {
 
 // --- FOLDER & UPLOAD LOGIC ---
 
+// --- FOLDER & UPLOAD LOGIC ---
+
 async function getBackupFolder() {
+    // 🛡️ WAIT FOR GAPI: Ensure the drive client is fully loaded before making requests
+    let retries = 0;
+    while ((!window.gapi || !gapi.client || !gapi.client.drive) && retries < 10) {
+        console.log("⏳ Waiting for Google Drive API to finish loading...");
+        await new Promise(r => setTimeout(r, 500));
+        retries++;
+    }
+    
+    if (!window.gapi || !gapi.client || !gapi.client.drive) {
+        throw new Error("Google Drive API failed to initialize. Please refresh the page.");
+    }
+
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     let res;
-try {
+    try {
         res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     } catch(e) {
         // 🛡️ FIX: Deeply check for 401 or 403 errors
@@ -536,7 +550,13 @@ async function manageRetention(folderId) {
 let autoSyncTimer = null;
 
 window.triggerDriveAutoSync = function(isImmediate = false) {
-    if (localStorage.getItem('isDriveConnected') !== 'true' || window.currentCollegeId) return;
+    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+
+    // In Basic ExamFlow, don't allow push if disconnected
+    if (!isProUser && localStorage.getItem('isDriveConnected') !== 'true') return;
+    
+    // In Pro mode, we only allow manual sync, never background loop auto-syncs from this function
+    if (isProUser && !isImmediate) return;
 
     // 🛡️ Guard: If API is missing/expired, prompt reconnect
     if (!window.gapi || !gapi.client || !gapi.client.getToken()) {
@@ -546,7 +566,8 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     }
 
     // 🛡️ Guard: Prevent pushing if we haven't verified Cloud data yet
-    if (!isReadyToPush) {
+    // Note: We bypass this for Pro users doing a manual immediate push as it is a dedicated backup
+    if (!isProUser && !isReadyToPush) {
         console.warn("Sync blocked: Waiting for initial Cloud data check...");
         checkForNewerDataOnDrive(false);
         return;
@@ -556,13 +577,13 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     const saveBtnText = document.getElementById('save-btn-text');
 
     if (isImmediate) {
-        console.log("Manual trigger: Pushing immediately to Google Drive...");
+        console.log(`Manual trigger: Pushing immediately to Google Drive (${isProUser ? 'PRO BACKUP' : 'BASIC SYNC'})...`);
         if (saveBtnText) saveBtnText.textContent = "Saving...";
         if (saveBtn) {
             saveBtn.classList.replace('bg-amber-500', 'bg-blue-600');
             saveBtn.classList.remove('animate-pulse');
         }
-        syncDataSilent();
+        syncDataSilent(isProUser ? 'INVIG_PRO' : 'BASIC');
     } else {
         // Change button to Amber to notify user there are unsaved changes
         if (saveBtn) {
@@ -573,10 +594,10 @@ window.triggerDriveAutoSync = function(isImmediate = false) {
     }
 };
 
-async function syncDataSilent() {
+async function syncDataSilent(source = 'BASIC') {
     try {
         const folderId = await getBackupFolder();
-        isReadyToPush = true; // 🔓 UNLOCK: We have successfully talked to the Cloud
+        isReadyToPush = true; // 🔓 UNLOCK: We have successfully talked to the Cloud        
         const localData = {};
         for (const k of DATA_KEYS) {
             if (k === 'examBaseData') {
@@ -589,7 +610,9 @@ async function syncDataSilent() {
 
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+
+        // Add prefix based on the source to segregate backups
+        const fileName = `${source}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
