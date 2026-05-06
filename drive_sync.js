@@ -277,19 +277,28 @@ async function getBackupFolder() {
 try {
         res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     } catch(e) {
-        // 🛡️ FIX: Wipe session on BOTH 401 (Unauthorized) and 403 (Forbidden/Scopes Missing)
-        if (e.status === 401 || e.status === 403 || (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403))) {
+        // 🛡️ FIX: Deeply check for 401 or 403 errors
+        const isAuthError = e.status === 401 || e.status === 403 || e.code === 401 || e.code === 403 || (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403));
+
+        if (isAuthError) {
             localStorage.removeItem('drive_access_token');
             localStorage.removeItem('drive_token_expiry');
             localStorage.removeItem('isDriveConnected');
             gapi.client.setToken(null);
             showReconnectState();
 
-            const errMsg = e.status === 403 ? "Drive permissions missing. Please reconnect and check the permission boxes." : "Drive session expired. Please reconnect.";
-            alert("⚠️ " + errMsg);
+            // Determine if it was specifically a 403 (permissions) or a 401 (expired)
+            const isForbidden = e.status === 403 || e.code === 403 || (e.result && e.result.error && e.result.error.code === 403);
+            const errMsg = isForbidden ? "Drive permissions missing. Please reconnect and check ALL permission boxes." : "Drive session expired. Please reconnect.";
+
+            // Log it, and only alert if they clicked a manual button
+            console.warn(errMsg);
+            if (!document.getElementById('drive-sync-status-ribbon')?.classList.contains('hidden')) {
+                 alert("⚠️ " + errMsg);
+            }
             throw new Error(errMsg);
         }
-// For other errors (like API not ready), warn but don't logout
+        // For other errors (like API not ready), warn but don't logout
         console.warn("Drive connection check deferred:", e);
         throw e;
     }
