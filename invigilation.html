@@ -231,18 +231,29 @@
                     </div>
                     <div class="mt-4 pt-4 border-t border-gray-200">
                         <label class="block text-xs font-bold text-gray-400 uppercase mb-2">System Data</label>
-                        <button onclick="downloadMasterBackup()"
-                            class="w-full mb-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                            </svg>
-                            Backup All Data (JSON)
-                        </button>
+                              <button onclick="downloadMasterBackup()"
+                                  class="w-full mb-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-xs font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition">
+                                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                  </svg>
+                                  Backup All Data (JSON)
+                              </button>
 
-                        
+                              <!-- Added Google Drive Manual Sync Controls -->
+                              <div class="grid grid-cols-2 gap-2 mb-2">
+                                  <button onclick="if(window.triggerDriveAutoSync) window.triggerDriveAutoSync(true)"
+                                      class="bg-blue-600 text-white border border-blue-700 px-2 py-2 rounded text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm transition">
+                                      ☁️ Push to Drive
+                                  </button>
+                                  <button onclick="if(window.executeDriveRestore) { alert('Updates available on ribbon!'); } else if(window.restoreFromDrive) { window.restoreFromDrive(); } else { alert('Drive not linked.'); }"
+                                      class="bg-white text-blue-600 border border-blue-300 px-2 py-2 rounded text-xs font-bold hover:bg-blue-50 flex items-center justify-center gap-1 shadow-sm transition">
+                                      📥 Fetch from Drive
+                                  </button>
+                              </div>
+                              <div class="w-full h-px bg-gray-200 mb-3 mt-1"></div>
 
-                        <button onclick="document.getElementById('restore-master-upload').click()"
+                              <button onclick="document.getElementById('restore-master-upload').click()"
                             class="w-full bg-white text-red-600 border border-red-200 px-3 py-2 rounded text-xs font-bold hover:bg-red-50 flex items-center justify-center gap-2 transition">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
