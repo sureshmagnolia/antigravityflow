@@ -89,13 +89,14 @@ function checkAuth() {
             // 1. Token is VALID. Reuse it!
             console.log("Restoring valid session from storage...");
             gapi.client.setToken({ access_token: storedToken });
-            localStorage.setItem('isDriveConnected', 'true'); // Ensure flag matches
+            localStorage.setItem('isDriveConnected', 'true');
             showConnectedState();
         } 
         else if (localStorage.getItem('isDriveConnected') === 'true') {
-            // 2. Token Expired, but was connected. Try refresh.
-            console.log("Token expired. Attempting silent refresh...");
-            restoreSession();
+            // 2. Token Expired. DO NOT auto-refresh on startup (prevents annoying popups).
+            // Instead, just show the Reconnect state.
+            console.log("Drive session expired. Showing reconnect option.");
+            showReconnectState();
         }
     }
 }
@@ -145,9 +146,13 @@ function showConnectedState() {
     const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
     if(ribbonBtn) ribbonBtn.classList.add('hidden');
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
-    // 🛡️ Guard: Only show status on ribbon if NOT a Pro user
-    if(ribbonStatus && !window.currentCollegeId) ribbonStatus.classList.remove('hidden');
-    else if(ribbonStatus) ribbonStatus.classList.add('hidden');
+    // 🛡️ Guard: Only show status on ribbon if NOT a Pro user (Firebase)
+    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+    if (ribbonStatus && !isProUser) {
+        ribbonStatus.classList.remove('hidden');
+    } else if (ribbonStatus) {
+        ribbonStatus.classList.add('hidden');
+    }
     
     findLatestBackupTime();
 
@@ -184,10 +189,13 @@ function showReconnectState() {
     if (controls) controls.classList.add('hidden');
 
     // 🎀 RIBBON FIX: Show reconnect button on top ribbon too
-    const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
-    if (ribbonBtn && !window.currentCollegeId) {
+const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
+    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+    if (ribbonBtn && !isProUser) {
         ribbonBtn.innerHTML = `<span>🔄 Reconnect Drive</span>`;
         ribbonBtn.classList.remove('hidden');
+    } else if (ribbonBtn) {
+        ribbonBtn.classList.add('hidden');
     }
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
     if (ribbonStatus) ribbonStatus.classList.add('hidden');
@@ -209,9 +217,13 @@ function showDisconnectedState() {
     if (lastSyncElem) lastSyncElem.textContent = "";
 
 const ribbonBtn = document.getElementById('btn-drive-sync-ribbon');
-    // 🛡️ Guard: Only show "Add Sync" button if NOT a Pro user
-    if(ribbonBtn && !window.currentCollegeId) ribbonBtn.classList.remove('hidden');
-    else if(ribbonBtn) ribbonBtn.classList.add('hidden');
+// 🛡️ Guard: Only show "Add Sync" button if NOT a Pro user (Firebase)
+    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+    if (ribbonBtn && !isProUser) {
+        ribbonBtn.classList.remove('hidden');
+    } else if (ribbonBtn) {
+        ribbonBtn.classList.add('hidden');
+    }
     const ribbonStatus = document.getElementById('drive-sync-status-ribbon');
     if(ribbonStatus) ribbonStatus.classList.add('hidden');
 }
