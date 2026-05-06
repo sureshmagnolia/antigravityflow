@@ -217,11 +217,17 @@
                       class="px-2 py-0.5 bg-gray-700 hover:bg-blue-600 text-[10px] text-white font-bold rounded transition-all border border-gray-600 flex items-center gap-1 shadow-inner">
                       <span id="save-btn-icon">☁️</span> <span id="save-btn-text">Save to Cloud</span>
                   </button>
-                  <button id="btn-drive-merge-prompt" onclick="event.stopPropagation(); if(window.executeDriveRestore) window.executeDriveRestore()"
-                      class="hidden ml-1 px-1.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold rounded animate-bounce">
-                      Update Available: Click to Merge
-                  </button>
-              </div>
+                    <button id="btn-drive-merge-prompt" onclick="event.stopPropagation(); if(window.executeDriveRestore) window.executeDriveRestore()"
+                        class="hidden ml-1 px-1.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold rounded animate-bounce">
+                        Update Available: Click to Merge
+                    </button>
+
+                    <!-- Ribbon Disconnect Button -->
+                    <button onclick="event.stopPropagation(); if(window.disconnectDrive) window.disconnectDrive()" 
+                        class="ml-1 text-[9px] text-gray-400 hover:text-red-400 transition-colors" title="Disconnect Google Drive">
+                        ✕
+                    </button>
+                </div>
 
               <button id="btn-drive-sync-ribbon" onclick="if(window.handleAuthClick) window.handleAuthClick()"
                   class="hidden bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 md:px-3 md:py-2 rounded transition mr-2 flex items-center gap-1 shadow-sm border border-emerald-500">
