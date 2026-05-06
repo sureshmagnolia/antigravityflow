@@ -1259,10 +1259,11 @@ function renderStaffTable() {
     const today = new Date();
 
     // 1. Filter & Map Data (SAFE MODE)
-    const filteredItems = staffData
+const filteredItems = staffData
         .map((staff, i) => ({ ...staff, originalIndex: i }))
         .filter(item => {
-            if (item.status === 'archived') return false;
+            const showInactive = document.getElementById('show-inactive-staff')?.checked;
+            if (item.status === 'archived' && !showInactive) return false;
 
             // --- THE FIX: Handle missing data safely ---
             if (filter) {
@@ -1355,6 +1356,12 @@ function renderStaffTable() {
         let actionButtons = "";
         if (isStaffListLocked) {
             actionButtons = `<div class="w-full text-center md:text-right pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0"><span class="text-gray-400 text-xs italic mr-2">Locked</span></div>`;
+        } else if (staff.status === 'archived') {
+            actionButtons = `
+                <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
+                    <span class="text-xs text-red-500 font-bold self-center mr-2">INACTIVE</span>
+                    <button onclick="reactivateStaff(${index})" class="flex-1 md:flex-none text-green-700 hover:text-white bg-green-100 hover:bg-green-600 px-4 py-1.5 rounded border border-green-300 transition text-xs font-bold text-center shadow-sm">↺ Reactivate</button>
+                </div>`;
         } else {
             actionButtons = `
                 <div class="flex gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t border-gray-100 md:border-0 mt-2 md:mt-0">
@@ -3094,9 +3101,24 @@ window.deleteStaff = async function (index) {
         await syncStaffToCloud();
         await removeStaffAccess(staff.email); // Optional: Block login
         renderStaffTable();
-        alert("Staff archived successfully.");
+alert("Staff archived successfully.");
     }
 }
+
+window.reactivateStaff = async function (index) {
+    const staff = staffData[index];
+    if (!staff) return;
+
+    if (confirm(`Reactivate ${staff.name}?\n\nThey will be able to log in to the portal again and will be included in duty assignments.`)) {
+        delete staff.status; // Remove 'archived' status
+        logActivity("Staff Reactivated", `Admin reactivated staff member: ${staff.name} (${staff.email}).`);
+        await syncStaffToCloud();
+        await addStaffAccess(staff.email); // Restore login access
+        renderStaffTable();
+        alert("Staff reactivated successfully.");
+    }
+}
+
 window.openRoleAssignmentModal = function (index) {
     const staff = staffData[index];
     const modal = document.getElementById('role-assignment-modal');
