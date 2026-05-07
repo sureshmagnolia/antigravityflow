@@ -4996,13 +4996,15 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         }
     }
 
-    // 6. Final Sync and Alerts
-    if (logEntries.length > 0) {
-        // (Existing cloud log update logic, assuming this uses Firebase/Firestore)
-        // const logRef = doc(db, "colleges", currentCollegeId);
-        // const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
-        // try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
-    }
+// 6. Final Sync and Alerts
+      if (logEntries.length > 0) {
+          const logRef = doc(db, "colleges", currentCollegeId);
+          const newLogs = logEntries.map(e => [${timestamp}] ${e.type}: ${e.msg});
+          try {
+              const { arrayUnion } = window.firebase;
+              await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) });
+          } catch (e) { console.warn("Log write failed", e); }
+      }
 
     logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
     await syncSlotsToCloud();
@@ -9180,19 +9182,31 @@ window.startNewAcademicYear = async function() {
         vacationEnd = "";
         vacationExtraHolidays.clear();
 
-        // 5. Update Main Cloud Document
-        const collegeRef = doc(db, "colleges", currentCollegeId);
-        
-        // Update specific fields (Configurations like Roles/Targets are PRESERVED automatically by updateDoc)
-        await updateDoc(collegeRef, {
-            examStaffData: JSON.stringify(staffData), // Save the reset staff list
-            examInvigilationSlots: "{}",              // Wipe slots
-            invigAdvanceUnavailability: "{}",         // Wipe leaves
-            invigVacationConfig: "{}",                // Wipe vacation settings
-            autoAssignLogs: []                        // Clear logic logs
-            // NOTE: We do NOT clear 'staffAccessList' so staff can still log in.
-        });
-        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+        // 5. Update Main Cloud Document & Sub-Collections
+          const collegeRef = doc(db, "colleges", currentCollegeId);
+          const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+          const staffRef = doc(db, "colleges", currentCollegeId, "system_data", "staff");
+
+          // A. Wipe Root Document
+          await updateDoc(collegeRef, {
+              examStaffData: JSON.stringify(staffData),
+              examInvigilationSlots: "{}",
+              invigAdvanceUnavailability: "{}",
+              invigVacationConfig: "{}",
+              autoAssignLogs: []
+          });
+
+          // B. Wipe Sub-Collections (The REAL data locus)
+          await setDoc(slotsRef, {
+              examInvigilationSlots: "{}",
+              invigAdvanceUnavailability: "{}"
+          }, { merge: true });
+
+          await setDoc(staffRef, {
+              examStaffData: JSON.stringify(staffData)
+          }, { merge: true });
+
+          if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
         
 // 6. Clear Activity Log (Sub-collection - Iterative Delete)
         if (btn) btn.innerHTML = "🧹 Wiping Old Logs...";
