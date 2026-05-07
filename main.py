@@ -13,28 +13,12 @@ from datetime import datetime
 # ==========================================
 
 def clean_text(text):
-      """Removes newlines, extra spaces, and fixes Mojibake characters."""
-      if not text: return ""
-      text = str(text).replace('\n', ' ')
-
-  MOJIBAKE MAP: Fixes UTF-8 characters misread as Latin-1
-      mojibake_map = {
-          'â€“': '-',
-          'â€”': '-',
-          'â€˜': "'",
-          'â€™': "'",
-          'â€œ': '"',
-          'â€': '"',
-          'â€¦': '...',
-          '\u00e2\u0080\u0093': '-',
-          '\u00e2\u0080\u0094': '-'
-      }
-      for bad, good in mojibake_map.items():
-          text = text.replace(bad, good)
-
-      text = re.sub(r'\s+', ' ', text).strip()
-      text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
-      return text
+    """Removes newlines and extra spaces."""
+    if not text: return ""
+    text = str(text).replace('\n', ' ').strip()
+    # Remove broken start chars like : - . ,
+    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
+    return text
 
 def find_date_in_text(text):
     """Scans text for Date patterns (DD.MM.YYYY or DD-MM-YYYY)"""
