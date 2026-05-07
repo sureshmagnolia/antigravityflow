@@ -4999,7 +4999,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 // 6. Final Sync and Alerts
       if (logEntries.length > 0) {
           const logRef = doc(db, "colleges", currentCollegeId);
-          const newLogs = logEntries.map(e => [${timestamp}] ${e.type}: ${e.msg});
+          const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
           try {
               const { arrayUnion } = window.firebase;
               await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) });
