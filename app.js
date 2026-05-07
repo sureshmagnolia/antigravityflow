@@ -20881,17 +20881,21 @@ window.downloadInvigilationListPDF = async function () {
     const allStudentData = await loadExamDataIDB() || [];
 
     
-    // Scribe Data
-    const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
-    const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+    // Scribe Data (Check both V2 and V1 keys for total compatibility)
+      const scribeV1 = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+      const scribeV2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+      const allScribeAllotments = { ...scribeV1, ...scribeV2 };
+      const sessionScribeMap = allScribeAllotments[sessionKey] || {};
 
-    // 2. Room List Builder
-    const roomList = [];
-    if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
-        currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
-    } else {
-         const allAllotments = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
-         const sessionAllotment = allAllotments[sessionKey];
+      // 2. Room List Builder
+      const roomList = [];
+      if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+          currentSessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
+      } else {
+           const roomV1 = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+           const roomV2 = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
+           const allAllotments = { ...roomV1, ...roomV2 };
+           const sessionAllotment = allAllotments[sessionKey];
          if (sessionAllotment && Array.isArray(sessionAllotment)) {
              sessionAllotment.forEach(r => roomList.push({ name: r.roomName, stream: r.stream || "Regular", isScribe: false }));
          } else {
