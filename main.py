@@ -12,13 +12,31 @@ from datetime import datetime
 # 🧠 SMART PARSING HELPERS (Universal)
 # ==========================================
 
-def clean_text(text):
-    """Removes newlines and extra spaces."""
-    if not text: return ""
-    text = str(text).replace('\n', ' ').strip()
-    # Remove broken start chars like : - . ,
-    text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
-    return text
+ def clean_text(text):
+      """Removes newlines, extra spaces, and fixes Mojibake characters."""
+      if not text: return ""
+      text = str(text).replace('\n', ' ')
+
+  🛡️ MOJIBAKE MAP: Fixes UTF-8 characters misread as Latin-1
+      mojibake_map = {
+          'â€“': '–',  # En Dash
+          'â€”': '—',  # Em Dash
+          'â€˜': "'",  # Left Single Quote
+          'â€™': "'",  # Right Single Quote
+          'â€œ': '"',  # Left Double Quote
+          'â€': '"',  # Right Double Quote
+          'â€¦': '...', # Ellipsis
+          '\u00e2\u0080\u0093': '–',
+          '\u00e2\u0080\u0094': '—'
+      }
+      for bad, good in mojibake_map.items():
+          text = text.replace(bad, good)
+
+  Remove extra spaces
+      text = re.sub(r'\s+', ' ', text).strip()
+  Remove broken start chars like : - . ,
+      text = re.sub(r'^[\s\-\)\]\.:,]+', '', text).strip()
+      return text
 
 def find_date_in_text(text):
     """Scans text for Date patterns (DD.MM.YYYY or DD-MM-YYYY)"""
