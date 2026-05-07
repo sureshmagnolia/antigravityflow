@@ -5262,31 +5262,52 @@ window.viewActivityLogs = function () {
 
     // 1. Setup UI
     titleEl.textContent = "🕒 Live Activity Feed";
-subtitleEl.innerHTML = `
-          <div class="flex flex-col gap-2 mt-2">
-              <div class="flex gap-2">
-                  <input type="text" id="act-search" placeholder="Search logs..." class="flex-1 p-2 border border-gray-300 rounded text-xs shadow-inner focus:outline-none focus:border-indigo-500">
-                  <div class="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-50 px-2 rounded border border-green-100">
-                      <span class="relative flex h-2 w-2">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                      </span>
-                      LIVE
-                  </div>
-              </div>
-                  <div class="flex items-center justify-between bg-gray-50 p-1.5 rounded border border-gray-200 relative">
-                  <button id="log-prev" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">← Previous</button>
-                  <div class="flex flex-col items-center">
-                      <span id="log-page-info" class="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Page 1</span>
-                      <span id="log-loading-indicator" class="hidden text-[8px] text-indigo-600 font-bold animate-pulse">Fetching Data...</span>
-                  </div>
-                <button id="log-next" class="px-3 py-1 bg-white border border-gray-300 rounded text-[10px] font-bold text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+ subtitleEl.innerHTML = `
+            <div class="flex flex-col gap-3 mt-4">
+                <!-- Row 1: Search & Status -->
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                        <input type="text" id="act-search" placeholder="Search activities..."
+                               class="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-xs bg-gray-50/50 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none
+  transition-all shadow-inner">
+                    </div>
+                    <div class="flex items-center gap-1.5 text-[10px] font-black text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg border border-green-100 shadow-sm shrink-0">
+                        <span class="relative flex h-2 w-2">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                        LIVE FEED
+                    </div>
                 </div>
-                <button onclick="if(window.downloadFullActivityLogs) window.downloadFullActivityLogs(this)" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-1.5 rounded text-[10px] font-bold shadow-sm transition flex items-center justify-center gap-1 mt-1">
-                    <span>⬇️</span> Download Full History Archive (JSON)
-                </button>
+
+                <!-- Row 2: Navigation & Actions -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="flex items-center justify-between bg-white border border-gray-200 p-1 rounded-xl shadow-sm">
+                        <button id="log-prev" class="p-1.5 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-20" title="Previous Page">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round"
+  stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                        </button>
+                        <div class="flex flex-col items-center">
+                            <span id="log-page-info" class="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Page 1</span>
+                            <span id="log-loading-indicator" class="hidden text-[8px] text-indigo-600 font-bold animate-pulse absolute -bottom-3">Loading...</span>
+                        </div>
+                        <button id="log-next" class="p-1.5 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-20" title="Next Page">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round"
+  stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                    </div>
+
+                    <button onclick="if(window.downloadFullActivityLogs) window.downloadFullActivityLogs(this)"
+                            class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-3 rounded-xl text-[10px] font-bold shadow-md shadow-indigo-100 transition-all
+  active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Export Logs
+                    </button>
+                </div>
             </div>
-        `;
+          `;
 
     window.openModal('inconvenience-modal');
     list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">Loading latest activities...</div>';
