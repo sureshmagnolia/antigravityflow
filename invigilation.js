@@ -3916,6 +3916,9 @@ window.toggleAttendanceLock = async function (key, lockState) {
 
 // 3. Updated Volunteer (Handles Picking Up Exchange)
 async function volunteer(key, email) {
+    // 🛡️ DOUBLE-CLICK PROTECTION
+    if (window._isVolunteering) return;
+
     const slot = invigilationSlots[key];
     // 1. NEW CHECK: Admin Lock
     if (slot.isAdminLocked) {
@@ -3969,19 +3972,28 @@ async function volunteer(key, email) {
         }
     }
 
-    // Standard Volunteer Logic
+// Standard Volunteer Logic
     if (!confirm("Confirm duty?")) return;
-    slot.assigned.push(email);
-    updateAssignmentMeta(slot, email, 'VOLUNTEER');
-    const me = staffData.find(s => s.email === email);
-    if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
-    // ✅ LOG the volunteering action so it appears in Activity Feed
-    logActivity("Volunteered", `${getNameFromEmail(email)} volunteered for duty on ${key}.`);
+    window._isVolunteering = true;
+    try {
+        slot.assigned.push(email);
+        updateAssignmentMeta(slot, email, 'VOLUNTEER');
+        const me = staffData.find(s => s.email === email);
+        if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
-    window.closeModal('day-detail-modal');
+        // ✅ LOG the volunteering action so it appears in Activity Feed
+        await logActivity("Volunteered", `${getNameFromEmail(email)} volunteered for duty on ${key}.`);
+
+        await syncSlotsToCloud();
+        await syncStaffToCloud();
+        window.closeModal('day-detail-modal');
+        if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
+    } catch (e) {
+        alert("Volunteering failed: " + e.message);
+    } finally {
+        window._isVolunteering = false;
+    }
 }
 
 async function acceptExchange(key, buyerEmail, sellerEmail) {
