@@ -458,13 +458,13 @@ function parseSessionTime(dateStr, timeStr) {
                       year: 'numeric'
                   };
 
-                      // Update Analogue Clock Hands
-                      const seconds = now.getSeconds();
-                      const minutes = now.getMinutes();
-                      const hours = now.getHours();
-                      document.getElementById('sec-hand').style.setProperty('--rotation', (seconds / 60) * 360);
-                      document.getElementById('min-hand').style.setProperty('--rotation', (minutes / 60)  360 + (seconds / 60)  6);
-                      document.getElementById('hour-hand').style.setProperty('--rotation', (hours / 12)  360 + (minutes / 60)  30);
+                        // Update Analogue Clock Hands
+                        const seconds = now.getSeconds();
+                        const minutes = now.getMinutes();
+                        const hours = now.getHours();
+                        document.getElementById('sec-hand').style.setProperty('--rotation', (seconds / 60) * 360);
+                        document.getElementById('min-hand').style.setProperty('--rotation', (minutes / 60) * 360 + (seconds / 60) * 6);
+                        document.getElementById('hour-hand').style.setProperty('--rotation', (hours / 12) *  360 + (minutes / 60) * 30);
 
                     // Use 'en-US' for the time string to ensure AM/PM is formatted correctly
                     clockEl.textContent = now.toLocaleTimeString('en-US', timeOptions);
