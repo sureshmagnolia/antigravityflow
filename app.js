@@ -5026,19 +5026,21 @@ function getExamName(date, time, stream) {
     }
     // MOJIBAKE SANITIZER: Fixes UTF-8 characters misread as Latin-1 from PDF extraction
     function sanitizeCourseName(name) {
-        if (!name) return name;
-        return name
-            .split('\u00e2\u0080\u0094').join('\u2014')   // em dash
-            .split('\u00e2\u0080\u0093').join('\u2013')   // en dash
-            .split('\u00e2\u0080\u0098').join('\u2018')   // left single quote
-            .split('\u00e2\u0080\u0099').join('\u2019')   // right single quote
-            .split('\u00e2\u0080\u009c').join('\u201c')   // left double quote
-            .split('\u00e2\u0080\u009d').join('\u201d')   // right double quote
-            .split('\u00e2\u0080\u00a6').join('\u2026')   // ellipsis
-            .split('\u00c3\u00a9').join('\u00e9')         // é
-            .split('\u00c3\u00a0').join('\u00e0')         // à
-            .trim();
-    }
+          if (!name) return name;
+          return name
+              .split('â€“').join('–')                       // Literal En Dash
+              .split('â€”').join('—')                       // Literal Em Dash
+              .split('\u00e2\u0080\u0094').join('\u2014')   // em dash (hex)
+              .split('\u00e2\u0080\u0093').join('\u2013')   // en dash (hex)
+              .split('\u00e2\u0080\u0098').join('\u2018')   // left single quote
+              .split('\u00e2\u0080\u0099').join('\u2019')   // right single quote
+              .split('\u00e2\u0080\u009c').join('\u201c')   // left double quote
+              .split('\u00e2\u0080\u009d').join('\u201d')   // right double quote
+              .split('\u00e2\u0080\u00a6').join('\u2026')   // ellipsis
+              .split('\u00c3\u00a9').join('\u00e9')         // é
+              .split('\u00c3\u00a0').join('\u00e0')         // à
+              .trim();
+      }
     window.sanitizeCourseName = sanitizeCourseName;
 
     function getQpKey(courseName, streamName) {
