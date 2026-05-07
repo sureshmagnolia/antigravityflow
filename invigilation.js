@@ -2570,78 +2570,82 @@ window.setAvailability = async function (key, email, isAvailable) {
 }
 
 window.confirmUnavailable = async function () {
+    // 🛡️ DOUBLE-CLICK PROTECTION: Prevent duplicate writes/costs
+    if (window._isConfirmingUnavailable) return;
+    
+    // UI Feedback: Target the "Confirm" button
+    const confirmBtn = document.querySelector('#unavailable-modal button.bg-red-600');
+    const originalBtnText = confirmBtn ? confirmBtn.innerText : "Confirm";
+
     const key = document.getElementById('unav-key').value;
     const email = document.getElementById('unav-email').value;
     const reason = document.getElementById('unav-reason').value;
     const details = document.getElementById('unav-details').value.trim();
-    // NEW: Capture Source
     const markedBy = document.getElementById('unav-marked-by').value || 'Self'; 
 
     // 1. Validation
     if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked && markedBy !== 'Admin') {
         return alert("🚫 Posting Locked! Admin has locked this slot.");
     }
-    
     if (!reason) return alert("Select a reason.");
     if (['OD', 'DL', 'Medical', 'Other'].includes(reason) && !details) return alert("Details required.");
 
-    // NEW: Create Entry Object with Metadata
-    const entry = { 
-        email: email, 
-        reason: reason, 
-        details: details || "",
-        markedBy: markedBy,
-        timestamp: new Date().toISOString()
-    };
-
-    if (key.startsWith('ADVANCE|')) {
-        // --- CASE A: ADVANCE / GENERAL UNAVAILABILITY ---
-        const [_, dateStr, session] = key.split('|');
-
-        if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
-        if (!advanceUnavailability[dateStr].FN) advanceUnavailability[dateStr].FN = [];
-        if (!advanceUnavailability[dateStr].AN) advanceUnavailability[dateStr].AN = [];
-
-        if (session === 'WHOLE') {
-            advanceUnavailability[dateStr].FN = advanceUnavailability[dateStr].FN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            advanceUnavailability[dateStr].AN = advanceUnavailability[dateStr].AN.filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            
-            advanceUnavailability[dateStr].FN.push(entry);
-            advanceUnavailability[dateStr].AN.push(entry);
-            
-            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);
-        } else {
-            if (!advanceUnavailability[dateStr][session]) advanceUnavailability[dateStr][session] = [];
-            
-            advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => (typeof u === 'string' ? u : u.email) !== email);
-            advanceUnavailability[dateStr][session].push(entry);
-
-            logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);
-        }
-
-        await saveAdvanceUnavailability();
-        
-    } else {
-        // --- CASE B: SLOT SPECIFIC ---
-        if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
-        
-        invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => 
-            (typeof u === 'string' ? u !== email : u.email !== email)
-        );
-
-        invigilationSlots[key].unavailable.push(entry);
-        logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
-
-        await syncSlotsToCloud();
+    // LOCK THE BUTTON IMMEDIATELY
+    window._isConfirmingUnavailable = true;
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerText = "Saving...";
+        confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
     }
 
-    // Cleanup & Refresh
-    window.closeModal('unavailable-modal');
-    window.closeModal('day-detail-modal'); 
+    try {
+        const entry = { 
+            email: email, reason: reason, details: details || "",
+            markedBy: markedBy, timestamp: new Date().toISOString()
+        };
+
+        if (key.startsWith('ADVANCE|')) {
+            const [_, dateStr, session] = key.split('|');
+            if (!advanceUnavailability[dateStr]) advanceUnavailability[dateStr] = { FN: [], AN: [] };
+
+            if (session === 'WHOLE') {
+                advanceUnavailability[dateStr].FN = (advanceUnavailability[dateStr].FN || []).filter(u => (typeof u === 'string' ? u : u.email) !== email);
+                advanceUnavailability[dateStr].AN = (advanceUnavailability[dateStr].AN || []).filter(u => (typeof u === 'string' ? u : u.email) !== email);
+                advanceUnavailability[dateStr].FN.push(entry);
+                advanceUnavailability[dateStr].AN.push(entry);
+                await logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for WHOLE DAY on ${dateStr}.`);   
+            } else {
+                advanceUnavailability[dateStr][session] = (advanceUnavailability[dateStr][session] || []).filter(u => (typeof u === 'string' ? u : u.email) !== email);
+                advanceUnavailability[dateStr][session].push(entry);
+                await logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);   
+            }
+            await saveAdvanceUnavailability();
+        } else {
+            if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
+            invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
+            invigilationSlots[key].unavailable.push(entry);
+            await logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
+            await syncSlotsToCloud();
+        }
+
+        // Cleanup & Success
+        window.closeModal('unavailable-modal');
+        window.closeModal('day-detail-modal');
+    } catch (e) {
+        alert("Execution Error: " + e.message);
+    } finally {
+        // UNLOCK FOR NEXT TIME
+        window._isConfirmingUnavailable = false;
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = originalBtnText;
+            confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
 
     // Refresh Manual Modal if open
     const manualKey = document.getElementById('manual-session-key').value;
-    if (document.getElementById('manual-allocation-modal').classList.contains('hidden') === false && manualKey === key) {
+    if (!document.getElementById('manual-allocation-modal').classList.contains('hidden') && manualKey === key) {
         window.openManualAllocationModal(key);
     } else {
         renderStaffCalendar(email);
