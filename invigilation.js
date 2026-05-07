@@ -245,11 +245,11 @@ function pauseInvigilationSession() {
                 Your Invigilation session was paused after 10 minutes of inactivity.
                 Your login remains active.
             </p>
-            <button onclick="window.location.reload()"
+        <button onclick="window.location.reload()"
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-95 shadow-lg"> 
                 Resume Session
             </button>
-            <button onclick="signOut(auth).then(() => window.location.reload())"
+            <button onclick="window.firebase.signOut(window.firebase.auth).then(() => window.location.reload())"
                     class="mt-4 text-gray-500 hover:text-red-400 text-xs font-medium transition-colors">
                 Logout Completely
             </button>
