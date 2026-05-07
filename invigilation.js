@@ -6778,18 +6778,20 @@ window.downloadMasterBackup = function () {
             college: collegeName
         },
         data: {
-            staffData,
-            invigilationSlots,
-            advanceUnavailability,
-            rolesConfig,
-            designationsConfig,
-            departmentsConfig,
-            globalDutyTarget,
-            guestGlobalTarget,
-            vacationDutyTarget,
-            vacationDutyDates,
-            googleScriptUrl
-        }
+              staffData,
+              invigilationSlots,
+              advanceUnavailability,
+              invigilatorMapping: JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}'),
+              rolesConfig,
+              designationsConfig,
+              departmentsConfig,
+              globalDutyTarget,
+              guestGlobalTarget,
+              vacationDutyTarget,
+              vacationDutyDates,
+              vacationConfig: JSON.parse(localStorage.getItem('invigVacationConfig') || '{}'),
+              googleScriptUrl
+          }
     };
 
 
