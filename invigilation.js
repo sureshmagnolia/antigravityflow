@@ -206,14 +206,56 @@ const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
 
 function resetInactivityTimer() {
     clearTimeout(inactivityTimer);
-    if (typeof currentUser !== 'undefined' && currentUser && sessionStorage.getItem('invig_idle_lock') !== 'true') {
+    // Only set timer if user is logged in and not already paused
+    if (typeof currentUser !== 'undefined' && currentUser && !document.getElementById('session-paused-overlay')) {
         inactivityTimer = setTimeout(() => {
-            console.warn("Auto-pausing Invigilation due to 10 mins inactivity. ExamFlow stays active.");
-            sessionStorage.setItem('invig_idle_lock', 'true');
-            alert("⏳ Your Invigilation session has been paused to save cloud costs due to 10 minutes of inactivity.\n\nYour ExamFlow session remains active.");
-            window.location.reload();
+            console.warn("Auto-pausing session due to 10 minutes of inactivity to save Firebase costs.");
+            pauseInvigilationSession();
         }, INACTIVITY_LIMIT);
     }
+}
+
+function stopAllInvigilationListeners() {
+    console.log("🛑 Stopping all active Firestore listeners...");
+    if (cloudUnsubscribe) cloudUnsubscribe();
+    if (slotsUnsubscribe) slotsUnsubscribe();
+    if (staffUnsubscribe) staffUnsubscribe();
+    if (sessionsUnsubscribe) sessionsUnsubscribe();
+    if (typeof presenceUnsubscribe === 'function') presenceUnsubscribe();
+
+    cloudUnsubscribe = null;
+    slotsUnsubscribe = null;
+    staffUnsubscribe = null;
+    sessionsUnsubscribe = null;
+    presenceUnsubscribe = null;
+}
+
+function pauseInvigilationSession() {
+    stopAllInvigilationListeners();
+
+    // Create Pause Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'session-paused-overlay';
+    overlay.className = "fixed inset-0 bg-black bg-opacity-80 backdrop-blur-md z-[1000] flex flex-col items-center justify-center text-white p-6 text-center animate-fadeIn";
+    overlay.innerHTML = `
+        <div class="max-w-md bg-gray-900 border border-gray-800 p-8 rounded-2xl shadow-2xl">
+            <div class="text-5xl mb-4">⏳</div>
+            <h2 class="text-2xl font-bold mb-2">Session Paused</h2>
+            <p class="text-gray-400 text-sm mb-6 leading-relaxed">
+                Your Invigilation session was paused after 10 minutes of inactivity to save data costs.
+                Your login remains active.
+            </p>
+            <button onclick="window.location.reload()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all active:scale-95 shadow-lg"> 
+                Resume Session
+            </button>
+            <button onclick="signOut(auth).then(() => window.location.reload())"
+                    class="mt-4 text-gray-500 hover:text-red-400 text-xs font-medium transition-colors">
+                Logout Completely
+            </button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 // Track user interaction to reset the timer (using passive listeners for performance)
@@ -4060,35 +4102,40 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
         // 4. LOGGING
         await logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
 
-        // --- NOTIFICATION EMAIL TO SELLER ---
-    if (seller && seller.email && googleScriptUrl) {
-        const subject = `Duty Exchange Accepted: ${key}`;
-        const body = `
-            <p>Dear ${seller.name},</p>
-            <p>Good news! Your request to exchange the invigilation duty for <b>${key}</b> has been accepted by <b>${buyer.name}</b>.</p>
-            <p>You have been removed from this duty assignment.</p>
-            <hr>
-            <p style="font-size:12px; color:#666;">Exam Cell Notification</p>
-        `;
+   // --- NOTIFICATION EMAIL TO SELLER ---
+            if (seller && seller.email && googleScriptUrl) {
+                const subject = `Duty Exchange Accepted: ${key}`;
+                const body = `
+                    <p>Dear ${seller.name},</p>
+                    <p>Good news! Your request to exchange the invigilation duty for <b>${key}</b> has been accepted by <b>${buyer.name}</b>.</p>        
+                    <p>You have been removed from this duty assignment.</p>
+                    <hr>
+                    <p style="font-size:12px; color:#666;">Exam Cell Notification</p>
+                `;
 
-        fetch(googleScriptUrl, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to: seller.email, subject: subject, body: body })
-        }).catch(e => console.error("Email failed", e));
-    }
+                fetch(googleScriptUrl, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ to: seller.email, subject: subject, body: body })
+                }).catch(e => console.error("Email failed", e));
+            }
 
-    // 5. Sync
-    await syncSlotsToCloud();
-    await syncStaffToCloud();
+            // 5. Sync
+            await syncSlotsToCloud();
+            await syncStaffToCloud();
 
-    alert(`Success! You have accepted the duty from ${sellerName}.`);
-    
-    window.closeModal('day-detail-modal');
-    renderStaffCalendar(buyerEmail);
-    renderExchangeMarket(buyerEmail);
-    initStaffDashboard(buyer);
+            alert(`Success! You have accepted the duty from ${sellerName}.`);
+
+            window.closeModal('day-detail-modal');
+            renderStaffCalendar(buyerEmail);
+            renderExchangeMarket(buyerEmail);
+            initStaffDashboard(buyer);
+        } catch (e) {
+            alert("Exchange failed: " + e.message);
+        } finally {
+            window._isAcceptingExchange = false;
+        }
 }
 
 window.postForExchange = async function (key, email) {
