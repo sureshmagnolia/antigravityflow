@@ -9,7 +9,13 @@
     <style>
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
-    </style>
+          .clock { width: 80px; height: 80px; border: 3px solid #f3f4f6; border-radius: 50%; position: relative; background: white; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+          .hand { --rotation: 0; position: absolute; bottom: 50%; left: 50%; transform-origin: bottom; transform: translateX(-50%) rotate(calc(var(--rotation) * 1deg)); border-radius: 10px; }
+          .hour-hand { width: 3px; height: 25%; background: #1f2937; }
+          .min-hand { width: 2px; height: 35%; background: #4b5563; }
+          .sec-hand { width: 1px; height: 40%; background: #ef4444; }
+          .center-dot { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: #1f2937; border-radius: 50%; transform: translate(-50%, -50%); }
+      </style>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -451,8 +457,16 @@ function parseSessionTime(dateStr, timeStr) {
                       year: 'numeric'
                   };
 
-                  // Use 'en-US' for the time string to ensure AM/PM is formatted correctly
-                  clockEl.textContent = now.toLocaleTimeString('en-US', timeOptions);
+                    // Update Analogue Clock Hands
+                    const seconds = now.getSeconds();
+                    const minutes = now.getMinutes();
+                    const hours = now.getHours();
+                    document.getElementById('sec-hand').style.setProperty('--rotation', (seconds / 60) * 360);
+                    document.getElementById('min-hand').style.setProperty('--rotation', (minutes / 60)  360 + (seconds / 60)  6);
+                    document.getElementById('hour-hand').style.setProperty('--rotation', (hours / 12)  360 + (minutes / 60)  30);
+
+                    // Use 'en-US' for the time string to ensure AM/PM is formatted correctly
+                    clockEl.textContent = now.toLocaleTimeString('en-US', timeOptions);
                   dateEl.textContent = now.toLocaleDateString('en-GB', dateOptions).replace(/,/g, '');
               }, 1000);
           }
@@ -509,8 +523,18 @@ function parseSessionTime(dateStr, timeStr) {
 
       <p class="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">Student Seating Portal</p>   
 
-      <!-- 🕒 Network Clock Display -->
-      <div id="network-clock-panel" class="mt-4 flex justify-center">
+         <!-- 🕒 Analogue Clock -->
+        <div id="analogue-clock-container" class="flex justify-center mb-2">
+            <div class="clock">
+                <div id="hour-hand" class="hand hour-hand"></div>
+                <div id="min-hand" class="hand min-hand"></div>
+                <div id="sec-hand" class="hand sec-hand"></div>
+                <div class="center-dot"></div>
+            </div>
+        </div>
+
+        <!-- 🕒 Network Clock Display -->
+        <div id="network-clock-panel" class="mt-4 flex justify-center">
           <div class="inline-flex flex-col items-center bg-white px-6 py-2 rounded-xl shadow-sm border
   border-gray-100">
               <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Time</span>
