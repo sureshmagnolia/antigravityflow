@@ -2201,8 +2201,13 @@ function openAddSlotModal() {
 }
 
 async function saveManualSlot() {
+    // 🛡️ DOUBLE-CLICK PROTECTION
+    if (window._isSavingManualSlot) return;
+
+    const btn = document.querySelector('#add-slot-modal button[onclick="saveManualSlot()"]');
+    const originalText = btn ? btn.innerText : "Save Slot";
+
     const dateInput = document.getElementById('manual-slot-date').value;
-    // CHANGED: Get value from Time Input instead of Select
     const timeInput = document.getElementById('manual-slot-time').value;
     const reqInput = parseInt(document.getElementById('manual-slot-req').value);
 
@@ -2210,6 +2215,11 @@ async function saveManualSlot() {
         alert("Please enter a valid date, time, and required count.");
         return;
     }
+
+    window._isSavingManualSlot = true;
+    if (btn) { btn.disabled = true; btn.innerText = "Saving..."; }
+
+    try {
 
     // 1. Format Date: YYYY-MM-DD -> DD.MM.YYYY
     const [y, m, d] = dateInput.split('-');
@@ -2243,10 +2253,16 @@ async function saveManualSlot() {
         unavailable: existing.unavailable || [],
         isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
-    logActivity("Session Created", `Admin created/updated session: ${key} (Req: ${reqInput}).`);
-    await syncSlotsToCloud();
-    window.closeModal('add-slot-modal');
-    renderSlotsGridAdmin();
+    await logActivity("Session Created", `Admin created/updated session: ${key} (Req: ${reqInput}).`);
+        await syncSlotsToCloud();
+        window.closeModal('add-slot-modal');
+        renderSlotsGridAdmin();
+    } catch (e) {
+        alert("Save failed: " + e.message);
+    } finally {
+        window._isSavingManualSlot = false;
+        if (btn) { btn.disabled = false; btn.innerText = originalText; }
+    }
 }
 
 // Expose to window for HTML onclick handlers
@@ -3228,16 +3244,25 @@ window.removeRoleFromStaff = async function (sIdx, rIdx) {
 // NEW: Instantly edits underlying roles right from the active list UI  
 window.updateRolePeriod = async function (sIdx, rIdx, field, value) {
     if (!staffData[sIdx] || !staffData[sIdx].roleHistory || !staffData[sIdx].roleHistory[rIdx]) return;
-    
-    // Update the exact start/end value in memory safely
+
+    // 1. Update memory immediately for UI responsiveness
     staffData[sIdx].roleHistory[rIdx][field] = value;
-    
-    const roleName = staffData[sIdx].roleHistory[rIdx].role;
-    logActivity("Role Period Edited", `Updated ${field} date for historical role '${roleName}' on ${staffData[sIdx].name} to [${value || 'No End Date'}].`);
-    
-    // Auto-sync gracefully behind the scenes (No need to close modal)
-    await syncStaffToCloud();
     renderStaffTable();
+
+    // 2. DEBOUNCE THE CLOUD WRITE (Cost Protection)
+    // Prevents 10 writes if user clicks through the calendar quickly
+    clearTimeout(window._roleUpdateTimer);
+    window._roleUpdateTimer = setTimeout(async () => {
+        try {
+            const roleName = staffData[sIdx].roleHistory[rIdx].role;
+            const staffName = staffData[sIdx].name;
+            await logActivity("Role Period Edited", `Updated ${field} date for historical role '${roleName}' on ${staffName} to [${value || 'No End Date'}].`);
+            await syncStaffToCloud();
+            console.log(`✅ Cloud Sync: Role updated for ${staffName}`);
+        } catch (e) {
+            console.error("Role Sync Failed:", e);
+        }
+    }, 1500); // Wait 1.5s after last click before saving
 };
 
 
@@ -5299,14 +5324,24 @@ subtitleEl.innerHTML = `
 window.downloadFullActivityLogs = async function(btnElement) {
     if (!currentCollegeId) return alert("❌ Error: College ID not found.");
 
+    // 🛡️ COST PROTECTION: Default to last 30 days
+    if (!confirm("Download Activity Logs for the LAST 30 DAYS?\n\n(This avoids excessive data costs).")) return;
+
     const originalText = btnElement.innerHTML;
-    btnElement.innerHTML = "⏳ Compiling Archive (Please Wait)...";
+    btnElement.innerHTML = "⏳ Compiling Archive...";
     btnElement.disabled = true;
     btnElement.classList.add('opacity-50');
 
     try {
         const logsColRef = collection(db, "colleges", currentCollegeId, "logs");
-        const q = query(logsColRef, orderBy("t", "desc"));
+
+        // Calculate 30-day cutoff
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        const cutoffStr = cutoff.toISOString();
+
+        // 🛡️ Filtered Query
+        const q = query(logsColRef, where("t", ">=", cutoffStr), orderBy("t", "desc"));
         const snapshot = await getDocs(q);
 
         const allLogs = [];
