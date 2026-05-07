@@ -818,29 +818,39 @@ window.executeRestore = async function(fileId) {
         }
     } catch (e) { return alert("Fetch Error: " + e.message); }
 
-    // 2. SHOW CUSTOM UI MODAL (Instead of confirm)
+    // 2. SHOW CUSTOM UI MODAL with Text Confirmation
     const promptModal = document.createElement('div');
     promptModal.id = "drive-restore-prompt";
-    promptModal.className = "fixed inset-0 bg-black bg-opacity-70 backdrop-blur-md flex items-center justify-center z-[200]";
+    promptModal.className = "fixed inset-0 bg-black bg-opacity-80 backdrop-blur-md flex items-center justify-center z-[200]";
     promptModal.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl p-6 w-[30rem] border border-gray-100 animate-fadeIn">
-            <h3 class="text-xl font-black text-gray-900 mb-2 italic underline decoration-blue-500 underline-offset-4">RESTORE DATA</h3>
-            <p class="text-sm text-gray-600 mb-6 font-medium leading-relaxed">
-                Choose how you want to bring the data from <span class="text-blue-600 font-bold">Google Drive</span> into this browser.
+        <div class="bg-white rounded-2xl shadow-2xl p-7 w-[28rem] border border-gray-100 animate-fadeIn text-center">
+            <div class="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+            <h3 class="text-xl font-black text-gray-900 mb-2 uppercase tracking-tight">Confirm Data Restore</h3>
+            <p class="text-xs text-gray-500 mb-6 leading-relaxed px-4">
+                You are about to bring cloud data into this browser. This <span class="text-red-600 font-bold">overwrites local changes</span> and cannot be undone.
             </p>
 
+            <div class="mb-6">
+                <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest text-left ml-1">Type <span class="text-gray-900">OVERWRITE</span> to enable</label>
+                <input type="text" id="restore-confirm-text" 
+                       placeholder="Type here..." 
+                       class="w-full p-3 border-2 border-gray-100 rounded-xl text-center font-bold text-sm focus:border-blue-500 outline-none transition-all uppercase">
+            </div>
+
             <div class="space-y-3">
-                <button id="restore-merge" class="w-full text-left p-4 rounded-xl border-2 border-emerald-50 hover:border-emerald-500 hover:bg-emerald-50 transition-all group">
+                <button id="restore-merge" disabled class="w-full p-4 rounded-xl border-2 border-emerald-50 text-left opacity-30 cursor-not-allowed transition-all group">
                     <div class="font-bold text-emerald-800">🧩 Smart Merge</div>
-                    <div class="text-[10px] text-emerald-600 opacity-80 group-hover:opacity-100">Keep current local edits and add only missing data from Drive. (Safest)</div>
+                    <div class="text-[10px] text-emerald-600 opacity-80">Add only missing data (Safest).</div>
                 </button>
 
-                <button id="restore-replace" class="w-full text-left p-4 rounded-xl border-2 border-red-50 hover:border-red-500 hover:bg-red-50 transition-all group">
+                <button id="restore-replace" disabled class="w-full p-4 rounded-xl border-2 border-red-50 text-left opacity-30 cursor-not-allowed transition-all group">
                     <div class="font-bold text-red-800">🔥 Full Overwrite</div>
-                    <div class="text-[10px] text-red-600 opacity-80 group-hover:opacity-100">Wipe ALL local data and replace it entirely with the Drive version.</div>
+                    <div class="text-[10px] text-red-600 opacity-80">Wipe and replace everything.</div>
                 </button>
 
-                <button id="restore-cancel" class="w-full text-center py-3 text-sm font-bold text-gray-400 hover:text-gray-700 transition-colors uppercase tracking-widest">
+                <button id="restore-cancel" class="w-full py-2 text-[10px] font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-[0.2em] mt-2">
                     Cancel (Do Nothing)
                 </button>
             </div>
@@ -848,11 +858,29 @@ window.executeRestore = async function(fileId) {
     `;
     document.body.appendChild(promptModal);
 
-    // Handle Clicks
+    // Interaction Logic: Enable buttons only when "OVERWRITE" is typed
+    const input = document.getElementById('restore-confirm-text');
+    const mergeBtn = document.getElementById('restore-merge');
+    const replaceBtn = document.getElementById('restore-replace');
+
+    input.addEventListener('input', (e) => {
+        const isValid = e.target.value.trim().toUpperCase() === "OVERWRITE";
+        [mergeBtn, replaceBtn].forEach(btn => {
+            btn.disabled = !isValid;
+            btn.style.opacity = isValid ? "1" : "0.3";
+            btn.style.cursor = isValid ? "pointer" : "not-allowed";
+            if(isValid) {
+               btn.classList.add('hover:shadow-md', 'active:scale-[0.98]');
+            } else {
+               btn.classList.remove('hover:shadow-md', 'active:scale-[0.98]');
+            }
+        });
+    });
+
     return new Promise((resolve) => {
         document.getElementById('restore-cancel').onclick = () => { promptModal.remove(); resolve(); };
-        document.getElementById('restore-merge').onclick = async () => { promptModal.remove(); await processRestore(cloudData, true); resolve(); };
-        document.getElementById('restore-replace').onclick = async () => { promptModal.remove(); await processRestore(cloudData, false); resolve(); };
+        mergeBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, true); resolve(); };
+        replaceBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, false); resolve(); };
     });
 };
 
