@@ -2180,21 +2180,39 @@ function switchToStaffView() {
 }
 
 async function syncSlotsToCloud() {
-    updateSyncStatus("Saving...", "neutral");
-    try {
-        // Write to 'system_data/slots'
-        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
-        await setDoc(ref, { 
-            examInvigilationSlots: JSON.stringify(invigilationSlots) 
-        }, { merge: true });
-        updateSyncStatus("Synced", "success");
-        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
-    } catch (e) {
-        console.error(e);
-        updateSyncStatus("Save Failed", "error");
-        alert("⚠️ Failed to save slots.");
-    }
-}
+      updateSyncStatus("Saving...", "neutral");
+      try {
+          const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+
+          // 🛡️ SMART MERGE: Fetch cloud data first to ensure we don't wipe existing volunteers
+          const cloudSnap = await getDoc(ref);
+          const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
+          const localSlots = invigilationSlots;
+
+          // If cloud has MORE data for a specific slot than local, keep the cloud version
+          Object.keys(cloudSlots).forEach(k => {
+              if (localSlots[k]) {
+                  const cloudAssigned = cloudSlots[k].assigned || [];
+                  const localAssigned = localSlots[k].assigned || [];
+                  if (cloudAssigned.length > localAssigned.length) {
+                      localSlots[k].assigned = cloudAssigned;
+                  }
+              } else {
+                  localSlots[k] = cloudSlots[k]; // Preserve slots only found in cloud
+              }
+          });
+
+          await setDoc(ref, {
+              examInvigilationSlots: JSON.stringify(localSlots)
+          }, { merge: true });
+
+          updateSyncStatus("Synced", "success");
+          if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+      } catch (e) {
+          console.error("Slot Sync Failed:", e);
+          updateSyncStatus("Save Failed", "error");
+      }
+  }
 
 async function syncStaffToCloud() {
     updateSyncStatus("Saving...", "neutral");
