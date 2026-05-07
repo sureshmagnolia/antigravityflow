@@ -12,7 +12,7 @@ from datetime import datetime
 # 🧠 SMART PARSING HELPERS (Universal)
 # ==========================================
 
- def clean_text(text):
+def clean_text(text):
       """Removes newlines, extra spaces, and fixes Mojibake characters."""
       if not text: return ""
       text = str(text).replace('\n', ' ')
