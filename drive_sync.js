@@ -661,7 +661,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
     }
 
     const log = document.getElementById('drive-sync-log-ribbon');
-    const originalLog = log ? log.textContent : "Drive Linked";
+    const originalLog = log ? log.textContent : "Linked, Click to check";
     
     if (isManual && log) log.textContent = "Checking...";
 
