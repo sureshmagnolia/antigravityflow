@@ -3997,6 +3997,9 @@ async function volunteer(key, email) {
 }
 
 async function acceptExchange(key, buyerEmail, sellerEmail) {
+    // 🛡️ DOUBLE-CLICK PROTECTION
+    if (window._isAcceptingExchange) return;
+
     const slot = invigilationSlots[key];
     const sellerName = getNameFromEmail(sellerEmail);
 
@@ -4004,7 +4007,6 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
     if (slot.isAdminLocked) {
         return alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
     }
-    // -----------------------------
 
     if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
 
@@ -4015,23 +4017,25 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
         return;
     }
 
-    // 2. Perform Swap
-    slot.assigned = slot.assigned.filter(e => e !== sellerEmail);
-    slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
-    slot.assigned.push(buyerEmail);
-    updateAssignmentMeta(slot, buyerEmail, 'EXCHANGE'); // <--- ADD THIS LINE
+    window._isAcceptingExchange = true;
+    try {
+        // 2. Perform Swap
+        slot.assigned = slot.assigned.filter(e => e !== sellerEmail);
+        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
+        slot.assigned.push(buyerEmail);
+        updateAssignmentMeta(slot, buyerEmail, 'EXCHANGE');
 
-    // 3. Update Stats
-    const seller = staffData.find(s => s.email === sellerEmail);
-    const buyer = staffData.find(s => s.email === buyerEmail);
+        // 3. Update Stats
+        const seller = staffData.find(s => s.email === sellerEmail);
+        const buyer = staffData.find(s => s.email === buyerEmail);
 
-    if (seller && seller.dutiesAssigned > 0) seller.dutiesAssigned--;
-    if (buyer) buyer.dutiesAssigned = (buyer.dutiesAssigned || 0) + 1;
+        if (seller && seller.dutiesAssigned > 0) seller.dutiesAssigned--;
+        if (buyer) buyer.dutiesAssigned = (buyer.dutiesAssigned || 0) + 1;
 
-    // 4. LOGGING
-    logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
+        // 4. LOGGING
+        await logActivity("Exchange Accepted", `${getNameFromEmail(buyerEmail)} took duty ${key} from ${getNameFromEmail(sellerEmail)}.`);
 
-    // --- NOTIFICATION EMAIL TO SELLER ---
+        // --- NOTIFICATION EMAIL TO SELLER ---
     if (seller && seller.email && googleScriptUrl) {
         const subject = `Duty Exchange Accepted: ${key}`;
         const body = `
@@ -4063,14 +4067,15 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
 }
 
 window.postForExchange = async function (key, email) {
+    // 🛡️ DOUBLE-CLICK PROTECTION
+    if (window._isPostingExchange) return;
+
     const slot = invigilationSlots[key];
-    
-    // 1. ADMIN LOCK CHECK
+
     if (slot.isAdminLocked) {
         return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. New exchange requests are disabled.");
     }
 
-    // 2. STANDARD LOCK CHECK (Must be locked to exchange)
     if (!slot.isLocked) {
         alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
         return;
@@ -4078,51 +4083,59 @@ window.postForExchange = async function (key, email) {
 
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
 
-    if (!slot.exchangeRequests) slot.exchangeRequests = [];
+    window._isPostingExchange = true;
+    try {
+        if (!slot.exchangeRequests) slot.exchangeRequests = [];
 
-    if (!slot.exchangeRequests.includes(email)) {
-        slot.exchangeRequests.push(email);
-        logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
-        
-        try {
-            renderStaffCalendar(email);
-            if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-            if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(email);
-            window.closeModal('day-detail-modal');
-        } catch (e) { }
+        if (!slot.exchangeRequests.includes(email)) {
+            slot.exchangeRequests.push(email);
+            await logActivity("Exchange Posted", `${getNameFromEmail(email)} posted ${key} for exchange.`);
 
-        await syncSlotsToCloud();
+            try {
+                renderStaffCalendar(email);
+                if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+                if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(email);
+                window.closeModal('day-detail-modal');
+            } catch (e) { }
+
+            await syncSlotsToCloud();
+        }
+    } catch (e) {
+        alert("Error posting exchange: " + e.message);
+    } finally {
+        window._isPostingExchange = false;
     }
 }
 window.withdrawExchange = async function (key, email) {
+    // 🛡️ DOUBLE-CLICK PROTECTION
+    if (window._isWithdrawingExchange) return;
+
     const slot = invigilationSlots[key];
 
-    // --- NEW: ADMIN LOCK CHECK ---
-    // Freezes the market state. Users cannot enter OR leave the market.
     if (slot.isAdminLocked) {
         return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. Withdrawal is disabled to prevent roster changes.");
     }
-    // -----------------------------
 
-    // 1. CONFIRMATION CHECK
     if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
 
-    if (slot.exchangeRequests) {
-        // 2. Update Local Data
-        slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
+    window._isWithdrawingExchange = true;
+    try {
+        if (slot.exchangeRequests) {
+            slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== email);
+            await logActivity("Exchange Withdrawn", `${getNameFromEmail(email)} withdrew request for ${key}.`);
 
-        // 3. LOGGING
-        logActivity("Exchange Withdrawn", `${getNameFromEmail(email)} withdrew request for ${key}.`);
+            try {
+                renderStaffCalendar(email);
+                if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
+                window.closeModal('day-detail-modal');
+            } catch (e) { console.error("UI Update Error:", e); }
 
-        // 4. IMMEDIATE UI UPDATES
-        try {
-            renderStaffCalendar(email);
-            if (typeof renderExchangeMarket === "function") renderExchangeMarket(email);
-            window.closeModal('day-detail-modal');
-        } catch (e) { console.error("UI Update Error:", e); }
-
-        // 5. Save to Cloud
-        await syncSlotsToCloud();
+            await syncSlotsToCloud();
+        }
+    } catch (e) {
+        alert("Error withdrawing exchange: " + e.message);
+    } finally {
+        window._isWithdrawingExchange = false;
     }
 }
 
