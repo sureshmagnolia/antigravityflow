@@ -83,9 +83,13 @@ function loadRates() {
         }
     });
 
-    // Save the fixed structure back to storage
-    localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
-}
+     // 🛡️ SMART SAVE: Only write to storage if data was missing or structure changed.
+      // This prevents triggering "Unsaved Changes" Drive notification just by opening the tab.
+      const currentSerialized = JSON.stringify(allRates);
+      if (currentSerialized !== savedRatesJson) {
+          localStorage.setItem(REMUNERATION_CONFIG_KEY, currentSerialized);
+      }
+  }
 
 // --- 3. UI: RATE SETTINGS FORM ---
 function renderRateConfigForm() {
