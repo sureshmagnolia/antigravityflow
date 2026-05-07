@@ -10,16 +10,18 @@ let gisInited = false;
 let isReadyToPush = false; // 🛡️ Safety Lock: Prevent pushing until cloud is checked
 
 const DATA_KEYS = [
-    'examRoomConfig', 'examStreamsConfig', 'examCollegeName', 
-    'examAbsenteeList', 'examQPCodes', 'examBaseData', 
-    'examRoomAllotment', 'examScribeList', 'examScribeAllotment', 
-    'examRulesConfig', 'examInvigilationSlots', 'examStaffData', 
-    'examInvigilatorMapping', 'invigAdvanceUnavailability',
-    'examSessionNames', 'examRemunerationConfig',
-    'invigDepartments', 'invigRoles', 'invigGlobalTarget', 
-    'invigGuestTarget', 'invigVacationTarget', 'invigGoogleScriptUrl',
-    'examHistoricalMeta', 'lastUpdated'
-];
+      'examRoomConfig', 'examStreamsConfig', 'examCollegeName',
+      'examAbsenteeList', 'examQPCodes', 'examBaseData',
+      'examRoomAllotment', 'examAllotmentData', 'examScribeList',
+      'examScribeAllotment', 'examScribeAllotmentV2',
+      'examRulesConfig', 'examInvigilationSlots', 'examStaffData',
+      'examInvigilatorMapping', 'invigAdvanceUnavailability',
+      'examSessionNames', 'examRemunerationConfig',
+      'invigDepartments', 'invigRoles', 'invigGlobalTarget',
+      'invigGuestTarget', 'invigVacationTarget', 'invigVacationConfig',
+      'invigDesignations', 'invigGoogleScriptUrl',
+      'examHistoricalMeta', 'lastUpdated'
+  ];
 window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
 
