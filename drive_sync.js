@@ -857,6 +857,10 @@ window.executeRestore = async function(fileId) {
 };
 
 async function processRestore(cloudData, isMerge) {
+    if (!cloudData || typeof cloudData !== 'object') {
+        return alert("Execution Error: Invalid or empty backup data received.");
+    }
+
     try {
         // --- 1. CLEANUP ---
         if (!isMerge) {
@@ -869,15 +873,22 @@ async function processRestore(cloudData, isMerge) {
 
             // Restore Whitelisted Keys
             Object.keys(saved).forEach(k => localStorage.setItem(k, saved[k]));
-            await saveExamDataIDB([]);
+
+            // 🛡️ FIX: Only wipe IndexedDB if the backup actually contains student data.
+            // (Prevents INVIG backups from wiping ExamFlow data)
+            if (cloudData.hasOwnProperty('examBaseData')) {
+                await saveExamDataIDB([]);
+            }
         }
 
         // --- 2. DATA IMPORT ---
         for (const key of Object.keys(cloudData)) {
             if (DATA_KEYS.includes(key)) {
                 const val = cloudData[key];
+                if (val === null || val === undefined) continue; 
 
                 if (key === 'examBaseData') {
+                    if (!Array.isArray(val)) continue; // Safety check
                     if (isMerge) {
                         const existingData = await loadExamDataIDB() || [];
                         const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
