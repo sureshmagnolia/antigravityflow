@@ -254,19 +254,18 @@ async function disconnectDrive() {
 function handleAuthClick() {
     tokenClient.callback = async (resp) => {
         if (resp.error) {
-            // If they closed the popup or canceled, don't throw an error, just stop
-            if (resp.error === 'access_denied') return;
+            if (resp.error === 'access_denied') {
+               alert("❌ Access Denied: You must tick the 'Google Drive' checkbox in the Google login screen to use this feature.");
+               return;
+            }
             throw resp;
         }
         handleTokenResponse(resp);
     };
     
-    // 🛡️ Always force account selection on manual click to allow switching accounts
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
-    } else {
-        tokenClient.requestAccessToken({ prompt: '' });
-    }
+    // 🛡️ FORCE CONSENT: This is critical. By adding 'consent', we force Google to show the 
+    // permission checkbox. This is the only fix for your "403 Forbidden" error.
+    tokenClient.requestAccessToken({ prompt: 'select_account consent' });
 }
 
 // --- FOLDER & UPLOAD LOGIC ---
