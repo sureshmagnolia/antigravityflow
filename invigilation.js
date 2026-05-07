@@ -242,7 +242,7 @@ function pauseInvigilationSession() {
             <div class="text-5xl mb-4">⏳</div>
             <h2 class="text-2xl font-bold mb-2">Session Paused</h2>
             <p class="text-gray-400 text-sm mb-6 leading-relaxed">
-                Your Invigilation session was paused after 10 minutes of inactivity to save data costs.
+                Your Invigilation session was paused after 10 minutes of inactivity.
                 Your login remains active.
             </p>
             <button onclick="window.location.reload()"
