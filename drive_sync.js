@@ -303,7 +303,7 @@ async function getBackupFolder() {
 
             // Determine if it was specifically a 403 (permissions) or a 401 (expired)
             const isForbidden = e.status === 403 || e.code === 403 || (e.result && e.result.error && e.result.error.code === 403);
-            const errMsg = isForbidden ? "Drive permissions missing. Please reconnect and check ALL permission boxes." : "Drive session expired. Please reconnect.";
+            const errMsg = isForbidden ? "Drive permissions missing. Please click 'Reconnect Drive' and ensure you TICK THE CHECKBOX for Drive access in the Google popup." : "Drive session expired. Please reconnect.";
 
             // Log it, and only alert if they clicked a manual button
             console.warn(errMsg);
