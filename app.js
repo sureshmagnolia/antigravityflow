@@ -2254,39 +2254,45 @@ async function deleteSessionFromCloud(sessionKey) {
                 }
             }
 
-            // 5. SLOTS — 🛡️ SAFE MERGE: Never wipe cloud volunteers with empty local data
-            else if (targetSection === 'slots') {
-                const localRaw = localStorage.getItem('examInvigilationSlots');
-                if (localRaw) {
-                    const { getDoc: _getDoc } = window.firebase;
-                    const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "slots"));
-                    const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
-                    const localSlots = JSON.parse(localRaw);
+// 5. SLOTS — 🛡️ SMART MERGE (Audit Fixed): Prevents Divya/Sindhu overwrites
+              else if (targetSection === 'slots') {
+                  const localRaw = localStorage.getItem('examInvigilationSlots');
+                  if (localRaw) {
+                      const { getDoc: _getDoc } = window.firebase;
+                      const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "slots"));
+                      const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
+                      const localSlots = JSON.parse(localRaw);
 
-                      // For each slot in cloud, if cloud has MORE volunteers than local, keep cloud's
-                      Object.keys(cloudSlots).forEach(k => {
-                          if (localSlots[k]) {
-                              if ((cloudSlots[k].assigned||[]).length > (localSlots[k].assigned||[]).length)
-                                  localSlots[k].assigned = cloudSlots[k].assigned;
-                              if ((cloudSlots[k].unavailable||[]).length > (localSlots[k].unavailable||[]).length)
-                                  localSlots[k].unavailable = cloudSlots[k].unavailable;
+                        // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
+                        Object.keys(cloudSlots).forEach(k => {
+                            if (localSlots[k]) {
+                                // If cloud has someone local doesn't have, keep them (prevents stale overwrites)
+                                const cloudAssigned = cloudSlots[k].assigned || [];
+                                const localAssigned = localSlots[k].assigned || [];
 
-                              // 🛡️ PRESERVE LOGS: Don't let empty local logs overwrite detailed cloud logs
-                              if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                                  localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                              }
-                          } else {
-                              localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                          }
-                      });
+                                // Merge arrays without duplicates
+                                localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
 
-                    localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
-                    const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
-                    if (localStorage.getItem('invigAdvanceUnavailability'))
-                        payload.invigAdvanceUnavailability = localStorage.getItem('invigAdvanceUnavailability');
-                    await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
-                }
-            }
+                                // Merge unavailability
+                                const cloudUnavail = cloudSlots[k].unavailable || [];
+                                const localUnavail = localSlots[k].unavailable || [];
+                                localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
+
+                                if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                                    localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                                }
+                            } else {
+                                localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                            }
+                        });
+
+                      localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
+                      const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
+                      if (localStorage.getItem('invigAdvanceUnavailability'))
+                          payload.invigAdvanceUnavailability = localStorage.getItem('invigAdvanceUnavailability');
+                      await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
+                  }
+              }
 
                  // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
