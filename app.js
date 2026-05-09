@@ -1547,7 +1547,7 @@ window.recalcInvigSlots = async function () {
                               if (s.absentees) allAbsentees[sessionKey] = s.absentees;
                               if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
                               if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
-                            }
+                            
                             // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
                             if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
                                 const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
