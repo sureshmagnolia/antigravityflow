@@ -607,12 +607,15 @@ function loadExamDataIDB() {
 const originalSetItem = localStorage.setItem;
 localStorage.setItem = function(key, value) {
     originalSetItem.apply(this, arguments);
-    if (key !== 'lastUpdated' && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
+    // 🛡️ SEPARATION: !window.currentCollegeId ensures this NEVER runs for Firebase Pro users.
+    // window.isDriveRestoringData ensures Drive restores don't trigger auto-sync loops.
+    if (!window.isDriveRestoringData && key !== 'lastUpdated' && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
         // Automatically update the timestamp for conflict detection
         originalSetItem.apply(this, ['lastUpdated', new Date().toISOString()]);
         window.triggerDriveAutoSync();
     }
 };
+
 
 // --- NEW: BASIC USER AUTO-PRUNER ---
 async function pruneOldDataForBasicUsers() {
