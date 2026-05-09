@@ -1484,12 +1484,9 @@ window.recalcInvigSlots = async function () {
                     }));
                     localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
                     
-                      // Bootstrap UI (Prevents timeout and populates dropdowns)
-                      loadInitialData();
-                      window.isAppInitializing = false; // 🔓 Startup finished
-                      if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-
-                      return;
+                // Removed early return and UI Bootstrap here to allow 
+                // the code to fall through to fetch Modular Sessions 
+                // (Room Allotment, Scribes, Invigilators) from the Cloud Listener
                   }
             } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
 
