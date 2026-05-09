@@ -11236,26 +11236,30 @@ window.real_populate_qp_code_session_dropdown = function () {
               streamStats[roomStream].roomsUsed++;
           });
 
-            // 3. Save cleaned data immediately if any ghosts or duplicates were pruned
-            if (hasIntegrityCleanup) {
-                console.log("🧹 [Audit Cleanup] Removed ghost students or duplicate assignments.");
-                saveRoomAllotment();
-                hasUnsavedAllotment = true;
-            }
+          // 3. Audit Scribe Allotments: Prune students no longer in this session
+          let hasScribePruning = false;
+          Object.keys(currentScribeAllotment).forEach(reg => {
+              if (!masterRegNos.has(reg)) {
+                  delete currentScribeAllotment[reg];
+                  hasScribePruning = true;
+              }
+          });
 
-            // 🛡️ [AUDIT FIX] Prune Scribe Allotments for students no longer in this session
-            let hasScribePruning = false;
-            Object.keys(currentScribeAllotment).forEach(reg => {
-                if (!masterRegNos.has(reg)) {
-                    delete currentScribeAllotment[reg];
-                    hasScribePruning = true;
-                }
-            });
-            hasUnsavedAllotment = true;
-                  if (typeof syncDataToCloud === 'function') syncDataToCloud('slots', currentSessionKey);
-                hasUnsavedAllotment = true;
-            }
+          // 4. Save cleaned data immediately if any ghosts, duplicates, or scribes were pruned
+          if (hasIntegrityCleanup || hasScribePruning) {
+              console.log("🧹 [Audit Cleanup] Pruned ghost students or duplicate assignments.");
+              saveRoomAllotment(); // Updates localStorage for rooms
 
+              if (hasScribePruning) {
+                  const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                  allScribes[currentSessionKey] = currentScribeAllotment;
+                  localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+              }
+
+              hasUnsavedAllotment = true;
+              // Sync to Cloud (Allocation handles Scribes/Rooms in V2)
+              if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
+          }
        
         // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
         const totalAllottedOverall = Object.values(streamStats).reduce((sum, s) => sum + s.allotted, 0);
