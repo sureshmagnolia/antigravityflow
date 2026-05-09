@@ -391,16 +391,16 @@ async function autoCleanPastGhostData() {
 
 
 // Smart Trigger (Safe to be at the top)
-document.addEventListener('DOMContentLoaded', () => {
-    // Check every 500ms for app readiness
-    const initCheck = setInterval(() => {
-        // 🔒 WAIT FOR COLLEGE ID: Ensure Auth is finished before cleaning Firebase
-        if (typeof syncDataToCloud === 'function' && window.firebase && window.currentCollegeId) {
-            clearInterval(initCheck);
-            autoCleanPastGhostData();
-        }
-    }, 500);
-});
+  document.addEventListener('DOMContentLoaded', () => {
+      // Check every 500ms for app readiness
+      const initCheck = setInterval(() => {
+          // 🔒 WAIT FOR COLLEGE ID: Ensure Auth is finished before cleaning Firebase
+          if (typeof syncDataToCloud === 'function' && window.firebase && window.currentCollegeId) {
+              clearInterval(initCheck);
+              // autoCleanPastGhostData(); // 🛡️ DISABLED: Prevent automatic deletion of old data
+          }
+      }, 500);
+  });
 
 // ==========================================
 
