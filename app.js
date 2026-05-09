@@ -11195,21 +11195,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (mixPanel) mixPanel.classList.remove('hidden');
 
 
- // 🛡️ [REVERT & FIX] Stream-only view with Duplicate & Ghost protection
+// 🛡️ [PRECISION FIX] Aligning Allotment Dashboard with Master List (665/18)
+          // 1. Map master student RegNos for fast lookup and identify scribes
+          const masterRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
           const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
           const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-
-          // Fix for 642 vs 652: Identify Unique Register Numbers ONLY
-          const uniqueMasterRecords = [];
-          const seenReg = new Set();
-          sessionStudentRecords.forEach(s => {
-              const reg = s['Register Number'];
-              if (!seenReg.has(reg)) {
-                  uniqueMasterRecords.push(s);
-                  seenReg.add(reg);
-              }
-          });
-          const masterRegNos = new Set(uniqueMasterRecords.map(s => s['Register Number']));
           let hasGhostPruning = false;
 
           const streamStats = {};
@@ -11218,26 +11208,24 @@ window.real_populate_qp_code_session_dropdown = function () {
           });
           if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-          // 1. Calculate Totals (Unique students, excluding Scribes)
-          uniqueMasterRecords.forEach(s => {
-              const reg = s['Register Number'];
-              if (!scribeRegNos.has(reg)) {
-                  const strm = s.Stream || "Regular";
-                  if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
-                  streamStats[strm].total++;
-              }
+          // 2. Calculate Totals directly from Master List (Ensures 665/18)
+          sessionStudentRecords.forEach(s => {
+              const strm = s.Stream || "Regular";
+              if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
+              streamStats[strm].total++;
           });
 
-          // 2. Audit Allotments and PRUNE GHOSTS (Students who were deleted or moved)
+          // 3. Audit Allotments and PRUNE GHOSTS (The 4 extra students found in audit)
           currentSessionAllotment.forEach(room => {
               const roomStream = room.stream || "Regular";
               if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
 
               const originalCount = room.students.length;
-              // Only keep students who exist in the master list AND are not scribes
+              // Only keep students who exist in the master list for this session/stream
               room.students = room.students.filter(s => {
                   const reg = (typeof s === 'object') ? s['Register Number'] : s;
-                  return masterRegNos.has(reg) && !scribeRegNos.has(reg);
+                  // [CRITICAL] Scribes are NOT pruned from rooms anymore as they belong to the stream
+                  return masterRegNos.has(reg);
               });
 
               if (room.students.length !== originalCount) hasGhostPruning = true;
@@ -11246,8 +11234,9 @@ window.real_populate_qp_code_session_dropdown = function () {
               streamStats[roomStream].roomsUsed++;
           });
 
+          // 4. Save cleaned data if ghosts were removed
           if (hasGhostPruning) {
-              console.log("🧹 [Audit] Pruned ghost students from rooms.");
+              console.log("🧹 [Audit] Pruned ghost students from room allotment.");
               saveRoomAllotment();
               hasUnsavedAllotment = true;
           }
