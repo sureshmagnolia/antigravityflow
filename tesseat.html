@@ -56,13 +56,12 @@
 
             statusEl.textContent = "Loading Live Exam Data...";
             
-            try {
-                // ⚡ Check Local Cache for Index (Uses V2 Smart Cache)
-                const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
-                const now = Date.now();
+             // ⚡ Check Local Cache for Index (Reduced to 10s for Admin Test immediate check)
+                  const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
+                  const now = Date.now();
 
-               if (cachedIndex && (now - cachedIndex.timestamp < 300000)) { 
-                    indexCache = cachedIndex.data;
+                 if (cachedIndex && (now - cachedIndex.timestamp < 10000)) {
+                      indexCache = cachedIndex.data;
                     document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
                 } else {
                     const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
@@ -90,28 +89,32 @@
         }
 
 
-        window.searchStudent = async function() {
-            const regInput = document.getElementById('reg-input');
-            const regNo = regInput.value.trim().toUpperCase();
-            const resultContainer = document.getElementById('result-container');
-            const statusEl = document.getElementById('status');
-            resultContainer.innerHTML = '';
-            
-            if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
+window.searchStudent = async function() {
+              allSessions = []; // 🚀 RESET: Ensure we fetch latest allotment for every search
+              const regInput = document.getElementById('reg-input');
+              const regNo = regInput.value.trim().toUpperCase();
+              const resultContainer = document.getElementById('result-container');
+              const statusEl = document.getElementById('status');
+              resultContainer.innerHTML = '';
 
-            // Unconditionally save it locally
-            localStorage.setItem('myExamRegNo', regNo);
+              if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
 
-            const nowTotal = new Date();
-            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
-            
-            // Populate sessions from correct V2 Architecture
-            if (allSessions.length === 0 && indexCache) {
-                statusEl.textContent = "Verifying sessions...";
-                const sessions = indexCache.sessions || {};
+              // Unconditionally save it locally
+              localStorage.setItem('myExamRegNo', regNo);
 
-                for (const [label, sInfo] of Object.entries(sessions)) {
-                    if (!label.startsWith(todayString)) continue;
+              // 🛡️ Ensure Index is loaded before searching
+              if (!indexCache) {
+                  statusEl.textContent = "Connecting to database...";
+                  await loadData();
+              }
+
+              // Populate sessions from correct V2 Architecture
+              if (indexCache) {
+                  statusEl.textContent = "Verifying all allotted sessions...";
+                  const sessions = indexCache.sessions || {};
+
+                  for (const [label, sInfo] of Object.entries(sessions)) {
+                      // 🛑 ADMIN FIX: Removed todayString filter to allow immediate check of all future/past allotments
 
                     const [dPart, tPart] = label.split(' | ');
                     const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
@@ -235,18 +238,20 @@
             document.getElementById('reg-input').focus();
         };
 
-        function parseSessionTime(dateStr, timeStr) {
-            try {
-                const [d, m, y] = dateStr.split('.').map(Number);
-                let [time, modifier] = timeStr.split(' ');
-                let [hours, minutes] = time.split(':').map(Number);
-                
-                if (modifier === 'PM' && hours < 12) hours += 12;
-                if (modifier === 'AM' && hours === 12) hours = 0;
-                
-                return new Date(y, m - 1, d, hours, minutes);
-            } catch(e) { return new Date(); }
-        }
+          function parseSessionTime(dateStr, timeStr) {
+              try {
+                  const [d, m, y] = dateStr.split('.').map(Number);
+                  let [time, modifier] = timeStr.split(' ');
+                  let [hours, minutes] = time.split(':').map(Number);
+
+                  if (modifier === 'PM' && hours < 12) hours += 12;
+                  if (modifier === 'AM' && hours === 12) hours = 0;
+
+                  // 🛡️ Robust IST ISO String
+                  const isoString = ${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30;
+                  return new Date(isoString);
+              } catch(e) { return new Date(); }
+          }
 
         loadData();
 
