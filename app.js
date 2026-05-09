@@ -1523,7 +1523,6 @@ window.recalcInvigSlots = async function () {
                 const midnightObj = todayMidnight.getTime();
 
                 // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
-                (async () => {
                     const sessionSnap = await getDocs(sessionsRef);
 
                     let cloudMetaFound = false;
@@ -1686,8 +1685,6 @@ window.recalcInvigSlots = async function () {
                     
                     // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
                     if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-                })();
-
 
                 // Check for V1 Fallback if sessions collection doesn't exist
                 const sessionSnapCheck = await getDocs(sessionsRef);
