@@ -11195,12 +11195,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (mixPanel) mixPanel.classList.remove('hidden');
 
 
-// 🛡️ [PRECISION FIX] Aligning Allotment Dashboard with Master List (665/18)
-          // 1. Map master student RegNos for fast lookup and identify scribes
+// 🛡️ [AUDIT FIX] System Integrity: Unique Totals, Ghost Pruning, and Duplicate Removal
           const masterRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
-          const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-          const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-          let hasGhostPruning = false;
+          const seenInAllotment = new Set(); // 🕵️ To detect and prune duplicate room assignments
+          let hasIntegrityCleanup = false;
 
           const streamStats = {};
           currentStreamConfig.forEach(stream => {
@@ -11208,31 +11206,45 @@ window.real_populate_qp_code_session_dropdown = function () {
           });
           if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-          // 2. Calculate Totals directly from Master List (Ensures 665/18)
+          // 1. Calculate Totals directly from Master List (Ensures 665 Regular / 18 EDE)
           sessionStudentRecords.forEach(s => {
               const strm = s.Stream || "Regular";
               if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
               streamStats[strm].total++;
           });
 
-          // 3. Audit Allotments and PRUNE GHOSTS (The 4 extra students found in audit)
+          // 2. Audit Allotments: PRUNE GHOSTS (deleted students) and DUPLICATES (students in 2+ rooms)
           currentSessionAllotment.forEach(room => {
               const roomStream = room.stream || "Regular";
               if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
 
               const originalCount = room.students.length;
-              // Only keep students who exist in the master list for this session/stream
               room.students = room.students.filter(s => {
                   const reg = (typeof s === 'object') ? s['Register Number'] : s;
-                  // [CRITICAL] Scribes are NOT pruned from rooms anymore as they belong to the stream
-                  return masterRegNos.has(reg);
+
+                  // Keep ONLY if: 1. Exists in Master List AND 2. Hasn't already been seen in another room
+                  const isValid = masterRegNos.has(reg);
+                  const isDuplicate = seenInAllotment.has(reg);
+
+                  if (isValid && !isDuplicate) {
+                      seenInAllotment.add(reg);
+                      return true;
+                  }
+                  return false;
               });
 
-              if (room.students.length !== originalCount) hasGhostPruning = true;
+              if (room.students.length !== originalCount) hasIntegrityCleanup = true;
 
               streamStats[roomStream].allotted += room.students.length;
               streamStats[roomStream].roomsUsed++;
           });
+
+          // 3. Save cleaned data immediately if any ghosts or duplicates were pruned
+          if (hasIntegrityCleanup) {
+              console.log("🧹 [Audit Cleanup] Removed ghost students or duplicate assignments.");
+              saveRoomAllotment();
+              hasUnsavedAllotment = true;
+          }
 
           // 4. Save cleaned data if ghosts were removed
           if (hasGhostPruning) {
@@ -13981,17 +13993,18 @@ Are you sure you want to update these records?
                     };
                 }
 
-                const isScribe = scribeRegNos.has(student['Register Number']);
-                if (isScribe) {
-                    sessionStats[sessionKey].scribeCount++;
-                } else {
-                    // Separate by Stream
-                    const strm = student.Stream || "Regular";
-                    if (!sessionStats[sessionKey].streams[strm]) {
-                        sessionStats[sessionKey].streams[strm] = 0;
-                    }
-                    sessionStats[sessionKey].streams[strm]++;
-                }
+                  // 🛡️ [AUDIT FIX] Account for Scribes in their main halls (Ensures 665 Regular)
+                  const strm = student.Stream || "Regular";
+                  if (!sessionStats[sessionKey].streams[strm]) {
+                      sessionStats[sessionKey].streams[strm] = 0;
+                  }
+                  sessionStats[sessionKey].streams[strm]++;
+
+                  const isScribe = scribeRegNos.has(student['Register Number']);
+                  if (isScribe) {
+                      // Scribes also counted separately to trigger the 1:5 staff requirement
+                      sessionStats[sessionKey].scribeCount++;
+                  }
             }
 
             // 4. Build Report Data
