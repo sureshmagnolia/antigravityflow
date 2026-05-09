@@ -11246,14 +11246,7 @@ window.real_populate_qp_code_session_dropdown = function () {
               hasUnsavedAllotment = true;
           }
 
-          // 4. Save cleaned data if ghosts were removed
-          if (hasGhostPruning) {
-              console.log("🧹 [Audit] Pruned ghost students from room allotment.");
-              saveRoomAllotment();
-              hasUnsavedAllotment = true;
-          }
-
-        
+       
         // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
         const totalAllottedOverall = Object.values(streamStats).reduce((sum, s) => sum + s.allotted, 0);
         const mixingRadios = document.querySelectorAll('input[name="mixing-strategy"]');
