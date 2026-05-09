@@ -2024,7 +2024,8 @@ async function deleteSessionFromCloud(sessionKey) {
             qpCodes: sessionQPs,
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
-            invigilatorMapping: sessionInvigMap, 
+            invigilatorMapping: sessionInvigMap,
+            replaced: (JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}')[sessionKey] || {}).replaced || [],
         meta: { 
                 studentCount: students.length,
                 normalCount: students.filter(s => {
@@ -11672,8 +11673,19 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (checkedBoxes.length === 0) return;
         
     document.getElementById('auto-allot-modal').classList.add('hidden');
-    // RE-ALLOTMENT CLEANUP: Clear current students from memory before applying new strategy
-    currentSessionAllotment = []; 
+    // RE-ALLOTMENT CLEANUP: Clear current students and stale assignments before applying new strategy
+      currentSessionAllotment = [];
+
+      // 🛡️ [AUDIT FIX] Clean up stale Scribe & Invigilator links for this session
+      const sessionKey = currentSessionKey;
+      const allScribeMap = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+      if (allScribeMap[sessionKey]) delete allScribeMap[sessionKey];
+      localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeMap));
+
+      const allInvigMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+      if (allInvigMappings[sessionKey]) delete allInvigMappings[sessionKey];
+      localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvigMappings));
+      if (window.currentInvigMapping) window.currentInvigMapping = {};
     
     // Map selected rooms
     let selectedRooms = checkedBoxes.map(cb => ({
@@ -18421,7 +18433,12 @@ window.toggleAllArchiveCheckboxes = function(check) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
         
-               // Sync (Added Session Sync)
+    // 🛡️ [AUDIT FIX] Atomic-Style Sync: Priority to the Room Assignment
+          if (typeof syncSessionToCloud === 'function') {
+              await syncSessionToCloud(sessionKey);
+              // After session is safe, update staff duty counts
+              if (typeof syncDataToCloud === 'function') await syncDataToCloud('staff');
+          }
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff');
             if (typeof syncSessionToCloud === 'function') {
