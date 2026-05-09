@@ -2247,17 +2247,22 @@ async function deleteSessionFromCloud(sessionKey) {
                     const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                     const localSlots = JSON.parse(localRaw);
 
-                    // For each slot in cloud, if cloud has MORE volunteers than local, keep cloud's
-                    Object.keys(cloudSlots).forEach(k => {
-                        if (localSlots[k]) {
-                            if ((cloudSlots[k].assigned||[]).length > (localSlots[k].assigned||[]).length)
-                                localSlots[k].assigned = cloudSlots[k].assigned;
-                            if ((cloudSlots[k].unavailable||[]).length > (localSlots[k].unavailable||[]).length)
-                                localSlots[k].unavailable = cloudSlots[k].unavailable;
-                        } else {
-                            localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                        }
-                    });
+                      // For each slot in cloud, if cloud has MORE volunteers than local, keep cloud's
+                      Object.keys(cloudSlots).forEach(k => {
+                          if (localSlots[k]) {
+                              if ((cloudSlots[k].assigned||[]).length > (localSlots[k].assigned||[]).length)
+                                  localSlots[k].assigned = cloudSlots[k].assigned;
+                              if ((cloudSlots[k].unavailable||[]).length > (localSlots[k].unavailable||[]).length)
+                                  localSlots[k].unavailable = cloudSlots[k].unavailable;
+
+                              // 🛡️ PRESERVE LOGS: Don't let empty local logs overwrite detailed cloud logs
+                              if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                                  localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                              }
+                          } else {
+                              localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                          }
+                      });
 
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
                     const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
