@@ -462,6 +462,9 @@ async function syncData(source = "AUTO") {
         });
 
         await manageRetention(folderId);
+        // 🛡️ SYNC FIX: Update local timestamp to NOW so we are in sync with the file we just sent
+        const finalTime = now.toISOString();
+        localStorage.setItem('lastUpdated', finalTime);
         localStorage.setItem('lastGoogleSync', Date.now());
         const syncLabel = document.getElementById('last-sync-time');
         if (syncLabel) syncLabel.textContent = now.toLocaleString();
@@ -769,7 +772,7 @@ async function restoreFromDrive() {
 function showRestoreModal(files) {
     let listHtml = files.map((f, i) => `
         <div class="p-4 border-b hover:bg-blue-50 cursor-pointer flex justify-between items-center transition-colors" 
-             onclick="executeRestore('${f.id}')">
+             onclick="executeRestore('${f.id}', '${f.createdTime}')">
             <div>
                 <div class="font-bold text-gray-800">${f.name}</div>
                 <div class="text-xs text-gray-500">${new Date(f.createdTime).toLocaleString()} ${i===0?'(Latest)':''}</div>
@@ -804,7 +807,7 @@ function showRestoreModal(files) {
     document.body.appendChild(modal);
 }
 
-window.executeRestore = async function(fileId) {
+window.executeRestore = async function(fileId, cloudTime = null) {
     const modal = document.getElementById('drive-restore-modal');
     if (modal) modal.remove();
 
@@ -880,15 +883,17 @@ window.executeRestore = async function(fileId) {
 
     return new Promise((resolve) => {
         document.getElementById('restore-cancel').onclick = () => { promptModal.remove(); resolve(); };
-        mergeBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, true); resolve(); };
-        replaceBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, false); resolve(); };
+        mergeBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, true, cloudTime); resolve(); };
+        replaceBtn.onclick = async () => { promptModal.remove(); await processRestore(cloudData, false, cloudTime); resolve(); };
     });
 };
 
-async function processRestore(cloudData, isMerge) {
+async function processRestore(cloudData, isMerge, cloudTime = null) {
     if (!cloudData || typeof cloudData !== 'object') {
         return alert("Execution Error: Invalid or empty backup data received.");
     }
+
+    window.isDriveRestoringData = true; // 🛡️ STRICT SEPARATION: Only affects Drive. Stops auto-sync loops.
 
     try {
         // --- 1. CLEANUP ---
@@ -937,13 +942,23 @@ async function processRestore(cloudData, isMerge) {
         }
 
         // --- 3. FINALIZE ---
+        if (cloudTime) {
+            // 🛡️ SYNC: Update local timestamp to match the Cloud file we just took
+            localStorage.setItem('lastUpdated', cloudTime);
+        }
+
         localStorage.removeItem('examBaseData'); // Clean ghost legacy key
         localStorage.setItem('pendingDriveRestoreSync', 'true');
 
+        window.isDriveRestoringData = false;
         alert("✅ Restored successfully! Reloading to apply changes.");
         location.reload();
 
-    } catch (e) { alert("Execution Error: " + e.message); }
+    } catch (e) { 
+        window.isDriveRestoringData = false;
+        alert("Execution Error: " + e.message); 
+    }
+
 }
 
 if (!document.getElementById('drive-anim-style')) {
