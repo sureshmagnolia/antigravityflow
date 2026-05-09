@@ -11195,38 +11195,46 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (mixPanel) mixPanel.classList.remove('hidden');
 
 
-// 1. Map current master student RegNos for fast lookup and identify scribes
+ // 🛡️ [REVERT & FIX] Stream-only view with Duplicate & Ghost protection
           const scribeListRaw = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
           const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
-          const masterRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
+
+          // Fix for 642 vs 652: Identify Unique Register Numbers ONLY
+          const uniqueMasterRecords = [];
+          const seenReg = new Set();
+          sessionStudentRecords.forEach(s => {
+              const reg = s['Register Number'];
+              if (!seenReg.has(reg)) {
+                  uniqueMasterRecords.push(s);
+                  seenReg.add(reg);
+              }
+          });
+          const masterRegNos = new Set(uniqueMasterRecords.map(s => s['Register Number']));
           let hasGhostPruning = false;
 
-          const streamStats = {
-              "Scribes": { total: 0, allotted: 0, roomsUsed: 0, isScribeCard: true }
-          };
+          const streamStats = {};
           currentStreamConfig.forEach(stream => {
               streamStats[stream] = { total: 0, allotted: 0, roomsUsed: 0 };
           });
           if (!streamStats["Regular"]) streamStats["Regular"] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-          sessionStudentRecords.forEach(s => {
+          // 1. Calculate Totals (Unique students, excluding Scribes)
+          uniqueMasterRecords.forEach(s => {
               const reg = s['Register Number'];
-              if (scribeRegNos.has(reg)) {
-                  streamStats["Scribes"].total++;
-              } else {
+              if (!scribeRegNos.has(reg)) {
                   const strm = s.Stream || "Regular";
                   if (!streamStats[strm]) streamStats[strm] = { total: 0, allotted: 0, roomsUsed: 0 };
                   streamStats[strm].total++;
               }
           });
 
-          // 2. Audit Allotments and PRUNE GHOSTS (🛡️ AUDIT FIX)
+          // 2. Audit Allotments and PRUNE GHOSTS (Students who were deleted or moved)
           currentSessionAllotment.forEach(room => {
               const roomStream = room.stream || "Regular";
               if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
 
               const originalCount = room.students.length;
-              // PRUNE: Only keep students who still exist in the master list AND are not scribes
+              // Only keep students who exist in the master list AND are not scribes
               room.students = room.students.filter(s => {
                   const reg = (typeof s === 'object') ? s['Register Number'] : s;
                   return masterRegNos.has(reg) && !scribeRegNos.has(reg);
@@ -11238,25 +11246,9 @@ window.real_populate_qp_code_session_dropdown = function () {
               streamStats[roomStream].roomsUsed++;
           });
 
-          // 3. Calculate Scribe Allotment Progress
-          Object.keys(currentScribeAllotment).forEach(reg => {
-              if (masterRegNos.has(reg) && scribeRegNos.has(reg)) {
-                  streamStats["Scribes"].allotted++;
-              } else {
-                  // Prune ghost scribe allotment
-                  delete currentScribeAllotment[reg];
-                  hasGhostPruning = true;
-              }
-          });
-          // Count unique scribe rooms
-          streamStats["Scribes"].roomsUsed = new Set(Object.values(currentScribeAllotment)).size;
-
           if (hasGhostPruning) {
-              console.log("🧹 [Audit] Pruned ghost data from allotment.");
+              console.log("🧹 [Audit] Pruned ghost students from rooms.");
               saveRoomAllotment();
-              const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-              allScribes[currentSessionKey] = currentScribeAllotment;
-              localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
               hasUnsavedAllotment = true;
           }
 
@@ -11289,8 +11281,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         Object.keys(streamStats).forEach(streamName => {
             const stats = streamStats[streamName];
             const remaining = stats.total - stats.allotted;
-            const estimatedRoomsNeeded = stats.isScribeCard ? Math.ceil(stats.total / 5) : Math.ceil(stats.total / 30);
-              const ratioLabel = stats.isScribeCard ? "1:5" : "1:30";
+            const estimatedRoomsNeeded = Math.ceil(stats.total / 30);
 
             const isComplete = (remaining <= 0 && stats.total > 0);
             const borderColor = isComplete ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50";
