@@ -435,6 +435,7 @@ async function finalizeAppLoad() {
 }
 
 let currentUser = null;
+window.isAppInitializing = true;
 window.currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
@@ -1342,21 +1343,27 @@ window.recalcInvigSlots = async function () {
                 const lastLocalSave = localSyncPriority[key] || 0;
                 if (now - lastLocalSave < 10000) return;
 
-                // --- SMART MERGE LOGIC for Mapping Data ---
-                if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment') {
-                    try {
-                        const localRaw = localStorage.getItem(key) || '{}';
-                        const local = JSON.parse(localRaw);
-                        const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
-                        
-                          // 🛡️ [AUDIT FIX] Cloud is Source of Truth during startup fetch
-                          const merged = { ...local, ...cloud };
-                        localStorage.setItem(key, JSON.stringify(merged));
-                        return;
-                    } catch (e) {
-                         console.error("Merge error for " + key, e);
-                    }
-                }
+// --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
+                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment') {
+                      try {
+                          const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
+                          const localRaw = localStorage.getItem(key) || '{}';
+                          const local = JSON.parse(localRaw);
+
+                          // 🔍 STARTUP CHECK: If we just opened the app, we MUST trust the Cloud's session state
+                          // This prevents PC 2 from "rescuing" rooms that were deleted on PC 1.
+                          const isStartup = (window.isAppInitializing === true);
+
+                          // If it's a startup fetch, Cloud is the Absolute Truth.
+                          // If it's a live update later, merge them to prevent overwriting current work.
+                          const merged = isStartup ? { ...cloud } : { ...local, ...cloud };
+
+                          localStorage.setItem(key, JSON.stringify(merged));
+                          return;
+                      } catch (e) {
+                           console.error("Merge error for " + key, e);
+                      }
+                  }
 
                 // Default: Direct sync for settings/simple strings
                 localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
@@ -1477,12 +1484,13 @@ window.recalcInvigSlots = async function () {
                     }));
                     localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
                     
-                    // Bootstrap UI (Prevents timeout and populates dropdowns)
-                    loadInitialData();
-                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                      // Bootstrap UI (Prevents timeout and populates dropdowns)
+                      loadInitialData();
+                      window.isAppInitializing = false; // 🔓 Startup finished
+                      if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 
-                    return; 
-                }
+                      return;
+                  }
             } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
 
 
