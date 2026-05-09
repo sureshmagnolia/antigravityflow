@@ -279,12 +279,6 @@ window.searchStudent = async function() {
                 // Auto-trigger search if a reg number was already saved
                 const savedRegNo = localStorage.getItem('myExamRegNo');
                 if (savedRegNo) setTimeout(() => window.searchStudent(), 200);
-              
-                // Trigger auto-search if Reg No is saved
-                const savedRegNo = localStorage.getItem('myExamRegNo');
-                if (savedRegNo) {
-                    window.searchStudent();
-                }
             } else {
                 if (pass !== null) { 
                     await UiModal.alert("🚫 Access Denied", "Incorrect password.");
