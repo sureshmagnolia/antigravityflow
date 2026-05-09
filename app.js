@@ -435,6 +435,7 @@ async function finalizeAppLoad() {
 }
 
 let currentUser = null;
+window.isAppInitializing = true;
 window.currentCollegeId = null; // The shared document ID
 let currentCollegeData = null; // Holds the full data including permissions
 let isSyncing = false;
@@ -1342,21 +1343,12 @@ window.recalcInvigSlots = async function () {
                 const lastLocalSave = localSyncPriority[key] || 0;
                 if (now - lastLocalSave < 10000) return;
 
-                // --- SMART MERGE LOGIC for Mapping Data ---
-                if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment') {
-                    try {
-                        const localRaw = localStorage.getItem(key) || '{}';
-                        const local = JSON.parse(localRaw);
-                        const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
-                        
-                        // Deep Merge: Combine both, preference for non-empty values
-                        const merged = { ...local, ...cloud };
-                        localStorage.setItem(key, JSON.stringify(merged));
-                        return;
-                    } catch (e) {
-                         console.error("Merge error for " + key, e);
-                    }
-                }
+                // --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
+                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
+                      // 🚫 [SCR5 MIGRATION FIX] Block legacy cloud documents from poisoning local state!
+                      // These keys are now strictly managed by the V2 Modular Sessions listener.
+                      return;
+                  }
 
                 // Default: Direct sync for settings/simple strings
                 localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
@@ -1420,21 +1412,27 @@ window.recalcInvigSlots = async function () {
             if (snap.exists()) syncLocal(snap.data());
         };
 
-        // 4. ALLOCATION (Scribes/Rooms) - On-Demand Fetcher
-        window.fetchAllocationData = async () => {
-            const { getDoc, doc } = window.firebase;
-            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "allocation"));
-            if (snap.exists()) {
-                syncLocal(snap.data());
-                if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                if (typeof renderRoomAllotmentList === 'function' && typeof currentSessionKey !== 'undefined') renderRoomAllotmentList(currentSessionKey);
-            }
-        };
+          // 4. ALLOCATION (Scribes/Rooms) - On-Demand Fetcher
+          window.fetchAllocationData = async () => {
+              const { getDoc, doc } = window.firebase;
+              const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "allocation"));
+              if (snap.exists()) {
+                  syncLocal(snap.data());
+                  if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
 
-        // Fetch settings once on load (so initial room capacities are ready)
-        fetchSettingsData();
-        // 4. ALLOCATIONS (Scribes)
-        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+                  // 🛡️ Force UI update to clear "Ghost" allotments from another device
+                  if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
+                  if (typeof renderRoomAllotmentList === 'function' && typeof currentSessionKey !== 'undefined') renderRoomAllotmentList(currentSessionKey);
+              }
+          };
+
+// 🛡️ [AUDIT FIX] Force full sync of configuration and assignments on startup
+          // This ensures PC 2 picks up PC 1's changes immediately upon login.
+          fetchSettingsData();
+          if (typeof fetchAllocationData === 'function') fetchAllocationData();
+          if (typeof fetchSlotsData === 'function') fetchSlotsData();
+          if (typeof fetchStaffData === 'function') fetchStaffData();
+          if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
@@ -1471,12 +1469,10 @@ window.recalcInvigSlots = async function () {
                     }));
                     localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
                     
-                    // Bootstrap UI (Prevents timeout and populates dropdowns)
-                    loadInitialData();
-                    if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-
-                    return; 
-                }
+                // Removed early return and UI Bootstrap here to allow 
+                // the code to fall through to fetch Modular Sessions 
+                // (Room Allotment, Scribes, Invigilators) from the Cloud Listener
+                  }
             } catch (e) { console.warn("⚠️ Storage empty, proceeding to Cloud Listener..."); }
 
 
@@ -1527,7 +1523,6 @@ window.recalcInvigSlots = async function () {
                 const midnightObj = todayMidnight.getTime();
 
                 // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
-                (async () => {
                     const sessionSnap = await getDocs(sessionsRef);
 
                     let cloudMetaFound = false;
@@ -1690,8 +1685,6 @@ window.recalcInvigSlots = async function () {
                     
                     // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
                     if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
-                })();
-
 
                 // Check for V1 Fallback if sessions collection doesn't exist
                 const sessionSnapCheck = await getDocs(sessionsRef);
@@ -2159,7 +2152,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
-        async function syncDataToCloud(targetSection, isManualChange = false) {
+         async function syncDataToCloud(targetSection) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
             console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
@@ -2263,28 +2256,25 @@ async function deleteSessionFromCloud(sessionKey) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
-                        // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
-                        Object.keys(cloudSlots).forEach(k => {
-                            if (localSlots[k]) {
-                                // If cloud has someone local doesn't have, keep them (prevents stale overwrites)
-                                const cloudAssigned = cloudSlots[k].assigned || [];
-                                const localAssigned = localSlots[k].assigned || [];
+                          // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
+                          Object.keys(cloudSlots).forEach(k => {
+                              if (localSlots[k]) {
+                                  // Additive Merge: Combine local and cloud to ensure no data loss
+                                  const cloudAssigned = cloudSlots[k].assigned || [];
+                                  const localAssigned = localSlots[k].assigned || [];
+                                  localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
 
-                                // Merge arrays without duplicates
-                                localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
+                                  const cloudUnavail = cloudSlots[k].unavailable || [];
+                                  const localUnavail = localSlots[k].unavailable || [];
+                                  localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
 
-                                // Merge unavailability
-                                const cloudUnavail = cloudSlots[k].unavailable || [];
-                                const localUnavail = localSlots[k].unavailable || [];
-                                localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
-
-                                if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                                    localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                                }
-                            } else {
-                                localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                            }
-                        });
+                                  if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                                      localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                                  }
+                              } else {
+                                  localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                              }
+                          });
 
                       localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
                       const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
@@ -11239,28 +11229,30 @@ window.real_populate_qp_code_session_dropdown = function () {
               streamStats[roomStream].roomsUsed++;
           });
 
-            // 3. Save cleaned data immediately if any ghosts or duplicates were pruned
-            if (hasIntegrityCleanup) {
-                console.log("🧹 [Audit Cleanup] Removed ghost students or duplicate assignments.");
-                saveRoomAllotment();
-                hasUnsavedAllotment = true;
-            }
+          // 3. Audit Scribe Allotments: Prune students no longer in this session
+          let hasScribePruning = false;
+          Object.keys(currentScribeAllotment).forEach(reg => {
+              if (!masterRegNos.has(reg)) {
+                  delete currentScribeAllotment[reg];
+                  hasScribePruning = true;
+              }
+          });
 
-            // 🛡️ [AUDIT FIX] Prune Scribe Allotments for students no longer in this session
-            let hasScribePruning = false;
-            Object.keys(currentScribeAllotment).forEach(reg => {
-                if (!masterRegNos.has(reg)) {
-                    delete currentScribeAllotment[reg];
-                    hasScribePruning = true;
-                }
-            });
-            if (hasScribePruning) {
-                const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                allScribes[currentSessionKey] = currentScribeAllotment;
-                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
-                hasUnsavedAllotment = true;
-            }
+          // 4. Save cleaned data immediately if any ghosts, duplicates, or scribes were pruned
+          if (hasIntegrityCleanup || hasScribePruning) {
+              console.log("🧹 [Audit Cleanup] Pruned ghost students or duplicate assignments.");
+              saveRoomAllotment(); // Updates localStorage for rooms
 
+              if (hasScribePruning) {
+                  const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                  allScribes[currentSessionKey] = currentScribeAllotment;
+                  localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+              }
+
+              hasUnsavedAllotment = true;
+              // Sync to Cloud (Allocation handles Scribes/Rooms in V2)
+              if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
+          }
        
         // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
         const totalAllottedOverall = Object.values(streamStats).reduce((sum, s) => sum + s.allotted, 0);

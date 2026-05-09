@@ -2186,7 +2186,7 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud() {
+async function syncSlotsToCloud(affectedKey = null) {
       updateSyncStatus("Saving...", "neutral");
       try {
           const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
@@ -2196,24 +2196,28 @@ async function syncSlotsToCloud() {
           const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
           const localSlots = invigilationSlots;
 
-            // 🛡️ SMART MERGE (Audit Upgrade): Merges assignments and unavailability from cloud
-               Object.keys(cloudSlots).forEach(k => {
-                   if (localSlots[k]) {
-                       // Merge Assigned (Prevents overwriting Divya with Sindhu if stale)
-                       const cloudAssigned = cloudSlots[k].assigned || [];
-                       localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+// 🛡️ SMART MERGE (Authoritative Deletion Fix): Allows deletions for the affected key
+                 Object.keys(cloudSlots).forEach(k => {
+                     if (localSlots[k]) {
+                         // CRITICAL: If this is the key we just edited, skip the union merge
+                         // to allow deletions to persist. Otherwise, use additive merge for safety.
+                         if (k !== affectedKey) {
+                             // Merge Assigned
+                             const cloudAssigned = cloudSlots[k].assigned || [];
+                             localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
 
-                       // Merge Unavailability
-                       const cloudUnavail = cloudSlots[k].unavailable || [];
-                       localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                             // Merge Unavailability
+                             const cloudUnavail = cloudSlots[k].unavailable || [];
+                             localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                         }
 
-                       if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                          localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                       }
-                   } else {
-                       localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                   }
-               });
+                         if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                            localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                         }
+                     } else {
+                         localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                     }
+                 });
 
           await setDoc(ref, {
               examInvigilationSlots: JSON.stringify(localSlots)
@@ -2591,7 +2595,7 @@ window.changeSlotReq = async function (key, delta) {
     if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
     if (newReq < 1) return;
     slot.required = newReq;
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     renderSlotsGridAdmin();
 }
 
@@ -7323,7 +7327,7 @@ window.adminForceRemoveFromSlot = async function(email) {
     const stateEntry = window.manualState.rankedStaff.find(s => s.email === email);
     if (stateEntry) stateEntry.isChecked = false;
 
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     await syncStaffToCloud();
     window.renderManualCards();
     console.log('%c✅ Removed & saved.', 'color:green;font-weight:bold');
