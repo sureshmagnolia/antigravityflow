@@ -2159,7 +2159,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
-        async function syncDataToCloud(targetSection, isManualChange = false) {
+        async function syncDataToCloud(targetSection, affectedKey = null) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
             console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
@@ -2263,28 +2263,28 @@ async function deleteSessionFromCloud(sessionKey) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
-                        // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
-                        Object.keys(cloudSlots).forEach(k => {
-                            if (localSlots[k]) {
-                                // If cloud has someone local doesn't have, keep them (prevents stale overwrites)
-                                const cloudAssigned = cloudSlots[k].assigned || [];
-                                const localAssigned = localSlots[k].assigned || [];
+                          // 🛡️ HARMONIZED MERGE (Deletion Fix): Skip union merge for the affectedKey
+                          Object.keys(cloudSlots).forEach(k => {
+                              if (localSlots[k]) {
+                                  // If this key was explicitly modified, trust local (allows deletions).
+                                  // Otherwise, use additive merge to protect concurrent edits.
+                                  if (k !== affectedKey) {
+                                      const cloudAssigned = cloudSlots[k].assigned || [];
+                                      const localAssigned = localSlots[k].assigned || [];
+                                      localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
 
-                                // Merge arrays without duplicates
-                                localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
+                                      const cloudUnavail = cloudSlots[k].unavailable || [];
+                                      const localUnavail = localSlots[k].unavailable || [];
+                                      localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
+                                  }
 
-                                // Merge unavailability
-                                const cloudUnavail = cloudSlots[k].unavailable || [];
-                                const localUnavail = localSlots[k].unavailable || [];
-                                localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
-
-                                if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                                    localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                                }
-                            } else {
-                                localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                            }
-                        });
+                                  if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                                      localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                                  }
+                              } else {
+                                  localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                              }
+                          });
 
                       localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
                       const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
@@ -11254,10 +11254,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     hasScribePruning = true;
                 }
             });
-            if (hasScribePruning) {
-                const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                allScribes[currentSessionKey] = currentScribeAllotment;
-                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+            hasUnsavedAllotment = true;
+                  if (typeof syncDataToCloud === 'function') syncDataToCloud('slots', currentSessionKey);
                 hasUnsavedAllotment = true;
             }
 
