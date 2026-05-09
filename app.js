@@ -1335,7 +1335,7 @@ window.recalcInvigSlots = async function () {
                         const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
                         
                         // Deep Merge: Combine both, preference for non-empty values
-                        const merged = { ...cloud, ...local };
+                        const merged = { ...local, ...cloud };
                         localStorage.setItem(key, JSON.stringify(merged));
                         return;
                     } catch (e) {
@@ -1542,29 +1542,11 @@ window.recalcInvigSlots = async function () {
                             // 🛡️ SMART MERGE SHIELD APPLIED TO ALL LAYERS: 
                             // Only allow cloud to overwrite local if cloud has >= records (prevents empty {} wiping local data)
                             
-                            const cloudRooms = s.roomAllotment || {};
-                            if (Object.keys(cloudRooms).length >= Object.keys(allAllotments[sessionKey] || {}).length) {
-                                allAllotments[sessionKey] = cloudRooms;
-                            }
-
-                            const cloudQPs = s.qpCodes || {};
-                            if (Object.keys(cloudQPs).length >= Object.keys(allQPCodes[sessionKey] || {}).length) {
-                                allQPCodes[sessionKey] = cloudQPs;
-                            }
-
-                            const cloudAbs = s.absentees || [];
-                            if (cloudAbs.length >= (allAbsentees[sessionKey] || []).length) {
-                                allAbsentees[sessionKey] = cloudAbs;
-                            }
-
-                            const cloudScribes = s.scribeAllotment || {};
-                            if (Object.keys(cloudScribes).length >= Object.keys(allScribeAllotments[sessionKey] || {}).length) {
-                                allScribeAllotments[sessionKey] = cloudScribes;
-                            }
-
-                            const cloudInvig = s.invigilatorMapping || {};
-                            if (Object.keys(cloudInvig).length >= Object.keys(allInvigMapping[sessionKey] || {}).length) {
-                                allInvigMapping[sessionKey] = cloudInvig;
+                              if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
+                              if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
+                              if (s.absentees) allAbsentees[sessionKey] = s.absentees;
+                              if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
+                              if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
                             }
                             // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
                             if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
