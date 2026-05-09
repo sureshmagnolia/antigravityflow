@@ -3233,8 +3233,9 @@ window.deleteStaff = async function (index) {
       const staff = staffData[index];
       if (!staff) return;
 
-      // Ask the user to choose the action
-      const action = prompt(Choose action for ${staff.name}:\n\nType 'ARCHIVE' to hide them but keep their history.\nType 'DELETE' to permanently remove their profile.\n\n(Recommended: ARCHIVE), "ARCHIVE");
+      // Ask the user to choose the action (Using safe string concatenation)
+      const action = prompt("Choose action for " + staff.name + ":\n\nType 'ARCHIVE' to hide them but keep their history.\nType 'DELETE' to permanently remove their profile.\n\n(Recommended: ARCHIVE)",
+  "ARCHIVE");
 
       if (!action) return; // User cancelled
 
@@ -3243,7 +3244,7 @@ window.deleteStaff = async function (index) {
       if (cleanAction === 'ARCHIVE') {
           // Soft Delete (Original Logic)
           staffData[index].status = 'archived';
-          logActivity("Staff Archived", Admin archived staff member: ${staff.name} (${staff.email}).);
+          logActivity("Staff Archived", "Admin archived staff member: " + staff.name + " (" + staff.email + ").");
           await syncStaffToCloud();
           await removeStaffAccess(staff.email); // Block login
           renderStaffTable();
@@ -3251,14 +3252,15 @@ window.deleteStaff = async function (index) {
       }
       else if (cleanAction === 'DELETE') {
           // Hard Delete Logic
-          const confirmDelete = prompt(⚠️ CRITICAL WARNING ⚠️\n\nYou are about to PERMANENTLY DELETE the profile for:\n${staff.name}\n\nTheir past duties will remain in old reports, but they will be completely
-  erased from the active directory.\n\nTo confirm, type exactly: DELETE ${staff.name.toUpperCase()});
+          const matchText = "DELETE " + staff.name.toUpperCase();
+          const confirmDelete = prompt("⚠️ CRITICAL WARNING ⚠️\n\nYou are about to PERMANENTLY DELETE the profile for:\n" + staff.name + "\n\nTheir past duties will remain in old reports, but they will be
+  completely erased from the active directory.\n\nTo confirm, type exactly: " + matchText);
 
-          if (confirmDelete === DELETE ${staff.name.toUpperCase()}) {
+          if (confirmDelete === matchText) {
               // Remove from array completely
               staffData.splice(index, 1);
 
-              logActivity("Staff Deleted", Admin permanently deleted staff member profile: ${staff.name} (${staff.email}).);
+              logActivity("Staff Deleted", "Admin permanently deleted staff member profile: " + staff.name + " (" + staff.email + ").");
               await syncStaffToCloud();
               await removeStaffAccess(staff.email); // Block login
               renderStaffTable();
