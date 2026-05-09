@@ -1350,21 +1350,12 @@ window.recalcInvigSlots = async function () {
                           const localRaw = localStorage.getItem(key) || '{}';
                           const local = JSON.parse(localRaw);
 
-                          // 🔍 STARTUP CHECK: If we just opened the app, we MUST trust the Cloud's session state
-                          // This prevents PC 2 from "rescuing" rooms that were deleted on PC 1.
-                          const isStartup = (window.isAppInitializing === true);
-
-                          // If it's a startup fetch, Cloud is the Absolute Truth.
-                          // If it's a live update later, merge them to prevent overwriting current work.
-                          const merged = isStartup ? { ...cloud } : { ...local, ...cloud };
-
-                          localStorage.setItem(key, JSON.stringify(merged));
-                          return;
-                      } catch (e) {
-                           console.error("Merge error for " + key, e);
-                      }
+// --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
+                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
+                      // 🚫 [SCR5 MIGRATION FIX] Block legacy cloud documents from poisoning local state!
+                      // These keys are now strictly managed by the V2 Modular Sessions listener.
+                      return;
                   }
-
                 // Default: Direct sync for settings/simple strings
                 localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
             });
