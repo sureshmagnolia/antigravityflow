@@ -1343,19 +1343,13 @@ window.recalcInvigSlots = async function () {
                 const lastLocalSave = localSyncPriority[key] || 0;
                 if (now - lastLocalSave < 10000) return;
 
-// --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
-                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment') {
-                      try {
-                          const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
-                          const localRaw = localStorage.getItem(key) || '{}';
-                          const local = JSON.parse(localRaw);
-
-// --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
+                // --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
                   if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
                       // 🚫 [SCR5 MIGRATION FIX] Block legacy cloud documents from poisoning local state!
                       // These keys are now strictly managed by the V2 Modular Sessions listener.
                       return;
                   }
+
                 // Default: Direct sync for settings/simple strings
                 localStorage.setItem(key, typeof incoming === 'string' ? incoming : JSON.stringify(incoming));
             });
