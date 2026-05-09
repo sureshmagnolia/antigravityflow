@@ -9,6 +9,10 @@
     <title>ExamFlow V12.8.5 (Diagnostic Mode)</title>
 
     <script src="tailwind.js"></script>
+    <script>
+          // Suppress Tailwind CDN production warning
+          if (window.tailwind) window.tailwind.config = { corePlugins: { preflight: true } };
+    </script>
     <script src="jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="jspdf.plugin.autotable.min.js"></script>
