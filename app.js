@@ -2159,7 +2159,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
-        async function syncDataToCloud(targetSection, affectedKey = null) {
+         async function syncDataToCloud(targetSection) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
             console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
@@ -2263,20 +2263,17 @@ async function deleteSessionFromCloud(sessionKey) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
-                          // 🛡️ HARMONIZED MERGE (Deletion Fix): Skip union merge for the affectedKey
+                          // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
                           Object.keys(cloudSlots).forEach(k => {
                               if (localSlots[k]) {
-                                  // If this key was explicitly modified, trust local (allows deletions).
-                                  // Otherwise, use additive merge to protect concurrent edits.
-                                  if (k !== affectedKey) {
-                                      const cloudAssigned = cloudSlots[k].assigned || [];
-                                      const localAssigned = localSlots[k].assigned || [];
-                                      localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
+                                  // Additive Merge: Combine local and cloud to ensure no data loss
+                                  const cloudAssigned = cloudSlots[k].assigned || [];
+                                  const localAssigned = localSlots[k].assigned || [];
+                                  localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
 
-                                      const cloudUnavail = cloudSlots[k].unavailable || [];
-                                      const localUnavail = localSlots[k].unavailable || [];
-                                      localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
-                                  }
+                                  const cloudUnavail = cloudSlots[k].unavailable || [];
+                                  const localUnavail = localSlots[k].unavailable || [];
+                                  localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
 
                                   if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
                                       localSlots[k].allocationLog = cloudSlots[k].allocationLog;
