@@ -133,6 +133,7 @@ window.searchStudent = async function() {
                         allSessions.push({
                             date: dPart.trim(), time: tPart.trim(),
                             studentMap: d.students || {},
+                            scribeAllotment: d.scribeAllotment || {}, // 🛡️ FIX: Fetch scribe data
                             fullDate: sessionTime
                         });
                     }
@@ -239,7 +240,8 @@ window.searchStudent = async function() {
 
           function parseSessionTime(dateStr, timeStr) {
               try {
-                  const [d, m, y] = dateStr.split('.').map(Number);
+                  let [d, m, y] = dateStr.split('.').map(Number);
+                  if (y < 100) y += 2000; // 🛡️ FIX: Convert 26 to 2026
                   let [time, modifier] = timeStr.split(' ');
                   let [hours, minutes] = time.split(':').map(Number);
 
