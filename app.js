@@ -13924,11 +13924,20 @@ Are you sure you want to update these records?
             currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
 
             // 1. Get Data
-            const data = getFilteredReportData('invigilator-summary');
-            if (data.length === 0) {
-                alert("No data found for the selected filter/session.");
-                return;
-            }
+              // 1. Get Data (🛡️ AUDIT FIX: Bypass stream filter to ensure full session requirement is shown)
+              let data = allStudentData || [];
+              if (filterSessionRadio.checked) {
+                  const sessionKey = reportsSessionSelect.value;
+                  if (sessionKey && sessionKey !== 'all') {
+                      const [date, time] = sessionKey.split(' | ');
+                      data = data.filter(s => s.Date === date && s.Time === time);
+                  }
+              }
+
+              if (data.length === 0) {
+                  alert("No data found for the selected session.");
+                  return;
+              }
 
             // 2. Get Scribes
             const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
