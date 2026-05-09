@@ -1349,8 +1349,8 @@ window.recalcInvigSlots = async function () {
                         const local = JSON.parse(localRaw);
                         const cloud = typeof incoming === 'string' ? JSON.parse(incoming) : incoming;
                         
-                        // Deep Merge: Combine both, preference for non-empty values
-                        const merged = { ...local, ...cloud };
+                          // 🛡️ [AUDIT FIX] Cloud is Source of Truth during startup fetch
+                          const merged = { ...local, ...cloud };
                         localStorage.setItem(key, JSON.stringify(merged));
                         return;
                     } catch (e) {
@@ -1420,21 +1420,27 @@ window.recalcInvigSlots = async function () {
             if (snap.exists()) syncLocal(snap.data());
         };
 
-        // 4. ALLOCATION (Scribes/Rooms) - On-Demand Fetcher
-        window.fetchAllocationData = async () => {
-            const { getDoc, doc } = window.firebase;
-            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "allocation"));
-            if (snap.exists()) {
-                syncLocal(snap.data());
-                if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                if (typeof renderRoomAllotmentList === 'function' && typeof currentSessionKey !== 'undefined') renderRoomAllotmentList(currentSessionKey);
-            }
-        };
+          // 4. ALLOCATION (Scribes/Rooms) - On-Demand Fetcher
+          window.fetchAllocationData = async () => {
+              const { getDoc, doc } = window.firebase;
+              const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "allocation"));
+              if (snap.exists()) {
+                  syncLocal(snap.data());
+                  if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
 
-        // Fetch settings once on load (so initial room capacities are ready)
-        fetchSettingsData();
-        // 4. ALLOCATIONS (Scribes)
-        if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
+                  // 🛡️ Force UI update to clear "Ghost" allotments from another device
+                  if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
+                  if (typeof renderRoomAllotmentList === 'function' && typeof currentSessionKey !== 'undefined') renderRoomAllotmentList(currentSessionKey);
+              }
+          };
+
+// 🛡️ [AUDIT FIX] Force full sync of configuration and assignments on startup
+          // This ensures PC 2 picks up PC 1's changes immediately upon login.
+          fetchSettingsData();
+          if (typeof fetchAllocationData === 'function') fetchAllocationData();
+          if (typeof fetchSlotsData === 'function') fetchSlotsData();
+          if (typeof fetchStaffData === 'function') fetchStaffData();
+          if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
             console.log("☁️ Fetching Data (Hybrid Mode)...");
