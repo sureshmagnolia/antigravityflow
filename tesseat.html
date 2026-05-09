@@ -267,7 +267,6 @@ window.searchStudent = async function() {
         var isAuthorized = false;
 
         async function checkAccess() {
-            // 🛡️ SECURITY: Dynamic password based on today's date (DDMMYYYY)
             const today = new Date();
             const dd = String(today.getDate()).padStart(2, '0');
             const mm = String(today.getMonth() + 1).padStart(2, '0');
