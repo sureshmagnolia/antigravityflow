@@ -2197,17 +2197,11 @@ async function syncSlotsToCloud() {
           const localSlots = invigilationSlots;
 
           // If cloud has MORE data for a specific slot than local, keep the cloud version
-          Object.keys(cloudSlots).forEach(k => {
-              if (localSlots[k]) {
-                  const cloudAssigned = cloudSlots[k].assigned || [];
-                  const localAssigned = localSlots[k].assigned || [];
-                  if (cloudAssigned.length > localAssigned.length) {
-                      localSlots[k].assigned = cloudAssigned;
-                  }
-              } else {
-                  localSlots[k] = cloudSlots[k]; // Preserve slots only found in cloud
-              }
-          });
+             Object.keys(cloudSlots).forEach(k => {
+                 if (!localSlots[k]) {
+                     localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                 }
+             });
 
           await setDoc(ref, {
               examInvigilationSlots: JSON.stringify(localSlots)
@@ -4102,12 +4096,18 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
 
     if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
 
-    // 1. Validation
-    if (!slot.assigned.includes(sellerEmail)) {
-        alert("This user is no longer assigned to this slot.");
-        renderExchangeMarket(buyerEmail);
-        return;
-    }
+      // 1. Validation (🛡️ Anti-Ghosting Shield)
+      if (!slot.assigned.includes(sellerEmail)) {
+          // Seller was removed by admin or already swapped.
+          // Force cleanup of the stale request.
+          if (slot.exchangeRequests) {
+              slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
+              await syncSlotsToCloud();
+          }
+          alert("⚠️ This exchange is no longer valid. The original owner is no longer assigned to this duty.");
+          if (typeof renderExchangeMarket === 'function') renderExchangeMarket(buyerEmail);
+          return;
+      }
 
     window._isAcceptingExchange = true;
     try {
