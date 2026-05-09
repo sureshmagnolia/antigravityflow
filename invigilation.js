@@ -3229,20 +3229,55 @@ window.saveNewStaff = async function () {
 
 
 
-window.deleteStaff = async function (index) {
-    const staff = staffData[index];
-    if (!staff) return;
+// 1. Ask the user to choose the action (ARCHIVE vs DELETE)
+const promptMsg = "Choose action for " + staff.name + ":\n\n" +
+                  "Type 'ARCHIVE' to hide them but keep their history.\n" +
+                  "Type 'DELETE' to permanently remove their profile.\n\n" +
+                  "(Recommended: ARCHIVE)";
+                  
+const action = prompt(promptMsg, "ARCHIVE");
 
-    if (confirm(`Archive ${staff.name}?\n\nThey will be hidden from new duty assignments, but their past attendance records will remain for reports.`)) {
-        // Soft Delete
-        staffData[index].status = 'archived';
-        logActivity("Staff Archived", `Admin archived staff member: ${staff.name} (${staff.email}).`);
+if (!action) return; // User cancelled
+
+const cleanAction = action.trim().toUpperCase();
+
+if (cleanAction === 'ARCHIVE') {
+    // Soft Delete Logic
+    staffData[index].status = 'archived';
+    logActivity("Staff Archived", "Admin archived staff member: " + staff.name + " (" + staff.email + ").");
+    await syncStaffToCloud();
+    await removeStaffAccess(staff.email); // Block login
+    renderStaffTable();
+    alert("Staff archived successfully.");
+}
+else if (cleanAction === 'DELETE') {
+    // Hard Delete Logic with Safety Confirmation
+    const matchText = "DELETE " + staff.name.toUpperCase();
+    
+    const msgPart1 = "⚠️ CRITICAL WARNING ⚠️\n\n" +
+                     "You are about to PERMANENTLY DELETE the profile for:\n" + staff.name + "\n\n";
+    const msgPart2 = "Their past duties will remain in old reports, but they will be completely ";
+    const msgPart3 = "erased from the active directory.\n\nTo confirm, type exactly: " + matchText;
+
+    const confirmDelete = prompt(msgPart1 + msgPart2 + msgPart3);
+
+    if (confirmDelete === matchText) {
+        // Remove from the data array completely
+        staffData.splice(index, 1);
+
+        logActivity("Staff Deleted", "Admin permanently deleted staff member: " + staff.name + " (" + staff.email + ").");
         await syncStaffToCloud();
-        await removeStaffAccess(staff.email); // Optional: Block login
+        await removeStaffAccess(staff.email); // Block login
         renderStaffTable();
-alert("Staff archived successfully.");
+        alert("Staff profile permanently deleted.");
+    } else {
+        alert("Deletion cancelled. The confirmation text did not match.");
     }
 }
+else {
+    alert("Invalid action. Please type either ARCHIVE or DELETE.");
+}
+
 
 window.reactivateStaff = async function (index) {
     const staff = staffData[index];
