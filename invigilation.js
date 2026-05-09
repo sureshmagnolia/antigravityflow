@@ -3251,12 +3251,12 @@ window.deleteStaff = async function (index) {
           alert("Staff archived successfully.");
       }
       else if (cleanAction === 'DELETE') {
-          // Hard Delete Logic
-          const matchText = "DELETE " + staff.name.toUpperCase();
-          const confirmDelete = prompt("⚠️ CRITICAL WARNING ⚠️\n\nYou are about to PERMANENTLY DELETE the profile for:\n" + staff.name + "\n\nTheir past duties will remain in old reports, but they will be
+            // Hard Delete Logic
+            const matchText = "DELETE " + staff.name.toUpperCase();
+            const confirmDelete = prompt("⚠️ CRITICAL WARNING ⚠️\n\nYou are about to PERMANENTLY DELETE the profile for:\n" + staff.name + "\n\nTheir past duties will remain in old reports, but they will be
   completely erased from the active directory.\n\nTo confirm, type exactly: " + matchText);
 
-          if (confirmDelete === matchText) {
+            if (confirmDelete === matchText) {
               // Remove from array completely
               staffData.splice(index, 1);
 
