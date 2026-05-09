@@ -2196,12 +2196,24 @@ async function syncSlotsToCloud() {
           const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
           const localSlots = invigilationSlots;
 
-          // If cloud has MORE data for a specific slot than local, keep the cloud version
-             Object.keys(cloudSlots).forEach(k => {
-                 if (!localSlots[k]) {
-                     localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                 }
-             });
+            // 🛡️ SMART MERGE (Audit Upgrade): Merges assignments and unavailability from cloud
+               Object.keys(cloudSlots).forEach(k => {
+                   if (localSlots[k]) {
+                       // Merge Assigned (Prevents overwriting Divya with Sindhu if stale)
+                       const cloudAssigned = cloudSlots[k].assigned || [];
+                       localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+
+                       // Merge Unavailability
+                       const cloudUnavail = cloudSlots[k].unavailable || [];
+                       localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+
+                       if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                          localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                       }
+                   } else {
+                       localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                   }
+               });
 
           await setDoc(ref, {
               examInvigilationSlots: JSON.stringify(localSlots)
