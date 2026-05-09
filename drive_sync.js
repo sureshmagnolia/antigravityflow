@@ -623,6 +623,9 @@ async function syncDataSilent() {
         });
 
         await manageRetention(folderId);
+        // 🛡️ SYNC FIX: Update local timestamp to NOW so we are in sync with the file we just sent
+        const finalTime = now.toISOString();
+        localStorage.setItem('lastUpdated', finalTime);
         localStorage.setItem('lastGoogleSync', Date.now());
         const lastSyncElem = document.getElementById('last-sync-time');
         if(lastSyncElem) lastSyncElem.textContent = now.toLocaleString();
@@ -721,7 +724,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
                 mergeBtn.classList.remove('hidden');
                 window.executeDriveRestore = () => {
                     mergeBtn.classList.add('hidden');
-                    window.executeRestore(latestCloudFile.id);
+                    window.executeRestore(latestCloudFile.id, latestCloudFile.createdTime);
                 };
             }
 
