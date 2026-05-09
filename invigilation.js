@@ -3227,8 +3227,9 @@ window.saveNewStaff = async function () {
 }
 
 
-
-
+window.deleteStaff = async function (index) { 
+const staff = staffData[index]; 
+if (!staff) return;
 // 1. Ask the user to choose the action (ARCHIVE vs DELETE)
 const promptMsg = "Choose action for " + staff.name + ":\n\n" +
                   "Type 'ARCHIVE' to hide them but keep their history.\n" +
