@@ -512,10 +512,17 @@ if (adminView && !adminView.classList.contains('hidden')) {
                 allInvig[sKey] = data.invigilatorMapping || {};
                 localStorage.setItem('examInvigilatorMapping', JSON.stringify(allInvig));
                 
-                // Update Local Room Allotment (For Capacity/Stats)
-                const allRooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-                allRooms[sKey] = data.roomAllotment || [];
-                localStorage.setItem('examRoomAllotment', JSON.stringify(allRooms));
+                  // Update Local Room Allotment (For Capacity/Stats)
+                  const allRooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                  allRooms[sKey] = data.roomAllotment || [];
+                  localStorage.setItem('examRoomAllotment', JSON.stringify(allRooms));
+
+                  // 🛡️ [SYNC] Update Scribe Allotments for Staffing Ratios
+                  const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                  if (data.scribeAllotment) {
+                      allScribes[sKey] = data.scribeAllotment;
+                      localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                  }
             });
 
             if (isAdmin) {
