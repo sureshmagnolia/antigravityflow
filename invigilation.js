@@ -3278,7 +3278,7 @@ else if (cleanAction === 'DELETE') {
 else {
     alert("Invalid action. Please type either ARCHIVE or DELETE.");
 }
-
+};
 
 window.reactivateStaff = async function (index) {
     const staff = staffData[index];
