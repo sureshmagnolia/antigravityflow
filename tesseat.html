@@ -267,14 +267,21 @@ window.searchStudent = async function() {
         var isAuthorized = false;
 
         async function checkAccess() {
+            // 🛡️ SECURITY: Dynamic password based on today's date (DDMMYYYY)
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            const dynamicPass = dd + mm + yyyy;
+
             const pass = await UiModal.prompt(
                 "🔐 Admin Access Required",
-                "Please enter the password for tesseat.html:",
+                "Please enter the access password:",
                 "Password",
                 "password"
             );
 
-            if (pass === "admin123") {
+            if (pass === dynamicPass) {
                 isAuthorized = true;
                 const content = document.getElementById('protected-content');
                 if (content) content.style.display = 'block';
