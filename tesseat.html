@@ -51,67 +51,69 @@
         const CACHE_KEY_INDEX = "seating_index_cache";
 
         async function loadData() {
-            const statusEl = document.getElementById('status');
-            if (!collegeId) return;
+              const statusEl = document.getElementById('status');
+              if (!collegeId) return;
 
-            statusEl.textContent = "Loading Live Exam Data...";
-            
-            try {
-                // ⚡ Check Local Cache for Index (Uses V2 Smart Cache)
-                const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
-                const now = Date.now();
+              statusEl.textContent = "Loading Live Exam Data...";
 
-               if (cachedIndex && (now - cachedIndex.timestamp < 300000)) { 
-                    indexCache = cachedIndex.data;
-                    document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
-                } else {
-                    const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
-                    if (indexSnap.exists()) {
-                        indexCache = indexSnap.data();
-                        localStorage.setItem(CACHE_KEY_INDEX, JSON.stringify({ timestamp: now, data: indexCache }));
-                        document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
-                    }
-                }
+              try {
+                  // ⚡ Check Local Cache for Index (Reduced to 10s for Admin Test immediate check)
+                  const cachedIndex = JSON.parse(localStorage.getItem(CACHE_KEY_INDEX));
+                  const now = Date.now();
 
-                statusEl.textContent = ""; 
-                document.getElementById('search-section').classList.remove('hidden');
+                  if (cachedIndex && (now - cachedIndex.timestamp < 10000)) {
+                      indexCache = cachedIndex.data;
+                      document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
+                  } else {
+                      const indexSnap = await getDoc(doc(db, 'public_seating', collegeId));
+                      if (indexSnap.exists()) {
+                          indexCache = indexSnap.data();
+                          localStorage.setItem(CACHE_KEY_INDEX, JSON.stringify({ timestamp: now, data: indexCache }));
+                          document.getElementById('college-name').textContent = indexCache.collegeName || "Exam Centre";
+                      }
+                  }
 
-                const savedRegNo = localStorage.getItem('myExamRegNo');
-                if (savedRegNo) {
-                    document.getElementById('reg-input').value = savedRegNo;
-                    // Trigger auto-search if authorization modal has already passed
-                    if (typeof isAuthorized !== 'undefined' && isAuthorized) {
-                         setTimeout(() => searchStudent(), 100);
-                    }
-                }
-            } catch (error) {
-                statusEl.textContent = "Database connection failed.";
-            }
-        }
+                  statusEl.textContent = "";
+                  document.getElementById('search-section').classList.remove('hidden');
+
+                  const savedRegNo = localStorage.getItem('myExamRegNo');
+                  if (savedRegNo) {
+                      document.getElementById('reg-input').value = savedRegNo;
+                      // Auto-search fires after admin grants access via checkAccess(), not here
+                  }
+
+              } catch (error) {
+                  statusEl.textContent = "Database connection failed.";
+              }
+          }
 
 
-        window.searchStudent = async function() {
-            const regInput = document.getElementById('reg-input');
-            const regNo = regInput.value.trim().toUpperCase();
-            const resultContainer = document.getElementById('result-container');
-            const statusEl = document.getElementById('status');
-            resultContainer.innerHTML = '';
-            
-            if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
+window.searchStudent = async function() {
+              allSessions = []; // 🚀 RESET: Ensure we fetch latest allotment for every search
+              const regInput = document.getElementById('reg-input');
+              const regNo = regInput.value.trim().toUpperCase();
+              const resultContainer = document.getElementById('result-container');
+              const statusEl = document.getElementById('status');
+              resultContainer.innerHTML = '';
 
-            // Unconditionally save it locally
-            localStorage.setItem('myExamRegNo', regNo);
+              if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
 
-            const nowTotal = new Date();
-            const todayString = `${String(nowTotal.getDate()).padStart(2, '0')}.${String(nowTotal.getMonth() + 1).padStart(2, '0')}.${nowTotal.getFullYear()}`;
-            
-            // Populate sessions from correct V2 Architecture
-            if (allSessions.length === 0 && indexCache) {
-                statusEl.textContent = "Verifying sessions...";
-                const sessions = indexCache.sessions || {};
+              // Unconditionally save it locally
+              localStorage.setItem('myExamRegNo', regNo);
 
-                for (const [label, sInfo] of Object.entries(sessions)) {
-                    if (!label.startsWith(todayString)) continue;
+              // 🛡️ Ensure Index is loaded before searching
+              if (!indexCache) {
+                  statusEl.textContent = "Connecting to database...";
+                  await loadData();
+              }
+
+              // Populate sessions from correct V2 Architecture
+              if (indexCache) {
+                  statusEl.textContent = "Verifying all allotted sessions...";
+                  const sessions = indexCache.sessions || {};
+
+                  for (const [label, sInfo] of Object.entries(sessions)) {
+                      // 🛑 ADMIN FIX: Removed todayString filter to allow immediate check of all future/past allotments
 
                     const [dPart, tPart] = label.split(' | ');
                     const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
@@ -131,6 +133,7 @@
                         allSessions.push({
                             date: dPart.trim(), time: tPart.trim(),
                             studentMap: d.students || {},
+                            scribeAllotment: d.scribeAllotment || {}, // 🛡️ FIX: Fetch scribe data
                             fullDate: sessionTime
                         });
                     }
@@ -235,18 +238,21 @@
             document.getElementById('reg-input').focus();
         };
 
-        function parseSessionTime(dateStr, timeStr) {
-            try {
-                const [d, m, y] = dateStr.split('.').map(Number);
-                let [time, modifier] = timeStr.split(' ');
-                let [hours, minutes] = time.split(':').map(Number);
-                
-                if (modifier === 'PM' && hours < 12) hours += 12;
-                if (modifier === 'AM' && hours === 12) hours = 0;
-                
-                return new Date(y, m - 1, d, hours, minutes);
-            } catch(e) { return new Date(); }
-        }
+          function parseSessionTime(dateStr, timeStr) {
+              try {
+                  let [d, m, y] = dateStr.split('.').map(Number);
+                  if (y < 100) y += 2000; // 🛡️ FIX: Convert 26 to 2026
+                  let [time, modifier] = timeStr.split(' ');
+                  let [hours, minutes] = time.split(':').map(Number);
+
+                  if (modifier === 'PM' && hours < 12) hours += 12;
+                  if (modifier === 'AM' && hours === 12) hours = 0;
+
+            // 🛡️ Robust IST ISO String
+                const isoString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:30`;
+                  return new Date(isoString);
+              } catch(e) { return new Date(); }
+          }
 
         loadData();
 
@@ -261,23 +267,26 @@
         var isAuthorized = false;
 
         async function checkAccess() {
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            const dynamicPass = dd + mm + yyyy;
+
             const pass = await UiModal.prompt(
                 "🔐 Admin Access Required",
-                "Please enter the password for tesseat.html:",
+                "Please enter the access password:",
                 "Password",
                 "password"
             );
 
-            if (pass === "admin123") {
+            if (pass === dynamicPass) {
                 isAuthorized = true;
                 const content = document.getElementById('protected-content');
                 if (content) content.style.display = 'block';
-                
-                // Trigger auto-search if Reg No is saved
+                // Auto-trigger search if a reg number was already saved
                 const savedRegNo = localStorage.getItem('myExamRegNo');
-                if (savedRegNo) {
-                    window.searchStudent();
-                }
+                if (savedRegNo) setTimeout(() => window.searchStudent(), 200);
             } else {
                 if (pass !== null) { 
                     await UiModal.alert("🚫 Access Denied", "Incorrect password.");
