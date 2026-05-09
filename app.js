@@ -11239,12 +11239,27 @@ window.real_populate_qp_code_session_dropdown = function () {
               streamStats[roomStream].roomsUsed++;
           });
 
-          // 3. Save cleaned data immediately if any ghosts or duplicates were pruned
-          if (hasIntegrityCleanup) {
-              console.log("🧹 [Audit Cleanup] Removed ghost students or duplicate assignments.");
-              saveRoomAllotment();
-              hasUnsavedAllotment = true;
-          }
+            // 3. Save cleaned data immediately if any ghosts or duplicates were pruned
+            if (hasIntegrityCleanup) {
+                console.log("🧹 [Audit Cleanup] Removed ghost students or duplicate assignments.");
+                saveRoomAllotment();
+                hasUnsavedAllotment = true;
+            }
+
+            // 🛡️ [AUDIT FIX] Prune Scribe Allotments for students no longer in this session
+            let hasScribePruning = false;
+            Object.keys(currentScribeAllotment).forEach(reg => {
+                if (!masterRegNos.has(reg)) {
+                    delete currentScribeAllotment[reg];
+                    hasScribePruning = true;
+                }
+            });
+            if (hasScribePruning) {
+                const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                allScribes[currentSessionKey] = currentScribeAllotment;
+                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+                hasUnsavedAllotment = true;
+            }
 
        
         // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
