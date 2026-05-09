@@ -207,10 +207,9 @@ async function autoCleanPastGhostData() {
 
     today.setHours(0, 0, 0, 0);
 
-    // 🛡️ SAFETY BUFFER: Keep data for 30 days after the exam date
-    // This allows you to delete and re-upload past exams without losing volunteers.
-    const cutoffDate = new Date(today);
-    cutoffDate.setDate(today.getDate() - 30); 
+      // 🛡️ SAFETY BUFFER: Keep data for 365 days after the exam date (Audit recommendation)
+      const cutoffDate = new Date(today);
+      cutoffDate.setDate(today.getDate() - 365);
 
     let slots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
@@ -18398,6 +18397,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
     // 3. Execute Swap Logic
         window.performSwap = async function (roomA, roomB) {
+          if (window._isPerformingSwap) return;
+          window._isPerformingSwap = true;
         const sessionKey = allotmentSessionSelect.value;
         const invigNameA = currentInvigMapping[roomA];
         const invigNameB = currentInvigMapping[roomB];
@@ -18428,9 +18429,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
             }
         }
 
-        // Reset UI
-        swapSourceRoom = null;
-        renderInvigilationPanel();
+          // Reset UI
+          swapSourceRoom = null;
+          window._isPerformingSwap = false;
+          renderInvigilationPanel();
 
         // Optional Feedback
         // alert("Swapped successfully!"); 
