@@ -8119,9 +8119,6 @@ function downloadVectorPDF() {
         const doc = new jsPDF('p', 'mm', 'a4');
         const staffList = ${staffListJson};
         
-        // Helper: Convert to Title Case
-        const toTitleCase = (str) => str ? str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "";
-        
         // --- DYNAMIC STRATEGY: 1 PAGE FIT ---
         const totalStaff = staffList.length;
         const availableHeight = 185; 
@@ -8138,7 +8135,7 @@ function downloadVectorPDF() {
         else if (rowsPerCol > 20) { dFontSize = 8; dPadding = 1; }
         else if (rowsPerCol > 15) { dFontSize = 9; dPadding = 1.5; }
 
-        // Add College Logo (Slightly larger)
+        // Add College Logo (Professional Size)
         try {
             doc.addImage("CollegeLogo.png", "PNG", 96.5, 4, 17, 17);
         } catch (e) { console.warn("Logo failed to load:", e); }
@@ -8178,7 +8175,6 @@ function downloadVectorPDF() {
             const offset = c * 3;
             colConfig[offset] = { halign: "center", cellWidth: 8 };
             colConfig[offset + 1] = { cellWidth: "auto" };
-            // Dynamic Mobile Width to prevent wrap
             colConfig[offset + 2] = { halign: "center", cellWidth: (dCols === 1 ? 30 : (dCols === 2 ? 22 : 20)) };
         }
 
@@ -8189,10 +8185,11 @@ function downloadVectorPDF() {
                 let idx = c * rowsPerCol + r;
                 if (idx < staffList.length) {
                     let s = staffList[idx];
-                    // Apply Title Case and Dept formatting
-                    const displayName = toTitleCase(s.name);
+                    // Name: FULL CAPS | Mobile: Sanitize Spaces & Last 10 Digits
+                    const displayName = s.name.toUpperCase();
+                    const sanitizedPhone = s.phone ? s.phone.replace(/\s+/g, '').slice(-10) : "-";
                     const deptName = s.dept ? "\\n(" + s.dept + ")" : "";
-                    row.push(s.no, displayName + deptName, s.phone);
+                    row.push(s.no, displayName + deptName, sanitizedPhone);
                 } else {
                     row.push("", "", "");
                 }
@@ -8234,7 +8231,7 @@ function downloadVectorPDF() {
         const sigY = Math.max(finalY + 15, 270);
         doc.setDrawColor(0);
         doc.setLineWidth(0.3);
-        doc.line(140, sigY - 2, 195, sigY - 2); // Signature Line
+        doc.line(140, sigY - 2, 195, sigY - 2); 
         doc.text("Chief Superintendent", 195, sigY + 4, { align: "right" });
 
         doc.save("Duty_Notification_${dateStr}_${sessionCode}.pdf");
