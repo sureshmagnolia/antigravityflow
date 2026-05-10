@@ -8196,7 +8196,7 @@ function downloadVectorPDF() {
                 let idx = c * rowsPerCol + r;
                 if (idx < staffList.length) {
                     let s = staffList[idx];
-                    row.push(s.no, s.name + "\n" + s.dept, s.phone);
+                    row.push(s.no, s.name + "\\n" + s.dept, s.phone);
                 } else {
                     row.push("", "", "");
                 }
