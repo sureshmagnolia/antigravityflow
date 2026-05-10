@@ -8119,65 +8119,57 @@ function downloadVectorPDF() {
         const doc = new jsPDF('p', 'mm', 'a4');
         const staffList = ${staffListJson};
         
+        // Helper: Convert to Title Case
+        const toTitleCase = (str) => str ? str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : "";
+        
         // --- DYNAMIC STRATEGY: 1 PAGE FIT ---
         const totalStaff = staffList.length;
-        const availableHeight = 185; // mm (Space for table)
+        const availableHeight = 185; 
 
-        // 1. Determine Columns based on count
         let dCols = 1;
         if (totalStaff > 20 && totalStaff <= 40) dCols = 2;
         else if (totalStaff > 40) dCols = 3;
 
-        // 2. Determine Font and Padding based on rows per column
         const rowsPerCol = Math.ceil(totalStaff / dCols);
         let dFontSize = 10;
         let dPadding = 2;
 
-        if (rowsPerCol > 30) {
-            dFontSize = 7;
-            dPadding = 0.5;
-        } else if (rowsPerCol > 20) {
-            dFontSize = 8;
-            dPadding = 1;
-        } else if (rowsPerCol > 15) {
-            dFontSize = 9;
-            dPadding = 1.5;
-        }
+        if (rowsPerCol > 30) { dFontSize = 7; dPadding = 0.5; }
+        else if (rowsPerCol > 20) { dFontSize = 8; dPadding = 1; }
+        else if (rowsPerCol > 15) { dFontSize = 9; dPadding = 1.5; }
 
-        // Add College Logo
+        // Add College Logo (Slightly larger)
         try {
-            doc.addImage("CollegeLogo.png", "PNG", 97.5, 5, 15, 15);
-        } catch (e) {
-            console.warn("Logo failed to load:", e);
-        }
+            doc.addImage("CollegeLogo.png", "PNG", 96.5, 4, 17, 17);
+        } catch (e) { console.warn("Logo failed to load:", e); }
 
         doc.setFont("times", "bold");
-        doc.setFontSize(14);
+        doc.setFontSize(15);
         doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 25, { align: "center" });
         doc.setFontSize(8);
         doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 29, { align: "center" });
         doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 33, { align: "center" });
         
-        doc.setDrawColor(0); // Black Line
-        doc.setLineWidth(0.3);
-        doc.line(10, 35, 200, 35);
+        doc.setDrawColor(0); 
+        doc.setLineWidth(0.4);
+        doc.line(10, 36, 200, 36);
 
         doc.setFontSize(10);
-        doc.text("Chief Superintendent, University Examinations", 10, 42);
-        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 42, { align: "right" });
-        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 46, { align: "right" });
+        doc.text("Chief Superintendent, University Examinations", 10, 43);
+        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 43, { align: "right" });
+        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 47, { align: "right" });
 
         doc.setFont("times", "normal");
         const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
         const splitText = doc.splitTextToSize(letterText, 190);
-        doc.text(splitText, 10, 52, { maxWidth: 190, align: "justify" });
+        doc.text(splitText, 10, 53, { maxWidth: 190, align: "justify" });
 
         doc.setDrawColor(0);
-        doc.setFillColor(245, 245, 245);
-        doc.rect(10, 64, 190, 7, "FD");
+        doc.setFillColor(242, 242, 242);
+        doc.rect(10, 65, 190, 8, "FD");
         doc.setFont("times", "bold");
-        doc.setFontSize(9);
-        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 68.5, { align: "center" });
+        doc.setFontSize(9.5);
+        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 70, { align: "center" });
 
         let headRow = [];
         let colConfig = {};
@@ -8186,7 +8178,8 @@ function downloadVectorPDF() {
             const offset = c * 3;
             colConfig[offset] = { halign: "center", cellWidth: 8 };
             colConfig[offset + 1] = { cellWidth: "auto" };
-            colConfig[offset + 2] = { halign: "center", cellWidth: 18 };
+            // Dynamic Mobile Width to prevent wrap
+            colConfig[offset + 2] = { halign: "center", cellWidth: (dCols === 1 ? 30 : (dCols === 2 ? 22 : 20)) };
         }
 
         let tableRows = [];
@@ -8196,7 +8189,10 @@ function downloadVectorPDF() {
                 let idx = c * rowsPerCol + r;
                 if (idx < staffList.length) {
                     let s = staffList[idx];
-                    row.push(s.no, s.name + "\\n" + s.dept, s.phone);
+                    // Apply Title Case and Dept formatting
+                    const displayName = toTitleCase(s.name);
+                    const deptName = s.dept ? "\\n(" + s.dept + ")" : "";
+                    row.push(s.no, displayName + deptName, s.phone);
                 } else {
                     row.push("", "", "");
                 }
@@ -8205,16 +8201,16 @@ function downloadVectorPDF() {
         }
 
         doc.autoTable({
-            startY: 73,
+            startY: 75,
             head: [headRow],
             body: tableRows,
             theme: "grid",
             headStyles: { 
-                fillColor: [240, 240, 240], 
+                fillColor: [220, 220, 220], 
                 textColor: [0, 0, 0], 
                 fontStyle: "bold", 
                 halign: "center",
-                lineWidth: 0.1,
+                lineWidth: 0.2,
                 lineColor: [0, 0, 0] 
             },
             styles: { 
@@ -8223,19 +8219,23 @@ function downloadVectorPDF() {
                 cellPadding: dPadding, 
                 valign: "middle", 
                 textColor: [0, 0, 0],
-                lineWidth: 0.1,
+                lineWidth: 0.15,
                 lineColor: [0, 0, 0] 
             },
             columnStyles: colConfig,
-            margin: { left: 10, right: 10, bottom: 20 }
+            margin: { left: 10, right: 10, bottom: 25 }
         });
 
         const finalY = doc.lastAutoTable.finalY || 200;
         doc.setFontSize(11);
         doc.setFont("times", "bold");
-        // Ensure signature is at bottom but doesn't cause page break
-        const sigY = Math.max(finalY + 10, 275); 
-        doc.text("Chief Superintendent", 190, Math.min(sigY, 285), { align: "right" });
+        
+        // Final Signature Block
+        const sigY = Math.max(finalY + 15, 270);
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.3);
+        doc.line(140, sigY - 2, 195, sigY - 2); // Signature Line
+        doc.text("Chief Superintendent", 195, sigY + 4, { align: "right" });
 
         doc.save("Duty_Notification_${dateStr}_${sessionCode}.pdf");
         
