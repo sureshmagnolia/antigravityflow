@@ -8109,108 +8109,137 @@ window.printDutyNotification = function (key) {
 
             <script>
 
-                function downloadVectorPDF() {
-                    const btn = document.querySelector('.btn-download');
-                    btn.textContent = "Generating Vector PDF...";
-                    btn.disabled = true;
+function downloadVectorPDF() {
+    const btn = document.querySelector('.btn-download');
+    btn.textContent = "Generating Vector PDF...";
+    btn.disabled = true;
 
-                    setTimeout(() => {
-                        const { jsPDF } = window.jspdf;
-                        const doc = new jsPDF('p', 'mm', 'a4');
-                        const staffList = ${staffListJson};
-                        const cols = ${cols};
-                // Add College Logo (Relative to your root)
-                        try {
-                            // Positioning: x=12, y=8, w=15, h=15 (Adjust if needed)
-                            doc.addImage("CollegeLogo.png", "PNG", 97.5, 5, 15, 15);
-                        } catch (e) {
-                            console.warn("Logo failed to load:", e);
-                        }
+    setTimeout(() => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const staffList = ${staffListJson};
+        
+        // --- DYNAMIC STRATEGY: 1 PAGE FIT ---
+        const totalStaff = staffList.length;
+        const availableHeight = 185; 
 
-                        doc.setFont("times", "bold");
-                        doc.setFontSize(14);
-    // Shifted down to accommodate the top-center logo
-    doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 25, { align: "center" });
-    doc.setFontSize(8);
-    doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 29, { align: "center" });
-    doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 33, { align: "center" });
-    doc.setLineWidth(0.3);
-    doc.line(10, 35, 200, 35); // Horizontal line moved down to y=35
+        let dCols = 1;
+        if (totalStaff > 20 && totalStaff <= 40) dCols = 2;
+        else if (totalStaff > 40) dCols = 3;
 
+        const rowsPerCol = Math.ceil(totalStaff / dCols);
+        let dFontSize = 10;
+        let dPadding = 2;
 
-                    doc.setFontSize(10);
-                        doc.text("Chief Superintendent, University Examinations", 10, 42);
-                        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 42, { align: "right" });
-                        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 46, { align: "right" });
+        if (rowsPerCol > 30) { dFontSize = 7; dPadding = 0.5; }
+        else if (rowsPerCol > 20) { dFontSize = 8; dPadding = 1; }
+        else if (rowsPerCol > 15) { dFontSize = 9; dPadding = 1.5; }
 
-                        // Justified Letter Text
-                        doc.setFont("times", "normal");
-                        const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
-                        
-                        const splitText = doc.splitTextToSize(letterText, 190);
-                        // 🔥 Shifted to y=52
-                        doc.text(splitText, 10, 52, { maxWidth: 190, align: "justify" });
+        // Add College Logo (Professional Size)
+        try {
+            doc.addImage("CollegeLogo.png", "PNG", 96.5, 4, 17, 17);
+        } catch (e) { console.warn("Logo failed to load:", e); }
 
-                        doc.setDrawColor(0);
-                        doc.setFillColor(245, 245, 245);
-                        // 🔥 Shifted to y=64
-                        doc.rect(10, 64, 190, 7, "FD");
-                        doc.setFont("times", "bold");
-                        doc.setFontSize(9);
-                        // 🔥 Shifted to y=68.5
-                        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 68.5, { align: "center" });
+        doc.setFont("times", "bold");
+        doc.setFontSize(15);
+        doc.text("GOVERNMENT VICTORIA COLLEGE, PALAKKAD", 105, 25, { align: "center" });
+        doc.setFontSize(8);
+        doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, 29, { align: "center" });
+        doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, 33, { align: "center" });
+        
+        doc.setDrawColor(0); 
+        doc.setLineWidth(0.4);
+        doc.line(10, 36, 200, 36);
 
+        doc.setFontSize(10);
+        doc.text("Chief Superintendent, University Examinations", 10, 43);
+        doc.text("No: EXAM/${dayDiff}${sessionCode}", 200, 43, { align: "right" });
+        doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 47, { align: "right" });
 
-                        let rowsPerCol = Math.ceil(staffList.length / cols);
-                        let headRow = [];
-                        let colConfig = {};
+        doc.setFont("times", "normal");
+        const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
+        const splitText = doc.splitTextToSize(letterText, 190);
+        doc.text(splitText, 10, 53, { maxWidth: 190, align: "justify" });
 
-                        
-                        for (let c = 0; c < cols; c++) {
-                            headRow.push("No", "Name & Dept", "Mobile");
-                            const offset = c * 3;
-                            colConfig[offset] = { halign: "center", cellWidth: 8 };
-                            colConfig[offset + 1] = { cellWidth: "auto" };
-                            colConfig[offset + 2] = { halign: "center", cellWidth: 18 };
-                        }
+        doc.setDrawColor(0);
+        doc.setFillColor(242, 242, 242);
+        doc.rect(10, 65, 190, 8, "FD");
+        doc.setFont("times", "bold");
+        doc.setFontSize(9.5);
+        doc.text("EXAM: ${dateStr}   |   SESSION: ${sessionCode} (${timeStr})   |   REPORT BY: ${reportTime}", 105, 70, { align: "center" });
 
-                        let tableRows = [];
-                        for (let r = 0; r < rowsPerCol; r++) {
-                            let row = [];
-                            for (let c = 0; c < cols; c++) {
-                                let idx = c * rowsPerCol + r;
-                                if (idx < staffList.length) {
-                                    let s = staffList[idx];
-                                    row.push(s.no, s.name + "\\n" + s.dept, s.phone);
-                                } else {
-                                    row.push("", "", "");
-                                }
-                            }
-                            tableRows.push(row);
-                        }
+        let headRow = [];
+        let colConfig = {};
+        for (let c = 0; c < dCols; c++) {
+            headRow.push("No", "Name & Dept", "Mobile");
+            const offset = c * 3;
+            colConfig[offset] = { halign: "center", cellWidth: 8 };
+            colConfig[offset + 1] = { cellWidth: "auto" };
+            colConfig[offset + 2] = { halign: "center", cellWidth: (dCols === 1 ? 30 : (dCols === 2 ? 22 : 20)) };
+        }
 
-                        doc.autoTable({
-                            startY: 73,
-                            head: [headRow],
-                            body: tableRows,
-                            theme: "grid",
-                            headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: "bold", halign: "center" },
-                            styles: { fontSize: 8, font: "times", cellPadding: 1, valign: "middle", textColor: [20, 20, 20] },
-                            columnStyles: colConfig,
-                            margin: { left: 10, right: 10, bottom: 20 }
-                        });
-
-                        const finalY = doc.lastAutoTable.finalY || 200;
-                        doc.setFontSize(11);
-                        doc.setFont("times", "bold");
-                        doc.text("Chief Superintendent", 190, finalY + 15, { align: "right" });
-
-                        doc.save("Duty_Notification_${dateStr}_${sessionCode}.pdf");
-                        
-                        btn.textContent = "✅ File Saved!";
-                        setTimeout(() => { btn.textContent = "⬇️ Instantly Download PDF"; btn.disabled = false; }, 2000);
-                    }, 300);
+        let tableRows = [];
+        for (let r = 0; r < rowsPerCol; r++) {
+            let row = [];
+            for (let c = 0; c < dCols; c++) {
+                let idx = c * rowsPerCol + r;
+                if (idx < staffList.length) {
+                    let s = staffList[idx];
+                    // Name: FULL CAPS | Mobile: Sanitize Spaces & Last 10 Digits
+                    const displayName = s.name.toUpperCase();
+                    const sanitizedPhone = s.phone ? s.phone.replace(/\s+/g, '').slice(-10) : "-";
+                    const deptName = s.dept ? "\\n(" + s.dept + ")" : "";
+                    row.push(s.no, displayName + deptName, sanitizedPhone);
+                } else {
+                    row.push("", "", "");
                 }
+            }
+            tableRows.push(row);
+        }
+
+        doc.autoTable({
+            startY: 75,
+            head: [headRow],
+            body: tableRows,
+            theme: "grid",
+            headStyles: { 
+                fillColor: [220, 220, 220], 
+                textColor: [0, 0, 0], 
+                fontStyle: "bold", 
+                halign: "center",
+                lineWidth: 0.2,
+                lineColor: [0, 0, 0] 
+            },
+            styles: { 
+                fontSize: dFontSize, 
+                font: "times", 
+                cellPadding: dPadding, 
+                valign: "middle", 
+                textColor: [0, 0, 0],
+                lineWidth: 0.15,
+                lineColor: [0, 0, 0] 
+            },
+            columnStyles: colConfig,
+            margin: { left: 10, right: 10, bottom: 25 }
+        });
+
+        const finalY = doc.lastAutoTable.finalY || 200;
+        doc.setFontSize(11);
+        doc.setFont("times", "bold");
+        
+        // Final Signature Block
+        const sigY = Math.max(finalY + 15, 270);
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.3);
+        doc.line(140, sigY - 2, 195, sigY - 2); 
+        doc.text("Chief Superintendent", 195, sigY + 4, { align: "right" });
+
+        doc.save("Duty_Notification_${dateStr}_${sessionCode}.pdf");
+        
+        btn.textContent = "✅ File Saved!";
+        setTimeout(() => { btn.textContent = "⬇️ Instantly Download PDF"; btn.disabled = false; }, 2000);
+    }, 300);
+}
 
                 // Populate HTML table on load
                 (function render() {

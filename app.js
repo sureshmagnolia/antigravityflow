@@ -19195,17 +19195,16 @@ if (displayLoc) {
             totalStudents += count;
 
             return `
-                <tr>
-                    <td style="text-align: center;">${serial}</td>
-                    <td>${room.roomName}</td>
-                    <td>${loc}</td>
-                    <td style="font-size: 8pt;">
-                        ${Array.from(new Set(room.students.map(s => s.Course || s['Course'] || '-'))).join(', ')}
-                    </td>
-                    <td style="text-align: center;">${stream}</td>
-                    <td style="text-align: center; font-weight: bold;">${count}</td>
-                </tr>
-            `;
+                  <tr>
+                      <td style="text-align: center;">${serial}</td>
+                      <td>${loc}</td>
+                      <td style="font-size: 8pt;">
+                          ${Array.from(new Set(room.students.map(s => s.Course || s['Course'] || '-'))).join(', ')}
+                      </td>
+                      <td style="text-align: center;">${stream}</td>
+                      <td style="text-align: center; font-weight: bold;">${count}</td>
+                  </tr>
+              `;
         }).join('');
 
         const summaryHtml = `
@@ -19239,17 +19238,16 @@ if (displayLoc) {
                     <div class="meta">Date: ${date} &nbsp; | &nbsp; Session: ${time}</div>
                 </div>
 
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 8%;">S.No</th>
-                            <th style="width: 25%;">Room Name</th>
-                            <th style="width: 30%;">Location</th>
-                            <th style="width: 25%;">Mixed Courses</th>
-                            <th style="width: 15%;">Stream</th>
-                            <th style="width: 17%;">Students</th>
-                        </tr>
-                    </thead>
+                 <table>
+                      <thead>
+                          <tr>
+                              <th style="width: 8%;">S.No</th>
+                              <th style="width: 25%;">Location</th>
+                              <th style="width: 50%;">Mixed Courses</th>
+                              <th style="width: 15%;">Stream</th>
+                              <th style="width: 17%;">Students</th>
+                          </tr>
+                      </thead>
                     <tbody>
                         ${rowsHtml}
                     </tbody>
