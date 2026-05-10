@@ -8128,7 +8128,7 @@ function downloadVectorPDF() {
                           let dPadding = 2;
 
                           // Helper to estimate height
-                          const getEstH = (c, fs, p) => (Math.ceil(totalStaff / c) + 1)  (fs  0.45 + p * 2);
+                          const getEstH = (c, fs, p) => (Math.ceil(totalStaff / c) + 1) * (fs * 0.45 + p * 2);
 
                           if (getEstH(1, 10, 2) > availableHeight) {
                               if (getEstH(1, 8, 1) > availableHeight) {
@@ -8183,8 +8183,7 @@ function downloadVectorPDF() {
                           doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 46, { align: "right" });
 
                           doc.setFont("times", "normal");
-                          const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief
-  Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
+const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
                           const splitText = doc.splitTextToSize(letterText, 190);
                           doc.text(splitText, 10, 52, { maxWidth: 190, align: "justify" });
 
