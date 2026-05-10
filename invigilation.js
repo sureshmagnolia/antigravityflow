@@ -8175,6 +8175,7 @@ function downloadVectorPDF() {
             const offset = c * 3;
             colConfig[offset] = { halign: "center", cellWidth: 8 };
             colConfig[offset + 1] = { cellWidth: "auto" };
+            // Dynamic Mobile Width to prevent wrap
             colConfig[offset + 2] = { halign: "center", cellWidth: (dCols === 1 ? 30 : (dCols === 2 ? 22 : 20)) };
         }
 
@@ -8185,9 +8186,9 @@ function downloadVectorPDF() {
                 let idx = c * rowsPerCol + r;
                 if (idx < staffList.length) {
                     let s = staffList[idx];
-                    // Name: FULL CAPS | Mobile: Sanitize Spaces & Last 10 Digits
+                    // Name: CAPS | Mobile: Strips EVERYTHING non-numeric, takes last 10
                     const displayName = s.name.toUpperCase();
-                    const sanitizedPhone = s.phone ? s.phone.replace(/\s+/g, '').slice(-10) : "-";
+                    const sanitizedPhone = s.phone ? s.phone.replace(/[^0-9]/g, '').slice(-10) : "-";
                     const deptName = s.dept ? "\\n(" + s.dept + ")" : "";
                     row.push(s.no, displayName + deptName, sanitizedPhone);
                 } else {
