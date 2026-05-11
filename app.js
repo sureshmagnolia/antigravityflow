@@ -19186,6 +19186,7 @@ if (displayLoc) {
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
         
         let totalStudents = 0;
+        const summaryRows = [];
         const rowsHtml = currentSessionAllotment.map(room => {
             const serial = roomSerialMap[room.roomName] || '-';
             const roomInfo = currentRoomConfig[room.roomName];
@@ -19193,6 +19194,14 @@ if (displayLoc) {
             const stream = room.stream || "Regular";
             const count = room.students.length;
             totalStudents += count;
+
+            summaryRows.push(`
+                <tr>
+                    <td style="text-align: center;">${serial}</td>
+                    <td>${loc}</td>
+                    <td style="text-align: center; font-weight: bold;">${count}</td>
+                </tr>
+            `);
 
             return `
                   <tr>
@@ -19226,15 +19235,52 @@ if (displayLoc) {
                     
                     .footer { margin-top: 30px; text-align: right; font-weight: bold; font-size: 12pt; border-top: 1px solid #eee; padding-top: 10px; }
                     .print-btn { background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
-                    @media print { .print-btn { display: none; } }
+                    @media print { 
+                        .print-btn { display: none; } 
+                        .page-break { page-break-after: always; }
+                    }
                 </style>
             </head>
             <body>
                 <div style="text-align: right;"><button class="print-btn" onclick="window.print()">Print Report</button></div>
                 
+                <!-- 1 PAGE SUMMARY (ABSTRACT) -->
+                <div class="page-break">
+                    <div class="header">
+                        <h1>${collegeName}</h1>
+                        <h2>Allotment Summary (Abstract)</h2>
+                        <div class="meta">Date: ${date} &nbsp; | &nbsp; Session: ${time}</div>
+                    </div>
+
+                    <table style="width: 80%; margin: 20px auto;">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">S.No</th>
+                                <th style="width: 60%;">Location</th>
+                                <th style="width: 25%;">Student Count</th>
+                            
+                        </thead>
+                        <tbody>
+                            ${summaryRows.join('')}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background: #f9f9f9;">
+                                <th colspan="2" style="text-align: right; padding-right: 20px;">TOTAL STUDENTS ALLOTTED:</th>
+                                <th style="text-align: center; font-size: 12pt;">${totalStudents}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    
+                    <div style="margin-top: 60px; display: flex; justify-content: space-between; padding: 0 50px;">
+                        <div style="text-align: center; border-top: 1px solid #000; width: 200px; padding-top: 5px;">Verified By</div>
+                        <div style="text-align: center; border-top: 1px solid #000; width: 200px; padding-top: 5px;">Chief Superintendent</div>
+                    </div>
+                </div>
+
+                <!-- DETAILED ALLOTMENT -->
                 <div class="header">
                     <h1>${collegeName}</h1>
-                    <h2>Room Allotment Summary</h2>
+                    <h2>Detailed Room Allotment</h2>
                     <div class="meta">Date: ${date} &nbsp; | &nbsp; Session: ${time}</div>
                 </div>
 
@@ -19257,7 +19303,7 @@ if (displayLoc) {
                     Total Allotted Students: ${totalStudents}
                 </div>
 
-                <script>window.onload = function() { setTimeout(() => window.print(), 800); };<\/script>
+                <script>window.onload = function() { setTimeout(() => window.print(), 800); };</script>
             </body>
             </html>
         `;
