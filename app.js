@@ -2129,10 +2129,14 @@ async function deleteSessionFromCloud(sessionKey) {
                 else studentMap[reg] = { room: scribeRoom, seat: 'Scribe', name: '', course: '' };
             });
 
+
             const docId = `${cid}_${generateSessionId(sessionKey)}`;
 
             // Write session seating doc to public_seating
-            await setDoc(doc(db, 'public_seating', docId), { students: studentMap });
+            await setDoc(doc(db, 'public_seating', docId), { 
+                collegeId: cid, // 🛡️ CRITICAL: Required for Firestore Rules (Team Access)
+                students: studentMap 
+            });
 
             // Update index doc so student.html can discover this session
             const indexRef = doc(db, 'public_seating', cid);
@@ -2142,7 +2146,7 @@ async function deleteSessionFromCloud(sessionKey) {
             existingSessions[sessionKey] = { docId, lastUpdated: Date.now() }; // ⏰ Add modification stamp
 
             await setDoc(indexRef, {
-
+                collegeId: cid, // 🛡️ CRITICAL: Required for Firestore Rules
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
                 sessions: existingSessions
             });
@@ -2150,6 +2154,7 @@ async function deleteSessionFromCloud(sessionKey) {
             console.log(`✅ Public seating published for ${sessionKey}`);
         } catch (e) {
             console.error('Public Seating Publish Error:', e);
+            throw e; // 🚀 Re-throw so the UI (Save Button) knows the publish failed
         }
     }
 
