@@ -21435,16 +21435,23 @@ window.downloadInvigilationListPDF = async function () {
 
                 let searchString = null, qpCode = null;
 
-                // ⚡ SMART DETECTION: University Portal Table
+            // ⚡ SMART DETECTION: University Portal Table
                 if (tabParts.length >= 4 && line.includes('--(')) {
                     qpCode = tabParts[0]; 
-                    // Keep the ENTIRE Name & Code for highest fuzzy success rate
-                    searchString = tabParts[1].toUpperCase(); 
+                    // FACTOR IN YEAR: Combine Subject Name + Syllabus Year (e.g. "Applied Costing... 2024")
+                    const syllabus = tabParts[3] ? ` \${tabParts[3].replace(/[()]/g, '')}` : '';
+                    searchString = (tabParts[1] + syllabus).toUpperCase(); 
                 } 
-                // Fallback Generic Manual Parsing
+                // Fallback Generic Manual Parsing (e.g. "Subject [tab] Code")
                 else if (tabParts.length >= 2) {
-                    searchString = tabParts[0].toUpperCase();
-                    qpCode = tabParts[tabParts.length - 1]; 
+                    // Try to detect if the last part is a short code and first part is long subject
+                    if (tabParts[0].length > tabParts[tabParts.length-1].length) {
+                        searchString = tabParts[0].toUpperCase();
+                        qpCode = tabParts[tabParts.length - 1];
+                    } else {
+                        searchString = tabParts[tabParts.length - 1].toUpperCase();
+                        qpCode = tabParts[0];
+                    }
                 } else if (dashParts.length === 2) {
                     searchString = dashParts[0].toUpperCase();
                     qpCode = dashParts[1];
