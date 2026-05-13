@@ -6330,51 +6330,65 @@ function getExamName(date, time, stream) {
                 return serialA - serialB;
             });
 
-function getSmartCourseName(fullName) {
-                // 1. Extract syllabus info (e.g., [2024 SYLLABUS])
-                const syllabusMatch = fullName.match(/\[(.*?\d{4}.*?)\]/i);
-                let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
-                cleanName = cleanName.replace(/\s-\s$/, '').trim();
+function getSmartCourseName(fullName, allNames = []) {
+                // 1. Preserve Syllabus [...] and Course Code (...)
+                const syllabus = (fullName.match(/\[.*?\]/i) || [""])[0];
+                const codes = (fullName.match(/\(.*?\)/i) || [""])[0];
                 
-                // 2. Identify the core code suffix (starts from the first '(' near the end)
-                const firstParenIndex = cleanName.indexOf('(');
-                let baseName = cleanName;
-                let suffix = "";
+                let clean = fullName.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
+                clean = clean.replace(/\s-\s$/, '').trim();
+                const words = clean.split(/\s+/);
+
+                // 2. "Spot the Difference" - Compare word by word against other courses in this room
+                const uniqueOthers = [...new Set(allNames)].filter(n => n !== fullName);
+                let firstDiffIdx = -1;
                 
-                if (firstParenIndex !== -1 && firstParenIndex > 10) { 
-                    baseName = cleanName.substring(0, firstParenIndex).trim();
-                    suffix = cleanName.substring(firstParenIndex).trim();
-                }
-
-                const words = baseName.split(/\s+/);
-                let resultName = baseName;
-
-                if (words.length > 3) {
-                    const prefix = words.slice(0, 2).join(' ');
-                    
-                    // Search for distinguishing phrases in the remaining part of baseName
-                    const remaining = baseName.substring(prefix.length).trim();
-                    // Looks for keywords like "for", "in", "of" followed by descriptive text
-                    const distinguishMatch = remaining.match(/\b(for|in|of)\s+([^,;]+)$/i);
-                    
-                    if (distinguishMatch) {
-                        resultName = `${prefix} .. ${distinguishMatch[1]} ${distinguishMatch[2].trim()}`;
-                    } else {
-                        // Fallback: Use first 2 words and the last word of the base name
-                        const lastWord = words[words.length - 1];
-                        resultName = `${prefix} .. ${lastWord}`;
+                if (uniqueOthers.length > 0) {
+                    for (let i = 0; i < words.length; i++) {
+                        const myWord = words[i];
+                        if (uniqueOthers.some(other => {
+                            const otherClean = other.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
+                            const otherWords = otherClean.split(/\s+/);
+                            return otherWords[i] !== myWord;
+                        })) {
+                            firstDiffIdx = i;
+                            break;
+                        }
                     }
                 }
+
+                // 3. Construct the redacted name
+                const prefix = words.slice(0, 2).join(' ');
+                let diffPart = "";
                 
-                // 3. Re-combine everything
-                let finalName = suffix ? `${resultName} ${suffix}` : resultName;
-                if (syllabusMatch) finalName += ` [${syllabusMatch[1].trim()}]`;
-                
-                return finalName.replace(/\s{2,}/g, ' ').trim();
+                if (firstDiffIdx !== -1) {
+                    let start = firstDiffIdx;
+                    const connectors = ["for", "in", "of", "and", "with", ":", "-"];
+                    if (firstDiffIdx > 0 && connectors.includes(words[firstDiffIdx-1].toLowerCase())) {
+                        start = firstDiffIdx - 1;
+                    }
+                    diffPart = words.slice(start, firstDiffIdx + 2).join(' ');
+                }
+
+                let result = prefix;
+                if (diffPart && !prefix.includes(diffPart)) {
+                    result += " .. " + diffPart;
+                } else if (words.length > 4) {
+                    result += " .. " + words[words.length - 1];
+                } else {
+                    result = clean;
+                }
+
+                if (codes) result += " " + codes;
+                if (syllabus) result += " " + syllabus;
+
+                return result.replace(/\s{2,}/g, ' ').trim();
             }
 
             sortedSessionKeys.forEach(key => {
                 const session = sessions[key];
+                // 🛡️ COLLECT ALL COURSES for "Spot the Difference" logic
+                const allRoomCourses = session.students.map(s => s.Course);
                 const roomInfo = currentRoomConfig[session.Room];
                 const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
                 const locationHtml = location ? `<div class="report-location-header" style="margin-bottom: 5px; padding-bottom: 5px;">Location: ${location}</div>` : "";
@@ -6409,7 +6423,7 @@ function getSmartCourseName(fullName) {
                     if (qpCode) uniqueQPCodesInRoom.add(qpCode);
                     else uniqueQPCodesInRoom.add(cName.substring(0, 10));
 
-                    let smartName = getSmartCourseName(cName);
+                    let smartName = getSmartCourseName(cName, allRoomCourses);
 
                     // MATHS: Total Candidates - Scribes = Booklets Needed
                     const totalCount = stats.total;
@@ -6536,7 +6550,7 @@ function getSmartCourseName(fullName) {
                         rowsHtml += `
                         
                             ${seatNumber}${asterisk}
-                            ${displayCourseCell(qpCode, student.Course, isDitto)}
+                            ${displayCourseCell(qpCode, student.Course, isDitto, allRoomCourses)}
                             <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 0 4px;">${displayRegNo}</td>
                             <td class="name-col" style="padding: 0 4px;">${student.Name}</td>
                             <td class="remarks-col" style="padding: 0 4px;">${remarkText}</td>
@@ -6547,14 +6561,13 @@ function getSmartCourseName(fullName) {
                     return rowsHtml;
                 }
 
-                function displayCourseCell(qp, fullCourse, isDitto) {
-                    if (isDitto) {
-                        return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> "</div>`;
+        function displayCourseCell(qp, fullCourse, isDitto, allNames = []) {
+                      if (isDitto) {
+                          return `<div style="white-space: nowrap; overflow: hidden; text-overflow:ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> "</div>`;
                     }
-                    const smart = getSmartCourseName(fullCourse);
-                    return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> <span style="font-size:0.85em;">${smart}</span></div>`;
-                }
-
+                     const smart = getSmartCourseName(fullCourse, allNames);
+                            return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><spanstyle="font-weight:bold; margin-right:6px;">${qp}</span> <spanstyle="font-size:0.85em;">${smart}</span></div>`;
+                    }
                 const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
                 const studentsPage2 = session.students.slice(20);
 
