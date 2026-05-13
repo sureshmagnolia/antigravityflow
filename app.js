@@ -12058,18 +12058,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             const isRegularAllotted = allottedRoomNames.includes(roomName);
             const isScribeAllotted = scribeRoomNames.includes(roomName);
             
-            // 2. Check for Hierarchy Conflicts
-            const parentName = room.parentRoom;
-            const isParentAllotted = parentName && (allottedRoomNames.includes(parentName) || scribeRoomNames.includes(parentName));
-            
-            const hasAllottedChild = Object.keys(currentRoomConfig).some(otherName => 
-                currentRoomConfig[otherName].parentRoom === roomName && 
-                (allottedRoomNames.includes(otherName) || scribeRoomNames.includes(otherName))
-            );
-
-            const isUnavailable = isRegularAllotted || isScribeAllotted || isParentAllotted || hasAllottedChild;
-            
-            // 2. NEW: Check for Hierarchy Conflicts (Mutual Exclusion)
+     // 2. Check for Hierarchy Conflicts (Mutual Exclusion)
             const parentName = room.parentRoom;
             
             // A. If this is a Child, check if its Parent is allotted
