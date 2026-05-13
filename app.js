@@ -12051,10 +12051,24 @@ window.real_populate_qp_code_session_dropdown = function () {
             const room = currentRoomConfig[roomName];
             const location = room.location ? ` (${room.location})` : '';
 
-            // Check Status: Is it used by Regular OR Scribe?
+            // 1. Check if the room itself is used by Regular OR Scribe
             const isRegularAllotted = allottedRoomNames.includes(roomName);
             const isScribeAllotted = scribeRoomNames.includes(roomName);
-            const isUnavailable = isRegularAllotted || isScribeAllotted;
+            
+            // 2. NEW: Check for Hierarchy Conflicts (Mutual Exclusion)
+            const parentName = room.parentRoom;
+            
+            // A. If this is a Child, check if its Parent is allotted
+            const isParentAllotted = parentName && (allottedRoomNames.includes(parentName) || scribeRoomNames.includes(parentName));
+            
+            // B. If this is a Parent, check if ANY of its Children are allotted
+            const hasAllottedChild = Object.keys(currentRoomConfig).some(otherName => 
+                currentRoomConfig[otherName].parentRoom === roomName && 
+                (allottedRoomNames.includes(otherName) || scribeRoomNames.includes(otherName))
+            );
+
+            // Mark as Unavailable if itself, its parent, or its children are already used
+            const isUnavailable = isRegularAllotted || isScribeAllotted || isParentAllotted || hasAllottedChild;
 
             // Capacity Badge
             let capBadge = "";
