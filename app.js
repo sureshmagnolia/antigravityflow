@@ -5069,7 +5069,7 @@ function getExamName(date, time, stream) {
 
 
     // --- Helper function to create a new room row HTML (Responsive Card/Row) ---
-    function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocked = true) {
+    function createRoomRowHtml(roomName, capacity, location, isLast = false, isLocked = true, parentRoom = "") {
         const disabledAttr = isLocked ? 'disabled' : '';
         const bgClass = isLocked ? 'bg-gray-50 text-gray-500' : 'bg-white text-black ring-1 ring-indigo-200';
 
@@ -5111,10 +5111,17 @@ function getExamName(date, time, stream) {
                         ${capBadge}
                     </div>
                 </div>
-                <div class="flex items-center gap-2 w-full md:w-auto md:flex-grow">
+                <div class="flex items-center gap-2 w-full md:w-48">
                     <span class="text-xs font-semibold text-gray-500 uppercase md:hidden w-16 shrink-0">Location</span>
-                    <input type="text" class="room-location-input block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" 
-                           value="${location}" placeholder="e.g., 101 - Commerce Block" ${disabledAttr}>
+                    <input type="text" class="room-location-input block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm \${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" 
+                           value="\${location}" placeholder="Location" \${disabledAttr}>
+                </div>
+                <div class="flex items-center gap-2 w-full md:flex-grow">
+                    <span class="text-xs font-semibold text-gray-500 uppercase md:hidden w-16 shrink-0">Parent</span>
+                    <select class="room-parent-select block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm \${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" \${disabledAttr}>
+                        <option value="">-- None (is Parent) --</option>
+                        \${Object.keys(currentRoomConfig).filter(name => name !== roomName).map(name => `<option value="\${name}" \${parentRoom === name ? 'selected' : ''}>Part of: \${name}</option>`).join('')}
+                    </select>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-2 mt-3 md:mt-0 md:w-[90px] border-t pt-2 md:border-0 md:pt-0 border-gray-100">
@@ -9058,7 +9065,8 @@ function getExamName(date, time, stream) {
                     break; // Stop processing
                 }
 
-                newConfig[roomName] = { capacity, location };
+                const parentRoom = row.querySelector('.room-parent-select').value;
+                newConfig[roomName] = { capacity, location, parentRoom };
             }
 
             // Stop if validation failed
@@ -9147,7 +9155,8 @@ function getExamName(date, time, stream) {
                 const isLast = (index === sortedKeys.length - 1);
                 const safeLocation = roomData.location || "";
 
-                const rowHtml = createRoomRowHtml(roomName, roomData.capacity, safeLocation, isLast, true);
+                const parentRoom = roomData.parentRoom || "";
+                const rowHtml = createRoomRowHtml(roomName, roomData.capacity, safeLocation, isLast, true, parentRoom);
                 roomConfigContainer.insertAdjacentHTML('beforeend', rowHtml);
             });
         }
