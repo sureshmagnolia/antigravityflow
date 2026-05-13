@@ -2145,11 +2145,35 @@ async function deleteSessionFromCloud(sessionKey) {
             const existingSessions = existingData.sessions || {};
             existingSessions[sessionKey] = { docId, lastUpdated: Date.now() }; // ⏰ Add modification stamp
 
+            // REMOVE EXPIRED SEATING DATA
+            const { deleteDoc } = window.firebase;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            for (const [sKey, meta] of Object.entries(existingSessions)) {
+                try {
+                    const [dRaw] = sKey.split(' | ');
+                    const [d, m, y] = dRaw.replace(/-/g, '.').split('.');
+                    const sessionDate = new Date(y, m - 1, d);
+                    
+                    if (sessionDate < today) {
+                        console.log(`🗑️ Removing expired seating session: ${sKey}`);
+                        if (meta.docId) {
+                            await deleteDoc(doc(db, 'public_seating', meta.docId)).catch(e => console.error(e));
+                        }
+                        delete existingSessions[sKey];
+                    }
+                } catch(e) {
+                    console.error('Error parsing session date:', e);
+                }
+            }
+
             await setDoc(indexRef, {
                 collegeId: cid, // 🛡️ CRITICAL: Required for Firestore Rules
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
                 sessions: existingSessions
             });
+
 
             console.log(`✅ Public seating published for ${sessionKey}`);
         } catch (e) {
@@ -19241,6 +19265,7 @@ if (displayLoc) {
                 <tr>
                     <td style="text-align: center;">${serial}</td>
                     <td>${loc}</td>
+                    <td style="text-align: center;">${stream}</td>
                     <td style="text-align: center; font-weight: bold;">${count}</td>
                 </tr>
             `);
@@ -19272,8 +19297,8 @@ if (displayLoc) {
                     .header .meta { margin-top: 10px; font-size: 11pt; font-weight: bold; color: #000; }
                     
                     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                    th { background-color: #f2f2f2; border: 1px solid #333; padding: 10px; font-size: 10pt; text-transform: uppercase; }
-                    td { border: 1px solid #333; padding: 8px 10px; font-size: 10pt; }
+                    th { background-color: #f2f2f2; border: 1px solid #333; padding: 6px; font-size: 9pt; text-transform: uppercase; }
+                    td { border: 1px solid #333; padding: 4px 6px; font-size: 9pt; }
                     
                     .footer { margin-top: 30px; text-align: right; font-weight: bold; font-size: 12pt; border-top: 1px solid #eee; padding-top: 10px; }
                     .print-btn { background: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
@@ -19294,21 +19319,22 @@ if (displayLoc) {
                         <div class="meta">Date: ${date} &nbsp; | &nbsp; Session: ${time}</div>
                     </div>
 
-                    <table style="width: 80%; margin: 20px auto;">
+                    <table style="width: 90%; margin: 15px auto;">
                         <thead>
                             <tr>
-                                <th style="width: 15%;">S.No</th>
-                                <th style="width: 60%;">Location</th>
-                                <th style="width: 25%;">Student Count</th>
-                            
+                                <th style="width: 10%;">S.No</th>
+                                <th style="width: 50%;">Location</th>
+                                <th style="width: 20%;">Stream</th>
+                                <th style="width: 20%;">Student Count</th>
+                            </tr>
                         </thead>
                         <tbody>
                             ${summaryRows.join('')}
                         </tbody>
                         <tfoot>
                             <tr style="background: #f9f9f9;">
-                                <th colspan="2" style="text-align: right; padding-right: 20px;">TOTAL STUDENTS ALLOTTED:</th>
-                                <th style="text-align: center; font-size: 12pt;">${totalStudents}</th>
+                                <th colspan="3" style="text-align: right; padding-right: 20px;">TOTAL STUDENTS ALLOTTED:</th>
+                                <th style="text-align: center; font-size: 11pt;">${totalStudents}</th>
                             </tr>
                         </tfoot>
                     </table>
