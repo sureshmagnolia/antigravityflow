@@ -5120,7 +5120,8 @@ function getExamName(date, time, stream) {
                     <span class="text-xs font-semibold text-gray-500 uppercase md:hidden w-16 shrink-0">Parent</span>
                     <select class="room-parent-select block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" ${disabledAttr}>
                         <option value="">-- None (is Parent) --</option>
-                        ${Object.keys(currentRoomConfig).filter(name => name !== roomName).map(name => `Part of: ${name}`).join('')}                    
+                        ${Object.keys(currentRoomConfig).filter(name => name !== roomName).map(name => `<option value="${name}" ${parentRoom === name ? 'selected' : ''}>Part of: ${name}</option>`).join('')}
+                    </select>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-2 mt-3 md:mt-0 md:w-[90px] border-t pt-2 md:border-0 md:pt-0 border-gray-100">
