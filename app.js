@@ -2718,6 +2718,7 @@ async function deleteSessionFromCloud(sessionKey) {
     const allottedRoomsList = document.getElementById('allotted-rooms-list');
     const saveAllotmentSection = document.getElementById('save-allotment-section');
     const saveRoomAllotmentButton = document.getElementById('save-room-allotment-button');
+    const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
     const roomAllotmentStatus = document.getElementById('room-allotment-status');
 
     // *** NEW SCRIBE SETTINGS ELEMENTS ***
@@ -12395,6 +12396,16 @@ if (saveScribeBtn) {
         });
     }
 
+    if (forceSyncAllotmentButton) {
+        forceSyncAllotmentButton.addEventListener('click', () => {
+            if (!confirm("🔄 This will overwrite cloud data with your current local allotment. Continue?")) return;
+            
+            // Bypass UI lock and trigger save logic
+            saveRoomAllotmentButton.disabled = false;
+            saveRoomAllotmentButton.click();
+            console.log("🚀 Force sync triggered via UI button.");
+        });
+    }
 
     // --- END ROOM ALLOTMENT FUNCTIONALITY ---
 
