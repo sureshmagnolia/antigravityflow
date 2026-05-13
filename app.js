@@ -9254,10 +9254,11 @@ function getExamName(date, time, stream) {
 
                 if (isCurrentlyLocked) {
                     // === STATE: LOCKED -> UNLOCK IT ===
-                    inputs.forEach(input => {
-                        input.disabled = false;
-                        input.classList.remove('bg-gray-50', 'text-gray-500');
-                        input.classList.add('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
+                    const controls = row.querySelectorAll('input, select');
+                    controls.forEach(el => {
+                        el.disabled = false;
+                        el.classList.remove('bg-gray-50', 'text-gray-500');
+                        el.classList.add('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
                     });
                     inputs[0].focus(); // Focus capacity
 
@@ -9277,18 +9278,20 @@ function getExamName(date, time, stream) {
                         return;
                     }
 
-                    // Update Config Object
+                 // Update Config Object
                     if (!currentRoomConfig) currentRoomConfig = {};
-                    currentRoomConfig[roomName] = { capacity: newCap, location: newLoc };
+                    const newParent = row.querySelector('.room-parent-select').value;
+                    currentRoomConfig[roomName] = { capacity: newCap, location: newLoc, parentRoom: newParent };
 
                     // Save to Storage
                     localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(currentRoomConfig));
 
-                    // Lock Inputs
-                    inputs.forEach(input => {
-                        input.disabled = true;
-                        input.classList.add('bg-gray-50', 'text-gray-500');
-                        input.classList.remove('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
+                    // Lock Controls
+                    const controls = row.querySelectorAll('input, select');
+                    controls.forEach(el => {
+                        el.disabled = true;
+                        el.classList.add('bg-gray-50', 'text-gray-500');
+                        el.classList.remove('bg-white', 'text-black', 'ring-1', 'ring-indigo-200');
                     });
 
                     // Revert Icon to PENCIL (Blue)
@@ -12047,13 +12050,24 @@ window.real_populate_qp_code_session_dropdown = function () {
             const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
             return numA - numB;
         });
-        sortedRoomNames.forEach(roomName => {
+    sortedRoomNames.forEach(roomName => {
             const room = currentRoomConfig[roomName];
-            const location = room.location ? ` (${room.location})` : '';
+            const location = room.location ? ` (\${room.location})` : '';
 
-            // 1. Check if the room itself is used by Regular OR Scribe
+            // 1. Check if the room itself is used
             const isRegularAllotted = allottedRoomNames.includes(roomName);
             const isScribeAllotted = scribeRoomNames.includes(roomName);
+            
+            // 2. Check for Hierarchy Conflicts
+            const parentName = room.parentRoom;
+            const isParentAllotted = parentName && (allottedRoomNames.includes(parentName) || scribeRoomNames.includes(parentName));
+            
+            const hasAllottedChild = Object.keys(currentRoomConfig).some(otherName => 
+                currentRoomConfig[otherName].parentRoom === roomName && 
+                (allottedRoomNames.includes(otherName) || scribeRoomNames.includes(otherName))
+            );
+
+            const isUnavailable = isRegularAllotted || isScribeAllotted || isParentAllotted || hasAllottedChild;
             
             // 2. NEW: Check for Hierarchy Conflicts (Mutual Exclusion)
             const parentName = room.parentRoom;
