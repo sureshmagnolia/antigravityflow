@@ -19261,15 +19261,7 @@ if (displayLoc) {
             const count = room.students.length;
             totalStudents += count;
 
-            summaryRows.push(`
-                <tr>
-                    <td style="text-align: center;">${serial}</td>
-                    <td>${loc}</td>
-                    <td style="text-align: center;">${stream}</td>
-                    <td style="text-align: center; font-weight: bold;">${count}</td>
-                </tr>
-            `);
-
+            summaryRows.push({ serial, loc, stream, count });
             return `
                   <tr>
                       <td style="text-align: center;">${serial}</td>
@@ -19329,7 +19321,14 @@ if (displayLoc) {
                             </tr>
                         </thead>
                         <tbody>
-                            ${summaryRows.join('')}
+                            ${summaryRows.sort((a, b) => a.loc.localeCompare(b.loc)).map(row => `
+                                <tr>
+                                    <td style="text-align: center;">${row.serial}</td>
+                                    <td>${row.loc}</td>
+                                    <td style="text-align: center;">${row.stream}</td>
+                                    <td style="text-align: center; font-weight: bold;">${row.count}</td>
+                                </tr>
+                            `).join('')}
                         </tbody>
                         <tfoot>
                             <tr style="background: #f9f9f9;">
