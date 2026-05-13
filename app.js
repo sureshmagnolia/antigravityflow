@@ -6330,24 +6330,47 @@ function getExamName(date, time, stream) {
                 return serialA - serialB;
             });
 
-            function getSmartCourseName(fullName) {
-                // Extract syllabus info before cleaning (looks for 4 digits inside brackets)
+function getSmartCourseName(fullName) {
+                // 1. Extract syllabus info (e.g., [2024 SYLLABUS])
                 const syllabusMatch = fullName.match(/\[(.*?\d{4}.*?)\]/i);
-                
                 let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
                 cleanName = cleanName.replace(/\s-\s$/, '').trim();
                 
-                const words = cleanName.split(/\s+/);
-                let resultName = cleanName;
-                if (words.length > 4) {
-                    resultName = `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
+                // 2. Identify the core code suffix (starts from the first '(' near the end)
+                const firstParenIndex = cleanName.indexOf('(');
+                let baseName = cleanName;
+                let suffix = "";
+                
+                if (firstParenIndex !== -1 && firstParenIndex > 10) { 
+                    baseName = cleanName.substring(0, firstParenIndex).trim();
+                    suffix = cleanName.substring(firstParenIndex).trim();
+                }
+
+                const words = baseName.split(/\s+/);
+                let resultName = baseName;
+
+                if (words.length > 3) {
+                    const prefix = words.slice(0, 2).join(' ');
+                    
+                    // Search for distinguishing phrases in the remaining part of baseName
+                    const remaining = baseName.substring(prefix.length).trim();
+                    // Looks for keywords like "for", "in", "of" followed by descriptive text
+                    const distinguishMatch = remaining.match(/\b(for|in|of)\s+([^,;]+)$/i);
+                    
+                    if (distinguishMatch) {
+                        resultName = `${prefix} .. ${distinguishMatch[1]} ${distinguishMatch[2].trim()}`;
+                    } else {
+                        // Fallback: Use first 2 words and the last word of the base name
+                        const lastWord = words[words.length - 1];
+                        resultName = `${prefix} .. ${lastWord}`;
+                    }
                 }
                 
-                // Re-append the syllabus year if found
-                if (syllabusMatch) {
-                    resultName += ` [${syllabusMatch[1].trim()}]`;
-                }
-                return resultName;
+                // 3. Re-combine everything
+                let finalName = suffix ? `${resultName} ${suffix}` : resultName;
+                if (syllabusMatch) finalName += ` [${syllabusMatch[1].trim()}]`;
+                
+                return finalName.replace(/\s{2,}/g, ' ').trim();
             }
 
             sortedSessionKeys.forEach(key => {
@@ -6497,12 +6520,10 @@ function getExamName(date, time, stream) {
                         const qpCode = sessionQPCodes[courseKey] || "";
                         const qpCodePrefix = qpCode ? `(${qpCode}) ` : "";
 
-                        const courseWords = student.Course.split(/\s+/);
-                        const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
-                        const tableCourseName = qpCodePrefix + truncatedCourse;
-
-                        let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
-                        if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
+                    // 🛡️ FIX: Use the full Course name for "ditto" comparison to avoid grouping different papers
+                        const courseKeyForDitto = qpCode + "|" + student.Course;
+                        let isDitto = (courseKeyForDitto === previousCourseName);
+                        if (!isDitto) previousCourseName = courseKeyForDitto;
 
                         // 🛡️ SCRIBE HIGHLIGHT: Apply grey background and auto-mark remarks
                         const rowClass = (student.isScribeChecked || student.isPlaceholder) ? 'class="scribe-row-highlight"' : '';
@@ -6513,9 +6534,9 @@ function getExamName(date, time, stream) {
 
 
                         rowsHtml += `
-                        <tr ${rowClass} class="room-report-row">
-                            <td class="sl-col" style="padding: 0 4px;">${seatNumber}${asterisk}</td>
-                            <td class="course-col" style="padding: 0 4px;">${displayCourseCell(qpCode, student.Course, displayCourseName === '"')}</td>
+                        
+                            ${seatNumber}${asterisk}
+                            ${displayCourseCell(qpCode, student.Course, isDitto)}
                             <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 0 4px;">${displayRegNo}</td>
                             <td class="name-col" style="padding: 0 4px;">${student.Name}</td>
                             <td class="remarks-col" style="padding: 0 4px;">${remarkText}</td>
