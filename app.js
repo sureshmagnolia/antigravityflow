@@ -6330,65 +6330,28 @@ function getExamName(date, time, stream) {
                 return serialA - serialB;
             });
 
-function getSmartCourseName(fullName, allNames = []) {
-                // 1. Preserve Syllabus [...] and Course Code (...)
-                const syllabus = (fullName.match(/\[.*?\]/i) || [""])[0];
-                const codes = (fullName.match(/\(.*?\)/i) || [""])[0];
+            function getSmartCourseName(fullName) {
+                // Extract syllabus info before cleaning (looks for 4 digits inside brackets)
+                const syllabusMatch = fullName.match(/\[(.*?\d{4}.*?)\]/i);
                 
-                let clean = fullName.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
-                clean = clean.replace(/\s-\s$/, '').trim();
-                const words = clean.split(/\s+/);
-
-                // 2. "Spot the Difference" - Compare word by word against other courses in this room
-                const uniqueOthers = [...new Set(allNames)].filter(n => n !== fullName);
-                let firstDiffIdx = -1;
+                let cleanName = fullName.replace(/\[.*?\]/g, '').trim();
+                cleanName = cleanName.replace(/\s-\s$/, '').trim();
                 
-                if (uniqueOthers.length > 0) {
-                    for (let i = 0; i < words.length; i++) {
-                        const myWord = words[i];
-                        if (uniqueOthers.some(other => {
-                            const otherClean = other.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').trim();
-                            const otherWords = otherClean.split(/\s+/);
-                            return otherWords[i] !== myWord;
-                        })) {
-                            firstDiffIdx = i;
-                            break;
-                        }
-                    }
+                const words = cleanName.split(/\s+/);
+                let resultName = cleanName;
+                if (words.length > 4) {
+                    resultName = `${words.slice(0, 3).join(' ')} ... ${words[words.length - 1]}`;
                 }
-
-                // 3. Construct the redacted name
-                const prefix = words.slice(0, 2).join(' ');
-                let diffPart = "";
                 
-                if (firstDiffIdx !== -1) {
-                    let start = firstDiffIdx;
-                    const connectors = ["for", "in", "of", "and", "with", ":", "-"];
-                    if (firstDiffIdx > 0 && connectors.includes(words[firstDiffIdx-1].toLowerCase())) {
-                        start = firstDiffIdx - 1;
-                    }
-                    diffPart = words.slice(start, firstDiffIdx + 2).join(' ');
+                // Re-append the syllabus year if found
+                if (syllabusMatch) {
+                    resultName += ` [${syllabusMatch[1].trim()}]`;
                 }
-
-                let result = prefix;
-                if (diffPart && !prefix.includes(diffPart)) {
-                    result += " .. " + diffPart;
-                } else if (words.length > 4) {
-                    result += " .. " + words[words.length - 1];
-                } else {
-                    result = clean;
-                }
-
-                if (codes) result += " " + codes;
-                if (syllabus) result += " " + syllabus;
-
-                return result.replace(/\s{2,}/g, ' ').trim();
+                return resultName;
             }
 
             sortedSessionKeys.forEach(key => {
                 const session = sessions[key];
-                // 🛡️ COLLECT ALL COURSES for "Spot the Difference" logic
-                const allRoomCourses = session.students.map(s => s.Course);
                 const roomInfo = currentRoomConfig[session.Room];
                 const location = (roomInfo && roomInfo.location) ? roomInfo.location : "";
                 const locationHtml = location ? `<div class="report-location-header" style="margin-bottom: 5px; padding-bottom: 5px;">Location: ${location}</div>` : "";
@@ -6423,7 +6386,7 @@ function getSmartCourseName(fullName, allNames = []) {
                     if (qpCode) uniqueQPCodesInRoom.add(qpCode);
                     else uniqueQPCodesInRoom.add(cName.substring(0, 10));
 
-                    let smartName = getSmartCourseName(cName, allRoomCourses);
+                    let smartName = getSmartCourseName(cName);
 
                     // MATHS: Total Candidates - Scribes = Booklets Needed
                     const totalCount = stats.total;
@@ -6534,10 +6497,12 @@ function getSmartCourseName(fullName, allNames = []) {
                         const qpCode = sessionQPCodes[courseKey] || "";
                         const qpCodePrefix = qpCode ? `(${qpCode}) ` : "";
 
-                    // 🛡️ FIX: Use the full Course name for "ditto" comparison to avoid grouping different papers
-                        const courseKeyForDitto = qpCode + "|" + student.Course;
-                        let isDitto = (courseKeyForDitto === previousCourseName);
-                        if (!isDitto) previousCourseName = courseKeyForDitto;
+                        const courseWords = student.Course.split(/\s+/);
+                        const truncatedCourse = courseWords.slice(0, 4).join(' ') + (courseWords.length > 4 ? '...' : '');
+                        const tableCourseName = qpCodePrefix + truncatedCourse;
+
+                        let displayCourseName = (tableCourseName === previousCourseName) ? '"' : tableCourseName;
+                        if (tableCourseName !== previousCourseName) previousCourseName = tableCourseName;
 
                         // 🛡️ SCRIBE HIGHLIGHT: Apply grey background and auto-mark remarks
                         const rowClass = (student.isScribeChecked || student.isPlaceholder) ? 'class="scribe-row-highlight"' : '';
@@ -6548,9 +6513,9 @@ function getSmartCourseName(fullName, allNames = []) {
 
 
                         rowsHtml += `
-                        
-                            ${seatNumber}${asterisk}
-                            ${displayCourseCell(qpCode, student.Course, isDitto, allRoomCourses)}
+                        <tr ${rowClass} class="room-report-row">
+                            <td class="sl-col" style="padding: 0 4px;">${seatNumber}${asterisk}</td>
+                            <td class="course-col" style="padding: 0 4px;">${displayCourseCell(qpCode, student.Course, displayCourseName === '"')}</td>
                             <td class="reg-col" style="font-size: ${regFontSize}; font-weight: bold; padding: 0 4px;">${displayRegNo}</td>
                             <td class="name-col" style="padding: 0 4px;">${student.Name}</td>
                             <td class="remarks-col" style="padding: 0 4px;">${remarkText}</td>
@@ -6561,13 +6526,14 @@ function getSmartCourseName(fullName, allNames = []) {
                     return rowsHtml;
                 }
 
-        function displayCourseCell(qp, fullCourse, isDitto, allNames = []) {
-                      if (isDitto) {
-                          return `<div style="white-space: nowrap; overflow: hidden; text-overflow:ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> "</div>`;
+                function displayCourseCell(qp, fullCourse, isDitto) {
+                    if (isDitto) {
+                        return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> "</div>`;
                     }
-                     const smart = getSmartCourseName(fullCourse, allNames);
-                            return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><spanstyle="font-weight:bold; margin-right:6px;">${qp}</span> <spanstyle="font-size:0.85em;">${smart}</span></div>`;
-                    }
+                    const smart = getSmartCourseName(fullCourse);
+                    return `<div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="font-weight:bold; margin-right:6px;">${qp}</span> <span style="font-size:0.85em;">${smart}</span></div>`;
+                }
+
                 const studentsPage1 = session.students.sort((a, b) => a.seatNumber - b.seatNumber).slice(0, 20);
                 const studentsPage2 = session.students.slice(20);
 
@@ -11545,40 +11511,40 @@ window.real_populate_qp_code_session_dropdown = function () {
             const onclickAction = isAllotmentLocked ? '' : `onclick="deleteRoom(${index})"`;
 
             roomDiv.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div class="flex items-start gap-2">
-                    <div class="flex flex-col items-center justify-center w-8 h-8 bg-gray-100 rounded text-gray-600 font-bold text-xs shrink-0 mt-0.5">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-center justify-center w-10 h-10 bg-gray-100 rounded text-gray-600 font-bold text-sm">
                         <span>#${serialNo}</span>
                     </div>
                     <div>
-                        <h4 class="font-bold text-gray-800 text-sm leading-tight flex flex-wrap items-center gap-1">
-                            <span>${room.roomName}</span> ${location}
+                        <h4 class="font-bold text-gray-800 text-base">
+                            ${room.roomName} ${location}
                         </h4>
 
-                        <div class="flex flex-wrap gap-1.5 mt-1.5 items-center">
-                            <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium ${badgeColor}">
+                        <div class="flex gap-2 mt-1 items-center">
+                            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}">
                                 ${streamName}
                             </span>
-                            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 flex items-center">
-                                ${room.students.length}/${room.capacity} ${capBadge}
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex items-center">
+                                ${room.students.length} / ${room.capacity} Students ${capBadge}
                                 ${room.students.length > 30 ? `
-                                    <span class="text-[8px] px-1 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-bold ml-1">
-                                        +Grace
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-bold ml-1">
+                                        Leftover Grace
                                     </span>
                                 ` : ''}
                             </span>
                         </div>
+
                     </div>
                 </div>
                 
-                <button class="${btnClass} p-1 -mt-1 -mr-1" ${onclickAction} ${btnDisabled} title="${isAllotmentLocked ? 'List Locked' : 'Remove Room'}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                <button class="${btnClass} p-2" ${onclickAction} ${btnDisabled} title="${isAllotmentLocked ? 'List Locked' : 'Remove Room'}">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
                       <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                     </svg>
                 </button>
             </div>
         `;
-
 
             allottedRoomsList.appendChild(roomDiv);
         });
@@ -21869,5 +21835,4 @@ document.addEventListener("visibilitychange", () => {
         }
     }
 });
-
 
