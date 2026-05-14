@@ -441,7 +441,8 @@ const SESSION_EXPORT_JS = {
                         const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
                         const stream = room.stream || 'Regular';
                         const paperKey = btoa(unescape(encodeURIComponent(fs.Course + '|' + stream)));
-                        if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: D.qpCodes[fs.Course+'|'+stream] || 'N/A', rooms: {} };
+                        // 🛡️ LOGIC FIX: Use the unified helper to fetch QP value (matches Report 1 & 3)
+                        if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: getActualQPValue(fs.Course, stream), rooms: {} };
                         map[paperKey].rooms[room.roomName] = (map[paperKey].rooms[room.roomName] || 0) + 1;
                     });
                 });
