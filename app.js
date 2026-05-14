@@ -5168,16 +5168,13 @@ function getExamName(date, time, stream) {
                     <input type="text" class="room-location-input block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" 
                            value="${location}" placeholder="Location" ${disabledAttr}>
                 </div>
-                <div class="flex items-center gap-2 w-full md:flex-grow">
+                <div class="flex items-center gap-2 w-full md:flex-grow relative">
                     <span class="text-xs font-semibold text-gray-500 uppercase md:hidden w-16 shrink-0">Parent</span>
-                    <select class="room-parent-select block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" ${disabledAttr}>
-                        <option value="">-- None (is Parent) --</option>
-                        ${Object.keys(currentRoomConfig).filter(name => name !== roomName).map(name => {
-                            const info = currentRoomConfig[name] || {};
-                            const locLabel = info.location ? ` (${info.location})` : '';
-                            return `<option value="${name}" ${parentRoom === name ? 'selected' : ''}>Part of: ${name}${locLabel}</option>`;
-                        }).join('')}
-                    </select>
+                    <input type="text" list="parent-rooms-list" 
+                           class="room-parent-select block w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm ${bgClass} focus:ring-indigo-500 focus:border-indigo-500 transition" 
+                           placeholder="Type to search parent..." 
+                           value="${parentRoom}" 
+                           ${disabledAttr}>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-2 mt-3 md:mt-0 md:w-[90px] border-t pt-2 md:border-0 md:pt-0 border-gray-100">
@@ -9195,7 +9192,18 @@ function getExamName(date, time, stream) {
             localStorage.setItem(ROOM_CONFIG_KEY, JSON.stringify(config));
         }
 
-        currentRoomConfig = config;
+    currentRoomConfig = config;
+
+        // Update the global searchable datalist
+        const datalist = document.getElementById('parent-rooms-list');
+        if (datalist) {
+            datalist.innerHTML = '<option value="">-- None (is Parent) --</option>' + 
+                Object.keys(config).sort().map(name => {
+                    const info = config[name] || {};
+                    const locLabel = info.location ? ` (${info.location})` : '';
+                    return `<option value="${name}">${name}${locLabel}</option>`;
+                }).join('');
+        }
 
         // 1. Populate List (Inside Modal)
         if (roomConfigContainer) {
