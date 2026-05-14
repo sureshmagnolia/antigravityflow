@@ -419,9 +419,8 @@ const SESSION_EXPORT_JS = {
                           tableRows += '<tr><td style="text-align:center">' + (i + 1) + '</td><td>' + qpPrefix + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
                       });
 
-                      contentHtml += '<h3 style="margin-top:20px; border-bottom:2px solid #000; display:inline-block">Stream: ' + stName + '</h3>' +
-                          '<table class="rt" style="margin-bottom:20px"><thead><tr><th style="text-align:center">SL</th><th style="width:70%">COURSE NAME</th><th
-                          style="text-align:center">COUNT</th></tr></thead>' +
+                    contentHtml += '<h3 style="margin-top:20px; border-bottom:2px solid #000; display:inline-block">Stream: ' + stName + '</h3>' +
+                        '<table class="rt" style="margin-bottom:20px"><thead><tr><th style="text-align:center">SL</th><th style="width:70%">COURSE NAME</th><th style="text-align:center">COUNT</th></tr></thead>' +
                           '<tbody>' + tableRows + '</tbody>' +
                           '<tfoot><tr><td colspan="2" style="text-align:right"><b>Total (' + stName + '):</b></td><td style="text-align:center"><b>' + totalInStream + '</b></td></tr></tfoot>' +
                           '</table>';
