@@ -7934,9 +7934,9 @@ function getExamName(date, time, stream) {
 
                         tableRows += `
                         <tr>
-                            <td class="sl-col">${index + 1}</td>
+                            <td class="sl-col" style="text-align: center;">${index + 1}</td>
                             <td class="course-col">${qpDisplay}${courseName}</td>
-                            <td class="count-col">${count}</td>
+                            <td class="count-col" style="text-align: center;">${count}</td>
                         </tr>
                     `;
                     });
@@ -7946,9 +7946,9 @@ function getExamName(date, time, stream) {
                     <table class="q-paper-table print-table" style="margin-bottom: 2rem;">
                         <thead>
                             <tr>
-                                <th class="sl-col">Sl No</th>
+                                <th class="sl-col" style="text-align: center;">Sl No</th>
                                 <th class="course-col">Course Name</th>
-                                <th class="count-col">Count</th>
+                                <th class="count-col" style="text-align: center;">Count</th>
                             </tr>
                         </thead>
                         <tbody>${tableRows}</tbody>
