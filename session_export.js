@@ -141,6 +141,7 @@ const SESSION_EXPORT_JS = {
             }
             .a4:last-of-type { break-after: auto; page-break-after: auto; }
             @page { size: A4 portrait; margin: 0; }
+            .a4.sticker-page { padding: 5mm !important; }
         }
 
 
@@ -443,7 +444,8 @@ const SESSION_EXPORT_JS = {
                 const map = {};
                 D.allotment.forEach(room => {
                     room.students.forEach(s => {
-                        const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                        const regNo = s.RegisterNo || s['Register Number'] || s.regNo;
+                        const fs = D.students.find(x => (x['Register Number'] || x.regNo) === regNo);
                         const stream = room.stream || 'Regular';
                         const paperKey = btoa(unescape(encodeURIComponent(fs.Course + '|' + stream)));
                         if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: getActualQPValue(fs.Course, stream), rooms: {} };
@@ -452,23 +454,60 @@ const SESSION_EXPORT_JS = {
                 });
 
                 const p = createPage();
-                // 🛡️ Remove hard padding/shadow to let the browser table handle the page flow
-                p.style.boxShadow = 'none';
-                p.style.padding = '0';
-                p.style.width = '100%';
+                p.style.boxShadow = 'none'; p.style.padding = '0'; p.style.width = '100%';
 
-let coursesRows = '';
-                Object.values(map).sort((a,b) => a.title.localeCompare(b.title)).forEach(info => {
+                let coursesRows = '';
+                Object.values(map).sort((a,b) => {
+                    const isRegA = a.stream === "Regular";
+                    const isRegB = b.stream === "Regular";
+                    if (isRegA && !isRegB) return -1;
+                    if (!isRegA && isRegB) return 1;
+                    if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+                    return a.title.localeCompare(b.title);
+                }).forEach(info => {
                     let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px">';
-                    // ... (keep the same sortedRooms.forEach logic)
+                    
+                    const sortedRooms = Object.keys(info.rooms).sort((a, b) => {
+                        const sA = D.roomConfig[a]?.serial || 999;
+                        const sB = D.roomConfig[b]?.serial || 999;
+                        return sA - sB;
+                    });
 
-                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
+                    sortedRooms.forEach(roomName => {
+                        const count = info.rooms[roomName];
+                        const rConf = D.roomConfig[roomName] || {};
+                        let loc = rConf.location || "";
+                        if (loc) {
+                            const words = loc.split(' ');
+                            if (words.length > 2) loc = words.slice(0, 2).join(' ') + "..";
+                        }
+                        const displayLoc = loc ? '(' + loc + ')' : "";
+                        const serial = rConf.serial || '-';
+
+                        boxes += \`
+                            <div style="border:1px solid #000; padding:4px 6px; background:#fff; display:flex; align-items:center; justify-content:space-between; border-radius:4px; height:34px; box-shadow:0 1px 2px rgba(0,0,0,0.05)">
+                                <div style="display:flex; align-items:baseline; overflow:hidden; width:100%">
+                                    <span style="font-size:12pt; font-weight:900; margin-right:2px">\${count}</span>
+                                    <span style="font-size:8pt; font-weight:bold; color:#666; margin-right:4px">Nos</span>
+                                    <span style="color:#ccc; margin-right:4px">|</span>
+                                    <div style="display:flex; align-items:baseline; min-w-0; white-space:nowrap; overflow:hidden">
+                                        <span style="font-size:9pt; font-weight:900; margin-right:2px">Room #\${serial}</span>
+                                        <span style="font-size:7pt; color:#666; text-overflow:ellipsis; overflow:hidden">\${displayLoc}</span>
+                                    </div>
+                                </div>
+                                <div style="width:12px; height:12px; border:1.5px solid #000; flex-shrink:0; margin-left:4px"></div>
+                            </div>
+                        \`;
+                    });
+                    boxes += '</div>';
+
+                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? \`<span style="background:#000; color:#fff; padding:1px 4px; border-radius:3px; font-size:8.5pt; font-weight:bold; margin-right:5px">\${info.qp}</span>\` : '';
                     coursesRows += \`
                         <tr><td style="padding-bottom:15px; border:none;">
                             <div style="break-inside: avoid;">
-                                <div style="border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">
-                                    <span>\${qpDisplay}<b>\${info.title}</b> <small>(\${info.stream})</small></span>
-                                    <span>Total: <b>\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                                <div style="border-bottom:1.5px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt; align-items:center">
+                                    <span>\${qpDisplay}<b>\${info.title}</b> <small style="text-transform:uppercase; color:#666">(\${info.stream})</small></span>
+                                    <span>Total: <b style="font-size:11pt">\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
                                 </div>
                                 \${boxes}
                             </div>
@@ -664,7 +703,7 @@ let coursesRows = '';
 
                               // ROTATED TEXT STYLING (Wrap Fix)
                               const tdStyles = r.span > 4
-                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.0; display:block;'
+                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.0; display:flex; align-items:center; justify-content:center;'
                                  : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
                              
                              // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
@@ -676,8 +715,8 @@ let coursesRows = '';
                                  '<td style="text-align:center; font-weight:bold; padding:1px 4px; border:1px solid #000;">' + r.seat + '</td></tr>';
                          });
                          
-                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse;">' +
-                                '<thead style="font-size:7.5pt"><tr><th style="width:45px; border:1px solid #000;">Loc</th><th style="width:85px; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:32px; border:1px solid #000;">Seat</th></tr></thead>' +
+                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse; border:1px solid #000">' +
+                                '<thead style="font-size:7.5pt"><tr><th style="width:12%; border:1px solid #000;">Loc</th><th style="width:23%; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:8%; border:1px solid #000;">Seat</th></tr></thead>' +
                                 '<tbody>' + rowsHtml + '</tbody></table>';
                     };
 
@@ -751,7 +790,7 @@ let coursesRows = '';
                         const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(Hall #' + serialNo + ')</span>' : 'Hall #' + serialNo;
 
                         return '' +
-                        '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:135mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
+                        '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:132mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
                             '<div style="text-align:center; margin-bottom:3px; flex-shrink:0; border-bottom:2px solid #000; padding-bottom:3px;">' +
                                 '<h1 style="font-size:12pt; font-weight:bold; margin:0; text-transform:uppercase; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + D.meta.collegeName + '</h1>' +
                                 '<div style="font-size:9pt; font-weight:bold; margin-top:1px; color:#444;">' + D.meta.date + ' | ' + D.meta.time + '</div>' +
@@ -768,7 +807,7 @@ let coursesRows = '';
                         '</div>';
                     };
 
-                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:5mm; border-bottom:1px dotted #ccc; margin-bottom:5mm;"></div>' + drawSticker(i+1) : '');
+                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:4mm; border-bottom:1px dotted #ccc; margin-bottom:4mm;"></div>' + drawSticker(i+1) : '');
                     v.appendChild(pg);
                 }
             }
