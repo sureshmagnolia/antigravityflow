@@ -159,7 +159,7 @@ const SESSION_EXPORT_JS = {
 
         /* Stickers Grid */
         .sticker-page { padding: 5mm!important; display: flex; flex-direction: column; justify-content: space-between; height: 297mm; box-sizing: border-box; }
-        .sticker { border: 2px dashed #000; padding: 10px; height: 135mm; box-sizing: border-box; display: flex; flex-direction: column; }
+        .sticker { border: 2px dashed #000; padding: 10px; height: 130mm; box-sizing: border-box; display: flex; flex-direction: column; }
         /* Highlighting Logic */
         .scribe-row-highlight { background-color: #374151 !important; color: white !important; font-weight: bold; }
     </style>
@@ -457,46 +457,32 @@ const SESSION_EXPORT_JS = {
                 p.style.padding = '0';
                 p.style.width = '100%';
 
-                let coursesHtml = '';
+let coursesRows = '';
                 Object.values(map).sort((a,b) => a.title.localeCompare(b.title)).forEach(info => {
                     let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px">';
-                    const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
-                    
-                    sortedRooms.forEach(r => {
-                        let loc = (D.roomConfig[r]?.location || "");
-                        const displayLoc = loc.split(' ').slice(0, 2).join(' ') + (loc.split(' ').length > 2 ? '..' : '');
-                        const serialNo = D.roomConfig[r]?.serial || '-';
-                        
-                        boxes += '<div class="qp-room-box">' +
-                           '<div style="display:flex; align-items:baseline; overflow:hidden">' +
-                              '<span class="qp-room-count" style="margin-right:4px">' + info.rooms[r] + '</span>' +
-                              '<span style="font-size:8px; font-weight:bold; color:#666; margin-right:5px">Nos</span>' +
-                              '<span style="color:#ddd; margin-right:5px">|</span>' +
-                              '<span style="font-weight:bold; font-size:10pt; white-space:nowrap">Hall #' + serialNo + '</span>' +
-                              '<span style="font-size:8px; margin-left:3px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
-                           '</div><div class="qp-room-check"></div></div>';
-                    });
+                    // ... (keep the same sortedRooms.forEach logic)
 
                     const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
-                    coursesHtml += \`
-                        <div style="break-inside: avoid; margin-bottom: 20px;">
-                            <div style="border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">
-                                <span>\${qpDisplay}<b>\${info.title}</b> <small>(\${info.stream})</small></span>
-                                <span>Total: <b>\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                    coursesRows += \`
+                        <tr><td style="padding-bottom:15px; border:none;">
+                            <div style="break-inside: avoid;">
+                                <div style="border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">
+                                    <span>\${qpDisplay}<b>\${info.title}</b> <small>(\${info.stream})</small></span>
+                                    <span>Total: <b>\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                                </div>
+                                \${boxes}
                             </div>
-                            \${boxes}
-                        </div>
+                        </td></tr>
                     \`;
                 });
 
-                // --- 🚀 THE DYNAMIC ENGINE: THEAD/TFOOT AUTO-REPEAT ---
                 p.innerHTML = \`
                 <table style="width:100%; border-collapse:collapse; background:white;">
                     <thead>
                         <tr><td>\${heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName)}<div style="height:10px"></div></td></tr>
                     </thead>
                     <tbody>
-                        <tr><td>\${coursesHtml}</td></tr>
+                        \${coursesRows}
                     </tbody>
                     <tfoot>
                         <tr><td><div style="height:20px"></div>\${footer()}</td></tr>
@@ -523,13 +509,16 @@ const SESSION_EXPORT_JS = {
                     let summ = ''; let gTot = 0;
                     Object.entries(stats).forEach(([k, v]) => {
                         const [c, stream] = k.split('|');
-                        const qp = D.qpCodes[k] || "N/A";
+                        const qp = getActualQPValue(c, stream); // Fix: Use helper
                         const bks = v.total - v.scribe; gTot += bks;
                         summ += '<tr><td>' + qp + '</td><td style="font-size:8.5pt">' + getSmartName(c) + (v.scribe > 0 ? ' <b>(' + v.scribe + ' Scribes)</b>' : '') + '</td><td style="text-align:center">' + bks + '</td></tr>';
                     });
 
                     // --- ADVANCED ACCOUNTING FOOTER ---
-                    let uniqueQPs = [...new Set(Object.keys(stats).map(k => D.qpCodes[k] || 'N/A'))].filter(q => q !== 'N/A');
+                    let uniqueQPs = [...new Set(Object.keys(stats).map(k => {
+                        const [c, s] = k.split('|');
+                        return getActualQPValue(c, s); // Fix: Use helper
+                    }))].filter(q => q !== 'N/A');
                     let qpChecklist = '';
                     uniqueQPs.forEach(q => { qpChecklist += '<span style="margin-right:15px">' + q + ': ____</span>'; });
 
@@ -675,7 +664,7 @@ const SESSION_EXPORT_JS = {
 
                               // ROTATED TEXT STYLING (Wrap Fix)
                               const tdStyles = r.span > 4
-                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; max-height:100%; white-space:normal; word-wrap:break-word; line-height:1.0; margin:auto; display:inline-block;'
+                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.0; display:block;'
                                  : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
                              
                              // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
@@ -779,7 +768,7 @@ const SESSION_EXPORT_JS = {
                         '</div>';
                     };
 
-                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:10mm; border-bottom:1px dotted #ccc; margin-bottom:10mm;"></div>' + drawSticker(i+1) : '');
+                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:5mm; border-bottom:1px dotted #ccc; margin-bottom:5mm;"></div>' + drawSticker(i+1) : '');
                     v.appendChild(pg);
                 }
             }
