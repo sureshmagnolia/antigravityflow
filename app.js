@@ -2108,7 +2108,7 @@ async function deleteSessionFromCloud(sessionKey) {
                 const serial = roomSerialMap[room.roomName] || '';
                 const roomInfo = roomConfig[room.roomName] || {};
                 const loc = (roomInfo.location && roomInfo.location.trim()) ? ` (${roomInfo.location})` : '';
-                const roomString = serial ? `Hall #${serial} - ${room.roomName}${loc}` : `${room.roomName}${loc}`;
+                const roomString = serial ? `Hall #${serial}${loc}` : `${room.roomName}${loc}`;
 
                 (room.students || []).forEach((s) => {
                     const reg = (typeof s === 'object' ? (s['Register Number'] || s.RegisterNo) : s);
@@ -2125,8 +2125,13 @@ async function deleteSessionFromCloud(sessionKey) {
 
             // Add scribe allotments
             Object.entries(scribeAllotment || {}).forEach(([reg, scribeRoom]) => {
-                if (studentMap[reg]) studentMap[reg].room = scribeRoom;
-                else studentMap[reg] = { room: scribeRoom, seat: 'Scribe', name: '', course: '' };
+                const sSerial = roomSerialMap[scribeRoom] || '-';
+                const sInfo = roomConfig[scribeRoom] || {};
+                const sLoc = (sInfo.location && sInfo.location.trim()) ? ` (${sInfo.location})` : '';
+                const sRoomString = sSerial ? `Hall #${sSerial}${sLoc}` : `${scribeRoom}${sLoc}`;
+                
+                if (studentMap[reg]) studentMap[reg].room = sRoomString;
+                else studentMap[reg] = { room: sRoomString, seat: 'Scribe', name: '', course: '' };
             });
 
 
@@ -6772,7 +6777,9 @@ function getExamName(date, time, stream) {
                     }
 
                     const roomInfo = currentRoomConfig[roomName] || {};
-                    const displayRoom = (roomInfo.location && roomInfo.location.trim() !== "") ? roomInfo.location : roomName;
+                    const serialMap = getRoomSerialMap(sessionKey);
+                    const serialNo = serialMap[roomName] || '-';
+                    const displayRoom = (roomInfo.location && roomInfo.location.trim() !== "") ? roomInfo.location : `Hall #${serialNo}`;
 
                     return {
                         student, isCourseHeader, displayRoom, seatNo, rowStyle,
@@ -11541,7 +11548,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     </div>
                     <div>
                         <h4 class="font-bold text-gray-800 text-base">
-                            ${room.roomName} ${location}
+                            ${(roomInfo && roomInfo.location) ? roomInfo.location : ('Hall #' + serialNo)}
                         </h4>
 
                         <div class="flex gap-2 mt-1 items-center">
@@ -14372,8 +14379,10 @@ Are you sure you want to update these records?
 
                     // Header Logic
                     const hasLocation = (roomInfo.location && roomInfo.location.trim() !== "");
-                    const headerTitle = hasLocation ? roomInfo.location : session.Room;
-                    const roomSubTitle = hasLocation ? `<span style="font-size: 14pt; font-weight: bold; margin-left: 5px;">(${session.Room})</span>` : "";
+                    const roomSerialMap = getRoomSerialMap(sessionKey);
+                    const serialNo = roomSerialMap[session.Room] || '-';
+                    const headerTitle = hasLocation ? roomInfo.location : `Hall #${serialNo}`;
+                    const roomSubTitle = hasLocation ? `<span style="font-size: 14pt; font-weight: bold; margin-left: 5px;">(Hall #${serialNo})</span>` : "";
 
                     // Group Students
                     const studentsByCourse = {};
@@ -15994,7 +16003,7 @@ window.handlePythonExtraction = async function (jsonString) {
                     let streamTotal = 0;
                     rooms.forEach(room => {
                         const roomInfo = currentRoomConfig[room.name] || {};
-                        const location = roomInfo.location ? `${room.name} <span class="text-xs text-gray-500">(${roomInfo.location})</span>` : room.name;
+                        onst location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
 
                         tableContent += `
                         <tr>
@@ -21188,7 +21197,8 @@ window.downloadInvigilationListPDF = async function () {
                 if(staff.phone) meta.push(staff.phone);
                 if(meta.length > 0) invigCell += `\n${meta.join(' | ')}`; 
             }
-            let loc = roomConfig[room.name]?.location || room.name;
+            const serialNo = roomSerialMap[room.name] || '-';
+            let loc = roomConfig[room.name]?.location || `Hall #${serialNo}`;
             loc = truncate(loc, 5);
             if(room.isScribe) loc += " (Scribe)";
             
