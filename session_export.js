@@ -478,31 +478,31 @@ const SESSION_EXPORT_JS = {
                     });
 
                     const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
-                    coursesHtml += `
+                    coursesHtml += \`
                         <div style="break-inside: avoid; margin-bottom: 20px;">
                             <div style="border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">
-                                <span>${qpDisplay}<b>${info.title}</b> <small>(${info.stream})</small></span>
-                                <span>Total: <b>${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                                <span>\${qpDisplay}<b>\${info.title}</b> <small>(\${info.stream})</small></span>
+                                <span>Total: <b>\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
                             </div>
-                            ${boxes}
+                            \${boxes}
                         </div>
-                    `;
+                    \`;
                 });
 
                 // --- 🚀 THE DYNAMIC ENGINE: THEAD/TFOOT AUTO-REPEAT ---
-                p.innerHTML = `
+                p.innerHTML = \`
                 <table style="width:100%; border-collapse:collapse; background:white;">
                     <thead>
-                        <tr><td>${heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName)}<div style="height:10px"></div></td></tr>
+                        <tr><td>\${heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName)}<div style="height:10px"></div></td></tr>
                     </thead>
                     <tbody>
-                        <tr><td>${coursesHtml}</td></tr>
+                        <tr><td>\${coursesHtml}</td></tr>
                     </tbody>
                     <tfoot>
-                        <tr><td><div style="height:20px"></div>${footer()}</td></tr>
+                        <tr><td><div style="height:20px"></div>\${footer()}</td></tr>
                     </tfoot>
                 </table>
-                `;
+                \`;
                 v.appendChild(p);
             }
 
