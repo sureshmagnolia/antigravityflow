@@ -3956,9 +3956,9 @@ function generateScribeProformaPDF() {
           const drawSmartText = (text, x, centerY, w, h, align = "left", isBold = false, qpCode = "") => {
               if (!text && !qpCode) return;
 
-              const prefix = qpCode ? [${qpCode}] : "";
+              const prefix = qpCode ? `[${qpCode}]` : "";
               const displaySafeText = text || "";
-              const fullDisplay = prefix ? ${prefix} ${displaySafeText} : displaySafeText;
+              const fullDisplay = prefix ? `${prefix} ${displaySafeText}` : displaySafeText;
 
               let fontSize = 10;
               // Width calculation (assume bold for safety if prefix exists)
@@ -4008,7 +4008,7 @@ function generateScribeProformaPDF() {
               const sessionTime = (rawData && rawData.length > 0) ? rawData[0].Time : "09:30 AM";
 
               doc.setFontSize(11); doc.setFont("helvetica", "normal");
-              doc.text(${dateStr} | ${sessionTime}, 105, y, { align: 'center' });
+              doc.text(`${dateStr} | ${sessionTime}`, 105, y, { align: 'center' });
               return y + 10;
           };
 
@@ -4057,7 +4057,7 @@ function generateScribeProformaPDF() {
 
               // A. STREAM HEADER
               doc.setFontSize(11); doc.setTextColor(0); doc.setFont("helvetica", "bold");
-              doc.text(Stream: ${stream}, MARGIN, currentY + 5);
+              doc.text(`Stream: ${stream}`, MARGIN, currentY + 5);
               currentY += 8;
 
               // B. TABLE HEADER
@@ -4129,18 +4129,18 @@ function generateScribeProformaPDF() {
               const labelW = W_SL + W_COURSE;
               doc.line(MARGIN + labelW, currentY, MARGIN + labelW, currentY + ROW_H);
 
-              // Text
-              const totalCenterY = currentY + (ROW_H/2) + 1.5;
-              doc.text(Total (${stream}), MARGIN + labelW - 2, totalCenterY, { align: 'right' });
-              doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT/2), totalCenterY, { align: 'center' });
+            // Text
+            const totalCenterY = currentY + (ROW_H/2) + 1.5;
+            doc.text(`Total (${stream})`, MARGIN + labelW - 2, totalCenterY, { align: 'right' });
+            doc.text(String(streamTotal), MARGIN + OFF_COUNT + (W_COUNT/2), totalCenterY, { align: 'center' });
 
               currentY += (ROW_H + 8);
           });
 
-          const dateStr = new Date().toISOString().slice(0,10);
-          doc.save(QP_Summary_${dateStr}.pdf);
+        const dateStr = new Date().toISOString().slice(0,10);
+        doc.save(`QP_Summary_${dateStr}.pdf`);
 
-      } catch (e) {
+    } catch (e) {
           console.error("PDF Error:", e);
           alert("Error: " + e.message);
       } finally {
