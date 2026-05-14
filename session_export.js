@@ -58,6 +58,13 @@ const SESSION_EXPORT_JS = {
 
         const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
         const roomConfig = (typeof window.getMyRoomConfig === 'function') ? window.getMyRoomConfig() : {};
+        
+        // 🛡️ ENRICH ROOM CONFIG: Inject Serial Numbers for the export
+        const roomSerialMap = (typeof window.getMyRoomSerialMap === 'function') ? window.getMyRoomSerialMap(sessionKey) : {};
+        const enrichedRoomConfig = JSON.parse(JSON.stringify(roomConfig));
+        Object.keys(enrichedRoomConfig).forEach(r => {
+            if (roomSerialMap[r]) enrichedRoomConfig[r].serial = roomSerialMap[r];
+        });
 
 
         const snapshot = {
@@ -80,7 +87,7 @@ const SESSION_EXPORT_JS = {
             }),
 
             invigilators: sessionInvigs,
-            roomConfig: roomConfig
+            roomConfig: enrichedRoomConfig
         };
 
 
