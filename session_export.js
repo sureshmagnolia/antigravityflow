@@ -152,10 +152,10 @@ const SESSION_EXPORT_JS = {
         .rh h1 { font-size: 18pt; margin: 0; text-transform: uppercase; }
         .rf { margin-top: 40px; display: flex; justify-content: space-between; font-weight: bold; }
 
-        /* QP Boxes Styling (Report 2) */
-        .qp-room-box { border: 1px solid #444; padding: 6px; background: #fff; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); }
-        .qp-room-count { font-size: 14pt; font-weight: 900; }
-        .qp-room-check { width: 16px; height: 16px; border: 2px solid #000; }
+        /* QP Boxes Styling (Report 2 - Compact Redesign) */
+        .qp-room-box { border: 1px solid #000; padding: 3px 6px; background: #fff; display: flex; align-items: center; justify-content: space-between; border-radius: 3px; }
+        .qp-room-count { font-size: 13pt; font-weight: 900; }
+        .qp-room-check { width: 14px; height: 14px; border: 1.5px solid #000; flex-shrink: 0; }
 
         /* Stickers Grid */
         .sticker-page { padding: 5mm!important; display: flex; flex-direction: column; justify-content: space-between; height: 297mm; box-sizing: border-box; }
@@ -438,51 +438,58 @@ const SESSION_EXPORT_JS = {
               }
 
 
-            // --- 📦 REPORT 2: QP DISTRIBUTION ---
+            // --- 📦 REPORT 2: QP DISTRIBUTION (PAGINATED & COMPACT) ---
             if (type === 'r2') {
-                const p = createPage();
-                p.innerHTML = heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName);
                 const map = {};
                 D.allotment.forEach(room => {
                     room.students.forEach(s => {
                         const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
                         const stream = room.stream || 'Regular';
                         const paperKey = btoa(unescape(encodeURIComponent(fs.Course + '|' + stream)));
-                        // 🛡️ LOGIC FIX: Use the unified helper to fetch QP value (matches Report 1 & 3)
                         if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: getActualQPValue(fs.Course, stream), rooms: {} };
                         map[paperKey].rooms[room.roomName] = (map[paperKey].rooms[room.roomName] || 0) + 1;
                     });
                 });
 
-                Object.values(map).sort((a,b) => a.title.localeCompare(b.title)).forEach(info => {
-                    let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px">';
-                    const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
-                    sortedRooms.forEach(r => {
-                        let loc = (D.roomConfig[r]?.location || "");
-                        const words = loc.split(' ');
-                        const displayLoc = words.length > 2 ? words.slice(0,2).join(' ') + '..' : loc;
+                const paperList = Object.values(map).sort((a,b) => a.title.localeCompare(b.title));
+                
+                // PAGINATION ENGINE: 6 Papers Per Page
+                const CHUNK_SIZE = 6;
+                for (let i = 0; i < paperList.length; i += CHUNK_SIZE) {
+                    const p = createPage();
+                    const chunk = paperList.slice(i, i + CHUNK_SIZE);
+                    let pageContent = '';
+
+                    chunk.forEach(info => {
+                        let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:5px">';
+                        const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
                         
-                        // Use Serial Number if available, otherwise fallback to Room Name
-                        const serialNo = D.roomConfig[r]?.serial;
-                        const roomLabel = serialNo ? 'Hall #' + serialNo : 'Hall ?';
-                        
-                        boxes += '<div class="qp-room-box">' +
-                           '<div style="display:flex; align-items:baseline; overflow:hidden">' +
-                              '<span style="font-size:16pt; font-weight:900; margin-right:4px">' + info.rooms[r] + '</span>' +
-                              '<span style="font-size:9px; font-weight:bold; color:#666; margin-right:8px">Nos</span>' +
-                              '<span style="color:#ddd; margin-right:8px">|</span>' +
-                              '<span style="font-weight:bold; font-size:11pt; white-space:nowrap">' + roomLabel + '</span>' +
-                              '<span style="font-size:9px; margin-left:4px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
-                           '</div><div class="qp-room-check"></div></div>';
+                        sortedRooms.forEach(r => {
+                            let loc = (D.roomConfig[r]?.location || "");
+                            const displayLoc = loc.split(' ').slice(0, 2).join(' ') + (loc.split(' ').length > 2 ? '..' : '');
+                            const serialNo = D.roomConfig[r]?.serial || '-';
+                            
+                            boxes += '<div class="qp-room-box">' +
+                               '<div style="display:flex; align-items:baseline; overflow:hidden">' +
+                                  '<span class="qp-room-count" style="margin-right:4px">' + info.rooms[r] + '</span>' +
+                                  '<span style="font-size:8px; font-weight:bold; color:#666; margin-right:5px">Nos</span>' +
+                                  '<span style="color:#ddd; margin-right:5px">|</span>' +
+                                  '<span style="font-weight:bold; font-size:10pt; white-space:nowrap">Hall #' + serialNo + '</span>' +
+                                  '<span style="font-size:8px; margin-left:3px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
+                               '</div><div class="qp-room-check"></div></div>';
+                        });
+
+                        const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
+                        pageContent += '<div style="margin-top:12px; border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">' +
+                            '<span>' + qpDisplay + '<b>' + info.title + '</b> <small>(' + info.stream + ')</small></span>' +
+                            '<span>Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
+                        '</div>' + boxes + '</div>';
                     });
 
-                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b style="margin-right:5px">[' + info.qp + ']</b> ' : '';
-                    p.innerHTML += '<div style="margin-top:15px; border-bottom:1px solid #000; padding:4px; display:flex; justify-content:space-between">' +
-                        '<span>' + qpDisplay + '<b>' + info.title + '</b> (' + info.stream + ')</span>' +
-                        '<span>Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
-                    '</div>' + boxes + '</div>';
-                });
-                v.appendChild(p);
+                    const pageNo = Math.floor(i / CHUNK_SIZE) + 1;
+                    p.innerHTML = heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName, pageNo) + pageContent + footer();
+                    v.appendChild(p);
+                }
             }
 
             // --- 🏠 REPORT 3: ROOM-WISE ---
