@@ -6979,7 +6979,15 @@ function getExamName(date, time, stream) {
             reportOutputArea.style.display = 'block';
             reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
             reportControls.classList.remove('hidden');
-            lastGeneratedReportType = "Daywise_Seating_Details";
+            lastGeneratedReportType = "Question_Paper_Summary";
+
+            // --- ADDED: JSON Export Button for Smart Print Manager ---
+            roomCsvDownloadContainer.innerHTML = `
+                <button id="download-qp-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
+                    📥 Download QP Summary for Print Manager (.json)
+                </button>
+            `;
+            document.getElementById('download-qp-json-button').addEventListener('click', downloadQpSummaryJson);
 
         } catch (e) {
             console.error("Error:", e);
@@ -7018,8 +7026,8 @@ function getExamName(date, time, stream) {
     const btn1Col = document.getElementById('generate-daywise-1col-btn');
     const btn2Col = document.getElementById('generate-daywise-2col-btn');
 
-    if (btn1Col) btn1Col.addEventListener('click', () => generateNoticeBoardReport(1));
-    if (btn2Col) btn2Col.addEventListener('click', () => generateNoticeBoardReport(2));
+    if (btn1Col) btn1Col.addEventListener('click', () => { roomCsvDownloadContainer.innerHTML = ""; generateNoticeBoardReport(1); });
+    if (btn2Col) btn2Col.addEventListener('click', () => { roomCsvDownloadContainer.innerHTML = ""; generateNoticeBoardReport(2); });
 
 
     // --- Helper: Render Page ---
