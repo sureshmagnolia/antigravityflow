@@ -455,15 +455,16 @@ const SESSION_EXPORT_JS = {
                         const words = loc.split(' ');
                         const displayLoc = words.length > 2 ? words.slice(0,2).join(' ') + '..' : loc;
                         
-                        // Use Serial Number to match Core App (e.g., Room #23)
-                        const serialNo = D.roomConfig[r]?.serial || '-';
+                        // Use Serial Number if available, otherwise fallback to Room Name
+                        const serialNo = D.roomConfig[r]?.serial;
+                        const roomLabel = serialNo ? 'Room #' + serialNo : r;
                         
                         boxes += '<div class="qp-room-box">' +
                            '<div style="display:flex; align-items:baseline; overflow:hidden">' +
                               '<span style="font-size:16pt; font-weight:900; margin-right:4px">' + info.rooms[r] + '</span>' +
                               '<span style="font-size:9px; font-weight:bold; color:#666; margin-right:8px">Nos</span>' +
                               '<span style="color:#ddd; margin-right:8px">|</span>' +
-                              '<span style="font-weight:bold; font-size:11pt; white-space:nowrap">Room #' + serialNo + '</span>' +
+                              '<span style="font-weight:bold; font-size:11pt; white-space:nowrap">' + roomLabel + '</span>' +
                               '<span style="font-size:9px; margin-left:4px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
                            '</div><div class="qp-room-check"></div></div>';
                     });
