@@ -638,8 +638,6 @@ function getDutiesDoneCount(email) {
 
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-        
-        if (isDateInVacation(dateObj)) return;
 
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
@@ -659,7 +657,6 @@ function getDutiesDoneByRole(email) {
         const dateObj = parseDate(key);
 
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-        if (isDateInVacation(dateObj)) return;
         if (!slot.attendance || !slot.attendance.includes(email)) return;
 
         // Find which role this person held on THIS specific slot date
@@ -813,19 +810,8 @@ function initStaffDashboard(me) {
     // Update UI
     document.getElementById('staff-view-pending').textContent = pending;
 
-    // FIX: Calculate total completed duties exactly as per Duty History (ignoring vacation filter)
-    let totalCompleted = 0;
-    const acYear = getCurrentAcademicYear();
-    Object.keys(invigilationSlots).forEach(key => {
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-        if (dateObj >= acYear.start && dateObj <= acYear.end && slot.attendance && slot.attendance.includes(me.email)) {
-            totalCompleted++;
-        }
-    });
-
     const completedEl = document.getElementById('staff-view-completed');
-    if (completedEl) completedEl.textContent = totalCompleted;
+    if (completedEl) completedEl.textContent = done;
 
     const completedCard = document.getElementById('staff-completed-card');
     if (completedCard) {
