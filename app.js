@@ -11527,62 +11527,58 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         currentSessionAllotment.forEach((room, index) => {
             const roomDiv = document.createElement('div');
-            roomDiv.className = 'bg-white border border-gray-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow';
+            roomDiv.className = 'bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm hover:border-indigo-300 transition-all';
 
             const roomInfo = currentRoomConfig[room.roomName];
-            const location = (roomInfo && roomInfo.location) ? ` <span class="text-gray-400 text-xs font-normal">(${roomInfo.location})</span>` : '';
             const serialNo = roomSerialMap[room.roomName] || '-';
 
             const streamName = room.stream || "Regular";
-            let badgeColor = "bg-blue-100 text-blue-800";
-            if (streamName !== "Regular") badgeColor = "bg-purple-100 text-purple-800";
+            let badgeColor = "bg-blue-100 text-blue-700";
+            if (streamName !== "Regular") badgeColor = "bg-purple-100 text-purple-700";
 
             let capBadge = "";
             const capNum = parseInt(room.capacity) || 30;
             if (capNum > 30) {
-                capBadge = `<span class="ml-1 text-[9px] font-bold text-red-700 bg-red-50 px-1 rounded border border-red-200">▲${capNum}</span>`;
+                capBadge = `<span class="ml-1 text-[9px] font-bold text-red-600 bg-red-50 px-1 rounded border border-red-100">▲${capNum}</span>`;
             } else if (capNum < 30) {
-                capBadge = `<span class="ml-1 text-[9px] font-bold text-blue-700 bg-blue-50 px-1 rounded border border-blue-200">▼${capNum}</span>`;
+                capBadge = `<span class="ml-1 text-[9px] font-bold text-blue-600 bg-blue-50 px-1 rounded border border-blue-100">▼${capNum}</span>`;
             }
 
             // --- LOCK LOGIC ---
             const btnDisabled = isAllotmentLocked ? 'disabled' : '';
-            const btnClass = isAllotmentLocked
-                ? 'text-gray-300 cursor-not-allowed'
-                : 'text-red-500 hover:text-red-700 cursor-pointer';
+            const btnClass = isAllotmentLocked ? 'text-gray-300' : 'text-red-400 hover:text-red-600';
             const onclickAction = isAllotmentLocked ? '' : `onclick="deleteRoom(${index})"`;
 
             roomDiv.innerHTML = `
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-3">
-                    <div class="flex flex-col items-center justify-center w-10 h-10 bg-gray-100 rounded text-gray-600 font-bold text-sm">
-                        <span>#${serialNo}</span>
+            <div class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-4 flex-grow overflow-hidden">
+                    <!-- Serial Badge -->
+                    <div class="shrink-0 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 font-bold text-xs border border-gray-200">
+                        #${serialNo}
                     </div>
-                    <div>
-                        <h4 class="font-bold text-gray-800 text-base">
+
+                    <!-- Room Info -->
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 flex-grow overflow-hidden">
+                        <h4 class="font-bold text-gray-800 text-sm whitespace-nowrap overflow-hidden text-overflow-ellipsis">
                             ${(roomInfo && roomInfo.location) ? roomInfo.location : ('Hall #' + serialNo)}
                         </h4>
-
-                        <div class="flex gap-2 mt-1 items-center">
-                            <span class="text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}">
+                        
+                        <!-- Status Pills -->
+                        <div class="flex items-center gap-2 shrink-0">
+                            <span class="text-[10px] uppercase tracking-tighter px-1.5 py-0.5 rounded font-bold ${badgeColor}">
                                 ${streamName}
                             </span>
-                            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex items-center">
-                                ${room.students.length} / ${room.capacity} Students ${capBadge}
-                                ${room.students.length > 30 ? `
-                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 font-bold ml-1">
-                                        Leftover Grace
-                                    </span>
-                                ` : ''}
+                            <span class="text-[10px] font-bold text-gray-500 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                ${room.students.length} / ${room.capacity} ${capBadge}
                             </span>
+                            ${room.students.length > 30 ? '<span class="text-[9px] font-black text-amber-600 animate-pulse">GRACE</span>' : ''}
                         </div>
-
                     </div>
                 </div>
                 
-                <button class="${btnClass} p-2" ${onclickAction} ${btnDisabled} title="${isAllotmentLocked ? 'List Locked' : 'Remove Room'}">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                <button class="${btnClass} p-1 transition-colors" ${onclickAction} ${btnDisabled}>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
             </div>
