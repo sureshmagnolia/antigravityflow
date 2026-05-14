@@ -16007,7 +16007,7 @@ window.handlePythonExtraction = async function (jsonString) {
                     let streamTotal = 0;
                     rooms.forEach(room => {
                         const roomInfo = currentRoomConfig[room.name] || {};
-                        onst location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
+                        const location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
 
                         tableContent += `
                         <tr>
