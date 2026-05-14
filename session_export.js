@@ -161,7 +161,7 @@ const SESSION_EXPORT_JS = {
         .sticker-page { padding: 5mm!important; display: flex; flex-direction: column; justify-content: space-between; height: 297mm; box-sizing: border-box; }
         .sticker { border: 2px dashed #000; padding: 10px; height: 135mm; box-sizing: border-box; display: flex; flex-direction: column; }
         /* Highlighting Logic */
-        .scribe-row-highlight { background-color: #f1f5f9 !important; font-weight: bold; }
+        .scribe-row-highlight { background-color: #374151 !important; color: white !important; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -566,7 +566,7 @@ const SESSION_EXPORT_JS = {
 
                     // Page 1
                     const serialNo = D.roomConfig[room.roomName]?.serial || '-';
-                    page1.innerHTML = heading('ROOM REPORT', 'Hall #' + serialNo, D.meta.examName, 1) + 
+                    page1.innerHTML = heading('ROOM REPORT', '#' + serialNo, D.meta.examName, 1) + 
                         '<div style="margin-bottom:10px"><b>Location:</b> ' + (D.roomConfig[room.roomName]?.location || 'Main Block') + '</div>' +
                         tHead + renderTableRows(st.slice(0, 20)) + '</tbody></table>' + 
                         (st.length <= 20 ? cFoot : '<div style="text-align:right; font-size:8pt">Continued on Page 2...</div>');
@@ -575,7 +575,7 @@ const SESSION_EXPORT_JS = {
                     // Page 2 (if exists)
                     if(st.length > 20) {
                         const p2 = createPage();
-                        p2.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 2) + 
+                        p2.innerHTML = heading('ROOM REPORT', '#' + serialNo, D.meta.examName, 2) + 
                             tHead + renderTableRows(st.slice(20)) + '</tbody></table>' + cFoot;
                         v.appendChild(p2);
                     }
