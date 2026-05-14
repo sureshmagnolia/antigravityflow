@@ -457,7 +457,7 @@ const SESSION_EXPORT_JS = {
                         
                         // Use Serial Number if available, otherwise fallback to Room Name
                         const serialNo = D.roomConfig[r]?.serial;
-                        const roomLabel = serialNo ? 'Room #' + serialNo : r;
+                        const roomLabel = serialNo ? 'Hall #' + serialNo : 'Hall ?';
                         
                         boxes += '<div class="qp-room-box">' +
                            '<div style="display:flex; align-items:baseline; overflow:hidden">' +
@@ -557,7 +557,8 @@ const SESSION_EXPORT_JS = {
                     const tHead = '<table class="rt"><thead><tr><th style="width:8%">SEAT</th><th style="width:30%">COURSE (QP)</th><th style="width:18%">REG NO</th><th style="width:24%">NAME</th><th style="width:10%">REMARK</th><th style="width:10%">SIGN</th></tr></thead><tbody>';
 
                     // Page 1
-                    page1.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 1) + 
+                    const serialNo = D.roomConfig[room.roomName]?.serial || '-';
+                    page1.innerHTML = heading('ROOM REPORT', 'Hall #' + serialNo, D.meta.examName, 1) + 
                         '<div style="margin-bottom:10px"><b>Location:</b> ' + (D.roomConfig[room.roomName]?.location || 'Main Block') + '</div>' +
                         tHead + renderTableRows(st.slice(0, 20)) + '</tbody></table>' + 
                         (st.length <= 20 ? cFoot : '<div style="text-align:right; font-size:8pt">Continued on Page 2...</div>');
@@ -728,7 +729,8 @@ const SESSION_EXPORT_JS = {
                                 '</div>';
                         });
 
-                        const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(' + r.roomName + ')</span>' : r.roomName;
+                        const serialNo = D.roomConfig[r.roomName]?.serial || '-';
+                        const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(Hall #' + serialNo + ')</span>' : 'Hall #' + serialNo;
 
                         return '' +
                         '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:135mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
@@ -779,13 +781,13 @@ const SESSION_EXPORT_JS = {
                         const stDat = origRoom.students.find(st => (st.RegisterNo || st['Register Number']) === s.regNo);
                         streamName = origRoom.stream || 'Regular';
                         const orgSerial = D.roomConfig[origRoom.roomName]?.serial || '-';
-                        origRoomDisplay = orgSerial + ' - ' + origRoom.roomName + ' (Seat: ' + stDat.seat + ')';
+                        origRoomDisplay = 'Hall #' + orgSerial + ' (Seat: ' + stDat.seat + ')';
                     }
                     
                     const qp = getActualQPValue(courseDisplay, streamName);
                     const scrSerial = D.roomConfig[s.room]?.serial || '-';
                     const scrLoc = D.roomConfig[s.room]?.location ? ' (' + D.roomConfig[s.room].location + ')' : '';
-                    const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - #' + scrSerial + ' - ' + s.room + '</strong>' + scrLoc;
+                    const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - Hall #' + scrSerial + '</strong>' + scrLoc;
                     p.innerHTML = '<div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">' +
                         '<h1 style="margin:0; font-size:18pt;">' + D.meta.collegeName + '</h1>' +
                         '<h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>' +
@@ -825,7 +827,7 @@ const SESSION_EXPORT_JS = {
                         '<td>' + (s.studentName || '') + '</td>' +
                         '<td>' + courseDisplay + '</td>' +
                         '<td style="font-weight:bold; color:#059669">' + (s.scribeName || '') + '</td>' +
-                        '<td style="text-align:center; font-weight:bold; font-size:10pt">' + s.room + '</td>' +
+                        '<td style="text-align:center; font-weight:bold; font-size:10pt">Hall #' + (D.roomConfig[s.room]?.serial || '-') + '</td>' +
                         '<td></td></tr>';
                 });
 
