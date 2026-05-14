@@ -7981,6 +7981,14 @@ function getExamName(date, time, stream) {
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "Question_Paper_Summary";
 
+            // --- ADDED: JSON Export Button for Smart Print Manager ---
+            roomCsvDownloadContainer.innerHTML = `
+                <button id="download-qp-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
+                    📥 Download QP Summary for Print Manager (.json)
+                </button>
+            `;
+            document.getElementById('download-qp-json-button').addEventListener('click', downloadQpSummaryJson);
+
         } catch (e) {
             console.error(e);
             alert("Error: " + e.message);
@@ -9026,7 +9034,62 @@ function getExamName(date, time, stream) {
         document.body.removeChild(link);
     }
 
+function downloadQpSummaryJson() {
+        const filteredData = getFilteredReportData('q-paper');
+        const sessions = {};
 
+        // 1. Group the data exactly like the visual report
+        filteredData.forEach(item => {
+            const key = `${item.Date}_${item.Time}`;
+            const stream = item.Stream || "Regular";
+            if (!sessions[key]) sessions[key] = { Date: item.Date, Time: item.Time, streams: {} };
+            if (!sessions[key].streams[stream]) sessions[key].streams[stream] = {};
+            const courseKey = item.Course;
+            if (!sessions[key].streams[stream][courseKey]) sessions[key].streams[stream][courseKey] = 0;
+            sessions[key].streams[stream][courseKey]++;
+        });
+
+        const exportData = [];
+        Object.values(sessions).forEach(session => {
+            Object.entries(session.streams).forEach(([streamName, courses]) => {
+                Object.entries(courses).forEach(([courseName, count]) => {
+                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                    const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+                    const paperKey = getQpKey(courseName, streamName);
+                    const qpCode = sessionQPCodes[paperKey] || '';
+                    
+                    // Sanitize components for filename (Pattern: Stream_Date_Time_QP Code_Course Name.pdf)
+                    const safeTime = session.Time.replace(/:/g, '-');
+                    const fileName = `${streamName}_${session.Date}_${safeTime}_${qpCode}_${courseName}.pdf`;
+
+                    exportData.push({
+                        stream: streamName,
+                        date: session.Date,
+                        time: session.Time,
+                        qpCode: qpCode,
+                        courseName: courseName,
+                        count: count,
+                        pdfFileName: fileName.trim()
+                    });
+                });
+            });
+        });
+
+        if (exportData.length === 0) return alert("No QP data to export.");
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateStamp = new Date().toISOString().slice(0,10);
+        a.download = `QP_Print_Job_${dateStamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    
     // --- NAVIGATION VIEW-SWITCHING LOGIC (REORDERED) ---
     navHome.addEventListener('click', () => showView(viewHome, navHome));
     navExtractor.addEventListener('click', () => {
