@@ -7878,6 +7878,7 @@ function getExamName(date, time, stream) {
 
         try {
             currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            loadQPCodes(); // Ensure codes are loaded
             const filteredData = getFilteredReportData('q-paper');
 
             // 1. Group by Session -> Then by Stream
@@ -7923,10 +7924,18 @@ function getExamName(date, time, stream) {
                     sortedCourses.forEach((courseName, index) => {
                         const count = courses[courseName];
                         totalStudentsInStream += count;
+                        
+                        // Get QP Code for this course/stream
+                        const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                        const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+                        const paperKey = getQpKey(courseName, streamName);
+                        const qpCode = sessionQPCodes[paperKey] || '';
+                        const qpDisplay = qpCode ? `<b style="margin-right:5px">[${qpCode}]</b> ` : '';
+
                         tableRows += `
                         <tr>
                             <td class="sl-col">${index + 1}</td>
-                            <td class="course-col">${courseName}</td>
+                            <td class="course-col">${qpDisplay}${courseName}</td>
                             <td class="count-col">${count}</td>
                         </tr>
                     `;
