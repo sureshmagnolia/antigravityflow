@@ -8304,6 +8304,8 @@ function getExamName(date, time, stream) {
             generateAbsenteeReportButton.textContent = "Generating...";
             reportOutputArea.innerHTML = "";
             reportControls.classList.add('hidden');
+            // 🛡️ Clear global container to remove persistent QP buttons
+            document.getElementById('room-csv-download-container').innerHTML = ""; 
             await new Promise(resolve => setTimeout(resolve, 50));
 
             try {
@@ -16009,6 +16011,7 @@ window.handlePythonExtraction = async function (jsonString) {
             generateRoomSummaryButton.textContent = "Generating...";
             reportOutputArea.innerHTML = "";
             reportControls.classList.add('hidden');
+            roomCsvDownloadContainer.innerHTML = "";
             await new Promise(resolve => setTimeout(resolve, 50));
 
             try {
