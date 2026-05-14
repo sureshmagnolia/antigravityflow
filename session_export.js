@@ -438,7 +438,7 @@ const SESSION_EXPORT_JS = {
               }
 
 
-            // --- 📦 REPORT 2: QP DISTRIBUTION (PAGINATED & COMPACT) ---
+            // --- 📦 REPORT 2: QP DISTRIBUTION (DYNAMIC AUTO-PAGINATION) ---
             if (type === 'r2') {
                 const map = {};
                 D.allotment.forEach(room => {
@@ -451,45 +451,59 @@ const SESSION_EXPORT_JS = {
                     });
                 });
 
-                const paperList = Object.values(map).sort((a,b) => a.title.localeCompare(b.title));
-                
-                // PAGINATION ENGINE: 6 Papers Per Page
-                const CHUNK_SIZE = 6;
-                for (let i = 0; i < paperList.length; i += CHUNK_SIZE) {
-                    const p = createPage();
-                    const chunk = paperList.slice(i, i + CHUNK_SIZE);
-                    let pageContent = '';
+                const p = createPage();
+                // 🛡️ Remove hard padding/shadow to let the browser table handle the page flow
+                p.style.boxShadow = 'none';
+                p.style.padding = '0';
+                p.style.width = '100%';
 
-                    chunk.forEach(info => {
-                        let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:5px">';
-                        const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
+                let coursesHtml = '';
+                Object.values(map).sort((a,b) => a.title.localeCompare(b.title)).forEach(info => {
+                    let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px">';
+                    const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
+                    
+                    sortedRooms.forEach(r => {
+                        let loc = (D.roomConfig[r]?.location || "");
+                        const displayLoc = loc.split(' ').slice(0, 2).join(' ') + (loc.split(' ').length > 2 ? '..' : '');
+                        const serialNo = D.roomConfig[r]?.serial || '-';
                         
-                        sortedRooms.forEach(r => {
-                            let loc = (D.roomConfig[r]?.location || "");
-                            const displayLoc = loc.split(' ').slice(0, 2).join(' ') + (loc.split(' ').length > 2 ? '..' : '');
-                            const serialNo = D.roomConfig[r]?.serial || '-';
-                            
-                            boxes += '<div class="qp-room-box">' +
-                               '<div style="display:flex; align-items:baseline; overflow:hidden">' +
-                                  '<span class="qp-room-count" style="margin-right:4px">' + info.rooms[r] + '</span>' +
-                                  '<span style="font-size:8px; font-weight:bold; color:#666; margin-right:5px">Nos</span>' +
-                                  '<span style="color:#ddd; margin-right:5px">|</span>' +
-                                  '<span style="font-weight:bold; font-size:10pt; white-space:nowrap">Hall #' + serialNo + '</span>' +
-                                  '<span style="font-size:8px; margin-left:3px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
-                               '</div><div class="qp-room-check"></div></div>';
-                        });
-
-                        const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
-                        pageContent += '<div style="margin-top:12px; border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">' +
-                            '<span>' + qpDisplay + '<b>' + info.title + '</b> <small>(' + info.stream + ')</small></span>' +
-                            '<span>Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
-                        '</div>' + boxes + '</div>';
+                        boxes += '<div class="qp-room-box">' +
+                           '<div style="display:flex; align-items:baseline; overflow:hidden">' +
+                              '<span class="qp-room-count" style="margin-right:4px">' + info.rooms[r] + '</span>' +
+                              '<span style="font-size:8px; font-weight:bold; color:#666; margin-right:5px">Nos</span>' +
+                              '<span style="color:#ddd; margin-right:5px">|</span>' +
+                              '<span style="font-weight:bold; font-size:10pt; white-space:nowrap">Hall #' + serialNo + '</span>' +
+                              '<span style="font-size:8px; margin-left:3px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
+                           '</div><div class="qp-room-check"></div></div>';
                     });
 
-                    const pageNo = Math.floor(i / CHUNK_SIZE) + 1;
-                    p.innerHTML = heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName, pageNo) + pageContent + footer();
-                    v.appendChild(p);
-                }
+                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b>[' + info.qp + ']</b> ' : '';
+                    coursesHtml += `
+                        <div style="break-inside: avoid; margin-bottom: 20px;">
+                            <div style="border-bottom:1px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt">
+                                <span>${qpDisplay}<b>${info.title}</b> <small>(${info.stream})</small></span>
+                                <span>Total: <b>${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                            </div>
+                            ${boxes}
+                        </div>
+                    `;
+                });
+
+                // --- 🚀 THE DYNAMIC ENGINE: THEAD/TFOOT AUTO-REPEAT ---
+                p.innerHTML = `
+                <table style="width:100%; border-collapse:collapse; background:white;">
+                    <thead>
+                        <tr><td>${heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName)}<div style="height:10px"></div></td></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>${coursesHtml}</td></tr>
+                    </tbody>
+                    <tfoot>
+                        <tr><td><div style="height:20px"></div>${footer()}</td></tr>
+                    </tfoot>
+                </table>
+                `;
+                v.appendChild(p);
             }
 
             // --- 🏠 REPORT 3: ROOM-WISE ---
