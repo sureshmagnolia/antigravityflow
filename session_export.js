@@ -652,10 +652,10 @@ const SESSION_EXPORT_JS = {
                                  else if (charLen > 15) dynFontSize = 7.5;
                              }
 
-                             // ROTATED TEXT STYLING
-                             const tdStyles = r.span > 4 
-                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; white-space:nowrap; line-height:1.1; margin:auto;' 
-                                : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
+                              // ROTATED TEXT STYLING (Wrap Fix)
+                              const tdStyles = r.span > 4
+                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; max-height:100%; white-space:normal; word-wrap:break-word; line-height:1.0; margin:auto; display:inline-block;'
+                                 : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
                              
                              // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
                              rowsHtml += '<tr style="line-height:1.1">' + 
