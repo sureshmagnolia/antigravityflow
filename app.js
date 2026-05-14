@@ -9034,7 +9034,7 @@ function getExamName(date, time, stream) {
         document.body.removeChild(link);
     }
 
-function downloadQpSummaryJson() {
+    function downloadQpSummaryJson() {
         const filteredData = getFilteredReportData('q-paper');
         const sessions = {};
 
@@ -9056,7 +9056,10 @@ function downloadQpSummaryJson() {
                     const sessionKeyPipe = `${session.Date} | ${session.Time}`;
                     const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                     const paperKey = getQpKey(courseName, streamName);
-                    const qpCode = sessionQPCodes[paperKey] || '';
+                    const qpCodeRaw = sessionQPCodes[paperKey] || '';
+                    
+                    // 🛡️ STRIP ALPHA PREFIX: Removes leading letters (e.g., D12345 -> 12345)
+                    const qpCode = qpCodeRaw.replace(/^[A-Za-z]+/, '');
                     
                     // Sanitize components for filename (Pattern: Stream_Date_Time_QP Code_Course Name.pdf)
                     const safeTime = session.Time.replace(/:/g, '-');
