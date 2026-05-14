@@ -701,18 +701,18 @@ const SESSION_EXPORT_JS = {
                                  else if (charLen > 15) dynFontSize = 7.5;
                              }
 
-                              // ROTATED TEXT STYLING (Wrap Fix)
-                              const tdStyles = r.span > 4
-                                 ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.0; display:flex; align-items:center; justify-content:center;'
-                                 : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
+                               // ROTATED TEXT STYLING (Wrap Fix)
+                               const tdStyles = r.span > 4
+                                  ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.2; display:flex; align-items:center; justify-content:center;'
+                                  : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                              
-                             // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
-                             rowsHtml += '<tr style="line-height:1.1">' + 
+                             // TIGHT PADDING + DYNAMIC FONT (Synced with app.js crisp layout)
+                             rowsHtml += '<tr style="line-height:1.0">' + 
                                  (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
 
-                                 '<td style="font-weight:700; font-size:8.5pt; padding:1px 4px; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + r['Register Number'] + '</td>' +
-                                 '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; border:1px solid #000;">' + r.Name + '</td>' +
-                                 '<td style="text-align:center; font-weight:bold; padding:1px 4px; border:1px solid #000;">' + r.seat + '</td></tr>';
+                                 '<td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">' + r['Register Number'] + '</td>' +
+                                 '<td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">' + r.Name + '</td>' +
+                                 '<td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">' + r.seat + '</td></tr>';
                          });
                          
                          return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse; border:1px solid #000">' +
