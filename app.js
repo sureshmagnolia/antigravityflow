@@ -8754,11 +8754,11 @@ function getExamName(date, time, stream) {
                 const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
                 const roomSerialMap = getRoomSerialMap(sessionKey);
 
-                // --- Format Original Room ---
+                // --- Format Original Room (Fixed) ---
                 const orgSerial = roomSerialMap[originalRoomData.room] || '-';
-                const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
+                const originalRoomDisplay = `Hall #${orgSerial} (Seat: ${originalRoomData.seat})`;
 
-                // --- Format Scribe Room ---
+                // --- Format Scribe Room (Fixed) ---
                 const rawScribeRoom = sessionScribeRooms[s['Register Number']];
                 let scribeRoomDisplay = '<span style="color:red;">Not Allotted</span>';
 
@@ -8770,9 +8770,8 @@ function getExamName(date, time, stream) {
                     }
                     const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
                     const scribeLabel = scribeRoomLabelMap[rawScribeRoom] || 'SCR?';
-                    // Display style: SCR1 - #10 - Room 5
-                    scribeRoomDisplay = `<strong><span style="color:#2563eb;">${scribeLabel}</span> - #${scribeSerial} - ${rawScribeRoom}</strong>${locText}`;
-
+                    // Display style: SCR1 - Hall #10
+                    scribeRoomDisplay = `<strong><span style="color:#2563eb;">${scribeLabel}</span> - Hall #${scribeSerial}</strong>${locText}`;
                 }
 
                 reportRows.push({
