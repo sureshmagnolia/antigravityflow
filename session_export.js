@@ -382,7 +382,7 @@ const SESSION_EXPORT_JS = {
                '</div>';
             };
 
-            const footer = () => '<div class="rf"><span>Date: ' + D.meta.date + '</span><span>Chief Superintendent Signature</span></div>';
+            const footer = () => '<div class="rf"><span>Date: ' + D.meta.date + '</span><span></span></div>';
 
             const getSmartName = (name) => {
                 let clean = name.replace(/\[.*?\]/g, '').replace(/\s-\s$/, '').trim();
