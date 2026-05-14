@@ -642,6 +642,8 @@ const SESSION_EXPORT_JS = {
             if (type === 'r4') {
                 // 1. Enrich & Split Data by Stream
                 const dataByStream = {};
+                const streamScribes = {}; // To track scribes per stream for the summary
+
                 D.students.forEach(s => {
                     const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number'] || st.regNo) === (s['Register Number'] || s.regNo)));
                     if (!room) return;
@@ -662,6 +664,11 @@ const SESSION_EXPORT_JS = {
 
                     if (!dataByStream[stream]) dataByStream[stream] = [];
                     dataByStream[stream].push(enriched);
+
+                    if (isScribe) {
+                        if (!streamScribes[stream]) streamScribes[stream] = [];
+                        streamScribes[stream].push(enriched);
+                    }
                 });
 
                 const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
@@ -679,6 +686,7 @@ const SESSION_EXPORT_JS = {
                         return (a['Register Number'] || a.regNo).localeCompare(b['Register Number'] || b.regNo);
                     });
 
+                    // --- PART A: SEATING DETAILS (2-COL) ---
                     const CHUNK_SIZE = 90;
                     for(let i=0; i < streamData.length; i += CHUNK_SIZE) {
                         const chunk = streamData.slice(i, i + CHUNK_SIZE);
@@ -736,7 +744,7 @@ const SESSION_EXPORT_JS = {
                                      (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
                                      '<td style="font-weight:700; font-size:8.5pt; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + regNo + '</td>' +
                                      '<td style="font-size:7.5pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid #000;">' + (r.Name || r.name || '-') + '</td>' +
-                                     '<td style="text-align:center; font-weight:bold; font-size:6.5pt; white-space:nowrap; border:1px solid #000;">' + r.seat + '</td></tr>';
+                                     '<td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">' + r.seat + '</td></tr>';
                              });
                              
                              return '<table class="rt-notice" style="table-layout:fixed;">' +
@@ -749,6 +757,33 @@ const SESSION_EXPORT_JS = {
                             '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
                         '</div>' + footer();
                         v.appendChild(pg);
+                    }
+
+                    // --- PART B: SCRIBE ASSISTANCE SUMMARY (PER STREAM) ---
+                    if (streamScribes[stream] && streamScribes[stream].length > 0) {
+                        const scribePg = createPage();
+                        scribePg.innerHTML = heading('SCRIBE ASSISTANCE SUMMARY', '', D.meta.examName + ' <br><small>Stream: ' + stream + '</small>');
+                        
+                        const roomMap = {};
+                        streamScribes[stream].forEach(s => {
+                            if (!roomMap[s.roomName]) roomMap[s.roomName] = [];
+                            roomMap[s.roomName].push(s.Name + ' (' + (s['Register Number'] || s.regNo) + ')');
+                        });
+
+                        let summaryRows = '';
+                        Object.keys(roomMap).sort().forEach(rName => {
+                            const rConf = D.roomConfig[rName] || {};
+                            const locText = rConf.location ? rName + ' (' + rConf.location + ')' : rName;
+                            summaryRows += '<tr>' +
+                                '<td style="border:1px solid #000; padding:8px; font-weight:bold; width:30%; vertical-align:top">' + locText + '</td>' +
+                                '<td style="border:1px solid #000; padding:8px; font-size:12pt; font-weight:bold">' + roomMap[rName].join(', ') + '</td>' +
+                                '</tr>';
+                        });
+
+                        scribePg.innerHTML += '<table style="width:100%; border-collapse:collapse; margin-top:10px">' +
+                            '<thead style="background:#eee"><tr><th style="border:1px solid #000; padding:8px; text-align:left">Room Location</th><th style="border:1px solid #000; padding:8px; text-align:left">Candidates</th></tr></thead>' +
+                            '<tbody>' + summaryRows + '</tbody></table>' + footer();
+                        v.appendChild(scribePg);
                     }
                 });
             }
