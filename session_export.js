@@ -701,14 +701,16 @@ const SESSION_EXPORT_JS = {
                                  else if (charLen > 15) dynFontSize = 7.5;
                              }
 
-                               // ROTATED TEXT STYLING (Wrap Fix)
+                               // ROTATED TEXT STYLING (Forced Wrap Logic)
+                               // In vertical-rl, HEIGHT constrains the text flow. We must set it to force wrapping.
+                               const spanHeightPx = r.span * 16.5; // Matches crisp row height
                                const tdStyles = r.span > 4
-                                  ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:100%; width:100%; white-space:normal; word-wrap:break-word; word-break:break-all; line-height:1.2; display:flex; align-items:center; justify-content:center;'
+                                  ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:' + spanHeightPx + 'px; width:100%; white-space:normal; overflow-wrap:break-word; word-break:break-all; line-height:1.1; margin:auto; display:block;'
                                   : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                              
                              // TIGHT PADDING + DYNAMIC FONT (Synced with app.js crisp layout)
                              rowsHtml += '<tr style="line-height:1.0">' + 
-                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
+                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
 
                                  '<td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">' + r['Register Number'] + '</td>' +
                                  '<td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">' + r.Name + '</td>' +
