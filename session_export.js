@@ -163,6 +163,12 @@ const SESSION_EXPORT_JS = {
         .sticker { border: 2px dashed #000; padding: 10px; height: 130mm; box-sizing: border-box; display: flex; flex-direction: column; }
         /* Highlighting Logic */
         .scribe-row-highlight { background-color: #374151 !important; color: white !important; font-weight: bold; }
+        /* Sync Notice Board Table Styles with app.js */
+        .rt-notice { border-collapse: collapse; width: 100%; table-layout: fixed; border: 1px solid #000; }
+        .rt-notice tr { height: 1.45em; max-height: 1.45em; line-height: 1.0; }
+        .rt-notice td, .rt-notice th { padding: 0px 3px; font-size: 8pt; border: 1px solid #000; overflow: hidden; }
+        .rt-notice th { font-size: 7.5pt; background: #eee; text-transform: uppercase; }
+    </style>
     </style>
 </head>
 <body>
@@ -634,100 +640,117 @@ const SESSION_EXPORT_JS = {
 
             // --- 📋 REPORT 4: SEATING DETAILS (PAPER-WISE GROUPING) ---
             if (type === 'r4') {
-                const p = createPage();
-                p.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName);
-                
-                // 1. Enrich data with Room Info for sorting
-                const enriched = D.students.map(s => {
-                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number']) === s['Register Number']));
-                    const seat = room?.students.find(x => (x.RegisterNo || x['Register Number']) === s['Register Number'])?.seat || '-';
-                    const loc = (D.roomConfig[room?.roomName]?.location || room?.roomName || '-');
-                    const rSerial = (D.roomConfig[room?.roomName]?.serial || 999);
-                    return { ...s, roomName: room?.roomName, loc: loc, seat: seat, rSerial: rSerial };
-                });
+                // 1. Enrich & Split Data by Stream
+                const dataByStream = {};
+                D.students.forEach(s => {
+                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number'] || st.regNo) === (s['Register Number'] || s.regNo)));
+                    if (!room) return;
 
-                // 2. Sort by Course -> Room Serial -> Register Number
-                enriched.sort((a,b) => {
-                    if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
-                    return a['Register Number'].localeCompare(b['Register Number']);
-                });
-
-                    // --- HARD PAGINATION ENGINE (90 Students Per A4 Page) ---
-                const CHUNK_SIZE = 90; 
-                for(let i=0; i < enriched.length; i += CHUNK_SIZE) {
-                    const chunk = enriched.slice(i, i + CHUNK_SIZE);
-                    const pg = createPage();
-                    pg.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName, Math.floor(i/CHUNK_SIZE)+1);
+                    const stInfo = room.students.find(x => (x.RegisterNo || x['Register Number'] || x.regNo) === (s['Register Number'] || s.regNo));
+                    const stream = room.stream || 'Regular';
+                    const isScribe = D.scribes.some(sc => sc.regNo === (s['Register Number'] || s.regNo));
                     
-                    const mid = Math.ceil(chunk.length / 2);
-                    
-                    const getTable = (list) => {
-                         let rowsHtml = '';
-                         let prevCourse = '';
-                         let tempRows = [];
-                         
-                         // Calculate rowspans cleanly within this specific column slice
-                         list.forEach(item => {
-                             const isNewCourse = item.Course !== prevCourse;
-                             tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
-                             prevCourse = item.Course;
-                         });
-
-                         for(let j=0; j < tempRows.length; j++) {
-                             if(tempRows[j].skip) continue;
-                             for(let k=j+1; k < tempRows.length; k++) {
-                                 if(tempRows[k].isNewCourse || tempRows[k].loc !== tempRows[j].loc) break;
-                                 tempRows[j].span++;
-                                 tempRows[k].skip = true;
-                             }
-                         }
-
-                         tempRows.forEach(r => {
-                             if(r.isNewCourse) {
-                                 rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:7.5pt; padding:2px 4px">' + r.Course + '</td></tr>';
-                             }
-                             // DYNAMIC FONT SIZING: Shrinks font if text is extremely dense for the given cell span
-                             let dynFontSize = 9;
-                             const charLen = r.loc.length;
-                             if (r.span > 4) {
-                                 // Vertical cell mapping (Allows ~4 chars per row span at 9pt)
-                                 const maxChars = r.span * 4;
-                                 if (charLen > maxChars + 8) dynFontSize = 6.5;
-                                 else if (charLen > maxChars) dynFontSize = 7.5;
-                             } else {
-                                 // Horizontal cell mapping
-                                 if (charLen > 25) dynFontSize = 6.5;
-                                 else if (charLen > 15) dynFontSize = 7.5;
-                             }
-
-                               // ROTATED TEXT STYLING (Forced Wrap Logic)
-                               // In vertical-rl, HEIGHT constrains the text flow. We must set it to force wrapping.
-                               const spanHeightPx = r.span * 16.5; // Matches crisp row height
-                               const tdStyles = r.span > 4
-                                  ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:' + spanHeightPx + 'px; width:100%; white-space:normal; overflow-wrap:break-word; word-break:break-all; line-height:1.1; margin:auto; display:block;'
-                                  : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
-                             
-                             // TIGHT PADDING + DYNAMIC FONT (Synced with app.js crisp layout)
-                             rowsHtml += '<tr style="line-height:1.0">' + 
-                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
-
-                                 '<td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">' + r['Register Number'] + '</td>' +
-                                 '<td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">' + r.Name + '</td>' +
-                                 '<td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">' + r.seat + '</td></tr>';
-                         });
-                         
-                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse; border:1px solid #000">' +
-                                '<thead style="font-size:7.5pt"><tr><th style="width:12%; border:1px solid #000;">Loc</th><th style="width:23%; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:8%; border:1px solid #000;">Seat</th></tr></thead>' +
-                                '<tbody>' + rowsHtml + '</tbody></table>';
+                    const enriched = { 
+                        ...s, 
+                        roomName: room.roomName, 
+                        loc: (D.roomConfig[room.roomName]?.location || room.roomName || '-'), 
+                        seat: isScribe ? 'SCR' : (stInfo?.seat || '-'), 
+                        rSerial: (D.roomConfig[room.roomName]?.serial || 999),
+                        isScribe: isScribe,
+                        Stream: stream
                     };
 
-                    pg.innerHTML += '<div style="display:flex; gap:10px">' +
-                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(0, mid)) + '</div>' +
-                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
-                    '</div>' + footer();
-                    v.appendChild(pg);
-                }
+                    if (!dataByStream[stream]) dataByStream[stream] = [];
+                    dataByStream[stream].push(enriched);
+                });
+
+                const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
+                    if (a === "Regular") return -1;
+                    if (b === "Regular") return 1;
+                    return a.localeCompare(b);
+                });
+
+                sortedStreamNames.forEach(stream => {
+                    const streamData = dataByStream[stream];
+                    // Sort by Course -> Room Serial -> Register Number
+                    streamData.sort((a,b) => {
+                        if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                        if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
+                        return (a['Register Number'] || a.regNo).localeCompare(b['Register Number'] || b.regNo);
+                    });
+
+                    const CHUNK_SIZE = 90;
+                    for(let i=0; i < streamData.length; i += CHUNK_SIZE) {
+                        const chunk = streamData.slice(i, i + CHUNK_SIZE);
+                        const pg = createPage();
+                        pg.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName + ' <br><small>Stream: ' + stream + '</small>', Math.floor(i/CHUNK_SIZE)+1);
+                        
+                        const mid = Math.ceil(chunk.length / 2);
+                        
+                        const getTable = (list) => {
+                             let rowsHtml = '';
+                             let prevCourse = '';
+                             let tempRows = [];
+                             
+                             list.forEach(item => {
+                                 const isNewCourse = item.Course !== prevCourse;
+                                 tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
+                                 prevCourse = item.Course;
+                             });
+
+                             for(let j=0; j < tempRows.length; j++) {
+                                 if(tempRows[j].skip) continue;
+                                 for(let k=j+1; k < tempRows.length; k++) {
+                                     if(tempRows[k].isNewCourse || tempRows[k].loc !== tempRows[j].loc) break;
+                                     tempRows[j].span++;
+                                     tempRows[k].skip = true;
+                                 }
+                             }
+
+                             tempRows.forEach(r => {
+                                 if(r.isNewCourse) {
+                                     rowsHtml += '<tr><td colspan="4" style="background:#eee; font-weight:bold; font-size:7.5pt; padding:2px 4px; border:1px solid #000;">' + r.Course + '</td></tr>';
+                                 }
+                                 
+                                 let dynFontSize = 9;
+                                 const charLen = (r.loc || '').length;
+                                 const spanHeightPx = r.span * 16.5; 
+                                 
+                                 if (r.span > 4) {
+                                     const maxChars = r.span * 4;
+                                     if (charLen > maxChars + 8) dynFontSize = 6.5;
+                                     else if (charLen > maxChars) dynFontSize = 7.5;
+                                 } else {
+                                     if (charLen > 25) dynFontSize = 6.5;
+                                     else if (charLen > 15) dynFontSize = 7.5;
+                                 }
+
+                                 const tdStyles = r.span > 4
+                                    ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:' + spanHeightPx + 'px; width:100%; white-space:normal; overflow-wrap:break-word; word-break:break-all; line-height:1.1; margin:auto; display:block;'
+                                    : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
+                                 
+                                 const rowStyle = r.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
+                                 const regNo = r['Register Number'] || r.regNo || '-';
+
+                                 rowsHtml += '<tr style="' + rowStyle + '">' + 
+                                     (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
+                                     '<td style="font-weight:700; font-size:8.5pt; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + regNo + '</td>' +
+                                     '<td style="font-size:7.5pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid #000;">' + (r.Name || r.name || '-') + '</td>' +
+                                     '<td style="text-align:center; font-weight:bold; font-size:6.5pt; white-space:nowrap; border:1px solid #000;">' + r.seat + '</td></tr>';
+                             });
+                             
+                             return '<table class="rt-notice" style="table-layout:fixed;">' +
+                                    '<thead><tr><th style="width:45px;">Loc</th><th style="width:85px;">Reg No</th><th style="width:auto;">Name</th><th style="width:28px;">Seat</th></tr></thead>' +
+                                    '<tbody>' + rowsHtml + '</tbody></table>';
+                        };
+
+                        pg.innerHTML += '<div style="display:flex; gap:10px">' +
+                            '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(0, mid)) + '</div>' +
+                            '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
+                        '</div>' + footer();
+                        v.appendChild(pg);
+                    }
+                });
             }
 
 
