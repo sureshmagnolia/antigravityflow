@@ -6667,8 +6667,8 @@ function getExamName(date, time, stream) {
         generateDaywiseReportButton.textContent = "Generating...";
         reportOutputArea.innerHTML = "";
         reportControls.classList.add('hidden');
+        roomCsvDownloadContainer.innerHTML = "";
         await new Promise(resolve => setTimeout(resolve, 50));
-
         try {
                        currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
@@ -8016,6 +8016,7 @@ function getExamName(date, time, stream) {
             generateQpDistributionReportButton.textContent = "Generating...";
             reportOutputArea.innerHTML = "";
             reportControls.classList.add('hidden');
+            roomCsvDownloadContainer.innerHTML = "";
             await new Promise(resolve => setTimeout(resolve, 50));
 
             try {
@@ -14392,6 +14393,7 @@ Are you sure you want to update these records?
             generateStickerButton.textContent = "Generating Stickers...";
             reportOutputArea.innerHTML = "";
             reportControls.classList.add('hidden');
+            roomCsvDownloadContainer.innerHTML = "";
             await new Promise(resolve => setTimeout(resolve, 50));
 
             try {
