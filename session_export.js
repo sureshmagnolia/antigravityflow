@@ -476,9 +476,10 @@ const SESSION_EXPORT_JS = {
                            '</div><div class="qp-room-check"></div></div>';
                     });
 
+                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? '<b style="margin-right:5px">[' + info.qp + ']</b> ' : '';
                     p.innerHTML += '<div style="margin-top:15px; border-bottom:1px solid #000; padding:4px; display:flex; justify-content:space-between">' +
-                        '<span><b>' + info.title + '</b> (' + info.stream + ')</span>' +
-                        '<span>QP: <b>' + info.qp + '</b> | Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
+                        '<span>' + qpDisplay + '<b>' + info.title + '</b> (' + info.stream + ')</span>' +
+                        '<span>Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
                     '</div>' + boxes + '</div>';
                 });
                 v.appendChild(p);
