@@ -4025,7 +4025,10 @@ function generateScribeProformaPDF() {
           rawData.forEach(s => {
               const stream = s.Stream || "Regular";
               const courseName = (s.Course || "Unknown Course").trim();
-              const qpCode = sessionQPCodes[courseName] || "";
+              
+              // 🛡️ LOGIC FIX: Use Base64 key to match storage system
+              const courseKey = window.getQpKey(courseName, stream);
+              const qpCode = sessionQPCodes[courseKey] || "";
 
               if (!streamMap[stream]) streamMap[stream] = {};
 
