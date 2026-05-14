@@ -390,11 +390,15 @@ const SESSION_EXPORT_JS = {
 
                   // 1. Group by Stream
                   const streams = {};
-                  D.students.forEach(s => {
-                      const st = s.Stream || 'Regular';
-                      if (!streams[st]) streams[st] = {};
-                      streams[st][s.Course] = (streams[st][s.Course] || 0) + 1;
-                  });
+                D.students.forEach(s => {
+                    const st = s.Stream || 'Regular';
+                    if (!streams[st]) streams[st] = {};
+                    // Store both course name and the count
+                    if (!streams[st][s.Course]) {
+                        streams[st][s.Course] = 0;
+                    }
+                    streams[st][s.Course]++;
+                });
 
                   // 2. Sort Streams (Regular first)
                   const sortedStreams = Object.keys(streams).sort((a, b) => {
