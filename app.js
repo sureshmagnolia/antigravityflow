@@ -2549,6 +2549,7 @@ async function deleteSessionFromCloud(sessionKey) {
     }
     // --- Global var to hold data from the last *report run* ---
     let lastGeneratedRoomData = [];
+    let lastGeneratedRoomWiseSummary = []; // Added for Smart Print Manager JSON
     let lastGeneratedReportType = "";
     let currentStreamConfig = ["Regular"]; // Default
     let isStreamSettingsLocked = true; // Default Locked state for Streams
@@ -6252,9 +6253,9 @@ function getExamName(date, time, stream) {
         reportControls.classList.add('hidden');
         roomCsvDownloadContainer.innerHTML = "";
         lastGeneratedRoomData = [];
+        lastGeneratedRoomWiseSummary = []; // Reset summary
         lastGeneratedReportType = "";
         await new Promise(resolve => setTimeout(resolve, 50));
-
         try {
             currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
@@ -6428,6 +6429,22 @@ function getExamName(date, time, stream) {
                     }
 
                     sessionAdjustedTotal += adjustedCount;
+
+                    // --- SMART PRINT MANAGER: Capture JSON Data ---
+                    const qpCodeForJson = (qpCode || "").replace(/^[A-Za-z]+/, ''); // Strip Alpha prefix
+                    const safeTime = session.Time.replace(/:/g, '-');
+                    const fileName = `${pageStream}_${session.Date}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
+
+                    lastGeneratedRoomWiseSummary.push({
+                        stream: pageStream,
+                        date: session.Date,
+                        time: session.Time,
+                        roomSerial: serialNo, // Room# (Serial Number)
+                        qpCode: qpCodeForJson,
+                        courseName: cName,
+                        count: adjustedCount,
+                        pdfFileName: fileName.trim()
+                    });
 
                     courseSummaryRows += `
                     <tr>
@@ -6644,11 +6661,11 @@ function getExamName(date, time, stream) {
             reportControls.classList.remove('hidden');
 
             roomCsvDownloadContainer.innerHTML = `
-            <button id="download-room-csv-button" class="w-full inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-3 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-                Download Room Allocation Report (.csv)
-            </button>
-        `;
-            document.getElementById('download-room-csv-button').addEventListener('click', downloadRoomCsv);
+                <button id="download-room-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
+                    📥 Download Room Seating JSON for Print Manager (.json)
+                </button>
+            `;
+            document.getElementById('download-room-json-button').addEventListener('click', downloadRoomWiseSeatingJson);
 
         } catch (e) {
             console.error("Error:", e);
@@ -9003,6 +9020,7 @@ function getExamName(date, time, stream) {
         reportControls.classList.add('hidden');
         roomCsvDownloadContainer.innerHTML = ""; // Clear CSV button
         lastGeneratedRoomData = []; // Clear data
+        lastGeneratedRoomWiseSummary = []; // Clear JSON summary
         lastGeneratedReportType = ""; // V91: Clear report type
     }
 
@@ -9045,6 +9063,23 @@ function getExamName(date, time, stream) {
         document.body.removeChild(link);
     }
 
+    function downloadRoomWiseSeatingJson() {
+        if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
+            return alert("No Room-wise summary data to export. Please generate the report first.");
+        }
+
+        const blob = new Blob([JSON.stringify(lastGeneratedRoomWiseSummary, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateStamp = new Date().toISOString().slice(0,10);
+        a.download = `Room_Wise_Seating_Summary_${dateStamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
     function downloadQpSummaryJson() {
         const filteredData = getFilteredReportData('q-paper');
         const sessions = {};
