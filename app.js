@@ -6442,7 +6442,8 @@ function getExamName(date, time, stream) {
                         roomSerial: serialNo, // Room# (Serial Number)
                         qpCode: qpCodeForJson,
                         courseName: cName,
-                        count: adjustedCount,
+                        count: totalCount, // FIX: Use totalCount to include scribes
+                        scribeCount: scribeCount, // Added for detail
                         pdfFileName: fileName.trim()
                     });
 
