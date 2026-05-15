@@ -7899,6 +7899,7 @@ function getExamName(date, time, stream) {
         generateQPaperReportButton.textContent = "Generating...";
         reportOutputArea.innerHTML = "";
         reportControls.classList.add('hidden');
+        roomCsvDownloadContainer.innerHTML = ""; // Clear previous download buttons
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
