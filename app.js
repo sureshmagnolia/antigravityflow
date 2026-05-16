@@ -2354,17 +2354,19 @@ async function deleteSessionFromCloud(sessionKey) {
                           const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
                           const localUnav = JSON.parse(localUnavRaw);
                           
-                          Object.keys(cloudUnav).forEach(date => {
-                              if (!localUnav[date]) localUnav[date] = cloudUnav[date];
-                              else {
-                                  ['FN', 'AN'].forEach(sess => {
-                                      const cList = cloudUnav[date][sess] || [];
-                                      const lList = localUnav[date][sess] || [];
-                                      // Deduplicate by combining stringified objects
-                                      localUnav[date][sess] = [...new Set([...lList.map(u => JSON.stringify(u)), ...cList.map(u => JSON.stringify(u))])].map(s => JSON.parse(s));
-                                  });
-                              }
-                          });
+                          if (affectedKey !== "FORCE_OVERWRITE") {
+                              Object.keys(cloudUnav).forEach(date => {
+                                  if (!localUnav[date]) localUnav[date] = cloudUnav[date];
+                                  else {
+                                      ['FN', 'AN'].forEach(sess => {
+                                          const cList = cloudUnav[date][sess] || [];
+                                          const lList = localUnav[date][sess] || [];
+                                          // Deduplicate by combining stringified objects
+                                          localUnav[date][sess] = [...new Set([...lList.map(u => JSON.stringify(u)), ...cList.map(u => JSON.stringify(u))])].map(s => JSON.parse(s));
+                                      });
+                                  }
+                              });
+                          }
                           payload.invigAdvanceUnavailability = JSON.stringify(localUnav);
                       }
                       
