@@ -2189,7 +2189,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
     // 4. CLOUD UPLOAD FUNCTION (Pure V2)
     // Removed 'heavy' default. Now requires explicit target.
-         async function syncDataToCloud(targetSection) {
+        async function syncDataToCloud(targetSection, affectedKey = null) {
         if (!targetSection) return; // Safety check
         if (targetSection === 'heavy') {
             console.warn("⚠️ Ignored V1 'heavy' sync call. System is V2.");
@@ -2296,6 +2296,7 @@ async function deleteSessionFromCloud(sessionKey) {
                           // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
                           Object.keys(cloudSlots).forEach(k => {
                               if (localSlots[k]) {
+                                  if (k === affectedKey) return; // FIX: Skip additive merge for the intentionally edited slot
                                   // Additive Merge: Combine local and cloud to ensure no data loss
                                   const cloudAssigned = cloudSlots[k].assigned || [];
                                   const localAssigned = localSlots[k].assigned || [];
