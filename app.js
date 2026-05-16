@@ -2293,9 +2293,20 @@ async function deleteSessionFromCloud(sessionKey) {
                     });
 
                     localStorage.setItem('examStaffData', JSON.stringify(mergedStaff));
+                    
+                    // 🛡️ SMART MERGE: Protect Invigilator Room Mappings
+                    const localMapRaw = localStorage.getItem('examInvigilatorMapping');
+                    let mergedMap = localMapRaw ? JSON.parse(localMapRaw) : {};
+                    const cloudMap = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilatorMapping || '{}') : {};
+                    
+                    // Merge local into cloud (Combine keys)
+                    Object.keys(cloudMap).forEach(key => {
+                        if (!mergedMap[key]) mergedMap[key] = cloudMap[key];
+                    });
+
                     const data = { 
                         examStaffData: JSON.stringify(mergedStaff),
-                        examInvigilatorMapping: localStorage.getItem('examInvigilatorMapping'),
+                        examInvigilatorMapping: JSON.stringify(mergedMap),
                         lastUpdated: timestamp 
                     };
                     await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
@@ -2336,8 +2347,26 @@ async function deleteSessionFromCloud(sessionKey) {
                       // 2. AUTHORITATIVE SAVE (Always runs)
                       localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
                       const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
-                      if (localStorage.getItem('invigAdvanceUnavailability'))
-                          payload.invigAdvanceUnavailability = localStorage.getItem('invigAdvanceUnavailability');
+                      
+                      // 🛡️ SMART MERGE: Protect Advance Unavailability
+                      const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
+                      if (localUnavRaw) {
+                          const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
+                          const localUnav = JSON.parse(localUnavRaw);
+                          
+                          Object.keys(cloudUnav).forEach(date => {
+                              if (!localUnav[date]) localUnav[date] = cloudUnav[date];
+                              else {
+                                  ['FN', 'AN'].forEach(sess => {
+                                      const cList = cloudUnav[date][sess] || [];
+                                      const lList = localUnav[date][sess] || [];
+                                      // Deduplicate by combining stringified objects
+                                      localUnav[date][sess] = [...new Set([...lList.map(u => JSON.stringify(u)), ...cList.map(u => JSON.stringify(u))])].map(s => JSON.parse(s));
+                                  });
+                              }
+                          });
+                          payload.invigAdvanceUnavailability = JSON.stringify(localUnav);
+                      }
                       
                       await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
                   }
