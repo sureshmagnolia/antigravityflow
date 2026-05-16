@@ -2301,6 +2301,9 @@ async function deleteSessionFromCloud(sessionKey) {
                     
                     // Merge local into cloud (Combine keys)
                     Object.keys(cloudMap).forEach(key => {
+                        if (affectedKey === "FORCE_OVERWRITE") return; // Authoritative Clear
+                        if (key === affectedKey) return; // Authoritative Session Clear
+
                         if (!mergedMap[key]) mergedMap[key] = cloudMap[key];
                     });
 
