@@ -18929,7 +18929,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
         // Sync (Added Slots and Session Mapping Sync)
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff');
-            await syncDataToCloud('slots'); // Sync the pool change
+            // FIX: This affects multiple staff assignments in one room
+            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             
             // Sync the specific room-to-person mapping (Crucial for other PCs)
             if (typeof syncSessionToCloud === 'function') {
