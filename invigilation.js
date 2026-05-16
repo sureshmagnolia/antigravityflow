@@ -1091,7 +1091,7 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 
     if (changed) {
         logActivity("Weekly Admin Lock", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} posting for ${monthStr} Week ${weekNum}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch lock
         renderSlotsGridAdmin();
     } else {
         alert("No changes needed.");
@@ -3143,7 +3143,7 @@ window.saveNewStaff = async function () {
                         if (unavChanged) slotsChanged = true;
                     }
                 });
-                if (slotsChanged) await syncSlotsToCloud();
+                if (slotsChanged) await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative pool migration
 
                 // Migrate Advance Unavailability
                 let advanceChanged = false;
@@ -7219,7 +7219,8 @@ document.getElementById('btn-att-replace').addEventListener('click', async () =>
 });
 
 async function finishAttendanceUpload(count, action) {
-    await syncSlotsToCloud();
+        // FIX: Bulk attendance replacement must stick
+    await syncSlotsToCloud("FORCE_OVERWRITE"); 
     window.closeModal('att-conflict-modal');
     alert(`✅ Success! ${action} attendance records for ${count} entries.`);
     populateAttendanceSessions();
@@ -11301,7 +11302,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     }
 
     if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch update
+    await syncSlotsToCloud("FORCE_OVERWRITE"); 
     renderSlotsGrid();
 
     let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
