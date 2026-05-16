@@ -2185,6 +2185,9 @@ function switchToStaffView() {
 }
 
 async function syncSlotsToCloud(affectedKey = null) {
+      if (affectedKey === "FORCE_OVERWRITE") {
+          console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
+      } else {
       updateSyncStatus("Saving...", "neutral");
       try {
           const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
@@ -2579,7 +2582,7 @@ window.lockAllSessions = async function () {
     });
 
     if (changed) {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE");
         alert("✅ All sessions have been LOCKED.");
     } else {
         alert("ℹ️ All sessions were already locked.");
@@ -4454,7 +4457,7 @@ window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
 
     if (changed) {
         logActivity("Weekly Lock Toggle", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} all slots for ${monthStr} Week ${weekNum}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Batch lock must stick
         renderSlotsGridAdmin();
         alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
     } else {
@@ -5082,7 +5085,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
       }
 
     logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud();
+    await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch assignment
     renderSlotsGridAdmin();
 
     // --- Bulk Reserve Notification Check (Unchanged) ---
@@ -6351,7 +6354,7 @@ window.clearOldData = async function () {
     if (removedCount > 0) {
         logActivity("Data Cleanup", `Admin cleared ${removedCount} old session records from previous AY.`);
         invigilationSlots = newSlots;
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative cleanup
         renderSlotsGridAdmin();
         alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
     } else {
