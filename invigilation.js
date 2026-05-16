@@ -1062,7 +1062,7 @@ window.toggleAdminLock = async function (key) {
     logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
     
     // 2. Sync to Cloud
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
 }
 
 window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
@@ -2354,7 +2354,7 @@ window.deleteSlot = async function (key) {
         delete invigilationSlots[key];
 
         // 3. Save to Cloud
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure slot deletion persists
 
         // 4. Refresh Grid
         renderSlotsGridAdmin();
@@ -2563,7 +2563,7 @@ window.toggleLock = async function (key) {
     const status = invigilationSlots[key].isLocked ? "LOCKED" : "UNLOCKED";
     logActivity("Session Lock Toggle", `Admin ${status} session ${key}.`);
     
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
 }
 
 // --- NEW: Lock All Function ---
@@ -2716,7 +2716,7 @@ window.confirmUnavailable = async function () {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             invigilationSlots[key].unavailable.push(entry);
             await logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Ensure unavailability is saved correctly
         }
 
         // Cleanup & Success
@@ -4025,7 +4025,7 @@ window.saveAttendance = async function () {
     // LOGGING
     logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
 
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     window.updateCompletionSessionDropdown();
     populateAttendanceSessions();
     renderStaffTable();
@@ -4046,7 +4046,7 @@ window.toggleAttendanceLock = async function (key, lockState) {
         invigilationSlots[key].attendance = presentEmails;
     }
 
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     loadSessionAttendance(); // Refresh UI
 }
 
@@ -4121,7 +4121,7 @@ async function volunteer(key, email) {
         // ✅ LOG the volunteering action so it appears in Activity Feed
         await logActivity("Volunteered", `${getNameFromEmail(email)} volunteered for duty on ${key}.`);
 
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure state syncs authoritatively
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
         if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
@@ -7915,7 +7915,7 @@ window.executeReschedule = async function () {
     delete invigilationSlots[oldKey];
     logActivity("Session Rescheduled", `Admin moved session from ${oldKey} to ${newKey}. Staff moved: ${affectedStaff.length}.`);
     // 4. Save & Close
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(oldKey); // FIX: Ensure old slot is deleted
     window.closeModal('reschedule-modal');
     renderSlotsGridAdmin();
 
@@ -10996,7 +10996,7 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
             slot.unavailable = slot.unavailable.filter(u => 
                 (typeof u === 'string' ? u !== email : u.email !== email)
             );
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Ensure clear unavailability persists
         }
     }
 
@@ -11075,7 +11075,7 @@ window.executeMergeSlots = async function() {
         // Ensure both the new data and the deletion register with the cloud
         btn.innerHTML = "Syncing to Cloud...";
         updateSyncStatus("Syncing Merge...", "neutral");
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(srcKey); // FIX: Ensure source slot remains deleted
 
         
         alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
@@ -11361,7 +11361,7 @@ window.saveManualAllocation = async function () {
 
 
     try {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure manual removals persist
         alert('✅ Assignments Saved successfully!');
         window.closeModal('manual-allocation-modal');
 
