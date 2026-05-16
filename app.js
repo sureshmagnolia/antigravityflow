@@ -2285,7 +2285,7 @@ async function deleteSessionFromCloud(sessionKey) {
             }
 
 // 5. SLOTS — 🛡️ SMART MERGE (Audit Fixed): Prevents Divya/Sindhu overwrites
-              else if (targetSection === 'slots') {
+                          else if (targetSection === 'slots') {
                   const localRaw = localStorage.getItem('examInvigilationSlots');
                   if (localRaw) {
                       const { getDoc: _getDoc } = window.firebase;
@@ -2293,12 +2293,11 @@ async function deleteSessionFromCloud(sessionKey) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
-                          // 🛡️ HARMONIZED MERGE: Skip if Force Overwrite is requested
-                          if (affectedKey !== "FORCE_OVERWRITE") {
-                              Object.keys(cloudSlots).forEach(k => {
+                      // 1. SMART MERGE (Conditional)
+                      if (affectedKey !== "FORCE_OVERWRITE") {
+                          Object.keys(cloudSlots).forEach(k => {
                               if (localSlots[k]) {
-                                  if (k === affectedKey) return; // FIX: Skip additive merge for the intentionally edited slot
-                                  // Additive Merge: Combine local and cloud to ensure no data loss
+                                  if (k === affectedKey) return; 
                                   const cloudAssigned = cloudSlots[k].assigned || [];
                                   const localAssigned = localSlots[k].assigned || [];
                                   localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
@@ -2311,14 +2310,17 @@ async function deleteSessionFromCloud(sessionKey) {
                                       localSlots[k].allocationLog = cloudSlots[k].allocationLog;
                                   }
                               } else {
-                                  localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                                  localSlots[k] = cloudSlots[k];
                               }
                           });
+                      } // <--- CRITICAL: Close the merge block here!
 
+                      // 2. AUTHORITATIVE SAVE (Always runs)
                       localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
                       const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
                       if (localStorage.getItem('invigAdvanceUnavailability'))
                           payload.invigAdvanceUnavailability = localStorage.getItem('invigAdvanceUnavailability');
+                      
                       await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
                   }
               }
