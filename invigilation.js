@@ -2605,7 +2605,7 @@ window.cancelDuty = async function (key, email, isLocked) {
         const me = staffData.find(s => s.email === email);
         if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
         logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Passing key allows the cancellation to persist in cloud
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
     }
@@ -2640,7 +2640,7 @@ window.setAvailability = async function (key, email, isAvailable) {
         if (confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Passing key ensures availability status syncs correctly
 
             // *** FIX: Update List Live ***
             if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
@@ -4098,7 +4098,7 @@ async function volunteer(key, email) {
             const me = staffData.find(s => s.email === email);
             if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
             await syncStaffToCloud();
             window.closeModal('day-detail-modal');
             renderStaffCalendar(email);
@@ -4197,7 +4197,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
             }
 
             // 5. Sync
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
             await syncStaffToCloud();
 
             alert(`Success! You have accepted the duty from ${sellerName}.`);
@@ -4245,7 +4245,7 @@ window.postForExchange = async function (key, email) {
                 window.closeModal('day-detail-modal');
             } catch (e) { }
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
         }
     } catch (e) {
         alert("Error posting exchange: " + e.message);
@@ -4277,7 +4277,7 @@ window.withdrawExchange = async function (key, email) {
                 window.closeModal('day-detail-modal');
             } catch (e) { console.error("UI Update Error:", e); }
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
         }
     } catch (e) {
         alert("Error withdrawing exchange: " + e.message);
