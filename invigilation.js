@@ -2228,7 +2228,7 @@ async function syncSlotsToCloud(affectedKey = null) {dateSyncStatus("Saving...",
     }
 }
 
-async function syncStaffToCloud() {
+async function syncStaffToCloud(affectedEmail = null) { // FIX: Added parameter
     updateSyncStatus("Saving...", "neutral");
     try {
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "staff");
@@ -2238,6 +2238,8 @@ async function syncStaffToCloud() {
         // 🛡️ SMART MERGE: Preserve Cloud Additions while saving local count changes
         const mergedStaff = [...staffData];
         cloudStaff.forEach(cs => {
+            if (cs.email === affectedEmail) return; // AUTHORITATIVE FIX: Skip adding the email we intentionally deleted
+
             if (!mergedStaff.find(ls => ls.email === cs.email)) {
                 mergedStaff.push(cs);
             }
@@ -2376,18 +2378,23 @@ window.deleteSlot = async function (key) {
 
 // --- MISSING HELPER FUNCTIONS ---
 
-async function saveAdvanceUnavailability() {
+async function saveAdvanceUnavailability(affectedDate = null) { // FIX: Added parameter
     updateSyncStatus("Saving...", "neutral");
     try {
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
         const cloudSnap = await getDoc(ref);
         const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
         
-        // 🛡️ SMART MERGE: Combine local and cloud leave records
-        Object.keys(cloudUnav).forEach(date => {
-            if (!advanceUnavailability[date]) {
-                advanceUnavailability[date] = cloudUnav[date];
-            } else {
+        if (affectedDate === "FORCE_OVERWRITE") {
+             console.log("⚡ FORCE OVERWRITE: Saving advance unavailability authoritatively.");
+        } else {
+            // 🛡️ SMART MERGE: Combine local and cloud leave records
+            Object.keys(cloudUnav).forEach(date => {
+                if (date === affectedDate) return; // AUTHORITATIVE FIX: Skip merge for the cleared date
+                
+                if (!advanceUnavailability[date]) {
+                    advanceUnavailability[date] = cloudUnav[date];
+                } else {
                 ['FN', 'AN'].forEach(sess => {
                     const cSess = cloudUnav[date][sess] || [];
                     const lSess = advanceUnavailability[date][sess] || [];
@@ -2401,6 +2408,7 @@ async function saveAdvanceUnavailability() {
                 });
             }
         });
+        } // <--- CLOSE THE ELSE BLOCK HERE
 
         await setDoc(ref, { 
             invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) 
@@ -2482,7 +2490,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from ${dateStr} (${session}) unavailability list.`);
                 } catch (e) {}
 
-                await saveAdvanceUnavailability();
+                await saveAdvanceUnavailability(dateStr); // FIX: Ensure removal sticks
             } catch (err) {
                 console.error("Cloud Save Error:", err);
                 updateSyncStatus("Save Failed", "error");
@@ -2558,7 +2566,7 @@ window.toggleWholeDay = async function(dateStr, email) {
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from Whole Day ${dateStr}.`);
                 } catch (e) {}
 
-                await saveAdvanceUnavailability();
+                await saveAdvanceUnavailability(dateStr); // FIX: Ensure removal sticks
             } catch (err) {
                 console.error("Cloud Save Error:", err);
                 updateSyncStatus("Save Failed", "error");
@@ -2740,7 +2748,7 @@ window.confirmUnavailable = async function () {
                 advanceUnavailability[dateStr][session].push(entry);
                 await logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);   
             }
-            await saveAdvanceUnavailability();
+            await saveAdvanceUnavailability(dateStr); // FIX: Make addition authoritative
         } else {
             if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
@@ -3189,7 +3197,7 @@ window.saveNewStaff = async function () {
                         }
                     });
                 });
-                if (advanceChanged) await saveAdvanceUnavailability();
+                if (advanceChanged) await saveAdvanceUnavailability("FORCE_OVERWRITE"); // FIX: Batch action
             }
 
             logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
@@ -3274,7 +3282,7 @@ if (cleanAction === 'ARCHIVE') {
     // Soft Delete Logic
     staffData[index].status = 'archived';
     logActivity("Staff Archived", "Admin archived staff member: " + staff.name + " (" + staff.email + ").");
-    await syncStaffToCloud();
+    await syncStaffToCloud(staff.email); // FIX: Make archive permanent
     await removeStaffAccess(staff.email); // Block login
     renderStaffTable();
     alert("Staff archived successfully.");
@@ -3293,9 +3301,9 @@ else if (cleanAction === 'DELETE') {
     if (confirmDelete === matchText) {
         // Remove from the data array completely
         staffData.splice(index, 1);
-
+ 
         logActivity("Staff Deleted", "Admin permanently deleted staff member: " + staff.name + " (" + staff.email + ").");
-        await syncStaffToCloud();
+        await syncStaffToCloud(staff.email); // FIX: Make deletion permanent
         await removeStaffAccess(staff.email); // Block login
         renderStaffTable();
         alert("Staff profile permanently deleted.");
@@ -11018,7 +11026,7 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
              advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => 
                 (typeof u === 'string' ? u !== email : u.email !== email)
              );
-             await saveAdvanceUnavailability();
+             await saveAdvanceUnavailability(dateStr); // FIX: Ensure admin clearance is permanent
         }
     } else {
         // Handle Slot Specific
