@@ -2276,12 +2276,28 @@ async function deleteSessionFromCloud(sessionKey) {
             }
 
 
-            // 4. STAFF (Invigilators)
+            // 4. STAFF (🛡️ SMART MERGE: Prevents Admin Conflict)
             else if (targetSection === 'staff') {
-                const data = buildPayload([
-                    'examStaffData', 'examInvigilatorMapping'
-                ]);
-                if (Object.keys(data).length > 0) {
+                const localRaw = localStorage.getItem('examStaffData');
+                if (localRaw) {
+                    const { getDoc: _getDoc } = window.firebase;
+                    const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "staff"));
+                    const cloudStaff = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examStaffData || '[]') : [];
+                    let mergedStaff = JSON.parse(localRaw);
+
+                    // 🛡️ Union Merge: Trust local but don't lose cloud-only additions
+                    cloudStaff.forEach(cs => {
+                        if (!mergedStaff.find(ls => ls.email === cs.email)) {
+                            mergedStaff.push(cs);
+                        }
+                    });
+
+                    localStorage.setItem('examStaffData', JSON.stringify(mergedStaff));
+                    const data = { 
+                        examStaffData: JSON.stringify(mergedStaff),
+                        examInvigilatorMapping: localStorage.getItem('examInvigilatorMapping'),
+                        lastUpdated: timestamp 
+                    };
                     await setDoc(doc(db, "colleges", cid, "system_data", "staff"), data, { merge: true });
                 }
             }
