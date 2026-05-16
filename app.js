@@ -18768,17 +18768,12 @@ window.toggleAllArchiveCheckboxes = function(check) {
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
         
     // 🛡️ [AUDIT FIX] Atomic-Style Sync: Priority to the Room Assignment
+          if (typeof syncDataToCloud === 'function') {
+              await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping clear sticks
+          }
           if (typeof syncSessionToCloud === 'function') {
               await syncSessionToCloud(sessionKey);
-              // After session is safe, update staff duty counts
-              if (typeof syncDataToCloud === 'function') await syncDataToCloud('staff');
           }
-        if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('staff');
-            if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
-            }
-        }
 
           // Reset UI
           swapSourceRoom = null;
@@ -18981,7 +18976,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
         // Sync (Added Slots and Session Mapping Sync)
         if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('staff');
+            await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping changes stick
             // FIX: Ensure this specific session is authoritative without risking other sessions
             await syncDataToCloud('slots', sessionKey); 
             
@@ -19053,7 +19048,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
             if (typeof syncDataToCloud === 'function') {
                 // 📡 DUAL-SYNC FIX: Update BOTH the master staff list and the session record
                 // This prevents the refresh listener from overwriting with empty data.
-                await syncDataToCloud('staff');
+                await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping sticks
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
                     console.log(`✅ Dual-Sync successful for session: ${sessionKey}`);
@@ -19091,9 +19086,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
             // Sync to Cloud
             if (typeof syncDataToCloud === 'function') {
-                await syncDataToCloud('staff');
-                // FIX: Ensure clearing staff from the slot is authoritative
-                await syncDataToCloud('slots', sessionKey);
+                await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping clear sticks
+                // 🚫 REMOVED syncDataToCloud('slots', sessionKey) to prevent data loss of volunteers
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
                 }
