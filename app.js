@@ -1286,7 +1286,8 @@ window.recalcInvigSlots = async function () {
 
         if (changed) {
             if (typeof syncDataToCloud === 'function') {
-                await syncDataToCloud('slots');
+                // FIX: Recalculation should be authoritative for all slots
+                await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             }
             alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
         } else {
@@ -19041,7 +19042,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
             // Sync to Cloud
             if (typeof syncDataToCloud === 'function') {
                 await syncDataToCloud('staff');
-                await syncDataToCloud('slots'); 
+                // FIX: Ensure clearing staff from the slot is authoritative
+                await syncDataToCloud('slots', sessionKey);
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
                 }
@@ -19684,7 +19686,8 @@ if (displayLoc) {
                     // 3. Sync Settings/Staff/Slots (Global Data)
                     await syncDataToCloud('settings');
                     await syncDataToCloud('staff');
-                    await syncDataToCloud('slots');
+                        // FIX: Restoring from backup MUST overwrite cloud
+                    await syncDataToCloud('slots', "FORCE_OVERWRITE");
                 }
 
                 alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
@@ -21598,7 +21601,8 @@ window.downloadInvigilationListPDF = async function () {
                     await syncDataToCloud('ops');
                     await syncDataToCloud('allocation');
                     await syncDataToCloud('staff');
-                    await syncDataToCloud('slots');
+                    // FIX: Force Sync should trust the local data 100%
+                    await syncDataToCloud('slots', "FORCE_OVERWRITE");
                     // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
                     // Iteratively sync all sessions (Ensures V2 documents are fresh)
