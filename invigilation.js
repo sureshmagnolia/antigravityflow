@@ -2185,7 +2185,7 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud(affectedKey = null) {dateSyncStatus("Saving...", "neutral");
+async function syncSlotsToCloud(affectedKey = null) {updateSyncStatus("Saving...", "neutral");
     try {
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
         const localSlots = invigilationSlots;
