@@ -251,7 +251,8 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
          if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('slots');
+            // FIX: Authoritative cleanup of old records
+            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
     } else {
@@ -2084,8 +2085,8 @@ async function deleteSessionFromCloud(sessionKey) {
                 await updateLocalSlotsFromStudents();
             }
             
-            // Sync Slots (This function call is fine)
-            await syncDataToCloud('slots'); 
+            // FIX: Global recalculation must be authoritative
+            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             
         } catch (e) {
             console.error("Session Sync Error:", e);
@@ -15767,8 +15768,8 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
                     // Small delay to prevent network congestion
                     await new Promise(r => setTimeout(r, 200));
                 }
-                // Ensure global slots/counts are updated
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots');
+                // FIX: CSV Upload must correctly reflect new slot requirements
+                if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots', "FORCE_OVERWRITE");
                 
                 updateSyncStatus("Smart Sync Complete", "success");
             })();
@@ -18901,7 +18902,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
                     
                     // Force Sync 'slots'
-                    if (typeof syncDataToCloud === 'function') syncDataToCloud('slots');
+                    if (typeof syncDataToCloud === 'function') {
+                        // FIX: Ensure intentional removals from pool stick
+                        syncDataToCloud('slots', sessionKey); 
+                    }
                 }
             }
         }
@@ -19985,7 +19989,7 @@ if (displayLoc) {
                         await syncDataToCloud('ops');
                         await syncDataToCloud('allocation');
                         await syncDataToCloud('staff');
-                        await syncDataToCloud('slots');
+                        wait syncDataToCloud('slots', "FORCE_OVERWRITE");
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
