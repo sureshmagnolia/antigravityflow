@@ -2293,8 +2293,9 @@ async function deleteSessionFromCloud(sessionKey) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
-                          // 🛡️ HARMONIZED MERGE: Preserve cloud metadata and assignments unless local has NEWER state
-                          Object.keys(cloudSlots).forEach(k => {
+                          // 🛡️ HARMONIZED MERGE: Skip if Force Overwrite is requested
+                          if (affectedKey !== "FORCE_OVERWRITE") {
+                              Object.keys(cloudSlots).forEach(k => {
                               if (localSlots[k]) {
                                   if (k === affectedKey) return; // FIX: Skip additive merge for the intentionally edited slot
                                   // Additive Merge: Combine local and cloud to ensure no data loss
