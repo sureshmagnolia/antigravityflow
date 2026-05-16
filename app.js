@@ -18979,12 +18979,11 @@ window.toggleAllArchiveCheckboxes = function(check) {
         allMappings[sessionKey] = currentInvigMapping;
         localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
 
-        // Sync
         // Sync (Added Slots and Session Mapping Sync)
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff');
-            // FIX: This affects multiple staff assignments in one room
-            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+            // FIX: Ensure this specific session is authoritative without risking other sessions
+            await syncDataToCloud('slots', sessionKey); 
             
             // Sync the specific room-to-person mapping (Crucial for other PCs)
             if (typeof syncSessionToCloud === 'function') {
