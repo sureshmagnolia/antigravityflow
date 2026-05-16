@@ -6718,11 +6718,17 @@ function getExamName(date, time, stream) {
             reportControls.classList.remove('hidden');
 
             roomCsvDownloadContainer.innerHTML = `
-                <button id="download-room-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
-                    📥 Download Room Seating JSON for Print Manager (.json)
-                </button>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button id="download-room-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
+                        📥 Download JSON
+                    </button>
+                    <button id="sync-print-manager-button" class="w-full inline-flex justify-center items-center rounded-md border border-green-300 bg-green-50 py-3 px-4 text-sm font-bold text-green-700 shadow-sm hover:bg-green-100 transition">
+                        ☁️ Sync to Print Manager
+                    </button>
+                </div>
             `;
             document.getElementById('download-room-json-button').addEventListener('click', downloadRoomWiseSeatingJson);
+            document.getElementById('sync-print-manager-button').addEventListener('click', syncToPrintManager);
 
         } catch (e) {
             console.error("Error:", e);
@@ -9121,6 +9127,45 @@ function getExamName(date, time, stream) {
         document.body.removeChild(link);
     }
 
+async function syncToPrintManager() {
+        if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
+            return alert("No Room-wise summary data to sync. Please generate the report first.");
+        }
+
+        const syncBtn = document.getElementById('sync-print-manager-button');
+        const originalText = syncBtn.innerHTML;
+        const cid = window.currentCollegeId || localStorage.getItem(COLLEGE_ID_KEY);
+
+        if (!cid) {
+            return alert("College ID not found. Please ensure you are logged in or have a valid session.");
+        }
+
+        try {
+            syncBtn.disabled = true;
+            syncBtn.innerHTML = "⏳ Syncing...";
+            
+            const { doc, setDoc, getFirestore } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+            const db = getFirestore();
+            
+            // We save it as a stringified payload for easy fetching by the Java App
+            await setDoc(doc(db, 'public_print_queue', cid), {
+                payload: JSON.stringify(lastGeneratedRoomWiseSummary),
+                lastUpdated: Date.now(),
+                collegeName: localStorage.getItem(COLLEGE_NAME_KEY) || "Unknown College"
+            });
+
+            syncBtn.innerHTML = "✅ Synced Successfully!";
+            setTimeout(() => { syncBtn.innerHTML = originalText; syncBtn.disabled = false; }, 3000);
+            alert("Data synced to Print Manager! You can now fetch it using your College ID in the Java app.\n\nYour College ID: " + cid);
+            
+        } catch (e) {
+            console.error("Sync Error:", e);
+            alert("Failed to sync: " + e.message);
+            syncBtn.innerHTML = originalText;
+            syncBtn.disabled = false;
+        }
+    }
+                    
     function downloadRoomWiseSeatingJson() {
         if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
             return alert("No Room-wise summary data to export. Please generate the report first.");
