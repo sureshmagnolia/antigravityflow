@@ -2231,12 +2231,22 @@ async function syncSlotsToCloud(affectedKey = null) {dateSyncStatus("Saving...",
 async function syncStaffToCloud() {
     updateSyncStatus("Saving...", "neutral");
     try {
-        // Write to 'system_data/staff'
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "staff");
-        // Note: We only save staffData here. InvigMapping is saved separately or merged if needed.
+        const cloudSnap = await getDoc(ref);
+        const cloudStaff = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examStaffData || '[]') : [];
+        
+        // 🛡️ SMART MERGE: Preserve Cloud Additions while saving local count changes
+        const mergedStaff = [...staffData];
+        cloudStaff.forEach(cs => {
+            if (!mergedStaff.find(ls => ls.email === cs.email)) {
+                mergedStaff.push(cs);
+            }
+        });
+
         await setDoc(ref, { 
-            examStaffData: JSON.stringify(staffData) 
+            examStaffData: JSON.stringify(mergedStaff) 
         }, { merge: true });
+        
         updateSyncStatus("Synced", "success");
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch (e) {
@@ -2369,8 +2379,29 @@ window.deleteSlot = async function (key) {
 async function saveAdvanceUnavailability() {
     updateSyncStatus("Saving...", "neutral");
     try {
-        // Write to 'system_data/slots' (grouped with slots)
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        const cloudSnap = await getDoc(ref);
+        const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
+        
+        // 🛡️ SMART MERGE: Combine local and cloud leave records
+        Object.keys(cloudUnav).forEach(date => {
+            if (!advanceUnavailability[date]) {
+                advanceUnavailability[date] = cloudUnav[date];
+            } else {
+                ['FN', 'AN'].forEach(sess => {
+                    const cSess = cloudUnav[date][sess] || [];
+                    const lSess = advanceUnavailability[date][sess] || [];
+                    // Deduplicate by email
+                    advanceUnavailability[date][sess] = [...lSess];
+                    cSess.forEach(cu => {
+                        if (!advanceUnavailability[date][sess].find(lu => lu.email === cu.email)) {
+                            advanceUnavailability[date][sess].push(cu);
+                        }
+                    });
+                });
+            }
+        });
+
         await setDoc(ref, { 
             invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) 
         }, { merge: true });
