@@ -2184,13 +2184,12 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud(affectedKey = null) {
-    updateSyncStatus("Saving...", "neutral");
+async function syncSlotsToCloud(affectedKey = null) {dateSyncStatus("Saving...", "neutral");
     try {
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
         const localSlots = invigilationSlots;
 
-        // 🛡️ SMART MERGE: Only perform merge if NOT in Force Overwrite mode
+        // 1. SMART MERGE (Conditional)
         if (affectedKey === "FORCE_OVERWRITE") {
             console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
         } else {
@@ -2199,8 +2198,6 @@ async function syncSlotsToCloud(affectedKey = null) {
 
             Object.keys(cloudSlots).forEach(k => {
                 if (localSlots[k]) {
-                    // CRITICAL: If this is the key we just edited, skip the union merge
-                    // to allow deletions to persist. Otherwise, use additive merge for safety.
                     if (k !== affectedKey) {
                         const cloudAssigned = cloudSlots[k].assigned || [];
                         localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
@@ -2208,17 +2205,16 @@ async function syncSlotsToCloud(affectedKey = null) {
                         const cloudUnavail = cloudSlots[k].unavailable || [];
                         localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
                     }
-
                     if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
                         localSlots[k].allocationLog = cloudSlots[k].allocationLog;
                     }
                 } else {
-                    localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                    localSlots[k] = cloudSlots[k];
                 }
             });
         }
 
-        // --- THE SAVE COMMAND (MUST BE OUTSIDE THE MERGE LOGIC) ---
+        // 2. AUTHORITATIVE SAVE (Always runs)
         await setDoc(ref, {
             examInvigilationSlots: JSON.stringify(localSlots)
         }, { merge: true });
