@@ -19989,7 +19989,7 @@ if (displayLoc) {
                         await syncDataToCloud('ops');
                         await syncDataToCloud('allocation');
                         await syncDataToCloud('staff');
-                        wait syncDataToCloud('slots', "FORCE_OVERWRITE");
+                        await syncDataToCloud('slots', "FORCE_OVERWRITE");
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
