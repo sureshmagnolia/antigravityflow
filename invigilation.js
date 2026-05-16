@@ -4152,7 +4152,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
           // Force cleanup of the stale request.
           if (slot.exchangeRequests) {
               slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
-              await syncSlotsToCloud();
+              await syncSlotsToCloud(key); // <--- ADD 'key' HERE
           }
           alert("⚠️ This exchange is no longer valid. The original owner is no longer assigned to this duty.");
           if (typeof renderExchangeMarket === 'function') renderExchangeMarket(buyerEmail);
