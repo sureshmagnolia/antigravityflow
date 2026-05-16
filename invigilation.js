@@ -2327,7 +2327,7 @@ async function saveManualSlot() {
         isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
     await logActivity("Session Created", `Admin created/updated session: ${key} (Req: ${reqInput}).`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Slot changes must be authoritative
         window.closeModal('add-slot-modal');
         renderSlotsGridAdmin();
     } catch (e) {
@@ -3004,7 +3004,7 @@ window.runAutoAllocation = async function () {
         logActivity("Global Auto-Assign", `Admin ran session-based auto-assign. Filled ${assignedCount} slots.`);
     }
 
-    await syncSlotsToCloud();
+   await syncSlotsToCloud(key);
     renderSlotsGridAdmin();
 
    alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
@@ -11301,7 +11301,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     }
 
     if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud();
+    await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch update
     renderSlotsGrid();
 
     let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
@@ -11416,7 +11416,7 @@ window.directAddStaff = async function(key) {
     
     // Write changes to Firebase/Local and refresh UI
     if (typeof syncSlotsToCloud === 'function') {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Direct add should stick
     }
     
     if (typeof renderSlotsGridAdmin === 'function') {
@@ -11580,8 +11580,10 @@ window.confirmDirectAdd = async function() {
         logActivity("Admin Override Add", `Admin explicitly assigned ${staff.name} to ${key}.`);
     }
     
-    if (typeof syncSlotsToCloud === 'function') await syncSlotsToCloud();
-    if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+    if (typeof syncSlotsToCloud === 'function') 
+        await syncSlotsToCloud(key); // FIX: Direct add should stick
+    if (typeof renderSlotsGridAdmin === 'function') 
+        renderSlotsGridAdmin();
     
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
