@@ -2185,52 +2185,51 @@ function switchToStaffView() {
 }
 
 async function syncSlotsToCloud(affectedKey = null) {
-      if (affectedKey === "FORCE_OVERWRITE") {
-          console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
-      } else {
-      updateSyncStatus("Saving...", "neutral");
-      try {
-          const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+    updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        const localSlots = invigilationSlots;
 
-          // 🛡️ SMART MERGE: Fetch cloud data first to ensure we don't wipe existing volunteers
-          const cloudSnap = await getDoc(ref);
-          const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
-          const localSlots = invigilationSlots;
+        // 🛡️ SMART MERGE: Only perform merge if NOT in Force Overwrite mode
+        if (affectedKey === "FORCE_OVERWRITE") {
+            console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
+        } else {
+            const cloudSnap = await getDoc(ref);
+            const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
 
-// 🛡️ SMART MERGE (Authoritative Deletion Fix): Allows deletions for the affected key
-                 Object.keys(cloudSlots).forEach(k => {
-                     if (localSlots[k]) {
-                         // CRITICAL: If this is the key we just edited, skip the union merge
-                         // to allow deletions to persist. Otherwise, use additive merge for safety.
-                         if (k !== affectedKey) {
-                             // Merge Assigned
-                             const cloudAssigned = cloudSlots[k].assigned || [];
-                             localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+            Object.keys(cloudSlots).forEach(k => {
+                if (localSlots[k]) {
+                    // CRITICAL: If this is the key we just edited, skip the union merge
+                    // to allow deletions to persist. Otherwise, use additive merge for safety.
+                    if (k !== affectedKey) {
+                        const cloudAssigned = cloudSlots[k].assigned || [];
+                        localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
 
-                             // Merge Unavailability
-                             const cloudUnavail = cloudSlots[k].unavailable || [];
-                             localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
-                         }
+                        const cloudUnavail = cloudSlots[k].unavailable || [];
+                        localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                    }
 
-                         if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                            localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                         }
-                     } else {
-                         localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                     }
-                 });
+                    if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                        localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                    }
+                } else {
+                    localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
+                }
+            });
+        }
 
-          await setDoc(ref, {
-              examInvigilationSlots: JSON.stringify(localSlots)
-          }, { merge: true });
+        // --- THE SAVE COMMAND (MUST BE OUTSIDE THE MERGE LOGIC) ---
+        await setDoc(ref, {
+            examInvigilationSlots: JSON.stringify(localSlots)
+        }, { merge: true });
 
-          updateSyncStatus("Synced", "success");
-          if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
-      } catch (e) {
-          console.error("Slot Sync Failed:", e);
-          updateSyncStatus("Save Failed", "error");
-      }
-  }
+        updateSyncStatus("Synced", "success");
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+    } catch (e) {
+        console.error("Slot Sync Failed:", e);
+        updateSyncStatus("Save Failed", "error");
+    }
+}
 
 async function syncStaffToCloud() {
     updateSyncStatus("Saving...", "neutral");
