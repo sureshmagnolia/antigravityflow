@@ -16931,7 +16931,7 @@ async function loadInitialData() {
         // ----------------------------
         });
     }
-    if (btnAcquittancePDF) btnAcquittancePDF.addEventListener('click', generateAcquittancePDF);
+    if (btnAcquittancePDF) btnAcquittancePDF.addEventListener('click', previewAcquittanceHTML);
     if (btnAcquittanceCSV) btnAcquittanceCSV.addEventListener('click', generateAcquittanceCSV);
     // --- REMUNERATION BILL DOWNLOAD ---
     if (btnPrintBill) {
@@ -20570,6 +20570,86 @@ function getAcquittanceData() {
     return { rows: reportRows, stream: selectedStream, count: sessionKeys.size };
 }
 
+// --- HTML PREVIEW FOR ACQUITTANCE (Pro Feature) ---
+function previewAcquittanceHTML() {
+    const data = getAcquittanceData();
+    if (!data) return;
+
+    const collegeName = localStorage.getItem('examCollegeName') || "Exam Center";
+    
+    // 1. Build the HTML Content
+    let html = `
+    <div class="print-page bg-white p-8 mx-auto shadow-lg" style="width: 210mm; min-height: 297mm; font-family: 'Inter', system-ui, sans-serif;">
+        <!-- Header -->
+        <div class="text-center border-b-2 border-gray-800 pb-4 mb-6">
+            <h1 class="text-2xl font-bold uppercase tracking-tight text-gray-900">${collegeName}</h1>
+            <h2 class="text-xl font-semibold text-gray-700 mt-1">INVIGILATION REMUNERATION ACQUITTANCE ROLL</h2>
+            <div class="flex justify-center gap-4 text-sm text-gray-500 mt-2 font-mono">
+                <span><strong>Stream:</strong> ${data.stream}</span>
+                <span>|</span>
+                <span><strong>Total Sessions:</strong> ${data.count}</span>
+                <span>|</span>
+                <span><strong>Date:</strong> ${new Date().toLocaleDateString()}</span>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <table class="w-full border-collapse border border-gray-400 text-sm">
+            <thead>
+                <tr class="bg-gray-100 text-gray-800">
+                    <th class="border border-gray-400 p-2 w-10 text-center">Sl</th>
+                    <th class="border border-gray-400 p-2 text-left">Name of Invigilator</th>
+                    <th class="border border-gray-400 p-2 text-left">Department</th>
+                    <th class="border border-gray-400 p-2 w-16 text-center">Duties</th>
+                    <th class="border border-gray-400 p-2 w-24 text-right">Rate</th>
+                    <th class="border border-gray-400 p-2 w-28 text-right">Total Amount</th>
+                    <th class="border border-gray-400 p-2 w-32">Signature</th>
+                    <th class="border border-gray-400 p-2">Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.rows.map((r, i) => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="border border-gray-400 p-2 text-center font-mono">${i + 1}</td>
+                        <td class="border border-gray-400 p-2 font-semibold text-gray-900">${r.name}</td>
+                        <td class="border border-gray-400 p-2 text-gray-600">${r.dept}</td>
+                        <td class="border border-gray-400 p-2 text-center font-bold">${r.count}</td>
+                        <td class="border border-gray-400 p-2 text-right font-mono text-gray-500">Rs. ${r.rate}</td>
+                        <td class="border border-gray-400 p-2 text-right font-bold text-indigo-700">Rs. ${r.amount}</td>
+                        <td class="border border-gray-400 p-2 h-10"></td>
+                        <td class="border border-gray-400 p-2"></td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+
+        <!-- Summary -->
+        <div class="mt-4 text-right pr-4 italic text-gray-500 text-xs">
+            * This list is generated based on the sessions selected in the Remuneration filter.
+        </div>
+
+        <!-- Verification Footer -->
+        <div class="mt-20 flex justify-between items-end px-4">
+            <div class="text-center">
+                <div class="w-48 border-t border-gray-800 pt-2 font-bold text-gray-800">Verified by,</div>
+            </div>
+            <div class="text-center">
+                <div class="w-64 border-t border-gray-800 pt-2 font-bold text-gray-800 text-lg uppercase">Chief Superintendent / Principal</div>
+            </div>
+        </div>
+    </div>
+    `;
+
+    // 2. Open in Professional Preview Tab
+    if (typeof window.openPdfPreview === 'function') {
+        window.openPdfPreview(html, `Acquittance_${data.stream}`);
+    } else {
+        // Fallback: Just open in new window
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Acquittance Preview</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-gray-100 p-10">${html}</body></html>`);
+    }
+}
+    
 function generateAcquittancePDF() {
     const data = getAcquittanceData();
     if (!data) return;
