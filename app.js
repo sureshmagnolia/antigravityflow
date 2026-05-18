@@ -16789,6 +16789,21 @@ async function loadInitialData() {
 
     // 3. Generate Bill Button
     const btnGenerateBill = document.getElementById('btn-generate-bill');
+    const btnAcquittancePDF = document.getElementById('btn-generate-acquittance-pdf');
+    const btnAcquittanceCSV = document.getElementById('btn-generate-acquittance-csv');
+
+    // 🛡️ Pro Check: Only show Acquittance buttons if logged in with a College ID
+    function checkProAcquittanceAccess() {
+        const hasCollege = localStorage.getItem('my_college_id');
+        // Check if firebase is initialized and user is logged in
+        const user = (window.firebase && window.firebase.auth) ? window.firebase.auth.currentUser : null;
+        if (hasCollege && user) {
+            btnAcquittancePDF?.classList.remove('hidden');
+            btnAcquittanceCSV?.classList.remove('hidden');
+        }
+    }
+    checkProAcquittanceAccess();
+    if (navRemuneration) navRemuneration.addEventListener('click', checkProAcquittanceAccess);
     const btnPrintBill = document.getElementById('btn-print-bill');
 
     if (btnGenerateBill) {
@@ -16916,7 +16931,8 @@ async function loadInitialData() {
         // ----------------------------
         });
     }
-
+    if (btnAcquittancePDF) btnAcquittancePDF.addEventListener('click', generateAcquittancePDF);
+    if (btnAcquittanceCSV) btnAcquittanceCSV.addEventListener('click', generateAcquittanceCSV);
     // --- REMUNERATION BILL DOWNLOAD ---
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
@@ -20489,7 +20505,140 @@ function generateInvigilatorSummaryPDF() {
     }
 }
 
+// --- ACQUITTANCE LOGIC (Pro Feature) ---
+function getAcquittanceData() {
+    const container = document.getElementById('remuneration-output');
+    const billPages = container ? container.querySelectorAll('.print-page') : [];
+    
+    if (billPages.length === 0) {
+        alert("Please click 'Generate Bill' first to select the sessions.");
+        return null;
+    }
 
+    // 1. Collect session keys (Date | Time) from the currently generated bills
+    const sessionKeys = new Set();
+    billPages.forEach(page => {
+        const rows = page.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const date = row.cells[0]?.innerText.trim();
+            const time = row.cells[1]?.innerText.trim();
+            if (date && time && date !== "Date" && !date.includes("Total")) {
+                sessionKeys.add(`${date} | ${time}`);
+            }
+        });
+    });
+
+    if (sessionKeys.size === 0) {
+        alert("No valid sessions found in the generated bills.");
+        return null;
+    }
+
+    // 2. Fetch data from LocalStorage (Sync'd from cloud by invigilation.js)
+    const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
+    const invigilationSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+    const allRates = JSON.parse(localStorage.getItem('examRemunerationConfig') || '{}');
+    const selectedStream = document.getElementById('bill-stream-select').value;
+    
+    const rates = allRates[selectedStream];
+    const invigRate = rates ? (Number(rates.invigilator) || 0) : 0;
+
+    // 3. Aggregate Duties per Staff across selected sessions
+    const staffDuties = {}; 
+    sessionKeys.forEach(key => {
+        const slot = invigilationSlots[key];
+        if (slot && slot.assigned) {
+            slot.assigned.forEach(email => {
+                const lowerEmail = email.toLowerCase();
+                staffDuties[lowerEmail] = (staffDuties[lowerEmail] || 0) + 1;
+            });
+        }
+    });
+
+    // 4. Map to Professional Report Rows
+    const reportRows = Object.keys(staffDuties).map(email => {
+        const staff = staffData.find(s => s.email.toLowerCase() === email);
+        const count = staffDuties[email];
+        return {
+            name: staff ? staff.name : email.split('@')[0],
+            dept: staff ? staff.dept : "N/A",
+            count: count,
+            rate: invigRate,
+            amount: count * invigRate
+        };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    return { rows: reportRows, stream: selectedStream, count: sessionKeys.size };
+}
+
+function generateAcquittancePDF() {
+    const data = getAcquittanceData();
+    if (!data) return;
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const collegeName = localStorage.getItem('examCollegeName') || "Exam Center";
+    
+    // Header Section
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
+    doc.setFontSize(12);
+    doc.text("INVIGILATION REMUNERATION ACQUITTANCE ROLL", 105, 22, { align: "center" });
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Stream: ${data.stream} | Sessions: ${data.count} | Date: ${new Date().toLocaleDateString()}`, 105, 28, { align: "center" });
+
+    // Build Table
+    const tableData = data.rows.map((r, i) => [
+        i + 1, r.name, r.dept, r.count, `Rs. ${r.rate}`, `Rs. ${r.amount}`, "", ""
+    ]);
+
+    doc.autoTable({
+        head: [['Sl', 'Name of Invigilator', 'Department', 'Duties', 'Rate', 'Total Amount', 'Signature', 'Remarks']],
+        body: tableData,
+        startY: 35,
+        theme: 'grid',
+        headStyles: { fillColor: [40, 40, 40], textColor: 255, fontSize: 8, halign: 'center' },
+        styles: { fontSize: 8, cellPadding: 2, font: "helvetica" },
+        columnStyles: {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 45 },
+            2: { cellWidth: 25 },
+            3: { cellWidth: 12, halign: 'center' },
+            4: { cellWidth: 15, halign: 'right' },
+            5: { cellWidth: 20, halign: 'right' },
+            6: { cellWidth: 35 },
+            7: { cellWidth: 25 }
+        }
+    });
+
+    // Verification Section
+    const finalY = doc.lastAutoTable.finalY + 25;
+    doc.setFontSize(10);
+    doc.text("Verified by,", 20, finalY);
+    doc.text("Chief Superintendent / Principal", 140, finalY);
+
+    doc.save(`Acquittance_${data.stream}_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
+function generateAcquittanceCSV() {
+    const data = getAcquittanceData();
+    if (!data) return;
+
+    let csvContent = "Sl,Name of Invigilator,Department,Number of Duties,Rate,Amount Claimed,Signature,Remarks\n";
+    data.rows.forEach((r, i) => {
+        csvContent += `${i+1},"${r.name}","${r.dept}",${r.count},${r.rate},${r.amount},,\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Acquittance_${data.stream}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
     
 //----------------Remunereation Bill PDF---------------------
