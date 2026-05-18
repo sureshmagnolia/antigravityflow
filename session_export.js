@@ -58,6 +58,13 @@ const SESSION_EXPORT_JS = {
 
         const scribeList = JSON.parse(localStorage.getItem('examScribeList') || '[]');
         const roomConfig = (typeof window.getMyRoomConfig === 'function') ? window.getMyRoomConfig() : {};
+        
+        // 🛡️ ENRICH ROOM CONFIG: Inject Serial Numbers for the export
+        const roomSerialMap = (typeof window.getMyRoomSerialMap === 'function') ? window.getMyRoomSerialMap(sessionKey) : {};
+        const enrichedRoomConfig = JSON.parse(JSON.stringify(roomConfig));
+        Object.keys(enrichedRoomConfig).forEach(r => {
+            if (roomSerialMap[r]) enrichedRoomConfig[r].serial = roomSerialMap[r];
+        });
 
 
         const snapshot = {
@@ -80,7 +87,7 @@ const SESSION_EXPORT_JS = {
             }),
 
             invigilators: sessionInvigs,
-            roomConfig: roomConfig
+            roomConfig: enrichedRoomConfig
         };
 
 
@@ -134,6 +141,7 @@ const SESSION_EXPORT_JS = {
             }
             .a4:last-of-type { break-after: auto; page-break-after: auto; }
             @page { size: A4 portrait; margin: 0; }
+            .a4.sticker-page { padding: 5mm !important; }
         }
 
 
@@ -145,16 +153,22 @@ const SESSION_EXPORT_JS = {
         .rh h1 { font-size: 18pt; margin: 0; text-transform: uppercase; }
         .rf { margin-top: 40px; display: flex; justify-content: space-between; font-weight: bold; }
 
-        /* QP Boxes Styling (Report 2) */
-        .qp-room-box { border: 1px solid #444; padding: 6px; background: #fff; display: flex; align-items: center; justify-content: space-between; border-radius: 4px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); }
-        .qp-room-count { font-size: 14pt; font-weight: 900; }
-        .qp-room-check { width: 16px; height: 16px; border: 2px solid #000; }
+        /* QP Boxes Styling (Report 2 - Compact Redesign) */
+        .qp-room-box { border: 1px solid #000; padding: 3px 6px; background: #fff; display: flex; align-items: center; justify-content: space-between; border-radius: 3px; }
+        .qp-room-count { font-size: 13pt; font-weight: 900; }
+        .qp-room-check { width: 14px; height: 14px; border: 1.5px solid #000; flex-shrink: 0; }
 
         /* Stickers Grid */
         .sticker-page { padding: 5mm!important; display: flex; flex-direction: column; justify-content: space-between; height: 297mm; box-sizing: border-box; }
-        .sticker { border: 2px dashed #000; padding: 10px; height: 135mm; box-sizing: border-box; display: flex; flex-direction: column; }
+        .sticker { border: 2px dashed #000; padding: 10px; height: 130mm; box-sizing: border-box; display: flex; flex-direction: column; }
         /* Highlighting Logic */
-        .scribe-row-highlight { background-color: #f1f5f9 !important; font-weight: bold; }
+        .scribe-row-highlight { background-color: #374151 !important; color: white !important; font-weight: bold; }
+        /* Sync Notice Board Table Styles with app.js */
+        .rt-notice { border-collapse: collapse; width: 100%; table-layout: fixed; border: 1px solid #000; }
+        .rt-notice tr { height: 1.45em; max-height: 1.45em; line-height: 1.0; }
+        .rt-notice td, .rt-notice th { padding: 0px 3px; font-size: 8pt; border: 1px solid #000; overflow: hidden; }
+        .rt-notice th { font-size: 7.5pt; background: #eee; text-transform: uppercase; }
+    </style>
     </style>
 </head>
 <body>
@@ -375,7 +389,7 @@ const SESSION_EXPORT_JS = {
                '</div>';
             };
 
-            const footer = () => '<div class="rf"><span>Date: ' + D.meta.date + '</span><span>Chief Superintendent Signature</span></div>';
+            const footer = () => '<div class="rf"><span>Date: ' + D.meta.date + '</span><span></span></div>';
 
             const getSmartName = (name) => {
                 let clean = name.replace(/\[.*?\]/g, '').replace(/\s-\s$/, '').trim();
@@ -383,89 +397,143 @@ const SESSION_EXPORT_JS = {
                 return w.length <= 4 ? clean : w.slice(0, 3).join(' ') + ' ... ' + w[w.length -1];
             };
 
-            // --- 📄 REPORT 1: QP SUMMARY (STREAM-WISE) ---
-            if (type === 'r1') {
-                const p = createPage();
-                let contentHtml = '';
-                
-                // 1. Group by Stream
-                const streams = {};
+               // --- 📄 REPORT 1: QP SUMMARY (STREAM-WISE) ---
+              if (type === 'r1') {
+                  const p = createPage();
+                  let contentHtml = '';
+
+                  // 1. Group by Stream
+                  const streams = {};
                 D.students.forEach(s => {
                     const st = s.Stream || 'Regular';
                     if (!streams[st]) streams[st] = {};
-                    streams[st][s.Course] = (streams[st][s.Course] || 0) + 1;
+                    // Store both course name and the count
+                    if (!streams[st][s.Course]) {
+                        streams[st][s.Course] = 0;
+                    }
+                    streams[st][s.Course]++;
                 });
 
-                // 2. Sort Streams (Regular first)
-                const sortedStreams = Object.keys(streams).sort((a, b) => {
-                    if (a === 'Regular') return -1;
-                    if (b === 'Regular') return 1;
-                    return a.localeCompare(b);
-                });
+                  // 2. Sort Streams (Regular first)
+                  const sortedStreams = Object.keys(streams).sort((a, b) => {
+                      if (a === 'Regular') return -1;
+                      if (b === 'Regular') return 1;
+                      return a.localeCompare(b);
+                  });
 
-                sortedStreams.forEach(stName => {
-                    const courses = streams[stName];
-                    let totalInStream = 0;
-                    let tableRows = '';
-                    
-                    Object.entries(courses).sort().forEach(([c, n], i) => {
-                        totalInStream += n;
-                        tableRows += '<tr><td>' + (i + 1) + '</td><td>' + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
-                    });
+                  sortedStreams.forEach(stName => {
+                      const courses = streams[stName];
+                      let totalInStream = 0;
+                      let tableRows = '';
+
+                      Object.entries(courses).sort().forEach(([c, n], i) => {
+                          totalInStream += n;
+                          const qp = getActualQPValue(c, stName);
+                          const qpPrefix = (qp && qp !== 'N/A') ? '<b style="margin-right:5px">[' + qp + ']</b>' : '';
+                          tableRows += '<tr><td style="text-align:center">' + (i + 1) + '</td><td>' + qpPrefix + c + '</td><td style="text-align:center; font-weight:bold">' + n + '</td></tr>';
+                      });
 
                     contentHtml += '<h3 style="margin-top:20px; border-bottom:2px solid #000; display:inline-block">Stream: ' + stName + '</h3>' +
-                        '<table class="rt" style="margin-bottom:20px"><thead><tr><th>SL</th><th style="width:70%">COURSE NAME</th><th>COUNT</th></tr></thead>' +
-                        '<tbody>' + tableRows + '</tbody>' +
-                        '<tfoot><tr><td colspan="2" style="text-align:right"><b>Total (' + stName + '):</b></td><td style="text-align:center"><b>' + totalInStream + '</b></td></tr></tfoot>' +
-                        '</table>';
-                });
+                        '<table class="rt" style="margin-bottom:20px"><thead><tr><th style="text-align:center">SL</th><th style="width:70%">COURSE NAME</th><th style="text-align:center">COUNT</th></tr></thead>' +
+                          '<tbody>' + tableRows + '</tbody>' +
+                          '<tfoot><tr><td colspan="2" style="text-align:right"><b>Total (' + stName + '):</b></td><td style="text-align:center"><b>' + totalInStream + '</b></td></tr></tfoot>' +
+                          '</table>';
+                  });
 
-                p.innerHTML = heading('QUESTION PAPER SUMMARY', '', D.meta.examName) + contentHtml + footer();
-                v.appendChild(p);
-            }
+                  p.innerHTML = heading('QUESTION PAPER SUMMARY', '', D.meta.examName) + contentHtml + footer();
+                  v.appendChild(p);
+              }
 
 
-            // --- 📦 REPORT 2: QP DISTRIBUTION ---
+            // --- 📦 REPORT 2: QP DISTRIBUTION (DYNAMIC AUTO-PAGINATION) ---
             if (type === 'r2') {
-                const p = createPage();
-                p.innerHTML = heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName);
                 const map = {};
                 D.allotment.forEach(room => {
                     room.students.forEach(s => {
-                        const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                        const regNo = s.RegisterNo || s['Register Number'] || s.regNo;
+                        const fs = D.students.find(x => (x['Register Number'] || x.regNo) === regNo);
                         const stream = room.stream || 'Regular';
                         const paperKey = btoa(unescape(encodeURIComponent(fs.Course + '|' + stream)));
-                        if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: D.qpCodes[fs.Course+'|'+stream] || 'N/A', rooms: {} };
+                        if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: getActualQPValue(fs.Course, stream), rooms: {} };
                         map[paperKey].rooms[room.roomName] = (map[paperKey].rooms[room.roomName] || 0) + 1;
                     });
                 });
 
-                Object.values(map).sort((a,b) => a.title.localeCompare(b.title)).forEach(info => {
-                    let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px">';
-                    const sortedRooms = Object.keys(info.rooms).sort((a,b) => (D.roomConfig[a]?.serial || 0) - (D.roomConfig[b]?.serial || 0));
-                    sortedRooms.forEach(r => {
-                        let loc = (D.roomConfig[r]?.location || "");
-                        const words = loc.split(' ');
-                        const displayLoc = words.length > 2 ? words.slice(0,2).join(' ') + '..' : loc;
-                        
-                        // Use Serial Number to match Core App (e.g., Room #23)
-                        const serialNo = D.roomConfig[r]?.serial || '-';
-                        
-                        boxes += '<div class="qp-room-box">' +
-                           '<div style="display:flex; align-items:baseline; overflow:hidden">' +
-                              '<span style="font-size:16pt; font-weight:900; margin-right:4px">' + info.rooms[r] + '</span>' +
-                              '<span style="font-size:9px; font-weight:bold; color:#666; margin-right:8px">Nos</span>' +
-                              '<span style="color:#ddd; margin-right:8px">|</span>' +
-                              '<span style="font-weight:bold; font-size:11pt; white-space:nowrap">Room #' + serialNo + '</span>' +
-                              '<span style="font-size:9px; margin-left:4px; color:#666">' + (displayLoc ? '('+displayLoc+')' : '') + '</span>' +
-                           '</div><div class="qp-room-check"></div></div>';
+                const p = createPage();
+                p.style.boxShadow = 'none'; p.style.padding = '0'; p.style.width = '100%';
+
+                let coursesRows = '';
+                Object.values(map).sort((a,b) => {
+                    const isRegA = a.stream === "Regular";
+                    const isRegB = b.stream === "Regular";
+                    if (isRegA && !isRegB) return -1;
+                    if (!isRegA && isRegB) return 1;
+                    if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+                    return a.title.localeCompare(b.title);
+                }).forEach(info => {
+                    let boxes = '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-top:6px">';
+                    
+                    const sortedRooms = Object.keys(info.rooms).sort((a, b) => {
+                        const sA = D.roomConfig[a]?.serial || 999;
+                        const sB = D.roomConfig[b]?.serial || 999;
+                        return sA - sB;
                     });
 
-                    p.innerHTML += '<div style="margin-top:15px; border-bottom:1px solid #000; padding:4px; display:flex; justify-content:space-between">' +
-                        '<span><b>' + info.title + '</b> (' + info.stream + ')</span>' +
-                        '<span>QP: <b>' + info.qp + '</b> | Total: <b>' + Object.values(info.rooms).reduce((a,b)=>a+b,0) + '</b></span>' +
-                    '</div>' + boxes + '</div>';
+                    sortedRooms.forEach(roomName => {
+                        const count = info.rooms[roomName];
+                        const rConf = D.roomConfig[roomName] || {};
+                        let loc = rConf.location || "";
+                        if (loc) {
+                            const words = loc.split(' ');
+                            if (words.length > 2) loc = words.slice(0, 2).join(' ') + "..";
+                        }
+                        const displayLoc = loc ? '(' + loc + ')' : "";
+                        const serial = rConf.serial || '-';
+
+                        boxes += \`
+                            <div style="border:1px solid #000; padding:4px 6px; background:#fff; display:flex; align-items:center; justify-content:space-between; border-radius:4px; height:34px; box-shadow:0 1px 2px rgba(0,0,0,0.05)">
+                                <div style="display:flex; align-items:baseline; overflow:hidden; width:100%">
+                                    <span style="font-size:12pt; font-weight:900; margin-right:2px">\${count}</span>
+                                    <span style="font-size:8pt; font-weight:bold; color:#666; margin-right:4px">Nos</span>
+                                    <span style="color:#ccc; margin-right:4px">|</span>
+                                    <div style="display:flex; align-items:baseline; min-w-0; white-space:nowrap; overflow:hidden">
+                                        <span style="font-size:9pt; font-weight:900; margin-right:2px">Room #\${serial}</span>
+                                        <span style="font-size:7pt; color:#666; text-overflow:ellipsis; overflow:hidden">\${displayLoc}</span>
+                                    </div>
+                                </div>
+                                <div style="width:12px; height:12px; border:1.5px solid #000; flex-shrink:0; margin-left:4px"></div>
+                            </div>
+                        \`;
+                    });
+                    boxes += '</div>';
+
+                    const qpDisplay = (info.qp && info.qp !== 'N/A') ? \`<span style="background:#000; color:#fff; padding:1px 4px; border-radius:3px; font-size:8.5pt; font-weight:bold; margin-right:5px">\${info.qp}</span>\` : '';
+                    coursesRows += \`
+                        <tr><td style="padding-bottom:15px; border:none;">
+                            <div style="break-inside: avoid;">
+                                <div style="border-bottom:1.5px solid #000; padding:2px 4px; display:flex; justify-content:space-between; font-size:10pt; align-items:center">
+                                    <span>\${qpDisplay}<b>\${info.title}</b> <small style="text-transform:uppercase; color:#666">(\${info.stream})</small></span>
+                                    <span>Total: <b style="font-size:11pt">\${Object.values(info.rooms).reduce((a,b)=>a+b,0)}</b></span>
+                                </div>
+                                \${boxes}
+                            </div>
+                        </td></tr>
+                    \`;
                 });
+
+                p.innerHTML = \`
+                <table style="width:100%; border-collapse:collapse; background:white;">
+                    <thead>
+                        <tr><td>\${heading('QP DISTRIBUTION SUMMARY', '', D.meta.examName)}<div style="height:10px"></div></td></tr>
+                    </thead>
+                    <tbody>
+                        \${coursesRows}
+                    </tbody>
+                    <tfoot>
+                        <tr><td><div style="height:20px"></div>\${footer()}</td></tr>
+                    </tfoot>
+                </table>
+                \`;
                 v.appendChild(p);
             }
 
@@ -486,13 +554,16 @@ const SESSION_EXPORT_JS = {
                     let summ = ''; let gTot = 0;
                     Object.entries(stats).forEach(([k, v]) => {
                         const [c, stream] = k.split('|');
-                        const qp = D.qpCodes[k] || "N/A";
+                        const qp = getActualQPValue(c, stream); // Fix: Use helper
                         const bks = v.total - v.scribe; gTot += bks;
                         summ += '<tr><td>' + qp + '</td><td style="font-size:8.5pt">' + getSmartName(c) + (v.scribe > 0 ? ' <b>(' + v.scribe + ' Scribes)</b>' : '') + '</td><td style="text-align:center">' + bks + '</td></tr>';
                     });
 
                     // --- ADVANCED ACCOUNTING FOOTER ---
-                    let uniqueQPs = [...new Set(Object.keys(stats).map(k => D.qpCodes[k] || 'N/A'))].filter(q => q !== 'N/A');
+                    let uniqueQPs = [...new Set(Object.keys(stats).map(k => {
+                        const [c, s] = k.split('|');
+                        return getActualQPValue(c, s); // Fix: Use helper
+                    }))].filter(q => q !== 'N/A');
                     let qpChecklist = '';
                     uniqueQPs.forEach(q => { qpChecklist += '<span style="margin-right:15px">' + q + ': ____</span>'; });
 
@@ -549,7 +620,8 @@ const SESSION_EXPORT_JS = {
                     const tHead = '<table class="rt"><thead><tr><th style="width:8%">SEAT</th><th style="width:30%">COURSE (QP)</th><th style="width:18%">REG NO</th><th style="width:24%">NAME</th><th style="width:10%">REMARK</th><th style="width:10%">SIGN</th></tr></thead><tbody>';
 
                     // Page 1
-                    page1.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 1) + 
+                    const serialNo = D.roomConfig[room.roomName]?.serial || '-';
+                    page1.innerHTML = heading('ROOM REPORT', '#' + serialNo, D.meta.examName, 1) + 
                         '<div style="margin-bottom:10px"><b>Location:</b> ' + (D.roomConfig[room.roomName]?.location || 'Main Block') + '</div>' +
                         tHead + renderTableRows(st.slice(0, 20)) + '</tbody></table>' + 
                         (st.length <= 20 ? cFoot : '<div style="text-align:right; font-size:8pt">Continued on Page 2...</div>');
@@ -558,7 +630,7 @@ const SESSION_EXPORT_JS = {
                     // Page 2 (if exists)
                     if(st.length > 20) {
                         const p2 = createPage();
-                        p2.innerHTML = heading('ROOM REPORT', room.roomName, D.meta.examName, 2) + 
+                        p2.innerHTML = heading('ROOM REPORT', '#' + serialNo, D.meta.examName, 2) + 
                             tHead + renderTableRows(st.slice(20)) + '</tbody></table>' + cFoot;
                         v.appendChild(p2);
                     }
@@ -568,98 +640,152 @@ const SESSION_EXPORT_JS = {
 
             // --- 📋 REPORT 4: SEATING DETAILS (PAPER-WISE GROUPING) ---
             if (type === 'r4') {
-                const p = createPage();
-                p.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName);
-                
-                // 1. Enrich data with Room Info for sorting
-                const enriched = D.students.map(s => {
-                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number']) === s['Register Number']));
-                    const seat = room?.students.find(x => (x.RegisterNo || x['Register Number']) === s['Register Number'])?.seat || '-';
-                    const loc = (D.roomConfig[room?.roomName]?.location || room?.roomName || '-');
-                    const rSerial = (D.roomConfig[room?.roomName]?.serial || 999);
-                    return { ...s, roomName: room?.roomName, loc: loc, seat: seat, rSerial: rSerial };
-                });
+                // 1. Enrich & Split Data by Stream
+                const dataByStream = {};
+                const streamScribes = {}; // To track scribes per stream for the summary
 
-                // 2. Sort by Course -> Room Serial -> Register Number
-                enriched.sort((a,b) => {
-                    if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
-                    return a['Register Number'].localeCompare(b['Register Number']);
-                });
+                D.students.forEach(s => {
+                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number'] || st.regNo) === (s['Register Number'] || s.regNo)));
+                    if (!room) return;
 
-                    // --- HARD PAGINATION ENGINE (90 Students Per A4 Page) ---
-                const CHUNK_SIZE = 90; 
-                for(let i=0; i < enriched.length; i += CHUNK_SIZE) {
-                    const chunk = enriched.slice(i, i + CHUNK_SIZE);
-                    const pg = createPage();
-                    pg.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName, Math.floor(i/CHUNK_SIZE)+1);
+                    const stInfo = room.students.find(x => (x.RegisterNo || x['Register Number'] || x.regNo) === (s['Register Number'] || s.regNo));
+                    const stream = room.stream || 'Regular';
+                    const isScribe = D.scribes.some(sc => sc.regNo === (s['Register Number'] || s.regNo));
                     
-                    const mid = Math.ceil(chunk.length / 2);
-                    
-                    const getTable = (list) => {
-                         let rowsHtml = '';
-                         let prevCourse = '';
-                         let tempRows = [];
-                         
-                         // Calculate rowspans cleanly within this specific column slice
-                         list.forEach(item => {
-                             const isNewCourse = item.Course !== prevCourse;
-                             tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
-                             prevCourse = item.Course;
-                         });
-
-                         for(let j=0; j < tempRows.length; j++) {
-                             if(tempRows[j].skip) continue;
-                             for(let k=j+1; k < tempRows.length; k++) {
-                                 if(tempRows[k].isNewCourse || tempRows[k].loc !== tempRows[j].loc) break;
-                                 tempRows[j].span++;
-                                 tempRows[k].skip = true;
-                             }
-                         }
-
-                         tempRows.forEach(r => {
-                             if(r.isNewCourse) {
-                                 rowsHtml += '<tr><td colspan="4" style="background:#ddd; font-weight:bold; font-size:7.5pt; padding:2px 4px">' + r.Course + '</td></tr>';
-                             }
-                             // DYNAMIC FONT SIZING: Shrinks font if text is extremely dense for the given cell span
-                             let dynFontSize = 9;
-                             const charLen = r.loc.length;
-                             if (r.span > 4) {
-                                 // Vertical cell mapping (Allows ~4 chars per row span at 9pt)
-                                 const maxChars = r.span * 4;
-                                 if (charLen > maxChars + 8) dynFontSize = 6.5;
-                                 else if (charLen > maxChars) dynFontSize = 7.5;
-                             } else {
-                                 // Horizontal cell mapping
-                                 if (charLen > 25) dynFontSize = 6.5;
-                                 else if (charLen > 15) dynFontSize = 7.5;
-                             }
-
-                             // ROTATED TEXT STYLING
-                             const tdStyles = r.span > 4 
-                                ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:4px; max-height:100%; white-space:nowrap; line-height:1.1; margin:auto;' 
-                                : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; margin:auto;';
-                             
-                             // TIGHT PADDING + DYNAMIC FONT (Fixed Border Issue)
-                             rowsHtml += '<tr style="line-height:1.1">' + 
-                                 (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
-
-                                 '<td style="font-weight:700; font-size:8.5pt; padding:1px 4px; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + r['Register Number'] + '</td>' +
-                                 '<td style="font-size:7.5pt; padding:1px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; border:1px solid #000;">' + r.Name + '</td>' +
-                                 '<td style="text-align:center; font-weight:bold; padding:1px 4px; border:1px solid #000;">' + r.seat + '</td></tr>';
-                         });
-                         
-                         return '<table class="rt" style="font-size:8.5pt; table-layout:fixed; width:100%; border-collapse:collapse;">' +
-                                '<thead style="font-size:7.5pt"><tr><th style="width:45px; border:1px solid #000;">Loc</th><th style="width:85px; border:1px solid #000;">Reg No</th><th style="width:auto; border:1px solid #000;">Name</th><th style="width:32px; border:1px solid #000;">Seat</th></tr></thead>' +
-                                '<tbody>' + rowsHtml + '</tbody></table>';
+                    const enriched = { 
+                        ...s, 
+                        roomName: room.roomName, 
+                        loc: (D.roomConfig[room.roomName]?.location || room.roomName || '-'), 
+                        seat: isScribe ? 'SCR' : (stInfo?.seat || '-'), 
+                        rSerial: (D.roomConfig[room.roomName]?.serial || 999),
+                        isScribe: isScribe,
+                        Stream: stream
                     };
 
-                    pg.innerHTML += '<div style="display:flex; gap:10px">' +
-                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(0, mid)) + '</div>' +
-                        '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
-                    '</div>' + footer();
-                    v.appendChild(pg);
-                }
+                    if (!dataByStream[stream]) dataByStream[stream] = [];
+                    dataByStream[stream].push(enriched);
+
+                    if (isScribe) {
+                        if (!streamScribes[stream]) streamScribes[stream] = [];
+                        streamScribes[stream].push(enriched);
+                    }
+                });
+
+                const sortedStreamNames = Object.keys(dataByStream).sort((a, b) => {
+                    if (a === "Regular") return -1;
+                    if (b === "Regular") return 1;
+                    return a.localeCompare(b);
+                });
+
+                sortedStreamNames.forEach(stream => {
+                    const streamData = dataByStream[stream];
+                    // Sort by Course -> Room Serial -> Register Number
+                    streamData.sort((a,b) => {
+                        if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
+                        if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
+                        return (a['Register Number'] || a.regNo).localeCompare(b['Register Number'] || b.regNo);
+                    });
+
+                    // --- PART A: SEATING DETAILS (2-COL) ---
+                    const CHUNK_SIZE = 90;
+                    for(let i=0; i < streamData.length; i += CHUNK_SIZE) {
+                        const chunk = streamData.slice(i, i + CHUNK_SIZE);
+                        const pg = createPage();
+                        pg.innerHTML = heading('SEATING DETAILS (PAPER-WISE)', '', D.meta.examName + ' <br><small>Stream: ' + stream + '</small>', Math.floor(i/CHUNK_SIZE)+1);
+                        
+                        const mid = Math.ceil(chunk.length / 2);
+                        
+                        const getTable = (list) => {
+                             let rowsHtml = '';
+                             let prevCourse = '';
+                             let tempRows = [];
+                             
+                             list.forEach(item => {
+                                 const isNewCourse = item.Course !== prevCourse;
+                                 tempRows.push({ ...item, isNewCourse, skip: false, span: 1 });
+                                 prevCourse = item.Course;
+                             });
+
+                             for(let j=0; j < tempRows.length; j++) {
+                                 if(tempRows[j].skip) continue;
+                                 for(let k=j+1; k < tempRows.length; k++) {
+                                     if(tempRows[k].isNewCourse || tempRows[k].loc !== tempRows[j].loc) break;
+                                     tempRows[j].span++;
+                                     tempRows[k].skip = true;
+                                 }
+                             }
+
+                             tempRows.forEach(r => {
+                                 if(r.isNewCourse) {
+                                     rowsHtml += '<tr><td colspan="4" style="background:#eee; font-weight:bold; font-size:7.5pt; padding:2px 4px; border:1px solid #000;">' + r.Course + '</td></tr>';
+                                 }
+                                 
+                                 let dynFontSize = 9;
+                                 const charLen = (r.loc || '').length;
+                                 const spanHeightPx = r.span * 16.5; 
+                                 
+                                 if (r.span > 4) {
+                                     const maxChars = r.span * 4;
+                                     if (charLen > maxChars + 8) dynFontSize = 6.5;
+                                     else if (charLen > maxChars) dynFontSize = 7.5;
+                                 } else {
+                                     if (charLen > 25) dynFontSize = 6.5;
+                                     else if (charLen > 15) dynFontSize = 7.5;
+                                 }
+
+                                 const tdStyles = r.span > 4
+                                    ? 'writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; padding:2px; height:' + spanHeightPx + 'px; width:100%; white-space:normal; overflow-wrap:break-word; word-break:break-all; line-height:1.1; margin:auto; display:block;'
+                                    : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
+                                 
+                                 const rowStyle = r.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
+                                 const regNo = r['Register Number'] || r.regNo || '-';
+
+                                 rowsHtml += '<tr style="' + rowStyle + '">' + 
+                                     (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
+                                     '<td style="font-weight:700; font-size:8.5pt; border:1px solid #000; white-space:nowrap; overflow:hidden;">' + regNo + '</td>' +
+                                     '<td style="font-size:7.5pt; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid #000;">' + (r.Name || r.name || '-') + '</td>' +
+                                     '<td style="padding: 1px 2px; text-align: center; font-weight: bold; font-size: 6.5pt; white-space: nowrap; border: 1px solid #000;">' + r.seat + '</td></tr>';
+                             });
+                             
+                             return '<table class="rt-notice" style="table-layout:fixed;">' +
+                                    '<thead><tr><th style="width:45px;">Loc</th><th style="width:85px;">Reg No</th><th style="width:auto;">Name</th><th style="width:28px;">Seat</th></tr></thead>' +
+                                    '<tbody>' + rowsHtml + '</tbody></table>';
+                        };
+
+                        pg.innerHTML += '<div style="display:flex; gap:10px">' +
+                            '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(0, mid)) + '</div>' +
+                            '<div style="flex:1; width:50%; overflow:hidden;">' + getTable(chunk.slice(mid)) + '</div>' +
+                        '</div>' + footer();
+                        v.appendChild(pg);
+                    }
+
+                    // --- PART B: SCRIBE ASSISTANCE SUMMARY (PER STREAM) ---
+                    if (streamScribes[stream] && streamScribes[stream].length > 0) {
+                        const scribePg = createPage();
+                        scribePg.innerHTML = heading('SCRIBE ASSISTANCE SUMMARY', '', D.meta.examName + ' <br><small>Stream: ' + stream + '</small>');
+                        
+                        const roomMap = {};
+                        streamScribes[stream].forEach(s => {
+                            if (!roomMap[s.roomName]) roomMap[s.roomName] = [];
+                            roomMap[s.roomName].push(s.Name + ' (' + (s['Register Number'] || s.regNo) + ')');
+                        });
+
+                        let summaryRows = '';
+                        Object.keys(roomMap).sort().forEach(rName => {
+                            const rConf = D.roomConfig[rName] || {};
+                            const locText = rConf.location ? rName + ' (' + rConf.location + ')' : rName;
+                            summaryRows += '<tr>' +
+                                '<td style="border:1px solid #000; padding:8px; font-weight:bold; width:30%; vertical-align:top">' + locText + '</td>' +
+                                '<td style="border:1px solid #000; padding:8px; font-size:12pt; font-weight:bold">' + roomMap[rName].join(', ') + '</td>' +
+                                '</tr>';
+                        });
+
+                        scribePg.innerHTML += '<table style="width:100%; border-collapse:collapse; margin-top:10px">' +
+                            '<thead style="background:#eee"><tr><th style="border:1px solid #000; padding:8px; text-align:left">Room Location</th><th style="border:1px solid #000; padding:8px; text-align:left">Candidates</th></tr></thead>' +
+                            '<tbody>' + summaryRows + '</tbody></table>' + footer();
+                        v.appendChild(scribePg);
+                    }
+                });
             }
 
 
@@ -720,10 +846,11 @@ const SESSION_EXPORT_JS = {
                                 '</div>';
                         });
 
-                        const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(' + r.roomName + ')</span>' : r.roomName;
+                        const serialNo = D.roomConfig[r.roomName]?.serial || '-';
+                        const roomTitle = (D.roomConfig[r.roomName]?.location) ? D.roomConfig[r.roomName].location + ' <span style="font-size:14pt; margin-left:5px">(Hall #' + serialNo + ')</span>' : 'Hall #' + serialNo;
 
                         return '' +
-                        '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:135mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
+                        '<div class="sticker" style="border:2px dashed #000; padding:6px 8px; height:132mm; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; background:white; width:100%;">' +
                             '<div style="text-align:center; margin-bottom:3px; flex-shrink:0; border-bottom:2px solid #000; padding-bottom:3px;">' +
                                 '<h1 style="font-size:12pt; font-weight:bold; margin:0; text-transform:uppercase; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + D.meta.collegeName + '</h1>' +
                                 '<div style="font-size:9pt; font-weight:bold; margin-top:1px; color:#444;">' + D.meta.date + ' | ' + D.meta.time + '</div>' +
@@ -740,7 +867,7 @@ const SESSION_EXPORT_JS = {
                         '</div>';
                     };
 
-                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:10mm; border-bottom:1px dotted #ccc; margin-bottom:10mm;"></div>' + drawSticker(i+1) : '');
+                    pg.innerHTML = drawSticker(i) + (D.allotment[i+1] ? '<div style="height:4mm; border-bottom:1px dotted #ccc; margin-bottom:4mm;"></div>' + drawSticker(i+1) : '');
                     v.appendChild(pg);
                 }
             }
@@ -771,13 +898,13 @@ const SESSION_EXPORT_JS = {
                         const stDat = origRoom.students.find(st => (st.RegisterNo || st['Register Number']) === s.regNo);
                         streamName = origRoom.stream || 'Regular';
                         const orgSerial = D.roomConfig[origRoom.roomName]?.serial || '-';
-                        origRoomDisplay = orgSerial + ' - ' + origRoom.roomName + ' (Seat: ' + stDat.seat + ')';
+                        origRoomDisplay = 'Hall #' + orgSerial + ' (Seat: ' + stDat.seat + ')';
                     }
                     
                     const qp = getActualQPValue(courseDisplay, streamName);
                     const scrSerial = D.roomConfig[s.room]?.serial || '-';
                     const scrLoc = D.roomConfig[s.room]?.location ? ' (' + D.roomConfig[s.room].location + ')' : '';
-                    const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - #' + scrSerial + ' - ' + s.room + '</strong>' + scrLoc;
+                    const scribeRoomDisplay = '<strong><span style="color:#2563eb;">' + label + '</span> - Hall #' + scrSerial + '</strong>' + scrLoc;
                     p.innerHTML = '<div style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:20px;">' +
                         '<h1 style="margin:0; font-size:18pt;">' + D.meta.collegeName + '</h1>' +
                         '<h2 style="margin:4px 0; font-size:14pt;">Scribe Assistance Proforma</h2>' +
@@ -817,7 +944,7 @@ const SESSION_EXPORT_JS = {
                         '<td>' + (s.studentName || '') + '</td>' +
                         '<td>' + courseDisplay + '</td>' +
                         '<td style="font-weight:bold; color:#059669">' + (s.scribeName || '') + '</td>' +
-                        '<td style="text-align:center; font-weight:bold; font-size:10pt">' + s.room + '</td>' +
+                        '<td style="text-align:center; font-weight:bold; font-size:10pt">Hall #' + (D.roomConfig[s.room]?.serial || '-') + '</td>' +
                         '<td></td></tr>';
                 });
 

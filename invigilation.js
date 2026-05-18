@@ -92,7 +92,8 @@ let collegeData = null;
 let staffData = [];
 let invigilationSlots = {};
 window._debugSlots = () => invigilationSlots;
-window._debugSyncSlots = () => syncSlotsToCloud();
+// FIX: Debug tool should be authoritative to allow manual data fixing
+window._debugSyncSlots = () => syncSlotsToCloud("FORCE_OVERWRITE");
 let collegeName = 'Loading College...';
 let collegeSettings = {};
 let designationsConfig = {};
@@ -638,8 +639,6 @@ function getDutiesDoneCount(email) {
 
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-        
-        if (isDateInVacation(dateObj)) return;
 
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
@@ -659,7 +658,6 @@ function getDutiesDoneByRole(email) {
         const dateObj = parseDate(key);
 
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-        if (isDateInVacation(dateObj)) return;
         if (!slot.attendance || !slot.attendance.includes(email)) return;
 
         // Find which role this person held on THIS specific slot date
@@ -812,6 +810,7 @@ function initStaffDashboard(me) {
 
     // Update UI
     document.getElementById('staff-view-pending').textContent = pending;
+
     const completedEl = document.getElementById('staff-view-completed');
     if (completedEl) completedEl.textContent = done;
 
@@ -1064,7 +1063,7 @@ window.toggleAdminLock = async function (key) {
     logActivity("Admin Posting Lock", `Admin ${status} slot ${key} for posting.`);
     
     // 2. Sync to Cloud
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
 }
 
 window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
@@ -1093,7 +1092,7 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 
     if (changed) {
         logActivity("Weekly Admin Lock", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} posting for ${monthStr} Week ${weekNum}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch lock
         renderSlotsGridAdmin();
     } else {
         alert("No changes needed.");
@@ -2186,60 +2185,70 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud(affectedKey = null) {
-      updateSyncStatus("Saving...", "neutral");
-      try {
-          const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+async function syncSlotsToCloud(affectedKey = null) {updateSyncStatus("Saving...", "neutral");
+    try {
+        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        const localSlots = invigilationSlots;
 
-          // 🛡️ SMART MERGE: Fetch cloud data first to ensure we don't wipe existing volunteers
-          const cloudSnap = await getDoc(ref);
-          const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
-          const localSlots = invigilationSlots;
+        // 1. SMART MERGE (Conditional)
+        if (affectedKey === "FORCE_OVERWRITE") {
+            console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
+        } else {
+            const cloudSnap = await getDoc(ref);
+            const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
 
-// 🛡️ SMART MERGE (Authoritative Deletion Fix): Allows deletions for the affected key
-                 Object.keys(cloudSlots).forEach(k => {
-                     if (localSlots[k]) {
-                         // CRITICAL: If this is the key we just edited, skip the union merge
-                         // to allow deletions to persist. Otherwise, use additive merge for safety.
-                         if (k !== affectedKey) {
-                             // Merge Assigned
-                             const cloudAssigned = cloudSlots[k].assigned || [];
-                             localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+            Object.keys(cloudSlots).forEach(k => {
+                if (localSlots[k]) {
+                    if (k !== affectedKey) {
+                        const cloudAssigned = cloudSlots[k].assigned || [];
+                        localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
 
-                             // Merge Unavailability
-                             const cloudUnavail = cloudSlots[k].unavailable || [];
-                             localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
-                         }
+                        const cloudUnavail = cloudSlots[k].unavailable || [];
+                        localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                    }
+                    if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
+                        localSlots[k].allocationLog = cloudSlots[k].allocationLog;
+                    }
+                } else {
+                    localSlots[k] = cloudSlots[k];
+                }
+            });
+        }
 
-                         if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                            localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                         }
-                     } else {
-                         localSlots[k] = cloudSlots[k]; // Preserve cloud-only slots
-                     }
-                 });
+        // 2. AUTHORITATIVE SAVE (Always runs)
+        await setDoc(ref, {
+            examInvigilationSlots: JSON.stringify(localSlots)
+        }, { merge: true });
 
-          await setDoc(ref, {
-              examInvigilationSlots: JSON.stringify(localSlots)
-          }, { merge: true });
+        updateSyncStatus("Synced", "success");
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+    } catch (e) {
+        console.error("Slot Sync Failed:", e);
+        updateSyncStatus("Save Failed", "error");
+    }
+}
 
-          updateSyncStatus("Synced", "success");
-          if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
-      } catch (e) {
-          console.error("Slot Sync Failed:", e);
-          updateSyncStatus("Save Failed", "error");
-      }
-  }
-
-async function syncStaffToCloud() {
+async function syncStaffToCloud(affectedEmail = null) { // FIX: Added parameter
     updateSyncStatus("Saving...", "neutral");
     try {
-        // Write to 'system_data/staff'
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "staff");
-        // Note: We only save staffData here. InvigMapping is saved separately or merged if needed.
+        const cloudSnap = await getDoc(ref);
+        const cloudStaff = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examStaffData || '[]') : [];
+        
+        // 🛡️ SMART MERGE: Preserve Cloud Additions while saving local count changes
+        const mergedStaff = [...staffData];
+        cloudStaff.forEach(cs => {
+            if (cs.email === affectedEmail) return; // AUTHORITATIVE FIX: Skip adding the email we intentionally deleted
+
+            if (!mergedStaff.find(ls => ls.email === cs.email)) {
+                mergedStaff.push(cs);
+            }
+        });
+
         await setDoc(ref, { 
-            examStaffData: JSON.stringify(staffData) 
+            examStaffData: JSON.stringify(mergedStaff) 
         }, { merge: true });
+        
         updateSyncStatus("Synced", "success");
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch (e) {
@@ -2331,7 +2340,7 @@ async function saveManualSlot() {
         isLocked: existing.isLocked !== undefined ? existing.isLocked : true
     };
     await logActivity("Session Created", `Admin created/updated session: ${key} (Req: ${reqInput}).`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Slot changes must be authoritative
         window.closeModal('add-slot-modal');
         renderSlotsGridAdmin();
     } catch (e) {
@@ -2356,7 +2365,7 @@ window.deleteSlot = async function (key) {
         delete invigilationSlots[key];
 
         // 3. Save to Cloud
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure slot deletion persists
 
         // 4. Refresh Grid
         renderSlotsGridAdmin();
@@ -2369,11 +2378,38 @@ window.deleteSlot = async function (key) {
 
 // --- MISSING HELPER FUNCTIONS ---
 
-async function saveAdvanceUnavailability() {
+async function saveAdvanceUnavailability(affectedDate = null) { // FIX: Added parameter
     updateSyncStatus("Saving...", "neutral");
     try {
-        // Write to 'system_data/slots' (grouped with slots)
         const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        const cloudSnap = await getDoc(ref);
+        const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
+        
+        if (affectedDate === "FORCE_OVERWRITE") {
+             console.log("⚡ FORCE OVERWRITE: Saving advance unavailability authoritatively.");
+        } else {
+            // 🛡️ SMART MERGE: Combine local and cloud leave records
+            Object.keys(cloudUnav).forEach(date => {
+                if (date === affectedDate) return; // AUTHORITATIVE FIX: Skip merge for the cleared date
+                
+                if (!advanceUnavailability[date]) {
+                    advanceUnavailability[date] = cloudUnav[date];
+                } else {
+                ['FN', 'AN'].forEach(sess => {
+                    const cSess = cloudUnav[date][sess] || [];
+                    const lSess = advanceUnavailability[date][sess] || [];
+                    // Deduplicate by email
+                    advanceUnavailability[date][sess] = [...lSess];
+                    cSess.forEach(cu => {
+                        if (!advanceUnavailability[date][sess].find(lu => lu.email === cu.email)) {
+                            advanceUnavailability[date][sess].push(cu);
+                        }
+                    });
+                });
+            }
+        });
+        } // <--- CLOSE THE ELSE BLOCK HERE
+
         await setDoc(ref, { 
             invigAdvanceUnavailability: JSON.stringify(advanceUnavailability) 
         }, { merge: true });
@@ -2454,7 +2490,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from ${dateStr} (${session}) unavailability list.`);
                 } catch (e) {}
 
-                await saveAdvanceUnavailability();
+                await saveAdvanceUnavailability(dateStr); // FIX: Ensure removal sticks
             } catch (err) {
                 console.error("Cloud Save Error:", err);
                 updateSyncStatus("Save Failed", "error");
@@ -2530,7 +2566,7 @@ window.toggleWholeDay = async function(dateStr, email) {
                     logActivity("Advance Unavailability Removed", `Removed ${staffName} from Whole Day ${dateStr}.`);
                 } catch (e) {}
 
-                await saveAdvanceUnavailability();
+                await saveAdvanceUnavailability(dateStr); // FIX: Ensure removal sticks
             } catch (err) {
                 console.error("Cloud Save Error:", err);
                 updateSyncStatus("Save Failed", "error");
@@ -2565,7 +2601,7 @@ window.toggleLock = async function (key) {
     const status = invigilationSlots[key].isLocked ? "LOCKED" : "UNLOCKED";
     logActivity("Session Lock Toggle", `Admin ${status} session ${key}.`);
     
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
 }
 
 // --- NEW: Lock All Function ---
@@ -2581,7 +2617,7 @@ window.lockAllSessions = async function () {
     });
 
     if (changed) {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE");
         alert("✅ All sessions have been LOCKED.");
     } else {
         alert("ℹ️ All sessions were already locked.");
@@ -2607,7 +2643,7 @@ window.cancelDuty = async function (key, email, isLocked) {
         const me = staffData.find(s => s.email === email);
         if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
         logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Passing key allows the cancellation to persist in cloud
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
     }
@@ -2642,7 +2678,7 @@ window.setAvailability = async function (key, email, isAvailable) {
         if (confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Passing key ensures availability status syncs correctly
 
             // *** FIX: Update List Live ***
             if (typeof renderStaffUpcomingSummary === 'function') renderStaffUpcomingSummary(email);
@@ -2712,13 +2748,13 @@ window.confirmUnavailable = async function () {
                 advanceUnavailability[dateStr][session].push(entry);
                 await logActivity("Advance Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${dateStr} (${session}).`);   
             }
-            await saveAdvanceUnavailability();
+            await saveAdvanceUnavailability(dateStr); // FIX: Make addition authoritative
         } else {
             if (!invigilationSlots[key].unavailable) invigilationSlots[key].unavailable = [];
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             invigilationSlots[key].unavailable.push(entry);
             await logActivity("Session Unavailability", `${markedBy} marked ${getNameFromEmail(email)} unavailable for ${key}.`);
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Ensure unavailability is saved correctly
         }
 
         // Cleanup & Success
@@ -3008,7 +3044,7 @@ window.runAutoAllocation = async function () {
         logActivity("Global Auto-Assign", `Admin ran session-based auto-assign. Filled ${assignedCount} slots.`);
     }
 
-    await syncSlotsToCloud();
+   await syncSlotsToCloud(key);
     renderSlotsGridAdmin();
 
    alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
@@ -3042,9 +3078,9 @@ window.generateWelcomeText = function(name, dept) {
     
     return `🔴🔴🔴
 Hi, ${displayName}, Welcome to ${cName}. You will be getting notifications regarding the examination duties posted for you on whatsapp from this number. You can view and manage duties by accessing the link 
-https://examflow-de08f.web.app/invigilation.html
+https://examflow-india.web.app/invigilation.html
  Any changes may be reported in advance to SAS @ ${sasPhone} or to CS @ ${csPhone}. 
-🟢 *Kindly check the General instructions to invigilators here: https://examflow-de08f.web.app/instructions.html*
+🟢 *Kindly check the General instructions to invigilators here: https://examflow-india.web.app/instructions.html*
 Please join the examination whatsapp group for latest updates using the following link
  https://chat.whatsapp.com/LvfrheUDh4d4T63r7Bg1cv
 Also join IQAC GVC Whatsapp group Here
@@ -3147,7 +3183,7 @@ window.saveNewStaff = async function () {
                         if (unavChanged) slotsChanged = true;
                     }
                 });
-                if (slotsChanged) await syncSlotsToCloud();
+                if (slotsChanged) await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative pool migration
 
                 // Migrate Advance Unavailability
                 let advanceChanged = false;
@@ -3161,7 +3197,7 @@ window.saveNewStaff = async function () {
                         }
                     });
                 });
-                if (advanceChanged) await saveAdvanceUnavailability();
+                if (advanceChanged) await saveAdvanceUnavailability("FORCE_OVERWRITE"); // FIX: Batch action
             }
 
             logActivity("Staff Profile Updated", `Admin updated profile for ${name} (${email}).`);
@@ -3246,7 +3282,7 @@ if (cleanAction === 'ARCHIVE') {
     // Soft Delete Logic
     staffData[index].status = 'archived';
     logActivity("Staff Archived", "Admin archived staff member: " + staff.name + " (" + staff.email + ").");
-    await syncStaffToCloud();
+    await syncStaffToCloud(staff.email); // FIX: Make archive permanent
     await removeStaffAccess(staff.email); // Block login
     renderStaffTable();
     alert("Staff archived successfully.");
@@ -3265,9 +3301,9 @@ else if (cleanAction === 'DELETE') {
     if (confirmDelete === matchText) {
         // Remove from the data array completely
         staffData.splice(index, 1);
-
+ 
         logActivity("Staff Deleted", "Admin permanently deleted staff member: " + staff.name + " (" + staff.email + ").");
-        await syncStaffToCloud();
+        await syncStaffToCloud(staff.email); // FIX: Make deletion permanent
         await removeStaffAccess(staff.email); // Block login
         renderStaffTable();
         alert("Staff profile permanently deleted.");
@@ -4027,7 +4063,7 @@ window.saveAttendance = async function () {
     // LOGGING
     logActivity("Attendance Marked", `Marked ${presentEmails.length} staff present for ${key}. CS: ${getNameFromEmail(csVal)}, SAS: ${getNameFromEmail(sasVal)}`);
 
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     window.updateCompletionSessionDropdown();
     populateAttendanceSessions();
     renderStaffTable();
@@ -4048,7 +4084,7 @@ window.toggleAttendanceLock = async function (key, lockState) {
         invigilationSlots[key].attendance = presentEmails;
     }
 
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(key);
     loadSessionAttendance(); // Refresh UI
 }
 
@@ -4100,7 +4136,7 @@ async function volunteer(key, email) {
             const me = staffData.find(s => s.email === email);
             if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
             await syncStaffToCloud();
             window.closeModal('day-detail-modal');
             renderStaffCalendar(email);
@@ -4123,7 +4159,7 @@ async function volunteer(key, email) {
         // ✅ LOG the volunteering action so it appears in Activity Feed
         await logActivity("Volunteered", `${getNameFromEmail(email)} volunteered for duty on ${key}.`);
 
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure state syncs authoritatively
         await syncStaffToCloud();
         window.closeModal('day-detail-modal');
         if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
@@ -4154,7 +4190,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
           // Force cleanup of the stale request.
           if (slot.exchangeRequests) {
               slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
-              await syncSlotsToCloud();
+              await syncSlotsToCloud(key); // <--- ADD 'key' HERE
           }
           alert("⚠️ This exchange is no longer valid. The original owner is no longer assigned to this duty.");
           if (typeof renderExchangeMarket === 'function') renderExchangeMarket(buyerEmail);
@@ -4199,7 +4235,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
             }
 
             // 5. Sync
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
             await syncStaffToCloud();
 
             alert(`Success! You have accepted the duty from ${sellerName}.`);
@@ -4247,7 +4283,7 @@ window.postForExchange = async function (key, email) {
                 window.closeModal('day-detail-modal');
             } catch (e) { }
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
         }
     } catch (e) {
         alert("Error posting exchange: " + e.message);
@@ -4279,7 +4315,7 @@ window.withdrawExchange = async function (key, email) {
                 window.closeModal('day-detail-modal');
             } catch (e) { console.error("UI Update Error:", e); }
 
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key);
         }
     } catch (e) {
         alert("Error withdrawing exchange: " + e.message);
@@ -4456,7 +4492,7 @@ window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
 
     if (changed) {
         logActivity("Weekly Lock Toggle", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} all slots for ${monthStr} Week ${weekNum}.`);
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Batch lock must stick
         renderSlotsGridAdmin();
         alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
     } else {
@@ -5084,7 +5120,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
       }
 
     logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud();
+    await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch assignment
     renderSlotsGridAdmin();
 
     // --- Bulk Reserve Notification Check (Unchanged) ---
@@ -5890,11 +5926,11 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
-    msg += `3️⃣ View detailed guidelines: https://examflow-de08f.web.app/instructions.html\n\n`;
+    msg += `3️⃣ View detailed guidelines: https://examflow-india.web.app/instructions.html\n\n`;
     
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
     msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
-    msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
+    msg += `🔗 *Portal Link:* https://examflow-india.web.app/invigilation.html\n\n`;
     msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
     
     msg += `Thank you for your cooperation.\n\n`;
@@ -5913,7 +5949,7 @@ window.generateWeeklySMS = function(firstName, duties) {
         return `${shortDate}(${d.session})`;
     }).join(', ');
 
-    return `${firstName}: Exam Duties: ${shortList}. Portal: https://examflow-de08f.web.app/invigilation.html -CS`;
+    return `${firstName}: Exam Duties: ${shortList}. Portal: https://examflow-india.web.app/invigilation.html -CS`;
 };
 
 // --- 4. DAILY WHATSAPP (Reminder) ---
@@ -5933,7 +5969,7 @@ window.generateDailyWhatsApp = function(name, dateStr, duties) {
            `🛑 *INSTRUCTIONS:*\n` +
            `1. Report to Chief Supdt office *30 mins before* exam.\n` +
            `2. Keep mobile phones in *silent mode*.\n\n` +
-           `♻️ *Portal:* https://examflow-de08f.web.app/invigilation.html\n\n` +
+           `♻️ *Portal:* https://examflow-india.web.app/invigilation.html\n\n` +
            `Thank you,\n` +
            `*Chief Superintendent*\n${college}\n` + 
            `_Automated Alert_`;
@@ -5943,7 +5979,7 @@ window.generateDailyWhatsApp = function(name, dateStr, duties) {
 window.generateDailySMS = function(firstName, dateStr, duties) {
     const sessions = duties.map(d => d.session).join('&');
     const firstTime = window.calculateReportTime(duties[0].time);
-    return `${firstName}: Duty Tmrw ${dateStr} (${sessions}). Report ${firstTime}. Link: https://examflow-de08f.web.app/invigilation.html -CS`;
+    return `${firstName}: Duty Tmrw ${dateStr} (${sessions}). Report ${firstTime}. Link: https://examflow-india.web.app/invigilation.html -CS`;
 };
 
 // --- 6. PROFESSIONAL EMAIL GENERATOR (Unified) ---
@@ -5971,7 +6007,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     return `
     <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
             <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
@@ -5999,13 +6035,13 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                 <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
                     <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
                     <li>Mobile phones must be kept in <strong>silent mode</strong> inside the hall.</li>
-                    <li><a href="https://examflow-de08f.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                    <li><a href="https://examflow-india.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
                 </ul>
             </div>
 
             <div style="margin-top: 15px; padding: 10px; background-color: #f3f4f6; border-radius: 4px; font-size: 13px; color: #374151;">
                 <p style="margin: 0 0 8px 0;">
-                    ♻️ For adjustments, please post in the <a href="https://examflow-de08f.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
+                    ♻️ For adjustments, please post in the <a href="https://examflow-india.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
                 </p>
                 <p style="margin: 0; color: #dc2626; font-weight: bold;">
                     Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
@@ -6060,7 +6096,7 @@ window.sendSessionSMS = function (key) {
     if (phones.length === 0) return alert("No valid phone numbers found.");
 
     // 3. Create Message
-    const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. Link: https://examflow-de08f.web.app/invigilation.html -CS GVC`;
+    const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. Link: https://examflow-india.web.app/invigilation.html -CS GVC`;
 
     // 4. Launch Native SMS App
     window.location.href = `sms:${phones.join(',')}?body=${encodeURIComponent(msg)}`;
@@ -6353,7 +6389,7 @@ window.clearOldData = async function () {
     if (removedCount > 0) {
         logActivity("Data Cleanup", `Admin cleared ${removedCount} old session records from previous AY.`);
         invigilationSlots = newSlots;
-        await syncSlotsToCloud();
+        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative cleanup
         renderSlotsGridAdmin();
         alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
     } else {
@@ -6460,7 +6496,7 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
         <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
             <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">${title}</p>
         </div>
@@ -6487,13 +6523,13 @@ window.generateProfessionalEmail = function(name, dutiesArray, title) {
                 <ul style="margin: 8px 0 0 20px; padding: 0; color: #78350f; font-size: 13px; line-height: 1.6;">
                     <li>Please report to the <strong>Chief Superintendent's office 30 minutes prior</strong> to the commencement of the examination.</li>
                     <li>Mobile phones should be in <strong>silent mode</strong> inside the hall.</li>
-                    <li><a href="https://examflow-de08f.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
+                    <li><a href="https://examflow-india.web.app/instructions.html" style="color: #d97706; text-decoration: underline;">View General Instructions</a></li>
                 </ul>
             </div>
 
             <div style="margin-top: 15px; padding: 10px; background-color: #f3f4f6; border-radius: 4px; font-size: 13px; color: #374151;">
                 <p style="margin: 0 0 8px 0;">
-                    ♻️ For adjustments, please post in the <a href="https://examflow-de08f.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
+                    ♻️ For adjustments, please post in the <a href="https://examflow-india.web.app/invigilation.html" style="color: #4f46e5; font-weight: bold;">Exam Portal</a>.
                 </p>
                 <p style="margin: 0; color: #dc2626; font-weight: bold;">
                     Important: If your Exchange Request is not picked up, you must arrange a replacement personally.
@@ -6618,7 +6654,7 @@ function generateDepartmentConsolidatedEmail(deptName, facultyData, weekNum, mon
 
         <!-- ✅ NEW: Header Block with Logo -->
         <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center; border-radius: 6px 6px 0 0; margin-bottom: 20px;">
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">Department Duty List</p>
         </div>
@@ -6673,7 +6709,7 @@ function generateDepartmentCompletionEmail(deptName, facultyData, dateStr) {
     return `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #4f46e5; color: white; padding: 20px; text-align: center;">
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 45px; margin-bottom: 5px;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 45px; margin-bottom: 5px;">
             <h2 style="margin: 0; font-size: 16px; text-transform: uppercase;">${collegeName}</h2>
             <p style="margin: 5px 0 0; font-size: 12px; opacity: 0.9;">Duty Completion Report (Daily)</p>
         </div>
@@ -7223,7 +7259,8 @@ document.getElementById('btn-att-replace').addEventListener('click', async () =>
 });
 
 async function finishAttendanceUpload(count, action) {
-    await syncSlotsToCloud();
+        // FIX: Bulk attendance replacement must stick
+    await syncSlotsToCloud("FORCE_OVERWRITE"); 
     window.closeModal('att-conflict-modal');
     alert(`✅ Success! ${action} attendance records for ${count} entries.`);
     populateAttendanceSessions();
@@ -7917,7 +7954,7 @@ window.executeReschedule = async function () {
     delete invigilationSlots[oldKey];
     logActivity("Session Rescheduled", `Admin moved session from ${oldKey} to ${newKey}. Staff moved: ${affectedStaff.length}.`);
     // 4. Save & Close
-    await syncSlotsToCloud();
+    await syncSlotsToCloud(oldKey); // FIX: Ensure old slot is deleted
     window.closeModal('reschedule-modal');
     renderSlotsGridAdmin();
 
@@ -10491,12 +10528,12 @@ window.generateWeeklyWhatsApp = function(name, duties) {
     msg += `\n🛑 *GENERAL INSTRUCTIONS:*\n`;
     msg += `1️⃣ Please report to the Chief Superintendent's office *30 minutes prior* to the commencement of the examination.\n`;
     msg += `2️⃣ Mobile phones must be kept in *silent mode* inside the examination hall.\n`;
-    msg += `3️⃣ View detailed guidelines: https://examflow-de08f.web.app/instructions.html\n\n`;
+    msg += `3️⃣ View detailed guidelines: https://examflow-india.web.app/instructions.html\n\n`;
     
     // 6. Exchange Instructions & Link
     msg += `♻️ *DUTY EXCHANGE / ADJUSTMENTS:*\n`;
     msg += `If you are unable to attend a session, please post a request in the Exam Portal:\n`;
-    msg += `🔗 *Portal Link:* https://examflow-de08f.web.app/invigilation.html\n\n`;
+    msg += `🔗 *Portal Link:* https://examflow-india.web.app/invigilation.html\n\n`;
     msg += `⚠️ *Important:* Posting a request does not exempt you from duty. You remain responsible until a colleague accepts your request.\n\n`;
     
     // 7. Footer
@@ -10780,7 +10817,7 @@ window.generateHtmlEmailBody = function(name, duties) {
     <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
         <div style="background:#4f46e5;color:white;padding:20px;text-align:center;">
         <!-- ✅ NEW: College Logo -->
-            <img src="https://examflow-de08f.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
+            <img src="https://examflow-india.web.app/CollegeLogo.png" alt="Logo" style="height: 50px; width: auto; margin-bottom: 2px; display: inline-block;">
             <h2 style="margin:0;font-size:18px;text-transform:uppercase;">${college}</h2>
             <p style="margin:5px 0 0;font-size:13px;opacity:0.9;">Invigilation Duty Intimation</p>
         </div>
@@ -10989,7 +11026,7 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
              advanceUnavailability[dateStr][session] = advanceUnavailability[dateStr][session].filter(u => 
                 (typeof u === 'string' ? u !== email : u.email !== email)
              );
-             await saveAdvanceUnavailability();
+             await saveAdvanceUnavailability(dateStr); // FIX: Ensure admin clearance is permanent
         }
     } else {
         // Handle Slot Specific
@@ -10998,7 +11035,7 @@ window.adminRemoveUnavailable = async function(key, email, isAdvance) {
             slot.unavailable = slot.unavailable.filter(u => 
                 (typeof u === 'string' ? u !== email : u.email !== email)
             );
-            await syncSlotsToCloud();
+            await syncSlotsToCloud(key); // FIX: Ensure clear unavailability persists
         }
     }
 
@@ -11077,7 +11114,7 @@ window.executeMergeSlots = async function() {
         // Ensure both the new data and the deletion register with the cloud
         btn.innerHTML = "Syncing to Cloud...";
         updateSyncStatus("Syncing Merge...", "neutral");
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(srcKey); // FIX: Ensure source slot remains deleted
 
         
         alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
@@ -11305,7 +11342,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     }
 
     if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud();
+    await syncSlotsToCloud("FORCE_OVERWRITE"); 
     renderSlotsGrid();
 
     let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
@@ -11363,7 +11400,7 @@ window.saveManualAllocation = async function () {
 
 
     try {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Ensure manual removals persist
         alert('✅ Assignments Saved successfully!');
         window.closeModal('manual-allocation-modal');
 
@@ -11420,7 +11457,7 @@ window.directAddStaff = async function(key) {
     
     // Write changes to Firebase/Local and refresh UI
     if (typeof syncSlotsToCloud === 'function') {
-        await syncSlotsToCloud();
+        await syncSlotsToCloud(key); // FIX: Direct add should stick
     }
     
     if (typeof renderSlotsGridAdmin === 'function') {
@@ -11584,8 +11621,10 @@ window.confirmDirectAdd = async function() {
         logActivity("Admin Override Add", `Admin explicitly assigned ${staff.name} to ${key}.`);
     }
     
-    if (typeof syncSlotsToCloud === 'function') await syncSlotsToCloud();
-    if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
+    if (typeof syncSlotsToCloud === 'function') 
+        await syncSlotsToCloud(key); // FIX: Direct add should stick
+    if (typeof renderSlotsGridAdmin === 'function') 
+        renderSlotsGridAdmin();
     
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
