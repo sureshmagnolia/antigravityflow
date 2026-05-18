@@ -4859,19 +4859,24 @@ if (toggleButton && sidebar) {
 // --- CORE: Get Exam Name (Simplified) ---
     // Previously used dates to guess name. Now strictly relies on Data Tagging.
     // This is kept for backward compatibility to prevent crashes.
-/** ✅ FIXED: Corrected variable name to allStudentData **/
-function getExamName(date, time, stream) {
-    if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
-    
-    // 1. Filter students for this specific session (Case-insensitive Stream Check)
-    const targetStream = (stream || "Regular").trim().toLowerCase();
-    const sessionStudents = allStudentData.filter(s =>
-        s.Date === date &&
-        s.Time === time &&
-        (s.Stream || "Regular").trim().toLowerCase() === targetStream
-    );
+ /** ✅ FIXED: Corrected variable name to allStudentData **/
+  function getExamName(date, time, stream) {
+      if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
+      
+      // Normalize inputs
+      const dSafe = (date || "").trim();
+      const tSafe = (time || "").trim();
+      const targetStream = (stream || "Regular").trim().toLowerCase();
 
-    if (sessionStudents.length === 0) return "";
+      // 1. Filter students for this specific session (Robust Trimming)
+      const sessionStudents = allStudentData.filter(s => {
+          const sDate = (s.Date || "").trim();
+          const sTime = (s.Time || "").trim();
+          const sStream = (s.Stream || "Regular").trim().toLowerCase();
+          return sDate === dSafe && sTime === tSafe && sStream === targetStream;
+      });
+
+      if (sessionStudents.length === 0) return "";
 
     // 2. Extract the Exam Name tagged during upload
     // ✅ FIXED: Look for both "Exam Name" (CSV/PDF) and "examName" (Internal)
@@ -16882,21 +16887,29 @@ async function loadInitialData() {
             const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
 
             filteredData.forEach(s => {
-                const sDateVal = s.Date ? s.Date.trim() : "";
-                const sTimeVal = s.Time ? s.Time.trim() : "";
-               const sessionKey = normalizeKey(sDateVal, sTimeVal);
+                // Robust extraction
+                const sDateVal = (s.Date || "").trim();
+                const sTimeVal = (s.Time || "").trim();
+                if (!sDateVal || !sTimeVal) return;
+
+                const sessionKey = normalizeKey(sDateVal, sTimeVal);
                 
                 if (mode === 'period' && (startDateInput || endDateInput)) {
-                    if (!sDateVal) return;
                     const sDate = parseDate(sDateVal);
+                    if (sDate.toString() === "Invalid Date") return; // Safety
                     if (startDateInput && sDate < startDateInput) return;
                     if (endDateInput && sDate > endDateInput) return;
                 }
                 
                 let groupKey = "Consolidated Bill";
                 if (mode === 'exam') {
+                    // Pass trimmed values to robust getExamName
                     const foundName = getExamName(sDateVal, sTimeVal, selectedStream) || "Unknown / Other Exams";
-                    if (selectedExamName && selectedExamName !== "" && foundName !== selectedExamName) return;
+                    
+                    // Specific Exam Filter (Case-insensitive)
+                    if (selectedExamName && selectedExamName !== "") {
+                        if (foundName.trim().toLowerCase() !== selectedExamName.trim().toLowerCase()) return;
+                    }
                     groupKey = foundName;
                 } else {
                     const sStr = document.getElementById('bill-start-date').value || "Start";
