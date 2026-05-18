@@ -20520,9 +20520,16 @@ function getAcquittanceData() {
     billPages.forEach(page => {
         const rows = page.querySelectorAll('tbody tr');
         rows.forEach(row => {
-            const date = row.cells[0]?.innerText.trim();
-            const time = row.cells[1]?.innerText.trim();
-            if (date && time && date !== "Date" && !date.includes("Total")) {
+            const cell0 = row.cells[0]?.innerText.trim();
+            // Handle header or invalid rows
+            if (!cell0 || cell0 === "Session" || cell0.includes("Total")) return;
+
+            // The cell contains: "DD.MM.YYYY\nhh:mm AM/PM"
+            // Split by newline to get date and time
+            const parts = cell0.split(/\s*\n\s*/);
+            if (parts.length >= 2) {
+                const date = parts[0].trim();
+                const time = parts[1].trim();
                 sessionKeys.add(`${date} | ${time}`);
             }
         });
