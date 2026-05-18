@@ -16867,19 +16867,17 @@ async function loadInitialData() {
                 }
             };
 
-            // B. Prepare Groups
-            const billGroups = {};
-
             const parseDate = (dStr) => {
-                const [d, m, y] = dStr.split('.');
-                return new Date(`${y}-${m}-${d}`);
+                const parts = dStr.split(/[.-/]/);
+                let d = parts[0], m = parts[1], y = parts[2];
+                if (d.length === 4) [y, m, d] = [d, m, y]; 
+                return new Date(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
             };
 
             const startDateInput = document.getElementById('bill-start-date').valueAsDate;
             const endDateInput = document.getElementById('bill-end-date').valueAsDate;
 
-                        // --- NEW: Build billGroups from lightweight metadata instead of heavy student arrays ---
-                        // --- FIX: Build billGroups from filteredData to properly segregate streams ---
+            // --- NEW: Build billGroups from filteredData ---
             const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
             const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
 
