@@ -4863,11 +4863,12 @@ if (toggleButton && sidebar) {
 function getExamName(date, time, stream) {
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
     
-    // 1. Filter students for this specific session
-    const sessionStudents = allStudentData.filter(s => 
-        s.Date === date && 
-        s.Time === time && 
-        (s.Stream || "Regular") === stream
+    // 1. Filter students for this specific session (Case-insensitive Stream Check)
+    const targetStream = (stream || "Regular").trim().toLowerCase();
+    const sessionStudents = allStudentData.filter(s =>
+        s.Date === date &&
+        s.Time === time &&
+        (s.Stream || "Regular").trim().toLowerCase() === targetStream
     );
 
     if (sessionStudents.length === 0) return "";
@@ -16834,24 +16835,36 @@ async function loadInitialData() {
                 return;
             }
 
+            // B. Prepare Groups
+            const billGroups = {};
+
             // Helper to normalize Date (DD.MM.YYYY) and Time (HH:MM AM/PM) for key matching
             const normalizeKey = (dateStr, timeStr) => {
                 if (!dateStr || !timeStr) return "";
-                const dateParts = dateStr.split(/[.-/]/);
-                let d = dateParts[0], m = dateParts[1], y = dateParts[2];
-                if (dateParts.length === 3) {
-                    if (d.length === 4) [y, m, d] = [d, m, y]; // Handle YYYY-MM-DD
-                    d = d.padStart(2, '0');
-                    m = m.padStart(2, '0');
+                try {
+                    // 1. Normalize Date: ensures 20.5.2026 becomes 20.05.2026
+                    const dateParts = dateStr.trim().split(/[.-/]/);
+                    let d = "01", m = "01", y = "2000";
+                    if (dateParts.length === 3) {
+                        d = dateParts[0]; m = dateParts[1]; y = dateParts[2];
+                        if (d.length === 4) [y, m, d] = [d, m, y]; 
+                        d = d.padStart(2, '0'); m = m.padStart(2, '0');
+                    }
+                    const cleanDate = `${d}.${m}.${y}`;
+
+                    // 2. Normalize Time: handles "9:30 AM", "09:30AM", "9.30 PM", etc.
+                    let rawTime = timeStr.trim().toUpperCase();
+                    let ampm = rawTime.includes("PM") ? "PM" : "AM";
+                    let timePart = rawTime.replace(/[AP]M/, "").trim();
+                    let [hrs, mins] = timePart.split(/[:.]/);
+                    if (!mins) mins = "00";
+                    hrs = hrs.padStart(2, '0');
+
+                    return `${cleanDate} | ${hrs}:${mins} ${ampm}`;
+                } catch (e) {
+                    console.error("Key Normalization Error:", e, dateStr, timeStr);
+                    return "";
                 }
-                const cleanDate = `${d}.${m}.${y}`;
-
-                let [t, ampm] = timeStr.trim().split(/\s+/);
-                let [hrs, mins] = t.split(/[:.]/);
-                hrs = hrs.padStart(2, '0');
-                const cleanTime = `${hrs}:${mins} ${ampm.toUpperCase()}`;
-
-                return `${cleanDate} | ${cleanTime}`;
             };
 
             // B. Prepare Groups
@@ -20539,16 +20552,25 @@ function getAcquittanceData() {
     // Helper to normalize keys (same logic as used in bill generation)
     const normalizeKey = (dateStr, timeStr) => {
         if (!dateStr || !timeStr) return "";
-        const dateParts = dateStr.split(/[.-/]/);
-        let d = dateParts[0], m = dateParts[1], y = dateParts[2];
-        if (dateParts.length === 3) {
-            if (d.length === 4) [y, m, d] = [d, m, y];
-            d = d.padStart(2, '0'); m = m.padStart(2, '0');
-        }
-        let [t, ampm] = timeStr.trim().split(/\s+/);
-        let [hrs, mins] = t.split(/[:.]/);
-        hrs = hrs.padStart(2, '0');
-        return `${d}.${m}.${y} | ${hrs}:${mins} ${ampm.toUpperCase()}`;
+        try {
+            const dateParts = dateStr.trim().split(/[.-/]/);
+            let d = "01", m = "01", y = "2000";
+            if (dateParts.length === 3) {
+                d = dateParts[0]; m = dateParts[1]; y = dateParts[2];
+                if (d.length === 4) [y, m, d] = [d, m, y]; 
+                d = d.padStart(2, '0'); m = m.padStart(2, '0');
+            }
+            const cleanDate = `${d}.${m}.${y}`;
+
+            let rawTime = timeStr.trim().toUpperCase();
+            let ampm = rawTime.includes("PM") ? "PM" : "AM";
+            let timePart = rawTime.replace(/[AP]M/, "").trim();
+            let [hrs, mins] = timePart.split(/[:.]/);
+            if (!mins) mins = "00";
+            hrs = hrs.padStart(2, '0');
+
+            return `${cleanDate} | ${hrs}:${mins} ${ampm}`;
+        } catch (e) { return ""; }
     };
 
     // 1. Collect session keys (Date | Time) from the currently generated bills
