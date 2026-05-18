@@ -16822,16 +16822,37 @@ async function loadInitialData() {
                 return;
             }
 
-            // A. Filter Data by Stream
+            // A. Filter Data by Stream (Case-insensitive & Trimmed)
             const filteredData = allStudentData.filter(s => {
-                const sStream = s.Stream || "Regular";
-                return sStream === selectedStream;
+                const sStream = (s.Stream || "Regular").trim().toLowerCase();
+                const selStream = (selectedStream || "Regular").trim().toLowerCase();
+                return sStream === selStream;
             });
 
             if (filteredData.length === 0) {
                 alert(`No students found for stream: "${selectedStream}"`);
                 return;
             }
+
+            // Helper to normalize Date (DD.MM.YYYY) and Time (HH:MM AM/PM) for key matching
+            const normalizeKey = (dateStr, timeStr) => {
+                if (!dateStr || !timeStr) return "";
+                const dateParts = dateStr.split(/[.-/]/);
+                let d = dateParts[0], m = dateParts[1], y = dateParts[2];
+                if (dateParts.length === 3) {
+                    if (d.length === 4) [y, m, d] = [d, m, y]; // Handle YYYY-MM-DD
+                    d = d.padStart(2, '0');
+                    m = m.padStart(2, '0');
+                }
+                const cleanDate = `${d}.${m}.${y}`;
+
+                let [t, ampm] = timeStr.trim().split(/\s+/);
+                let [hrs, mins] = t.split(/[:.]/);
+                hrs = hrs.padStart(2, '0');
+                const cleanTime = `${hrs}:${mins} ${ampm.toUpperCase()}`;
+
+                return `${cleanDate} | ${cleanTime}`;
+            };
 
             // B. Prepare Groups
             const billGroups = {};
@@ -16852,7 +16873,7 @@ async function loadInitialData() {
             filteredData.forEach(s => {
                 const sDateVal = s.Date ? s.Date.trim() : "";
                 const sTimeVal = s.Time ? s.Time.trim() : "";
-                const sessionKey = `${sDateVal} | ${sTimeVal}`;
+               const sessionKey = normalizeKey(sDateVal, sTimeVal);
                 
                 if (mode === 'period' && (startDateInput || endDateInput)) {
                     if (!sDateVal) return;
@@ -20515,22 +20536,35 @@ function getAcquittanceData() {
         return null;
     }
 
+    // Helper to normalize keys (same logic as used in bill generation)
+    const normalizeKey = (dateStr, timeStr) => {
+        if (!dateStr || !timeStr) return "";
+        const dateParts = dateStr.split(/[.-/]/);
+        let d = dateParts[0], m = dateParts[1], y = dateParts[2];
+        if (dateParts.length === 3) {
+            if (d.length === 4) [y, m, d] = [d, m, y];
+            d = d.padStart(2, '0'); m = m.padStart(2, '0');
+        }
+        let [t, ampm] = timeStr.trim().split(/\s+/);
+        let [hrs, mins] = t.split(/[:.]/);
+        hrs = hrs.padStart(2, '0');
+        return `${d}.${m}.${y} | ${hrs}:${mins} ${ampm.toUpperCase()}`;
+    };
+
     // 1. Collect session keys (Date | Time) from the currently generated bills
     const sessionKeys = new Set();
     billPages.forEach(page => {
         const rows = page.querySelectorAll('tbody tr');
         rows.forEach(row => {
             const cell0 = row.cells[0]?.innerText.trim();
-            // Handle header or invalid rows
-            if (!cell0 || cell0 === "Session" || cell0.includes("Total")) return;
+            // Ignore headers or footer/total rows
+            if (!cell0 || cell0 === "Session" || cell0.includes("Total") || cell0.includes("Date")) return;
 
-            // The cell contains: "DD.MM.YYYY\nhh:mm AM/PM"
-            // Split by newline to get date and time
+            // The cell contains: "Date\nTime" (e.g. "20.05.2026\n09:30 AM")
             const parts = cell0.split(/\s*\n\s*/);
             if (parts.length >= 2) {
-                const date = parts[0].trim();
-                const time = parts[1].trim();
-                sessionKeys.add(`${date} | ${time}`);
+                const normalized = normalizeKey(parts[0], parts[1]);
+                if (normalized) sessionKeys.add(normalized);
             }
         });
     });
