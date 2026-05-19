@@ -11567,8 +11567,10 @@ window.real_populate_qp_code_session_dropdown = function () {
               }
 
               hasUnsavedAllotment = true;
-              // Sync to Cloud (Allocation handles Scribes/Rooms in V2)
-              if (typeof syncDataToCloud === 'function') syncDataToCloud('allocation');
+              // 🛡️ [V3 FIX]: Trigger reliable Session-Specific sync.
+              if (typeof syncSessionToCloud === 'function') {
+                  syncSessionToCloud(currentSessionKey).catch(e => console.warn("Background sync failed", e));
+              }
           }
        
         // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
