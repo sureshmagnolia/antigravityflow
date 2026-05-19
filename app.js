@@ -12275,8 +12275,9 @@ function renderAllottedRooms() {
     };
 
     window.openSwapModal = function() {
+        if (!currentSessionKey) return alert("Please select a session first.");
         if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
-        
+
         const s1 = document.getElementById('swap-room-1');
         const s2 = document.getElementById('swap-room-2');
         
