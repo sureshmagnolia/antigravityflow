@@ -11742,12 +11742,13 @@ function renderAllottedRooms() {
         
         const swapBtn = document.getElementById('swap-rooms-btn');
         if (swapBtn) {
-            swapBtn.disabled = isAllotmentLocked;
-            swapBtn.title = isAllotmentLocked ? "Unlock Allotment to Swap Rooms" : "Swap Student Groups";
+            // Remove native disabled so the button can trigger an alert when locked
+            swapBtn.disabled = false; 
+            swapBtn.title = isAllotmentLocked ? "Click to unlock first" : "Swap Student Groups";
             swapBtn.className = isAllotmentLocked
-                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-not-allowed"
+                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-80"
                 : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
-        }  
+        }
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
         if (currentSessionAllotment.length === 0) {
@@ -12275,6 +12276,9 @@ function renderAllottedRooms() {
     };
 
     window.openSwapModal = function() {
+        if (isAllotmentLocked) {
+            return alert("🔒 Please unlock the allotment list first by clicking the 'Locked' button on the right.");
+        }
         if (!currentSessionKey) return alert("Please select a session first.");
         if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
 
@@ -12861,17 +12865,6 @@ if (saveScribeBtn) {
             // Re-render list to apply disabled state to inputs
             if (sessionSelectQP.value) {
                 render_qp_code_list(sessionSelectQP.value);
-            }
-        });
-    }
-    // --- SWAP BUTTON LISTENER ---
-    const swapBtnElement = document.getElementById('swap-rooms-btn');
-    if (swapBtnElement) {
-        swapBtnElement.addEventListener('click', () => {
-            if (typeof window.openSwapModal === 'function') {
-                window.openSwapModal();
-            } else {
-                console.error("openSwapModal function not found!");
             }
         });
     }
