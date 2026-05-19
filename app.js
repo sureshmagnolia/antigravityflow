@@ -11748,7 +11748,7 @@ function renderAllottedRooms() {
             swapBtn.className = isAllotmentLocked
                 ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-75"
                 : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
-        }
+        } 
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
         if (currentSessionAllotment.length === 0) {
@@ -12276,6 +12276,7 @@ function renderAllottedRooms() {
     };
 
     window.openSwapModal = function() {
+        // Prevent action if locked and provide clear feedback
         if (isAllotmentLocked) {
             return alert("🔒 Allotment is Locked. Please click the 'Locked' button on the right to unlock before swapping.");
         }
