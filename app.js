@@ -11742,11 +11742,11 @@ function renderAllottedRooms() {
         
         const swapBtn = document.getElementById('swap-rooms-btn');
         if (swapBtn) {
-            // Remove native disabled so the button can trigger an alert when locked
+            // Remove native disabled so the button remains 'alive' to show an alert
             swapBtn.disabled = false; 
             swapBtn.title = isAllotmentLocked ? "Click to unlock first" : "Swap Student Groups";
             swapBtn.className = isAllotmentLocked
-                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-80"
+                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-75"
                 : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
         }
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
@@ -12277,7 +12277,7 @@ function renderAllottedRooms() {
 
     window.openSwapModal = function() {
         if (isAllotmentLocked) {
-            return alert("🔒 Please unlock the allotment list first by clicking the 'Locked' button on the right.");
+            return alert("🔒 Allotment is Locked. Please click the 'Locked' button on the right to unlock before swapping.");
         }
         if (!currentSessionKey) return alert("Please select a session first.");
         if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
