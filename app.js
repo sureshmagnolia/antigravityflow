@@ -7,7 +7,65 @@ let syncQueue = { active: false, sections: new Set() }; // New Sync Manager
 
 // 🚫 DELETED: HYBRID_GAS_URL (Returning to Pure Firebase Architecture)
 
+window.openSwapModal = function() {
+        // Prevent action if locked and provide clear feedback
+        if (isAllotmentLocked) {
+            return alert("🔒 Allotment is Locked. Please click the 'Locked' button on the right to unlock before swapping.");
+        }
+        if (!currentSessionKey) return alert("Please select a session first.");
+        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
 
+        const s1 = document.getElementById('swap-room-1');
+        const s2 = document.getElementById('swap-room-2');
+
+        s1.innerHTML = '';
+        s2.innerHTML = '';
+
+        currentSessionAllotment.forEach((r, idx) => {
+            const opt = `<option value="${idx}">${r.roomName} (${r.students.length} students)</option>`;
+            s1.insertAdjacentHTML('beforeend', opt);
+            s2.insertAdjacentHTML('beforeend', opt);
+        });
+
+        if (s2.options.length > 1) s2.selectedIndex = 1;
+
+        document.getElementById('swap-rooms-modal').classList.remove('hidden');
+    };
+
+    window.executeRoomSwap = function() {
+        const idx1 = parseInt(document.getElementById('swap-room-1').value);
+        const idx2 = parseInt(document.getElementById('swap-room-2').value);
+
+        if (idx1 === idx2) return alert("Please select two different rooms to swap.");
+
+        const r1 = currentSessionAllotment[idx1];
+        const r2 = currentSessionAllotment[idx2];
+
+        // Safety Capacity Check
+        if (r1.students.length > parseInt(r2.capacity)) {
+            return alert(`Cannot swap: Room ${r2.roomName} capacity (${r2.capacity}) is too small for ${r1.students.length} students.`);
+        }
+        if (r2.students.length > parseInt(r1.capacity)) {
+            return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
+        }
+
+        // Swap room details
+        const tempName = r1.roomName;
+        const tempCap = r1.capacity;
+
+        r1.roomName = r2.roomName;
+        r1.capacity = r2.capacity;
+
+        r2.roomName = tempName;
+        r2.capacity = tempCap;
+
+        saveRoomAllotment();
+        hasUnsavedAllotment = true;
+        updateSyncStatus("Unsaved Changes", "warning");
+        updateAllotmentDisplay();
+
+        closeModal('swap-rooms-modal');
+    };
 
 // Fail-safe constants (Avoids conflict with drive_sync.js)
 
@@ -12275,67 +12333,7 @@ function renderAllottedRooms() {
         if (modal) modal.classList.add('hidden');
     };
 
-    window.openSwapModal = function() {
-        // Prevent action if locked and provide clear feedback
-        if (isAllotmentLocked) {
-            return alert("🔒 Allotment is Locked. Please click the 'Locked' button on the right to unlock before swapping.");
-        }
-        if (!currentSessionKey) return alert("Please select a session first.");
-        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
-
-        const s1 = document.getElementById('swap-room-1');
-        const s2 = document.getElementById('swap-room-2');
-        
-        s1.innerHTML = '';
-        s2.innerHTML = '';
-        
-        currentSessionAllotment.forEach((r, idx) => {
-            const opt = `<option value="${idx}">${r.roomName} (${r.students.length} students)</option>`;
-            s1.insertAdjacentHTML('beforeend', opt);
-            s2.insertAdjacentHTML('beforeend', opt);
-        });
-        
-        if (s2.options.length > 1) s2.selectedIndex = 1;
-        
-        document.getElementById('swap-rooms-modal').classList.remove('hidden');
-    };
-
-    window.executeRoomSwap = function() {
-        const idx1 = parseInt(document.getElementById('swap-room-1').value);
-        const idx2 = parseInt(document.getElementById('swap-room-2').value);
-        
-        if (idx1 === idx2) return alert("Please select two different rooms to swap.");
-        
-        const r1 = currentSessionAllotment[idx1];
-        const r2 = currentSessionAllotment[idx2];
-        
-        // Safety Capacity Check
-        if (r1.students.length > parseInt(r2.capacity)) {
-            return alert(`Cannot swap: Room ${r2.roomName} capacity (${r2.capacity}) is too small for ${r1.students.length} students.`);
-        }
-        if (r2.students.length > parseInt(r1.capacity)) {
-            return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
-        }
-        
-        // Swap room details
-        const tempName = r1.roomName;
-        const tempCap = r1.capacity;
-        
-        r1.roomName = r2.roomName;
-        r1.capacity = r2.capacity;
-        
-        r2.roomName = tempName;
-        r2.capacity = tempCap;
-        
-        saveRoomAllotment();
-        hasUnsavedAllotment = true;
-        updateSyncStatus("Unsaved Changes", "warning");
-        updateAllotmentDisplay();
-        
-        closeModal('swap-rooms-modal');
-    };
-
-    
+       
     // Global helper for Auto Allot button
     window.selectFrequentRoomsAutoAllot = function() {
         const freqs = getRoomFrequencies();
