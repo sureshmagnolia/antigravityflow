@@ -11763,24 +11763,35 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
             }
 
-            // SWAP THE DATA (Students + Stream), NOT THE ROOM
+            // 1. Swap the Occupants (Students + Stream)
             const tempStudents = r1.students;
             const tempStream = r1.stream;
-
             r1.students = r2.students;
             r1.stream = r2.stream;
-
             r2.students = tempStudents;
             r2.stream = tempStream;
 
+            // 2. Swap the Invigilators (Move them to the new address)
+            if (currentInvigMapping && currentInvigMapping[currentSessionKey]) {
+                const inv1 = currentInvigMapping[currentSessionKey][r1.roomName];
+                const inv2 = currentInvigMapping[currentSessionKey][r2.roomName];
+                if (inv1 || inv2) {
+                    currentInvigMapping[currentSessionKey][r1.roomName] = inv2 || "";
+                    currentInvigMapping[currentSessionKey][r2.roomName] = inv1 || "";
+                    localStorage.setItem('examInvigilatorMapping', JSON.stringify(currentInvigMapping));
+                }
+            }
+
             isSwapModeActive = false;
             swapSourceIndex = null;
-            // Auto-trigger the main Save logic (Cloud Sync + Public Publishing)
+            hasUnsavedAllotment = true; // Mark as dirty
+
+            // 3. Auto-trigger Cloud Sync (Firebase + Public Seating Portal)
             const saveBtn = document.getElementById('save-room-allotment-button');
             if (saveBtn) {
+                saveBtn.disabled = false; // Force enable to bypass browser lock
                 saveBtn.click();
             } else {   
-                // Fallback if button not found
                 saveRoomAllotment();
                 renderAllottedRooms();
             }
