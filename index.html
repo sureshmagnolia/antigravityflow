@@ -2136,8 +2136,13 @@
                                             </svg>
                                             Clear
                                         </button>
-                                        <button id="toggle-allotment-lock-btn"
-                                            class="flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-200 transition shadow-sm">
+                                        <button id="swap-rooms-btn" onclick="openSwapModal()"
+                                            class="flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                            </svg>
+                                            Swap
+                                        </button>
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                                 stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -4405,6 +4410,41 @@
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>
+
+
+<!-- Swap Rooms Modal -->
+<div id="swap-rooms-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col">
+        <div class="p-4 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-bold text-gray-800">Swap Rooms</h3>
+        </div>
+        <div class="p-4 space-y-4">
+            <p class="text-xs text-gray-500 italic">Select two allotted rooms to swap their assigned student groups. Capacities will be validated.</p>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Room 1:</label>
+                <select id="swap-room-1" class="w-full p-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-indigo-500"></select>
+            </div>
+            <div class="flex justify-center">
+                <div class="bg-gray-100 p-1.5 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-gray-400">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5 7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Room 2:</label>
+                <select id="swap-room-2" class="w-full p-2 border border-gray-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-indigo-500"></select>
+            </div>
+            <button onclick="executeRoomSwap()" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95 mt-2">Execute Swap</button>
+        </div>
+        <div class="p-3 bg-gray-50 text-right border-t border-gray-200">
+            <button onclick="closeModal('swap-rooms-modal')" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-bold">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+
 </body>
 
 </html>
