@@ -11724,7 +11724,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     
 
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
-    function renderAllottedRooms() {
+function renderAllottedRooms() {
         allottedRoomsList.innerHTML = '';
         const clearAllBtn = document.getElementById('clear-all-rooms-btn');
         if (clearAllBtn) {
@@ -11732,6 +11732,14 @@ window.real_populate_qp_code_session_dropdown = function () {
             clearAllBtn.className = isAllotmentLocked 
                 ? "text-xs px-3 py-1.5 bg-gray-100 border border-gray-300 text-gray-400 rounded flex items-center gap-1 font-bold cursor-not-allowed opacity-60" 
                 : "text-xs px-3 py-1.5 bg-white border border-red-600 text-red-600 rounded hover:bg-red-50 flex items-center gap-1 font-bold transition";
+        }
+        
+        const swapBtn = document.getElementById('swap-rooms-btn');
+        if (swapBtn) {
+            swapBtn.disabled = isAllotmentLocked;
+            swapBtn.className = isAllotmentLocked
+                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-100 text-gray-400 border border-gray-300 px-3 py-1.5 rounded font-bold cursor-not-allowed opacity-60"
+                : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
         }      
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
@@ -11776,7 +11784,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             // --- LOCK LOGIC ---
             const btnDisabled = isAllotmentLocked ? 'disabled' : '';
             const btnClass = isAllotmentLocked ? 'text-gray-300' : 'text-red-400 hover:text-red-600';
+            const changeBtnClass = isAllotmentLocked ? 'text-gray-300' : 'text-blue-500 hover:text-blue-700';
             const onclickAction = isAllotmentLocked ? '' : `onclick="deleteRoom(${index})"`;
+            const changeAction = isAllotmentLocked ? '' : `onclick="changeRoom(${index})"`;
 
             roomDiv.innerHTML = `
             <div class="flex items-center justify-between gap-4">
@@ -11805,11 +11815,18 @@ window.real_populate_qp_code_session_dropdown = function () {
                     </div>
                 </div>
                 
-                <button class="${btnClass} p-1 transition-colors" ${onclickAction} ${btnDisabled}>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button class="${changeBtnClass} p-1 transition-colors" ${changeAction} ${btnDisabled} title="Change Room">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                        </svg>
+                    </button>
+                    <button class="${btnClass} p-1 transition-colors" ${onclickAction} ${btnDisabled} title="Remove Room">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         `;
 
@@ -12223,6 +12240,89 @@ window.real_populate_qp_code_session_dropdown = function () {
         return freqs;
     }
 
+
+    // --- NEW: ROOM CHANGE & SWAP FUNCTIONS ---
+    
+    window.changeRoom = function(index) {
+        showRoomSelectionModal(index);
+    };
+
+    window.applyRoomChange = function(index, newRoomName, newCapacity) {
+        const allotment = currentSessionAllotment[index];
+        const studentCount = allotment.students.length;
+        
+        if (studentCount > parseInt(newCapacity)) {
+            return alert(`Error: New room capacity (${newCapacity}) is too small for the current ${studentCount} students.`);
+        }
+
+        allotment.roomName = newRoomName;
+        allotment.capacity = newCapacity;
+        
+        saveRoomAllotment();
+        hasUnsavedAllotment = true;
+        updateSyncStatus("Unsaved Changes", "warning");
+        updateAllotmentDisplay();
+        
+        const modal = document.getElementById('room-selection-modal');
+        if (modal) modal.classList.add('hidden');
+    };
+
+    window.openSwapModal = function() {
+        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
+        
+        const s1 = document.getElementById('swap-room-1');
+        const s2 = document.getElementById('swap-room-2');
+        
+        s1.innerHTML = '';
+        s2.innerHTML = '';
+        
+        currentSessionAllotment.forEach((r, idx) => {
+            const opt = `<option value="${idx}">${r.roomName} (${r.students.length} students)</option>`;
+            s1.insertAdjacentHTML('beforeend', opt);
+            s2.insertAdjacentHTML('beforeend', opt);
+        });
+        
+        if (s2.options.length > 1) s2.selectedIndex = 1;
+        
+        document.getElementById('swap-rooms-modal').classList.remove('hidden');
+    };
+
+    window.executeRoomSwap = function() {
+        const idx1 = parseInt(document.getElementById('swap-room-1').value);
+        const idx2 = parseInt(document.getElementById('swap-room-2').value);
+        
+        if (idx1 === idx2) return alert("Please select two different rooms to swap.");
+        
+        const r1 = currentSessionAllotment[idx1];
+        const r2 = currentSessionAllotment[idx2];
+        
+        // Safety Capacity Check
+        if (r1.students.length > parseInt(r2.capacity)) {
+            return alert(`Cannot swap: Room ${r2.roomName} capacity (${r2.capacity}) is too small for ${r1.students.length} students.`);
+        }
+        if (r2.students.length > parseInt(r1.capacity)) {
+            return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
+        }
+        
+        // Swap room details
+        const tempName = r1.roomName;
+        const tempCap = r1.capacity;
+        
+        r1.roomName = r2.roomName;
+        r1.capacity = r2.capacity;
+        
+        r2.roomName = tempName;
+        r2.capacity = tempCap;
+        
+        saveRoomAllotment();
+        hasUnsavedAllotment = true;
+        updateSyncStatus("Unsaved Changes", "warning");
+        updateAllotmentDisplay();
+        
+        closeModal('swap-rooms-modal');
+    };
+
+    
     // Global helper for Auto Allot button
     window.selectFrequentRoomsAutoAllot = function() {
         const freqs = getRoomFrequencies();
@@ -12267,7 +12367,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     };
 
 
-    function showRoomSelectionModal() {
+    function showRoomSelectionModal(changeIndex = null) {
         getRoomCapacitiesFromStorage();
         roomSelectionList.innerHTML = '';
 
@@ -12312,18 +12412,24 @@ window.real_populate_qp_code_session_dropdown = function () {
             </select>
         </div>
     `;
-        roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
-        // Show selected strategy as read-only info in modal
-        const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
-        const strategyLabels = { 'none': 'No Mix', 'ratio_1_1': '1:1 Mix', 'ratio_2_1': '2:1 Mix' };
-        const strategyInfoHtml = `<div class="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 font-bold">Active Strategy: ${strategyLabels[activeStrategy]}</div>`;
-        roomSelectionList.insertAdjacentHTML('beforeend', strategyInfoHtml);
-
+        if (changeIndex === null) {
+            roomSelectionList.insertAdjacentHTML('beforeend', streamSelectHtml);
+            const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+            const strategyLabels = { 'none': 'No Mix', 'ratio_1_1': '1:1 Mix', 'ratio_2_1': '2:1 Mix' };
+            const strategyInfoHtml = `<div class="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 font-bold">Active Strategy: ${strategyLabels[activeStrategy]}</div>`;
+            roomSelectionList.insertAdjacentHTML('beforeend', strategyInfoHtml);
+        } else {
+            const currentRoom = currentSessionAllotment[changeIndex];
+            const changeInfoHtml = `<div class="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2 font-bold">Changing Room for: ${currentRoom.roomName} (${currentRoom.students.length} Students)</div>`;
+            roomSelectionList.insertAdjacentHTML('beforeend', changeInfoHtml);
+        }
 
         // 2. List Rooms (Updated Logic)
 
         // A. Regular Allotted Rooms
-        const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
+        const allottedRoomNames = currentSessionAllotment
+            .filter((r, idx) => idx !== changeIndex)
+            .map(r => r.roomName);
 
         // B. Scribe Allotted Rooms (NEW CHECK)
         // We fetch the scribe data to ensure we don't double-book a room used by a scribe
@@ -12398,10 +12504,13 @@ window.real_populate_qp_code_session_dropdown = function () {
         `;
             if (!isUnavailable) {
                 roomOption.onclick = () => {
-                    const selectedStream = document.getElementById('allotment-stream-select').value;
-                    // Read the strategy from the persistent radio buttons on the main page
-                    const selectedStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
-                    selectRoomForAllotment(roomName, room.capacity, selectedStream, selectedStrategy);
+                    if (changeIndex !== null) {
+                        applyRoomChange(changeIndex, roomName, room.capacity);
+                    } else {
+                        const selectedStream = document.getElementById('allotment-stream-select').value;
+                        const selectedStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
+                        selectRoomForAllotment(roomName, room.capacity, selectedStream, selectedStrategy);
+                    }
                 };
             }
 
