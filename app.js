@@ -11729,8 +11729,58 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     
 
+  // --- INLINE SWAP STATE ---
+    let isSwapModeActive = false;
+    let swapSourceIndex = null;
+
+    window.toggleSwapMode = function() {
+        if (isAllotmentLocked) return alert("🔒 Allotment is Locked. Please unlock before swapping.");
+        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
+        
+        isSwapModeActive = !isSwapModeActive;
+        swapSourceIndex = null; // Reset selection if toggled
+        renderAllottedRooms();
+    };
+
+    window.selectSwapRoom = function(index) {
+        if (swapSourceIndex === null) {
+            swapSourceIndex = index; // Select first room
+            renderAllottedRooms();
+        } else if (swapSourceIndex === index) {
+            swapSourceIndex = null; // Deselect if clicked again
+            renderAllottedRooms();
+        } else {
+            // Execute Swap!
+            const idx1 = swapSourceIndex;
+            const idx2 = index;
+            const r1 = currentSessionAllotment[idx1];
+            const r2 = currentSessionAllotment[idx2];
+
+            if (r1.students.length > parseInt(r2.capacity)) {
+                return alert(`Cannot swap: Room ${r2.roomName} capacity (${r2.capacity}) is too small for ${r1.students.length} students.`);
+            }
+            if (r2.students.length > parseInt(r1.capacity)) {
+                return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
+            }
+
+            const tempName = r1.roomName;
+            const tempCap = r1.capacity;
+            r1.roomName = r2.roomName;
+            r1.capacity = r2.capacity;
+            r2.roomName = tempName;
+            r2.capacity = tempCap;
+
+            isSwapModeActive = false;
+            swapSourceIndex = null;
+            saveRoomAllotment();
+            hasUnsavedAllotment = true;
+            updateSyncStatus("Unsaved Changes", "warning");
+            renderAllottedRooms();
+        }
+    };
+
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
-function renderAllottedRooms() {
+ function renderAllottedRooms() {
         allottedRoomsList.innerHTML = '';
         const clearAllBtn = document.getElementById('clear-all-rooms-btn');
         if (clearAllBtn) {
@@ -11742,12 +11792,17 @@ function renderAllottedRooms() {
         
         const swapBtn = document.getElementById('swap-rooms-btn');
         if (swapBtn) {
-            // CRITICAL: Disable the native lock so clicks can fire and trigger your alert
-            swapBtn.disabled = false; 
-            swapBtn.title = isAllotmentLocked ? "Click to unlock first" : "Swap Student Groups";
-            swapBtn.className = isAllotmentLocked
-                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-75"
-                : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
+            swapBtn.disabled = false;
+            if (isAllotmentLocked) {
+                swapBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>Swap`;
+                swapBtn.className = "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-pointer opacity-75";
+            } else if (isSwapModeActive) {
+                swapBtn.innerHTML = `Cancel Swap Mode`;
+                swapBtn.className = "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-red-600 text-white border border-red-600 px-3 py-1.5 rounded hover:bg-red-700 transition shadow-sm font-bold animate-pulse";
+            } else {
+                swapBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>Swap Mode`;
+                swapBtn.className = "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
+            }
         }
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
@@ -11790,11 +11845,40 @@ function renderAllottedRooms() {
             }
 
             // --- LOCK LOGIC ---
+            // --- LOCK LOGIC ---
             const btnDisabled = isAllotmentLocked ? 'disabled' : '';
             const btnClass = isAllotmentLocked ? 'text-gray-300' : 'text-red-400 hover:text-red-600';
             const changeBtnClass = isAllotmentLocked ? 'text-gray-300' : 'text-blue-500 hover:text-blue-700';
             const onclickAction = isAllotmentLocked ? '' : `onclick="deleteRoom(${index})"`;
             const changeAction = isAllotmentLocked ? '' : `onclick="changeRoom(${index})"`;
+
+            let actionButtonsHTML = '';
+            if (isSwapModeActive) {
+                // IN SWAP MODE
+                if (swapSourceIndex === null) {
+                    actionButtonsHTML = `<button onclick="selectSwapRoom(${index})" class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-300 px-3 py-1 rounded text-xs font-bold transition">Select</button>`;
+                } else if (swapSourceIndex === index) {
+                    roomDiv.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50');
+                    actionButtonsHTML = `<button onclick="selectSwapRoom(${index})" class="bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold shadow-md">Selected (Click to Cancel)</button>`;
+                } else {
+                    roomDiv.classList.add('hover:ring-2', 'hover:ring-green-400', 'cursor-pointer');
+                    actionButtonsHTML = `<button onclick="selectSwapRoom(${index})" class="bg-green-500 text-white hover:bg-green-600 px-3 py-1 rounded text-xs font-bold shadow transition animate-pulse">Swap Here</button>`;
+                }
+            } else {
+                // NORMAL MODE
+                actionButtonsHTML = `
+                    <button class="${changeBtnClass} p-1 transition-colors" ${changeAction} ${btnDisabled} title="Change Room">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                        </svg>
+                    </button>
+                    <button class="${btnClass} p-1 transition-colors" ${onclickAction} ${btnDisabled} title="Remove Room">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                `;
+            }
 
             roomDiv.innerHTML = `
             <div class="flex items-center justify-between gap-4">
@@ -11824,16 +11908,7 @@ function renderAllottedRooms() {
                 </div>
                 
                 <div class="flex items-center gap-2">
-                    <button class="${changeBtnClass} p-1 transition-colors" ${changeAction} ${btnDisabled} title="Change Room">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                        </svg>
-                    </button>
-                    <button class="${btnClass} p-1 transition-colors" ${onclickAction} ${btnDisabled} title="Remove Room">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                    ${actionButtonsHTML}
                 </div>
             </div>
         `;
