@@ -11763,12 +11763,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
             }
 
-            const tempName = r1.roomName;
-            const tempCap = r1.capacity;
-            r1.roomName = r2.roomName;
-            r1.capacity = r2.capacity;
-            r2.roomName = tempName;
-            r2.capacity = tempCap;
+            // SWAP THE DATA (Students + Stream), NOT THE ROOM
+            const tempStudents = r1.students;
+            const tempStream = r1.stream;
+
+            r1.students = r2.students;
+            r1.stream = r2.stream;
+
+            r2.students = tempStudents;
+            r2.stream = tempStream;
 
             isSwapModeActive = false;
             swapSourceIndex = null;
