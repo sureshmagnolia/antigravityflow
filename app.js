@@ -11772,11 +11772,16 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             isSwapModeActive = false;
             swapSourceIndex = null;
-            saveRoomAllotment();
-            hasUnsavedAllotment = true;
-            updateSyncStatus("Unsaved Changes", "warning");
-            renderAllottedRooms();
-        }
+            // Auto-trigger the main Save logic (Cloud Sync + Public Publishing)
+            const saveBtn = document.getElementById('save-room-allotment-button');
+            if (saveBtn) {
+                saveBtn.click();
+            } else {   
+                // Fallback if button not found
+                saveRoomAllotment();
+                renderAllottedRooms();
+            }
+         }
     };
 
     // Render the list of allotted rooms (WITH CAPACITY TAGS & LOCK)
