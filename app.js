@@ -12832,7 +12832,12 @@ if (saveScribeBtn) {
 
         if (s2.options.length > 1) s2.selectedIndex = 1;
 
-        document.getElementById('swap-rooms-modal').classList.remove('hidden');
+        // CRITICAL FIX: Remove opacity-0 trap and log success
+        const modal = document.getElementById('swap-rooms-modal');
+        modal.classList.remove('hidden', 'opacity-0');
+        modal.classList.add('opacity-100');
+        
+        console.log("✅ Swap Modal Successfully Fired and Opened!");
     };
 
     window.executeRoomSwap = function() {
