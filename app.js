@@ -1554,10 +1554,14 @@ window.recalcInvigSlots = async function () {
                             const isTodayOrFuture = examTimestamp >= midnightObj;
 
                             // 1. Load Metadata (Lightweight Icons/Calendar)
-                            // 🛡️ SMART MERGE SHIELD APPLIED TO ALL LAYERS: 
-                            // Only allow cloud to overwrite local if cloud has >= records (prevents empty {} wiping local data)
+                            // 🛡️ [V3 SMART SHIELD]: Do NOT overwrite local data if we have unsaved manual changes.
+                            // This prevents "Ghosting" where cloud (empty/old) wipes out manual (new) work.
                             
-                              if (s.roomAllotment) allAllotments[sessionKey] = s.roomAllotment;
+                            const isDirty = (sessionKey === currentSessionKey && hasUnsavedAllotment);
+
+                            if (s.roomAllotment && !isDirty) {
+                                allAllotments[sessionKey] = s.roomAllotment;
+                            }
                               if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
                               if (s.absentees) allAbsentees[sessionKey] = s.absentees;
                               if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
@@ -2251,28 +2255,25 @@ async function deleteSessionFromCloud(sessionKey) {
             }
 
 
-            // 2. OPERATIONS (Global Lists)
+             // 2. OPERATIONS (Global Lists)
             else if (targetSection === 'ops') {
-                const data = buildPayload([
-                    'examAbsenteeList', 'examQPCodes'
-                ]);
+                // 🛡️ [V3 REFACTOR]: Heavy lists (QP, Absentees) are now per-session.
+                // Global sync only handles lightweight master registry.
+                const data = buildPayload(['examAllKnownSessions']); 
                 if (Object.keys(data).length > 0) {
                     await setDoc(doc(db, "colleges", cid, "system_data", "operations"), data, { merge: true });
                 }
-                // 🚫 DELETED: Shadow Mirror to GAS
             }
 
 
             // 3. ALLOCATION (Scribes + Room Allotments)
             else if (targetSection === 'allocation') {
-                const data = buildPayload([
-                    'examScribeList', 'examScribeAllotment', 'examScribeAllotmentV2', 'examAllotmentData', 'examRoomAllotment'
-                ]);
+                // 🛡️ [V3 REFACTOR]: Removed heavy arrays 'examRoomAllotment' & 'examScribeAllotment'.
+                // These are now stored authoritatively in the per-session 'sessions' collection.
+                const data = buildPayload(['examScribeList']);
                 if (Object.keys(data).length > 0) {
                     await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), data, { merge: true });
                 }
-
-                         // 🚫 DELETED: Shadow Mirror to GAS
             }
 
 
