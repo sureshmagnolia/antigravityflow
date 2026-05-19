@@ -12343,7 +12343,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
     sortedRoomNames.forEach(roomName => {
             const room = currentRoomConfig[roomName];
-            const location = room.location ? ` (\${room.location})` : '';
+            const location = room.location ? ` (${room.location})` : '';
 
             // 1. Check if the room itself is used
             const isRegularAllotted = allottedRoomNames.includes(roomName);
