@@ -11756,11 +11756,20 @@ window.real_populate_qp_code_session_dropdown = function () {
             const r1 = currentSessionAllotment[idx1];
             const r2 = currentSessionAllotment[idx2];
 
-            if (r1.students.length > parseInt(r2.capacity)) {
-                return alert(`Cannot swap: Room ${r2.roomName} capacity (${r2.capacity}) is too small for ${r1.students.length} students.`);
+            const cap1 = parseInt(r1.capacity);
+            const cap2 = parseInt(r2.capacity);
+            const grace1 = cap1 + 3;
+            const grace2 = cap2 + 3;
+
+            if (r1.students.length > grace2) {
+                return alert(`Cannot swap: Room ${r2.roomName} capacity (${cap2} + 3 grace) is too small for ${r1.students.length} students.`);
             }
-            if (r2.students.length > parseInt(r1.capacity)) {
-                return alert(`Cannot swap: Room ${r1.roomName} capacity (${r1.capacity}) is too small for ${r2.students.length} students.`);
+            if (r2.students.length > grace1) {
+                return alert(`Cannot swap: Room ${r1.roomName} capacity (${cap1} + 3 grace) is too small for ${r2.students.length} students.`);
+            }
+
+            if (r1.students.length > cap2 || r2.students.length > cap1) {
+                alert("⚠️ Capacity Warning: Swapping these rooms will exceed nominal capacity but stays within grace limits (max +3).");
             }
 
             // 1. Swap the Occupants (Students + Stream)
@@ -12352,9 +12361,15 @@ window.real_populate_qp_code_session_dropdown = function () {
     window.applyRoomChange = function(index, newRoomName, newCapacity) {
         const allotment = currentSessionAllotment[index];
         const studentCount = allotment.students.length;
+        const nominalCap = parseInt(newCapacity);
+        const graceCap = nominalCap + 3;
         
-        if (studentCount > parseInt(newCapacity)) {
-            return alert(`Error: New room capacity (${newCapacity}) is too small for the current ${studentCount} students.`);
+        if (studentCount > graceCap) {
+            return alert(`Error: New room capacity (${nominalCap} + 3 grace) is too small for the current ${studentCount} students.`);
+        }
+        
+        if (studentCount > nominalCap) {
+            alert(`⚠️ Capacity Warning: New room capacity (${nominalCap}) is exceeded but within grace limit (max +3).`);
         }
 
         allotment.roomName = newRoomName;
