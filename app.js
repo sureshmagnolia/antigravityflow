@@ -11742,7 +11742,7 @@ function renderAllottedRooms() {
         
         const swapBtn = document.getElementById('swap-rooms-btn');
         if (swapBtn) {
-            // CRITICAL: Remove native .disabled so the click event fires even when locked
+            // CRITICAL: Disable the native lock so clicks can fire and trigger your alert
             swapBtn.disabled = false; 
             swapBtn.title = isAllotmentLocked ? "Click to unlock first" : "Swap Student Groups";
             swapBtn.className = isAllotmentLocked
