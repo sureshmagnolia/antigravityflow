@@ -12863,7 +12863,17 @@ if (saveScribeBtn) {
             }
         });
     }
-
+    // --- SWAP BUTTON LISTENER ---
+    const swapBtnElement = document.getElementById('swap-rooms-btn');
+    if (swapBtnElement) {
+        swapBtnElement.addEventListener('click', () => {
+            if (typeof window.openSwapModal === 'function') {
+                window.openSwapModal();
+            } else {
+                console.error("openSwapModal function not found!");
+            }
+        });
+    }
     // --- ALLOTMENT LIST LOCK TOGGLE ---
     const toggleAllotmentLockBtn = document.getElementById('toggle-allotment-lock-btn');
     if (toggleAllotmentLockBtn) {
