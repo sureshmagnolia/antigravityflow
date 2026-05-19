@@ -2091,6 +2091,9 @@ async function deleteSessionFromCloud(sessionKey) {
             
             // FIX: Global recalculation must be authoritative
             await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+
+            // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
+            // that used to be here, which were causing the 1MB limit error.
             
         } catch (e) {
             console.error("Session Sync Error:", e);
