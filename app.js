@@ -12867,6 +12867,20 @@ if (saveScribeBtn) {
             }
         });
     }
+
+    // --- SWAP BUTTON LISTENER (BULLETPROOF DELEGATION) ---
+    document.addEventListener('click', (e) => {
+        const swapBtn = e.target.closest('#swap-rooms-btn');
+        if (swapBtn) {
+            e.preventDefault();
+            if (typeof window.openSwapModal === 'function') {
+                window.openSwapModal();
+            } else {
+                console.error("Error: openSwapModal is not accessible in this scope.");
+            }
+        }
+    });
+
     // --- ALLOTMENT LIST LOCK TOGGLE ---
     const toggleAllotmentLockBtn = document.getElementById('toggle-allotment-lock-btn');
     if (toggleAllotmentLockBtn) {
