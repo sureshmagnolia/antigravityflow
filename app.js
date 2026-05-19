@@ -11743,10 +11743,11 @@ function renderAllottedRooms() {
         const swapBtn = document.getElementById('swap-rooms-btn');
         if (swapBtn) {
             swapBtn.disabled = isAllotmentLocked;
+            swapBtn.title = isAllotmentLocked ? "Unlock Allotment to Swap Rooms" : "Swap Student Groups";
             swapBtn.className = isAllotmentLocked
-                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-100 text-gray-400 border border-gray-300 px-3 py-1.5 rounded font-bold cursor-not-allowed opacity-60"
+                ? "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-gray-50 text-gray-400 border border-gray-200 px-3 py-1.5 rounded font-bold cursor-not-allowed"
                 : "flex-1 sm:flex-none justify-center text-xs flex items-center gap-1 bg-white border border-indigo-600 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-50 transition shadow-sm font-bold";
-        }      
+        }  
         const roomSerialMap = getRoomSerialMap(currentSessionKey);
 
         if (currentSessionAllotment.length === 0) {
