@@ -689,10 +689,6 @@ function getVacationDutiesDoneCount(email, referenceDate = null) {
         if (dateObj < acYear.start || dateObj > acYear.end) return;
 
         // Clean format conversion to catch manually added extra dates
-        const slot = invigilationSlots[key];
-        const dateObj = parseDate(key);
-        
-        // Clean format conversion to catch manually added extra dates
         const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
         const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(isoDate);
 
@@ -3537,6 +3533,9 @@ function getAcademicYearForDate(date) {
         end: new Date(startYear + 1, 4, 31) // May 31st
     };
 }
+
+// 2. Calculate Academic Year (Needed for stats)
+function getCurrentAcademicYear() {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth(); // 0-11
