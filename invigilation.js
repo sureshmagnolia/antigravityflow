@@ -7493,7 +7493,12 @@ window.openManualAllocationModal = function (key) {
 
     // 1. Build allUnavailable list FIRST so we can use it in the ranking
     const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
+    if (slot.unavailable) {
+        slot.unavailable.forEach(u => {
+            const entry = (typeof u === 'string') ? { email: u, reason: "Marked Unavailable" } : u;
+            allUnavailable.push({ ...entry, type: 'Session' });
+        });
+    }
 
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
