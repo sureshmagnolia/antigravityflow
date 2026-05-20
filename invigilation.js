@@ -628,9 +628,10 @@ function isDateInVacation(dateObj) {
 
 
 // Updated: Calculate Duties Done based on actual attendance (Filtered by Current AY)
-function getDutiesDoneCount(email) {
+function getDutiesDoneCount(email, referenceDate = null) {
     let count = 0;
-    const acYear = getCurrentAcademicYear();
+    // Use referenceDate (e.g. from the slot being edited) to determine the relevant AY
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
 
     // Iterate through all slots to find confirmed attendance
     Object.keys(invigilationSlots).forEach(key => {
@@ -648,8 +649,8 @@ function getDutiesDoneCount(email) {
 }
 // NEW: Get duty count broken down per ROLE PERIOD
 // Returns an object: { "Chief Superintendent": 3, "Senior Asst. Superintendent": 5, "Regular": 7 }
-function getDutiesDoneByRole(email) {
-    const acYear = getCurrentAcademicYear();
+function getDutiesDoneByRole(email, referenceDate = null) {
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
     const staff = staffData.find(s => s.email === email);
     const breakdown = {};
 
@@ -676,9 +677,18 @@ function getDutiesDoneByRole(email) {
 
     return breakdown;
 }
-function getVacationDutiesDoneCount(email) {
+function getVacationDutiesDoneCount(email, referenceDate = null) {
     let count = 0;
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
+
     Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+
+        // Ensure we only count duties within the same Academic Year as the referenceDate
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+
+        // Clean format conversion to catch manually added extra dates
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
         
@@ -708,21 +718,25 @@ function getPendingCountForSession(staffEmail, sessionKey) {
     const dateObj = sessionKey ? parseDate(sessionKey) : new Date();
 
     if (isDateInVacation(dateObj)) {
-        return Math.max(0, vacationDutyTarget - getVacationDutiesDoneCount(staffEmail));
+        return Math.max(0, vacationDutyTarget - getVacationDutiesDoneCount(staffEmail, dateObj));
     } else {
-        return Math.max(0, calculateStaffTarget(s) - getDutiesDoneCount(staffEmail));
+        return Math.max(0, calculateStaffTarget(s, dateObj) - getDutiesDoneCount(staffEmail, dateObj));
     }
 }
 
 
 
-function calculateStaffTarget(staff) {
+function calculateStaffTarget(staff, referenceDate = null) {
+    const ref = referenceDate || new Date();
     // 1. Get Academic Year Boundaries (June 1st to May 31st)
-    const acYear = getCurrentAcademicYear();
+    const acYear = getAcademicYearForDate(ref);
     const today = new Date();
+    
+    // Use the reference date for the calculation boundary if it's in the future
+    const boundaryDate = (ref > today) ? ref : today;
 
     // 2. Determine Calculation Period
-    let calcEnd = (today < acYear.end) ? today : acYear.end;
+    let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
     let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
@@ -3511,8 +3525,18 @@ function getNameFromEmail(email) {
     return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
 }
 
-// 2. Calculate Academic Year (Needed for stats)
-function getCurrentAcademicYear() {
+// Helper: Calculate Academic Year Boundaries for a SPECIFIC date
+function getAcademicYearForDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = d.getMonth(); // 0-11
+    const startYear = (month < 5) ? year - 1 : year;
+    return {
+        label: `${startYear}-${startYear + 1}`,
+        start: new Date(startYear, 5, 1), // June 1st
+        end: new Date(startYear + 1, 4, 31) // May 31st
+    };
+}
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth(); // 0-11
