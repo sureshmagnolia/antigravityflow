@@ -9311,7 +9311,52 @@ function printVacationReport(data, start, end) {
 // ==========================================
 
 window.startNewAcademicYear = async function() {
-    // 1. Initial Warning
+    // 1. Discover all Academic Years present in the data
+    const discoveredYears = new Set();
+    Object.keys(invigilationSlots).forEach(key => {
+        const d = parseDate(key);
+        const ay = getAcademicYearForDate(d);
+        discoveredYears.add(ay.label);
+    });
+
+    // Add current year if not discovered
+    discoveredYears.add(getCurrentAcademicYear().label);
+
+    const yearList = Array.from(discoveredYears).sort().reverse();
+    
+    // 2. Select Year (Using a numbered list for precision in prompt)
+    let message = "⚠️ SURGICAL DATA CLEARANCE ⚠️\n\nSelect the Academic Year to DELETE:\n\n";
+    yearList.forEach((y, i) => { message += `${i + 1}. ${y}\n`; });
+    message += "\nEnter the NUMBER of the year to clear:";
+
+    const selection = prompt(message);
+    const index = parseInt(selection) - 1;
+
+    if (isNaN(index) || !yearList[index]) {
+        return alert("❌ Invalid selection.");
+    }
+
+    const targetAYLabel = yearList[index];
+
+    // 3. Calculate Boundaries
+    const parts = targetAYLabel.split('-');
+    const startYear = parseInt(parts[0]);
+    const ayStart = new Date(startYear, 5, 1);
+    const ayEnd = new Date(startYear + 1, 4, 31);
+
+    // 4. Initial Warning
+    if(!confirm(`⚠️ CONFIRM CLEARANCE FOR AY ${targetAYLabel} ⚠️\n\nThis will surgically DELETE:\n- ALL Exam Slots in this period\n- ALL Attendance for this period\n- ALL Unavailability blocks in this period\n\nProceed?`)) {
+        return;
+    }
+
+    // 5. Trigger Backup
+    downloadMasterBackup();
+
+    // 6. Final Security Check
+    const check = prompt(`🔴 FINAL SECURITY CHECK\n\nTo permanently DELETE data for ${targetAYLabel}, type 'DELETE' below:`);
+    if (check !== "DELETE") {
+        return alert("❌ Action Cancelled. Incorrect confirmation code.");
+    }
     if(!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
         return;
     }
@@ -9343,21 +9388,41 @@ window.startNewAcademicYear = async function() {
         const d = String(acYear.start.getDate()).padStart(2, '0');
         const newJoinDate = `${y}-${m}-${d}`; // YYYY-MM-DD format
 
-        // B. Reset Staff Counters & Dates
-        staffData = staffData.map(s => ({
-            ...s,
-            dutiesDone: 0, 
-            dutiesAssigned: 0,
-            joiningDate: newJoinDate, // <--- RESET JOIN DATE
-            // Keep: name, email, phone, dept, designation, roleHistory, preferredDays
-        }));
+        // B. Surgical Slot Removal
+        const slotKeys = Object.keys(invigilationSlots);
+        slotKeys.forEach(key => {
+            const d = parseDate(key);
+            if (d >= ayStart && d <= ayEnd) {
+                delete invigilationSlots[key];
+            }
+        });
 
-        // C. Wipe Transactional Data
-        invigilationSlots = {};
-        advanceUnavailability = {};
-        vacationStart = "";
-        vacationEnd = "";
-        vacationExtraHolidays.clear();
+        // C. Surgical Unavailability Removal (Advance)
+        const unavKeys = Object.keys(advanceUnavailability);
+        unavKeys.forEach(dateStr => {
+            const d = new Date(dateStr);
+            if (d >= ayStart && d <= ayEnd) {
+                delete advanceUnavailability[dateStr];
+            }
+        });
+
+        // D. Reset Staff Duty Counters (Recalculate based on current year)
+        staffData = staffData.map(s => {
+            const currentYearDone = getDutiesDoneCount(s.email);
+            return {
+                ...s,
+                dutiesDone: currentYearDone,
+                dutiesAssigned: currentYearDone
+            };
+        });
+
+        // Optional: Clear vacation range if it falls within the target year
+        const vStart = vacationStart ? new Date(vacationStart) : null;
+        if (vStart && vStart >= ayStart && vStart <= ayEnd) {
+            vacationStart = "";
+            vacationEnd = "";
+            vacationExtraHolidays.clear();
+        }
 
         // 5. Update Main Cloud Document & Sub-Collections
           const collegeRef = doc(db, "colleges", currentCollegeId);
@@ -9401,7 +9466,7 @@ window.startNewAcademicYear = async function() {
         await logActivity("System Reset", `Started New Academic Year. Reset duty counts and set all staff joining dates to ${newJoinDate}.`);
 
         updateSyncStatus("Year Started", "success");
-        alert(`✅ New Academic Year Started Successfully.\n\n- All staff joining dates reset to ${newJoinDate}.\n- Duty counts reset to 0.\n- Previous sessions & logs cleared.`);
+        alert(`✅ Surgical Clearance Complete for AY ${targetAYLabel}.\n\n- Data for ${targetAYLabel} removed successfully.`);
         
         window.location.reload();
 
