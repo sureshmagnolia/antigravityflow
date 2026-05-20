@@ -7318,7 +7318,7 @@ window.renderManualCards = function() {
         if (s.isChecked) currentSelectionCount++;
 
         // Hide unavailable from Available pane
-        if (isUnavailable && !s.isChecked) return; 
+        //if (isUnavailable && !s.isChecked) return; 
 
         const disabledState = (!window.manualState.isFullEditMode && !s.isChecked) ? 'opacity-60 cursor-not-allowed pointer-events-none bg-gray-50' : 'cursor-pointer hover:shadow-md hover:border-indigo-300';
         const pendingColor = s.pending > 0 ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50';
@@ -7371,6 +7371,21 @@ window.toggleManualStaffCard = function(email) {
     if (!window.manualState.isFullEditMode) return;
     const staff = window.manualState.rankedStaff.find(s => s.email === email);
     if (staff) {
+        // ALERT IF UNAVAILABLE OR EXCL
+        if (!staff.isChecked && window.manualState.allUnavailable) {
+            const unav = window.manualState.allUnavailable.find(u => (typeof u === 'string' ? u === email : (u.email === email)));
+            if (unav) {
+                const isRole = unav.type === 'Role';
+                const reason = unav.reason || (isRole ? `Admin Role (${unav.role})` : "Marked Unavailable");
+                const warningMsg = isRole 
+                    ? `🛡️ EXEMPTION ALERT: This staff member is marked as EXCL (Role: ${unav.role}).`
+                    : `⚠️ UNAVAILABILITY ALERT: This staff member is marked as UNAVAILABLE for this session.`;
+                
+                if (!confirm(`${warningMsg}\n\nReason: ${reason}\n\nAre you sure you want to assign them for this invigilation?`)) {
+                    return;
+                }
+            }
+        }
         staff.isChecked = !staff.isChecked;
         renderManualCards();
     }
@@ -7531,19 +7546,10 @@ window.openManualAllocationModal = function (key) {
 
     const isCurrentSlotVacation = isDateInVacation(targetDate) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotTargetDateStr));
 
-    // 3. Filter and Rank Staff
+    // 3. Filter and Rank Staff (Modified: Do not exclude admin roles, sort them to bottom instead)
     const rankedStaff = staffData
         .filter(s => {
             if (s.status === 'archived') return false;
-            // Remove those strictly holding admin roles
-            if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                const isExempt = s.roleHistory.some(r => {
-                    const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
-                });
-                if (isExempt) return false;
-            }
             return true;
         })
         .map(s => {
@@ -7575,18 +7581,16 @@ window.openManualAllocationModal = function (key) {
                 badges.push("Volunteer");
             }
 
-            // 🛡️ Smart Unavailability Penalty (Prevent Dodging)
+            // 🛡️ Smart Unavailability Penalty (Prevent Dodging & Sort to Bottom)
             const unavailableRecord = allUnavailable.find(u => (typeof u.email === 'undefined' ? u : u.email) === s.email);
             if (unavailableRecord) {
                 if (unavailableRecord.type === 'Role') {
-                    // Admin/Role Exclusions are fully excused
-                    score -= 100000; 
-                    badges.push("Role Excluded");
+                    // Admin/Role Exclusions are fully excused - Massive penalty to keep at bottom
+                    score -= 2000000; 
+                    badges.push(unavailableRecord.role || "EXCL");
                 } else {
-                    // Self-reported unavailability gets a minor penalty (-500).
-                    // Since 1 pending duty = +100 or +1000 points, they will still rank 
-                    // above available staff if they are dodging their target!
-                    score -= 500; 
+                    // Self-reported or Advance Unavailability - Large penalty to keep below available staff
+                    score -= 1000000; 
                     badges.push("Unavailable");
                 }
             }
@@ -7617,7 +7621,8 @@ window.openManualAllocationModal = function (key) {
         s.isChecked = assignedSet.has(s.email);
     });
 
-    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
+        // Store allUnavailable in state for selection alerts
+    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot, allUnavailable };
     renderManualCards();
 
     // Render Unavailable List manually at bottom right
