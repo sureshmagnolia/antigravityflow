@@ -9357,18 +9357,6 @@ window.startNewAcademicYear = async function() {
     if (check !== "DELETE") {
         return alert("❌ Action Cancelled. Incorrect confirmation code.");
     }
-    if(!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
-        return;
-    }
-
-    // 2. Trigger Backup
-    downloadMasterBackup();
-
-    // 3. Final Security Check
-    const check = prompt("🔴 FINAL CONFIRMATION\n\nTo reset duty data for the new year, please type 'RESET' in the box below:");
-    if (check !== "RESET") {
-        return alert("❌ Action Cancelled. Incorrect confirmation code.");
-    }
 
     const btn = document.querySelector('button[onclick="startNewAcademicYear()"]');
     if(btn) {
@@ -9429,19 +9417,23 @@ window.startNewAcademicYear = async function() {
           const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
           const staffRef = doc(db, "colleges", currentCollegeId, "system_data", "staff");
 
-          // A. Wipe Root Document
+          // A. Update Root Document (Save surgically filtered data)
           await updateDoc(collegeRef, {
               examStaffData: JSON.stringify(staffData),
-              examInvigilationSlots: "{}",
-              invigAdvanceUnavailability: "{}",
-              invigVacationConfig: "{}",
+              examInvigilationSlots: JSON.stringify(invigilationSlots),
+              invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
+              invigVacationConfig: JSON.stringify({
+                  start: vacationStart,
+                  end: vacationEnd,
+                  extra: Array.from(vacationExtraHolidays)
+              }),
               autoAssignLogs: []
           });
 
-          // B. Wipe Sub-Collections (The REAL data locus)
+          // B. Update Sub-Collections
           await setDoc(slotsRef, {
-              examInvigilationSlots: "{}",
-              invigAdvanceUnavailability: "{}"
+              examInvigilationSlots: JSON.stringify(invigilationSlots),
+              invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
           }, { merge: true });
 
           await setDoc(staffRef, {
