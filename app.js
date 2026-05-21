@@ -18049,7 +18049,8 @@ window.generateBatchArchive = async function() {
         archiveExamName = sessionNamesSet.size > 0 ? Array.from(sessionNamesSet).join(" & ") : "University Examinations";
     }
 
-    let sourceStudentData = allStudentData;
+    // FIX: Removed 'let' because sourceStudentData is already declared above
+    sourceStudentData = allStudentData;
 
     if (!sourceStudentData || sourceStudentData.length === 0) {
         sourceStudentData = await loadExamDataIDB() || [];
