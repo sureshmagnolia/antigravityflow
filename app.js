@@ -20863,16 +20863,33 @@ function getAcquittanceData() {
         });
     });
 
-    // 4. Map to Professional Report Rows
+    // 4. Map to Professional Report Rows (Enhanced with Sessions & Formatting)
     const reportRows = Object.keys(staffDuties).map(email => {
-        const staff = staffData.find(s => s.email.toLowerCase() === email);
+        const staff = staffData.find(s => s.email && s.email.toLowerCase() === email);
         const count = staffDuties[email];
+        
+        // Find which specific sessions this staff member was assigned to
+        const assignedSessions = [];
+        sessionKeys.forEach(key => {
+            const mapping = invigilatorMapping[key] || {};
+            const allotments = allAllotments[key] || [];
+            
+            // Cross-verify they were in a relevant room for this session
+            allotments.forEach(roomObj => {
+                const roomEmail = mapping[roomObj.roomName];
+                if (roomEmail && roomEmail.toLowerCase() === email) {
+                    assignedSessions.push(key);
+                }
+            });
+        });
+
         return {
-            name: staff ? staff.name : email.split('@')[0],
-            dept: staff ? staff.dept : "N/A",
+            name: (staff ? staff.name : email.split('@')[0]).toUpperCase(),
+            dept: (staff && staff.dept && staff.dept !== "N/A") ? staff.dept : "General",
             count: count,
             rate: invigRate,
-            amount: count * invigRate
+            amount: count * invigRate,
+            sessions: assignedSessions.join(', ')
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -20909,24 +20926,24 @@ function previewAcquittanceHTML() {
                     <th class="border border-gray-400 p-2 w-10 text-center">Sl</th>
                     <th class="border border-gray-400 p-2 text-left">Name of Invigilator</th>
                     <th class="border border-gray-400 p-2 text-left">Department</th>
-                    <th class="border border-gray-400 p-2 w-16 text-center">Duties</th>
-                    <th class="border border-gray-400 p-2 w-24 text-right">Rate</th>
-                    <th class="border border-gray-400 p-2 w-28 text-right">Total Amount</th>
-                    <th class="border border-gray-400 p-2 w-32">Signature</th>
-                    <th class="border border-gray-400 p-2">Remarks</th>
+                    <th class="border border-gray-400 p-2 text-left text-[10px]">Dates & Sessions</th>
+                    <th class="border border-gray-400 p-2 w-12 text-center">Duties</th>
+                    <th class="border border-gray-400 p-2 w-20 text-right">Rate</th>
+                    <th class="border border-gray-400 p-2 w-24 text-right">Amount</th>
+                    <th class="border border-gray-400 p-2 w-28">Signature</th>
                 </tr>
             </thead>
             <tbody>
                 ${data.rows.map((r, i) => `
                     <tr class="hover:bg-gray-50">
-                        <td class="border border-gray-400 p-2 text-center font-mono">${i + 1}</td>
-                        <td class="border border-gray-400 p-2 font-semibold text-gray-900">${r.name}</td>
-                        <td class="border border-gray-400 p-2 text-gray-600">${r.dept}</td>
+                        <td class="border border-gray-400 p-2 text-center font-mono text-xs">${i + 1}</td>
+                        <td class="border border-gray-400 p-2 font-bold text-gray-900 text-xs">${r.name}</td>
+                        <td class="border border-gray-400 p-2 text-gray-600 text-[10px] uppercase">${r.dept}</td>
+                        <td class="border border-gray-400 p-2 text-gray-500 text-[9px] italic leading-tight">${r.sessions}</td>
                         <td class="border border-gray-400 p-2 text-center font-bold">${r.count}</td>
-                        <td class="border border-gray-400 p-2 text-right font-mono text-gray-500">Rs. ${r.rate}</td>
-                        <td class="border border-gray-400 p-2 text-right font-bold text-indigo-700">Rs. ${r.amount}</td>
-                        <td class="border border-gray-400 p-2 h-10"></td>
-                        <td class="border border-gray-400 p-2"></td>
+                        <td class="border border-gray-400 p-2 text-right font-mono text-gray-500 text-xs">${r.rate}</td>
+                        <td class="border border-gray-400 p-2 text-right font-bold text-indigo-900 text-xs">${r.amount}</td>
+                        <td class="border border-gray-400 p-2 h-12"></td>
                     </tr>
                 `).join('')}
             </tbody>
