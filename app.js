@@ -16962,15 +16962,11 @@ async function loadInitialData() {
     const btnAcquittancePDF = document.getElementById('btn-generate-acquittance-pdf');
     const btnAcquittanceCSV = document.getElementById('btn-generate-acquittance-csv');
 
-    // 🛡️ Pro Check: Only show Acquittance buttons if logged in with a College ID
+    // 🛡️ Pro Check: Prepare Acquittance buttons (Hidden by default until Bill is generated)
     function checkProAcquittanceAccess() {
-        const hasCollege = localStorage.getItem('my_college_id');
-        // Check if firebase is initialized and user is logged in
-        const user = (window.firebase && window.firebase.auth) ? window.firebase.auth.currentUser : null;
-        if (hasCollege && user) {
-            btnAcquittancePDF?.classList.remove('hidden');
-            btnAcquittanceCSV?.classList.remove('hidden');
-        }
+        // Ensure they stay hidden initially
+        btnAcquittancePDF?.classList.add('hidden');
+        btnAcquittanceCSV?.classList.add('hidden');
     }
     checkProAcquittanceAccess();
     if (navRemuneration) navRemuneration.addEventListener('click', checkProAcquittanceAccess);
@@ -17128,16 +17124,22 @@ async function loadInitialData() {
             });
 
             if (btnPrintBill) btnPrintBill.classList.remove('hidden');
+            
+            // --- NEW: Trigger Pro Acquittance Buttons ---
+            const hasCollege = localStorage.getItem('my_college_id');
+            if (hasCollege) {
+                btnAcquittancePDF?.classList.remove('hidden');
+                btnAcquittanceCSV?.classList.remove('hidden');
+            }
+
             // --- ADD THESE LINES HERE ---
             const pdfBtn = document.getElementById('btn-download-bill-pdf');
             if(pdfBtn) {
-            pdfBtn.classList.remove('hidden');
-            // Remove old listener to avoid duplicates if clicked multiple times
-            const newBtn = pdfBtn.cloneNode(true);
-            pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
-            newBtn.addEventListener('click', generateRemunerationBillPDF);
+                pdfBtn.classList.remove('hidden');
+                const newBtn = pdfBtn.cloneNode(true);
+                pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
+                newBtn.addEventListener('click', generateRemunerationBillPDF);
             }
-        // ----------------------------
         });
     }
     if (btnAcquittancePDF) btnAcquittancePDF.addEventListener('click', previewAcquittanceHTML);
