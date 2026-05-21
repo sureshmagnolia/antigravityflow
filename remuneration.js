@@ -189,14 +189,24 @@ function renderRateConfigForm() {
                 const key = e.target.dataset.key;
                 const val = e.target.value;
 
-                // 🛡️ FIX: Check if the value is a number or a string (like the Calculation Scheme)
                 if (key === 'calculation_scheme') {
-                    allRates[currentStream][key] = val; // Save as string
+                    allRates[currentStream][key] = val;
+                    
+                    // 🛡️ AUTO-SYNC: If switching to 2026, update the base rates automatically
+                    if (val === 'Calicut_2026') {
+                        allRates[currentStream]['chief_supdt'] = 123;
+                        allRates[currentStream]['invigilator_ratio'] = 25;
+                        allRates[currentStream]['invigilator_min_fraction'] = 5;
+                        allRates[currentStream]['sweeper_min'] = 25;
+                        allRates[currentStream]['sweeper_rate'] = 35;
+                        
+                        // Refresh the form immediately to show the new values
+                        renderRateConfigForm(); 
+                    }
                 } else {
-                    allRates[currentStream][key] = parseFloat(val) || 0; // Save as number
+                    allRates[currentStream][key] = parseFloat(val) || 0;
                 }
                 
-                // AUTO-SAVE to Local Storage on input change (Safety)
                 localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
             });
         });
