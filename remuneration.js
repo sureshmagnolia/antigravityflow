@@ -354,19 +354,24 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             const totalInvigs = normalInvigs + scribeInvigs;
             const invigCost = totalInvigs * getNum(rates.invigilator); 
 
-            // 2. CLERK & PEON (Rule: 113 per 100 + Slab for remainder)
+            // 2. CLERK & PEON (Cumulative Multipliers Restored)
             let clerkCost = 0;
             if (totalStudents > 0) {
+                const fullSlab = getNum(rates.clerk_full_slab); // 113
                 const fullHundreds = Math.floor(totalStudents / 100);
                 const remainder = totalStudents % 100;
-                const fullSlab = getNum(rates.clerk_full_slab); // 113
-                
-                clerkCost = fullHundreds * fullSlab;
-                
-                if (remainder > 0) {
-                    if (remainder <= 30) clerkCost += getNum(rates.clerk_slab_1); // 38
-                    else if (remainder <= 60) clerkCost += getNum(rates.clerk_slab_2); // 75
-                    else clerkCost += fullSlab; // 113
+
+                if (is2026) {
+                    // CALICUT 2026: Multiplies for every 100 + Slab Remainder
+                    clerkCost = fullHundreds * fullSlab;
+                    if (remainder > 0) {
+                        if (remainder <= 30) clerkCost += getNum(rates.clerk_slab_1); // +38
+                        else if (remainder <= 60) clerkCost += getNum(rates.clerk_slab_2); // +75
+                        else clerkCost += fullSlab; // +113
+                    }
+                } else {
+                    // LEGACY: Standard multiplier logic (Always rounds up to nearest 100)
+                    clerkCost = Math.ceil(totalStudents / 100) * fullSlab;
                 }
             }
 
