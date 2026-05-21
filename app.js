@@ -20916,7 +20916,10 @@ function getAcquittanceData() {
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
-    return { rows: reportRows, stream: selectedStream, count: sessionKeys.size };
+    const selectedExamName = document.getElementById('bill-exam-select').value;
+    const examLabel = selectedExamName || "All Exams (Consolidated)";
+
+    return { rows: reportRows, stream: selectedStream, count: sessionKeys.size, examName: examLabel };
 }
 
 // --- HTML PREVIEW FOR ACQUITTANCE (Pro Feature) ---
@@ -20933,6 +20936,7 @@ function previewAcquittanceHTML() {
         <div class="text-center border-b-2 border-gray-800 pb-4 mb-6">
             <h1 class="text-2xl font-bold uppercase tracking-tight text-gray-900">${collegeName}</h1>
             <h2 class="text-xl font-semibold text-gray-700 mt-1">INVIGILATION REMUNERATION ACQUITTANCE ROLL</h2>
+            <h3 class="text-lg font-bold text-indigo-800 mt-1 uppercase">${data.examName}</h3>
             <div class="flex justify-center gap-4 text-sm text-gray-500 mt-2 font-mono">
                 <span><strong>Stream:</strong> ${data.stream}</span>
                 <span>|</span>
