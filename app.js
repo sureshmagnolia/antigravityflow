@@ -20916,7 +20916,6 @@ function getAcquittanceData() {
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
-    const selectedExamName = document.getElementById('bill-exam-select').value;
     const examLabel = selectedExamName || "All Exams (Consolidated)";
 
     return { rows: reportRows, stream: selectedStream, count: sessionKeys.size, examName: examLabel };
