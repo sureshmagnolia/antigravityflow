@@ -16905,32 +16905,24 @@ async function loadInitialData() {
     const billExamSelect = document.getElementById('bill-exam-select');
     const billStreamSelect = document.getElementById('bill-stream-select');
 
-    // Helper: Populate Exam Name Dropdown
+   // Helper: Populate Exam Name Dropdown
     function populateBillExamDropdown() {
         if (!billExamSelect) return;
 
-        const selectedStream = billStreamSelect ? billStreamSelect.value : "Regular";
+        const selectedStream = (billStreamSelect ? billStreamSelect.value : "Regular").trim().toLowerCase();
 
         // 1. Find all unique exam names for the selected stream
         const examNames = new Set();
 
-        // We need to iterate unique sessions to get their exam names
-        const sessions = new Set();
         if (allStudentData) {
             allStudentData.forEach(s => {
-                // Stream Filter
-                const sStream = s.Stream || "Regular";
-                if (selectedStream === "Regular" && sStream !== "Regular") return;
-                if (selectedStream !== "Regular" && sStream === "Regular") return;
+                // Stream Filter (Robust & Case-insensitive)
+                const sStream = (s.Stream || "Regular").trim().toLowerCase();
+                if (sStream !== selectedStream) return;
 
-                const sessionKey = `${s.Date} | ${s.Time}`;
-                if (!sessions.has(sessionKey)) {
-                sessions.add(sessionKey);
-                // Lookup Exam Name
-                // FIX: Use the tag from student data first
-                const name = s['Exam Name'] || getExamName(s.Date, s.Time, sStream);
+                // FIX: Get the name directly from the student record to avoid multi-exam session issues
+                const name = s['Exam Name'] || s.examName;
                 if (name) examNames.add(name);
-            }
             });
         }
 
@@ -17075,8 +17067,8 @@ async function loadInitialData() {
                 
                 let groupKey = "Consolidated Bill";
                 if (mode === 'exam') {
-                    // Pass trimmed values to robust getExamName
-                    const foundName = getExamName(sDateVal, sTimeVal, selectedStream) || "Unknown / Other Exams";
+                    // FIX: Use the student's actual exam name instead of the session-level helper
+                    const foundName = s['Exam Name'] || s.examName || "Unknown / Other Exams";
                     
                     // Specific Exam Filter (Case-insensitive)
                     if (selectedExamName && selectedExamName !== "") {
