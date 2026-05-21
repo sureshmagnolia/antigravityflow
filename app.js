@@ -17945,17 +17945,31 @@ window.renderBatchArchiveList = function() {
             </label>
         `).join('');
     } else {
-        // --- 2. RENDER BY EXAM NAME ---
+        // --- 2. RENDER BY EXAM NAME (Robust Multi-Exam Grouping) ---
         const examMap = {};
+        const sourceData = allStudentData.length > 0 ? allStudentData : (JSON.parse(localStorage.getItem('examAllStudentData_Cache') || '[]'));
+
         known.forEach(sk => {
             const [date, time] = sk.split(' | ');
             if (date && time) {
-                // Check multiple streams to find the name
-                const name = getExamName(date.trim(), time.trim(), 'Regular') 
-                          || getExamName(date.trim(), time.trim(), 'EDE') 
-                          || 'Untitled Exams';
-                if (!examMap[name]) examMap[name] = [];
-                examMap[name].push(sk);
+                // Find all unique exam names present in this specific session
+                const sessionStudents = sourceData.filter(s => 
+                    (s.Date || "").trim() === date.trim() && 
+                    (s.Time || "").trim() === time.trim()
+                );
+                const names = new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean));
+                
+                if (names.size === 0) {
+                    const fallback = 'Untitled Exams';
+                    if (!examMap[fallback]) examMap[fallback] = [];
+                    examMap[fallback].push(sk);
+                } else {
+                    // A session can now belong to MULTIPLE exam groups
+                    names.forEach(name => {
+                        if (!examMap[name]) examMap[name] = [];
+                        examMap[name].push(sk);
+                    });
+                }
             }
         });
 
@@ -17993,19 +18007,30 @@ window.generateBatchArchive = async function() {
     btn.disabled = true;
     await new Promise(r => setTimeout(r, 100));
 
-    // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
+       // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
     const finalSessionSet = new Set();
-    const allowedExamNames = new Set(); // NEW: Track which exams were explicitly selected
+    const allowedExamNames = new Set();
     const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
     
+    // Ensure we have student data for resolution
+    let sourceStudentData = allStudentData;
+    if (!sourceStudentData || sourceStudentData.length === 0) {
+        sourceStudentData = await loadExamDataIDB() || [];
+    }
+
     rawChecked.forEach(val => {
         if (val.startsWith('EXAM_GROUP::')) {
             const targetName = val.replace('EXAM_GROUP::', '');
-            allowedExamNames.add(targetName); // Store the requested exam name
+            allowedExamNames.add(targetName);
             known.forEach(sk => {
                 const [d, t] = sk.split(' | ');
-                const name = getExamName(d.trim(), t.trim(), 'Regular') || getExamName(d.trim(), t.trim(), 'EDE');
-                if (name === targetName) finalSessionSet.add(sk);
+                // Check if this session ACTUALLY contains this exam name
+                const hasExam = sourceStudentData.some(s => 
+                    (s.Date || "").trim() === d.trim() && 
+                    (s.Time || "").trim() === t.trim() &&
+                    (s.examName || s['Exam Name']) === targetName
+                );
+                if (hasExam) finalSessionSet.add(sk);
             });
         } else {
             finalSessionSet.add(val);
@@ -18014,22 +18039,23 @@ window.generateBatchArchive = async function() {
 
     const checked = Array.from(finalSessionSet);
     let allArchiveData = [];
-    
-    // Correctly fetch College Name using the actual local storage key
     const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Project';
     
-    // Calculate the overarching Exam Name for this Archive Batch dynamically
-    const archiveExamNamesSet = new Set();
-    checked.forEach(sessionKey => {
-        const [d, t] = sessionKey.split(' | ');
-        const n1 = getExamName(d.trim(), t.trim(), 'Regular');
-        const n2 = getExamName(d.trim(), t.trim(), 'EDE');
-        if (n1) archiveExamNamesSet.add(n1);
-        if (n2) archiveExamNamesSet.add(n2);
-    });
-    const archiveExamName = archiveExamNamesSet.size > 0 
-        ? Array.from(archiveExamNamesSet).join(" & ") 
-        : "University Examinations";
+    // --- FIX: Dynamic Title Generation ---
+    let archiveExamName = "";
+    if (allowedExamNames.size > 0) {
+        archiveExamName = Array.from(allowedExamNames).sort().join(" & ");
+    } else {
+        const sessionNamesSet = new Set();
+        checked.forEach(sk => {
+            const [d, t] = sk.split(' | ');
+            const n1 = getExamName(d.trim(), t.trim(), 'Regular');
+            const n2 = getExamName(d.trim(), t.trim(), 'EDE');
+            if (n1) sessionNamesSet.add(n1);
+            if (n2) sessionNamesSet.add(n2);
+        });
+        archiveExamName = sessionNamesSet.size > 0 ? Array.from(sessionNamesSet).join(" & ") : "University Examinations";
+    }
 
     let sourceStudentData = allStudentData;
 
