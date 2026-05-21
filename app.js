@@ -16905,34 +16905,21 @@ async function loadInitialData() {
     const billExamSelect = document.getElementById('bill-exam-select');
     const billStreamSelect = document.getElementById('bill-stream-select');
 
-    // Helper: Populate Exam Name Dropdown
-    function populateBillExamDropdown() {
-        if (!billExamSelect) return;
-
-        const selectedStream = billStreamSelect ? billStreamSelect.value : "Regular";
-
-        // 1. Find all unique exam names for the selected stream
-        const examNames = new Set();
-
-        // We need to iterate unique sessions to get their exam names
-        const sessions = new Set();
-        if (allStudentData) {
-            allStudentData.forEach(s => {
-                // Stream Filter
-                const sStream = s.Stream || "Regular";
-                if (selectedStream === "Regular" && sStream !== "Regular") return;
-                if (selectedStream !== "Regular" && sStream === "Regular") return;
-
-                const sessionKey = `${s.Date} | ${s.Time}`;
-                if (!sessions.has(sessionKey)) {
-                sessions.add(sessionKey);
-                // Lookup Exam Name
-                // FIX: Use the tag from student data first
-                const name = s['Exam Name'] || getExamName(s.Date, s.Time, sStream);
-                if (name) examNames.add(name);
-            }
-            });
-        }
+                let groupKey = "Consolidated Bill";
+                if (mode === 'exam') {
+                    // FIX: Use the student's actual exam name instead of the session-level helper
+                    const foundName = s['Exam Name'] || s.examName || "Unknown / Other Exams";
+                    
+                    // Specific Exam Filter (Case-insensitive)
+                    if (selectedExamName && selectedExamName !== "") {
+                        if (foundName.trim().toLowerCase() !== selectedExamName.trim().toLowerCase()) return;
+                    }
+                    groupKey = foundName;
+                } else {
+                    const sStr = document.getElementById('bill-start-date').value || "Start";
+                    const eStr = document.getElementById('bill-end-date').value || "End";
+                    groupKey = `Period: ${sStr} to ${eStr}`;
+                }
 
         // 2. Populate Select
         billExamSelect.innerHTML = '<option value="">-- Generate All --</option>';
