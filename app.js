@@ -17993,13 +17993,15 @@ window.generateBatchArchive = async function() {
     btn.disabled = true;
     await new Promise(r => setTimeout(r, 100));
 
-    // --- STEP 1: RESOLVE GROUPS ---
+    // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
     const finalSessionSet = new Set();
+    const allowedExamNames = new Set(); // NEW: Track which exams were explicitly selected
     const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
     
     rawChecked.forEach(val => {
         if (val.startsWith('EXAM_GROUP::')) {
             const targetName = val.replace('EXAM_GROUP::', '');
+            allowedExamNames.add(targetName); // Store the requested exam name
             known.forEach(sk => {
                 const [d, t] = sk.split(' | ');
                 const name = getExamName(d.trim(), t.trim(), 'Regular') || getExamName(d.trim(), t.trim(), 'EDE');
@@ -18040,10 +18042,19 @@ window.generateBatchArchive = async function() {
         const targetDate = (datePart || "").trim();
         const targetTime = (timePart || "").trim();
         
-        const students = sourceStudentData.filter(s => 
+        // 1. Initial filter by Session Time
+        let students = sourceStudentData.filter(s => 
             (s.Date || "").trim() === targetDate && 
             (s.Time || "").trim() === targetTime
         );
+
+        // 2. NEW: Strict filter by Exam Name (if grouped)
+        if (allowedExamNames.size > 0) {
+            students = students.filter(s => {
+                const sName = s["Exam Name"] || s.examName || "Untagged Exam";
+                return allowedExamNames.has(sName);
+            });
+        }
 
         const rooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}')[sessionKey] || {};
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
