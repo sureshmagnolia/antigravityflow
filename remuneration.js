@@ -328,7 +328,6 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             });
         });
     } else {
-      } else {
         // REGULAR LOGIC (Calicut University 2026 Slab Engine)
         sessionData.forEach(session => {
             const normalStudents = session.normalCount || 0;
