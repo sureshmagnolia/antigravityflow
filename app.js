@@ -20818,16 +20818,49 @@ function getAcquittanceData() {
     const rates = allRates[selectedStream];
     const invigRate = rates ? (Number(rates.invigilator) || 0) : 0;
 
-    // 3. Aggregate Duties per Staff across selected sessions
+    // 3. Aggregate Duties per Staff across selected sessions (Strictly Filtered)
     const staffDuties = {}; 
+    const mode = document.getElementById('bill-mode-select').value;
+    const selectedExamName = document.getElementById('bill-exam-select').value;
+    const invigilatorMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+    const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+
     sessionKeys.forEach(key => {
-        const slot = invigilationSlots[key];
-        if (slot && slot.assigned) {
-            slot.assigned.forEach(email => {
-                const lowerEmail = email.toLowerCase();
-                staffDuties[lowerEmail] = (staffDuties[lowerEmail] || 0) + 1;
+        const mapping = invigilatorMapping[key] || {};
+        const allotments = allAllotments[key] || [];
+        const relevantEmails = new Set();
+
+        // 🛡️ Logic: Only include staff if their room actually contained students matching the filter
+        allotments.forEach(roomObj => {
+            const hasMatch = (roomObj.students || []).some(s => {
+                const sName = (typeof s === 'object') ? (s['Exam Name'] || s.examName) : null;
+                const sStream = (typeof s === 'object') ? (s.Stream || s.stream || 'Regular') : 'Regular';
+                
+                // Filter by Exam Name (if in exam mode)
+                const nameMatch = (mode !== 'exam' || !selectedExamName || sName === selectedExamName);
+                // Filter by Stream (Always)
+                const streamMatch = sStream.trim().toLowerCase() === selectedStream.trim().toLowerCase();
+                
+                return nameMatch && streamMatch;
             });
+
+            if (hasMatch) {
+                const email = mapping[roomObj.roomName];
+                if (email) relevantEmails.add(email.toLowerCase());
+            }
+        });
+
+        // Fallback: If no room mapping is found for a session in 'Period' mode, use the global list
+        if (relevantEmails.size === 0 && mode === 'period') {
+            const slot = invigilationSlots[key];
+            if (slot && slot.assigned) {
+                slot.assigned.forEach(e => relevantEmails.add(e.toLowerCase()));
+            }
         }
+
+        relevantEmails.forEach(email => {
+            staffDuties[email] = (staffDuties[email] || 0) + 1;
+        });
     });
 
     // 4. Map to Professional Report Rows
