@@ -187,7 +187,14 @@ function renderRateConfigForm() {
         container.querySelectorAll('.rate-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
-                allRates[currentStream][key] = parseFloat(e.target.value) || 0;
+                const val = e.target.value;
+
+                // 🛡️ FIX: Check if the value is a number or a string (like the Calculation Scheme)
+                if (key === 'calculation_scheme') {
+                    allRates[currentStream][key] = val; // Save as string
+                } else {
+                    allRates[currentStream][key] = parseFloat(val) || 0; // Save as number
+                }
                 
                 // AUTO-SAVE to Local Storage on input change (Safety)
                 localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
