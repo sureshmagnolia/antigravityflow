@@ -20863,33 +20863,44 @@ function getAcquittanceData() {
         });
     });
 
-    // 4. Map to Professional Report Rows (Enhanced with Sessions & Formatting)
+    // 4. Map to Professional Report Rows (Fixed Dept & Strict Session Filtering)
     const reportRows = Object.keys(staffDuties).map(email => {
-        const staff = staffData.find(s => s.email && s.email.toLowerCase() === email);
+        const staff = staffData.find(s => s.email && s.email.toLowerCase() === email.toLowerCase());
         const count = staffDuties[email];
         
-        // Find which specific sessions this staff member was assigned to
+        // Find which specific sessions this staff member was assigned to (Filtered by Room-Content)
         const assignedSessions = [];
         sessionKeys.forEach(key => {
             const mapping = invigilatorMapping[key] || {};
             const allotments = allAllotments[key] || [];
-            
-            // Cross-verify they were in a relevant room for this session
+
             allotments.forEach(roomObj => {
                 const roomEmail = mapping[roomObj.roomName];
-                if (roomEmail && roomEmail.toLowerCase() === email) {
-                    assignedSessions.push(key);
+                if (roomEmail && roomEmail.toLowerCase() === email.toLowerCase()) {
+                    // Check if THIS specific room matches our current filter
+                    const roomHasFilterMatch = (roomObj.students || []).some(s => {
+                        const sName = (typeof s === 'object') ? (s['Exam Name'] || s.examName) : null;
+                        const sStream = (typeof s === 'object') ? (s.Stream || s.stream || 'Regular') : 'Regular';
+                        const nameMatch = (mode !== 'exam' || !selectedExamName || sName === selectedExamName);
+                        const streamMatch = sStream.trim().toLowerCase() === selectedStream.trim().toLowerCase();
+                        return nameMatch && streamMatch;
+                    });
+
+                    if (roomHasFilterMatch) {
+                        assignedSessions.push(key);
+                    }
                 }
             });
         });
 
         return {
             name: (staff ? staff.name : email.split('@')[0]).toUpperCase(),
-            dept: (staff && staff.dept && staff.dept !== "N/A") ? staff.dept : "General",
+            // Logic: Fallback to "General" only if department is genuinely missing or "N/A"
+            dept: (staff && staff.dept && staff.dept.toUpperCase() !== "N/A") ? staff.dept : "General",
             count: count,
             rate: invigRate,
             amount: count * invigRate,
-            sessions: assignedSessions.join(', ')
+            sessions: [...new Set(assignedSessions)].sort().join(', ') // Deduplicated & Sorted
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
