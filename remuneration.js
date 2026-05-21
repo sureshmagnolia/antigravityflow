@@ -342,17 +342,15 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             const totalInvigs = normalInvigs + scribeInvigs;
             const invigCost = totalInvigs * getNum(rates.invigilator); 
 
-            // Clerk
+            // Clerk (Capped Per Session Slab)
             let clerkCost = 0;
-            const clerkFullBatches = Math.floor(totalStudents / 100);
-            const clerkRemainder = totalStudents % 100;
-            const fullSlab = getNum(rates.clerk_full_slab);
-            
-            clerkCost += clerkFullBatches * fullSlab;
-            if (clerkRemainder > 0) {
-                if (clerkRemainder <= 30) clerkCost += getNum(rates.clerk_slab_1);
-                else if (clerkRemainder <= 60) clerkCost += getNum(rates.clerk_slab_2);
-                else clerkCost += fullSlab;
+            if (totalStudents > 0) {
+                if (totalStudents <= 30) {
+                    clerkCost = getNum(rates.clerk_slab_1); // 38
+                } else {
+                    // Maximum for any number above 30 is the full slab
+                    clerkCost = getNum(rates.clerk_slab_2); // 75
+                }
             }
 
             // Sweeper
