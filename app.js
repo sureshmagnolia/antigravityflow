@@ -20863,21 +20863,28 @@ function getAcquittanceData() {
         });
     });
 
-    // 4. Map to Professional Report Rows (Fixed Dept & Strict Session Filtering)
-    const reportRows = Object.keys(staffDuties).map(email => {
-        const staff = staffData.find(s => s.email && s.email.toLowerCase() === email.toLowerCase());
-        const count = staffDuties[email];
+     // 4. Map to Professional Report Rows (Robust Name/Email Matching & Filtering)
+    const reportRows = Object.keys(staffDuties).map(idOrEmail => {
+        const query = idOrEmail.toLowerCase();
         
-        // Find which specific sessions this staff member was assigned to (Filtered by Room-Content)
+        // 🛡️ FIX: Dual-Lookup. Mapping uses Names, Slots use Emails. We check BOTH.
+        const staff = staffData.find(s => 
+            (s.email && s.email.toLowerCase() === query) || 
+            (s.name && s.name.toLowerCase() === query)
+        );
+
+        const count = staffDuties[idOrEmail];
+        
+        // Find which specific sessions this staff member was assigned to (Strict Filter)
         const assignedSessions = [];
         sessionKeys.forEach(key => {
             const mapping = invigilatorMapping[key] || {};
             const allotments = allAllotments[key] || [];
 
             allotments.forEach(roomObj => {
-                const roomEmail = mapping[roomObj.roomName];
-                if (roomEmail && roomEmail.toLowerCase() === email.toLowerCase()) {
-                    // Check if THIS specific room matches our current filter
+                const roomStaff = mapping[roomObj.roomName];
+                if (roomStaff && roomStaff.toLowerCase() === query) {
+                    // Check if THIS specific room matches the selected Exam/Stream
                     const roomHasFilterMatch = (roomObj.students || []).some(s => {
                         const sName = (typeof s === 'object') ? (s['Exam Name'] || s.examName) : null;
                         const sStream = (typeof s === 'object') ? (s.Stream || s.stream || 'Regular') : 'Regular';
@@ -20893,14 +20900,19 @@ function getAcquittanceData() {
             });
         });
 
+        const finalName = (staff ? staff.name : idOrEmail.split('@')[0]).toUpperCase();
+        // 🛡️ FIX: Use 'dept' or 'subject' from back-end staff database
+        const finalDept = (staff && (staff.dept || staff.subject) && (staff.dept || staff.subject).toUpperCase() !== "N/A") 
+                        ? (staff.dept || staff.subject) 
+                        : "General Duty";
+
         return {
-            name: (staff ? staff.name : email.split('@')[0]).toUpperCase(),
-            // Logic: Fallback to "General" only if department is genuinely missing or "N/A"
-            dept: (staff && staff.dept && staff.dept.toUpperCase() !== "N/A") ? staff.dept : "General",
+            name: finalName,
+            dept: finalDept,
             count: count,
             rate: invigRate,
             amount: count * invigRate,
-            sessions: [...new Set(assignedSessions)].sort().join(', ') // Deduplicated & Sorted
+            sessions: [...new Set(assignedSessions)].sort().join(', ')
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
