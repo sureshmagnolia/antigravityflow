@@ -16905,32 +16905,24 @@ async function loadInitialData() {
     const billExamSelect = document.getElementById('bill-exam-select');
     const billStreamSelect = document.getElementById('bill-stream-select');
 
-    // Helper: Populate Exam Name Dropdown
+   // Helper: Populate Exam Name Dropdown
     function populateBillExamDropdown() {
         if (!billExamSelect) return;
 
-        const selectedStream = billStreamSelect ? billStreamSelect.value : "Regular";
+        const selectedStream = (billStreamSelect ? billStreamSelect.value : "Regular").trim().toLowerCase();
 
         // 1. Find all unique exam names for the selected stream
         const examNames = new Set();
 
-        // We need to iterate unique sessions to get their exam names
-        const sessions = new Set();
         if (allStudentData) {
             allStudentData.forEach(s => {
-                // Stream Filter
-                const sStream = s.Stream || "Regular";
-                if (selectedStream === "Regular" && sStream !== "Regular") return;
-                if (selectedStream !== "Regular" && sStream === "Regular") return;
+                // Stream Filter (Robust & Case-insensitive)
+                const sStream = (s.Stream || "Regular").trim().toLowerCase();
+                if (sStream !== selectedStream) return;
 
-                const sessionKey = `${s.Date} | ${s.Time}`;
-                if (!sessions.has(sessionKey)) {
-                sessions.add(sessionKey);
-                // Lookup Exam Name
-                // FIX: Use the tag from student data first
-                const name = s['Exam Name'] || getExamName(s.Date, s.Time, sStream);
+                // FIX: Get the name directly from the student record to avoid multi-exam session issues
+                const name = s['Exam Name'] || s.examName;
                 if (name) examNames.add(name);
-            }
             });
         }
 
@@ -16970,15 +16962,11 @@ async function loadInitialData() {
     const btnAcquittancePDF = document.getElementById('btn-generate-acquittance-pdf');
     const btnAcquittanceCSV = document.getElementById('btn-generate-acquittance-csv');
 
-    // 🛡️ Pro Check: Only show Acquittance buttons if logged in with a College ID
+    // 🛡️ Pro Check: Prepare Acquittance buttons (Hidden by default until Bill is generated)
     function checkProAcquittanceAccess() {
-        const hasCollege = localStorage.getItem('my_college_id');
-        // Check if firebase is initialized and user is logged in
-        const user = (window.firebase && window.firebase.auth) ? window.firebase.auth.currentUser : null;
-        if (hasCollege && user) {
-            btnAcquittancePDF?.classList.remove('hidden');
-            btnAcquittanceCSV?.classList.remove('hidden');
-        }
+        // Ensure they stay hidden initially
+        btnAcquittancePDF?.classList.add('hidden');
+        btnAcquittanceCSV?.classList.add('hidden');
     }
     checkProAcquittanceAccess();
     if (navRemuneration) navRemuneration.addEventListener('click', checkProAcquittanceAccess);
@@ -17075,8 +17063,8 @@ async function loadInitialData() {
                 
                 let groupKey = "Consolidated Bill";
                 if (mode === 'exam') {
-                    // Pass trimmed values to robust getExamName
-                    const foundName = getExamName(sDateVal, sTimeVal, selectedStream) || "Unknown / Other Exams";
+                    // FIX: Use the student's actual exam name instead of the session-level helper
+                    const foundName = s['Exam Name'] || s.examName || "Unknown / Other Exams";
                     
                     // Specific Exam Filter (Case-insensitive)
                     if (selectedExamName && selectedExamName !== "") {
@@ -17136,16 +17124,22 @@ async function loadInitialData() {
             });
 
             if (btnPrintBill) btnPrintBill.classList.remove('hidden');
+            
+            // --- NEW: Trigger Pro Acquittance Buttons ---
+            const hasCollege = localStorage.getItem('my_college_id');
+            if (hasCollege) {
+                btnAcquittancePDF?.classList.remove('hidden');
+                btnAcquittanceCSV?.classList.remove('hidden');
+            }
+
             // --- ADD THESE LINES HERE ---
             const pdfBtn = document.getElementById('btn-download-bill-pdf');
             if(pdfBtn) {
-            pdfBtn.classList.remove('hidden');
-            // Remove old listener to avoid duplicates if clicked multiple times
-            const newBtn = pdfBtn.cloneNode(true);
-            pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
-            newBtn.addEventListener('click', generateRemunerationBillPDF);
+                pdfBtn.classList.remove('hidden');
+                const newBtn = pdfBtn.cloneNode(true);
+                pdfBtn.parentNode.replaceChild(newBtn, pdfBtn);
+                newBtn.addEventListener('click', generateRemunerationBillPDF);
             }
-        // ----------------------------
         });
     }
     if (btnAcquittancePDF) btnAcquittancePDF.addEventListener('click', previewAcquittanceHTML);
@@ -17945,17 +17939,31 @@ window.renderBatchArchiveList = function() {
             </label>
         `).join('');
     } else {
-        // --- 2. RENDER BY EXAM NAME ---
+        // --- 2. RENDER BY EXAM NAME (Robust Multi-Exam Grouping) ---
         const examMap = {};
+        const sourceData = allStudentData.length > 0 ? allStudentData : (JSON.parse(localStorage.getItem('examAllStudentData_Cache') || '[]'));
+
         known.forEach(sk => {
             const [date, time] = sk.split(' | ');
             if (date && time) {
-                // Check multiple streams to find the name
-                const name = getExamName(date.trim(), time.trim(), 'Regular') 
-                          || getExamName(date.trim(), time.trim(), 'EDE') 
-                          || 'Untitled Exams';
-                if (!examMap[name]) examMap[name] = [];
-                examMap[name].push(sk);
+                // Find all unique exam names present in this specific session
+                const sessionStudents = sourceData.filter(s => 
+                    (s.Date || "").trim() === date.trim() && 
+                    (s.Time || "").trim() === time.trim()
+                );
+                const names = new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean));
+                
+                if (names.size === 0) {
+                    const fallback = 'Untitled Exams';
+                    if (!examMap[fallback]) examMap[fallback] = [];
+                    examMap[fallback].push(sk);
+                } else {
+                    // A session can now belong to MULTIPLE exam groups
+                    names.forEach(name => {
+                        if (!examMap[name]) examMap[name] = [];
+                        examMap[name].push(sk);
+                    });
+                }
             }
         });
 
@@ -17993,17 +18001,30 @@ window.generateBatchArchive = async function() {
     btn.disabled = true;
     await new Promise(r => setTimeout(r, 100));
 
-    // --- STEP 1: RESOLVE GROUPS ---
+       // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
     const finalSessionSet = new Set();
+    const allowedExamNames = new Set();
     const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
     
+    // Ensure we have student data for resolution
+    let sourceStudentData = allStudentData;
+    if (!sourceStudentData || sourceStudentData.length === 0) {
+        sourceStudentData = await loadExamDataIDB() || [];
+    }
+
     rawChecked.forEach(val => {
         if (val.startsWith('EXAM_GROUP::')) {
             const targetName = val.replace('EXAM_GROUP::', '');
+            allowedExamNames.add(targetName);
             known.forEach(sk => {
                 const [d, t] = sk.split(' | ');
-                const name = getExamName(d.trim(), t.trim(), 'Regular') || getExamName(d.trim(), t.trim(), 'EDE');
-                if (name === targetName) finalSessionSet.add(sk);
+                // Check if this session ACTUALLY contains this exam name
+                const hasExam = sourceStudentData.some(s => 
+                    (s.Date || "").trim() === d.trim() && 
+                    (s.Time || "").trim() === t.trim() &&
+                    (s.examName || s['Exam Name']) === targetName
+                );
+                if (hasExam) finalSessionSet.add(sk);
             });
         } else {
             finalSessionSet.add(val);
@@ -18012,24 +18033,26 @@ window.generateBatchArchive = async function() {
 
     const checked = Array.from(finalSessionSet);
     let allArchiveData = [];
-    
-    // Correctly fetch College Name using the actual local storage key
     const collegeName = localStorage.getItem('examCollegeName') || 'ExamFlow Project';
     
-    // Calculate the overarching Exam Name for this Archive Batch dynamically
-    const archiveExamNamesSet = new Set();
-    checked.forEach(sessionKey => {
-        const [d, t] = sessionKey.split(' | ');
-        const n1 = getExamName(d.trim(), t.trim(), 'Regular');
-        const n2 = getExamName(d.trim(), t.trim(), 'EDE');
-        if (n1) archiveExamNamesSet.add(n1);
-        if (n2) archiveExamNamesSet.add(n2);
-    });
-    const archiveExamName = archiveExamNamesSet.size > 0 
-        ? Array.from(archiveExamNamesSet).join(" & ") 
-        : "University Examinations";
+    // --- FIX: Dynamic Title Generation ---
+    let archiveExamName = "";
+    if (allowedExamNames.size > 0) {
+        archiveExamName = Array.from(allowedExamNames).sort().join(" & ");
+    } else {
+        const sessionNamesSet = new Set();
+        checked.forEach(sk => {
+            const [d, t] = sk.split(' | ');
+            const n1 = getExamName(d.trim(), t.trim(), 'Regular');
+            const n2 = getExamName(d.trim(), t.trim(), 'EDE');
+            if (n1) sessionNamesSet.add(n1);
+            if (n2) sessionNamesSet.add(n2);
+        });
+        archiveExamName = sessionNamesSet.size > 0 ? Array.from(sessionNamesSet).join(" & ") : "University Examinations";
+    }
 
-    let sourceStudentData = allStudentData;
+    // FIX: Removed 'let' because sourceStudentData is already declared above
+    sourceStudentData = allStudentData;
 
     if (!sourceStudentData || sourceStudentData.length === 0) {
         sourceStudentData = await loadExamDataIDB() || [];
@@ -18040,10 +18063,19 @@ window.generateBatchArchive = async function() {
         const targetDate = (datePart || "").trim();
         const targetTime = (timePart || "").trim();
         
-        const students = sourceStudentData.filter(s => 
+        // 1. Initial filter by Session Time
+        let students = sourceStudentData.filter(s => 
             (s.Date || "").trim() === targetDate && 
             (s.Time || "").trim() === targetTime
         );
+
+        // 2. NEW: Strict filter by Exam Name (if grouped)
+        if (allowedExamNames.size > 0) {
+            students = students.filter(s => {
+                const sName = s["Exam Name"] || s.examName || "Untagged Exam";
+                return allowedExamNames.has(sName);
+            });
+        }
 
         const rooms = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}')[sessionKey] || {};
         const qpMap = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[sessionKey] || {};
@@ -20788,32 +20820,107 @@ function getAcquittanceData() {
     const rates = allRates[selectedStream];
     const invigRate = rates ? (Number(rates.invigilator) || 0) : 0;
 
-    // 3. Aggregate Duties per Staff across selected sessions
+    // 3. Aggregate Duties per Staff across selected sessions (Strictly Filtered)
     const staffDuties = {}; 
+    const mode = document.getElementById('bill-mode-select').value;
+    const selectedExamName = document.getElementById('bill-exam-select').value;
+    const invigilatorMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+    const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+
     sessionKeys.forEach(key => {
-        const slot = invigilationSlots[key];
-        if (slot && slot.assigned) {
-            slot.assigned.forEach(email => {
-                const lowerEmail = email.toLowerCase();
-                staffDuties[lowerEmail] = (staffDuties[lowerEmail] || 0) + 1;
+        const mapping = invigilatorMapping[key] || {};
+        const allotments = allAllotments[key] || [];
+        const relevantEmails = new Set();
+
+        // 🛡️ Logic: Only include staff if their room actually contained students matching the filter
+        allotments.forEach(roomObj => {
+            const hasMatch = (roomObj.students || []).some(s => {
+                const sName = (typeof s === 'object') ? (s['Exam Name'] || s.examName) : null;
+                const sStream = (typeof s === 'object') ? (s.Stream || s.stream || 'Regular') : 'Regular';
+                
+                // Filter by Exam Name (if in exam mode)
+                const nameMatch = (mode !== 'exam' || !selectedExamName || sName === selectedExamName);
+                // Filter by Stream (Always)
+                const streamMatch = sStream.trim().toLowerCase() === selectedStream.trim().toLowerCase();
+                
+                return nameMatch && streamMatch;
             });
+
+            if (hasMatch) {
+                const email = mapping[roomObj.roomName];
+                if (email) relevantEmails.add(email.toLowerCase());
+            }
+        });
+
+        // Fallback: If no room mapping is found for a session in 'Period' mode, use the global list
+        if (relevantEmails.size === 0 && mode === 'period') {
+            const slot = invigilationSlots[key];
+            if (slot && slot.assigned) {
+                slot.assigned.forEach(e => relevantEmails.add(e.toLowerCase()));
+            }
         }
+
+        relevantEmails.forEach(email => {
+            staffDuties[email] = (staffDuties[email] || 0) + 1;
+        });
     });
 
-    // 4. Map to Professional Report Rows
-    const reportRows = Object.keys(staffDuties).map(email => {
-        const staff = staffData.find(s => s.email.toLowerCase() === email);
-        const count = staffDuties[email];
+     // 4. Map to Professional Report Rows (Robust Name/Email Matching & Filtering)
+    const reportRows = Object.keys(staffDuties).map(idOrEmail => {
+        const query = idOrEmail.toLowerCase();
+        
+        // 🛡️ FIX: Dual-Lookup. Mapping uses Names, Slots use Emails. We check BOTH.
+        const staff = staffData.find(s => 
+            (s.email && s.email.toLowerCase() === query) || 
+            (s.name && s.name.toLowerCase() === query)
+        );
+
+        const count = staffDuties[idOrEmail];
+        
+        // Find which specific sessions this staff member was assigned to (Strict Filter)
+        const assignedSessions = [];
+        sessionKeys.forEach(key => {
+            const mapping = invigilatorMapping[key] || {};
+            const allotments = allAllotments[key] || [];
+
+            allotments.forEach(roomObj => {
+                const roomStaff = mapping[roomObj.roomName];
+                if (roomStaff && roomStaff.toLowerCase() === query) {
+                    // Check if THIS specific room matches the selected Exam/Stream
+                    const roomHasFilterMatch = (roomObj.students || []).some(s => {
+                        const sName = (typeof s === 'object') ? (s['Exam Name'] || s.examName) : null;
+                        const sStream = (typeof s === 'object') ? (s.Stream || s.stream || 'Regular') : 'Regular';
+                        const nameMatch = (mode !== 'exam' || !selectedExamName || sName === selectedExamName);
+                        const streamMatch = sStream.trim().toLowerCase() === selectedStream.trim().toLowerCase();
+                        return nameMatch && streamMatch;
+                    });
+
+                    if (roomHasFilterMatch) {
+                        assignedSessions.push(key);
+                    }
+                }
+            });
+        });
+
+        const finalName = (staff ? staff.name : idOrEmail.split('@')[0]).toUpperCase();
+        // 🛡️ FIX: Use 'dept' or 'subject' from back-end staff database
+        const finalDept = (staff && (staff.dept || staff.subject) && (staff.dept || staff.subject).toUpperCase() !== "N/A") 
+                        ? (staff.dept || staff.subject) 
+                        : "General Duty";
+
         return {
-            name: staff ? staff.name : email.split('@')[0],
-            dept: staff ? staff.dept : "N/A",
+            name: finalName,
+            dept: finalDept,
             count: count,
             rate: invigRate,
-            amount: count * invigRate
+            amount: count * invigRate,
+            sessions: [...new Set(assignedSessions)].sort().join(', ')
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 
-    return { rows: reportRows, stream: selectedStream, count: sessionKeys.size };
+    const examLabel = selectedExamName || "All Exams (Consolidated)";
+
+    return { rows: reportRows, stream: selectedStream, count: sessionKeys.size, examName: examLabel };
 }
 
 // --- HTML PREVIEW FOR ACQUITTANCE (Pro Feature) ---
@@ -20830,6 +20937,7 @@ function previewAcquittanceHTML() {
         <div class="text-center border-b-2 border-gray-800 pb-4 mb-6">
             <h1 class="text-2xl font-bold uppercase tracking-tight text-gray-900">${collegeName}</h1>
             <h2 class="text-xl font-semibold text-gray-700 mt-1">INVIGILATION REMUNERATION ACQUITTANCE ROLL</h2>
+            <h3 class="text-lg font-bold text-indigo-800 mt-1 uppercase">${data.examName}</h3>
             <div class="flex justify-center gap-4 text-sm text-gray-500 mt-2 font-mono">
                 <span><strong>Stream:</strong> ${data.stream}</span>
                 <span>|</span>
@@ -20846,24 +20954,24 @@ function previewAcquittanceHTML() {
                     <th class="border border-gray-400 p-2 w-10 text-center">Sl</th>
                     <th class="border border-gray-400 p-2 text-left">Name of Invigilator</th>
                     <th class="border border-gray-400 p-2 text-left">Department</th>
-                    <th class="border border-gray-400 p-2 w-16 text-center">Duties</th>
-                    <th class="border border-gray-400 p-2 w-24 text-right">Rate</th>
-                    <th class="border border-gray-400 p-2 w-28 text-right">Total Amount</th>
-                    <th class="border border-gray-400 p-2 w-32">Signature</th>
-                    <th class="border border-gray-400 p-2">Remarks</th>
+                    <th class="border border-gray-400 p-2 text-left text-[10px]">Dates & Sessions</th>
+                    <th class="border border-gray-400 p-2 w-12 text-center">Duties</th>
+                    <th class="border border-gray-400 p-2 w-20 text-right">Rate</th>
+                    <th class="border border-gray-400 p-2 w-24 text-right">Amount</th>
+                    <th class="border border-gray-400 p-2 w-28">Signature</th>
                 </tr>
             </thead>
             <tbody>
                 ${data.rows.map((r, i) => `
                     <tr class="hover:bg-gray-50">
-                        <td class="border border-gray-400 p-2 text-center font-mono">${i + 1}</td>
-                        <td class="border border-gray-400 p-2 font-semibold text-gray-900">${r.name}</td>
-                        <td class="border border-gray-400 p-2 text-gray-600">${r.dept}</td>
+                        <td class="border border-gray-400 p-2 text-center font-mono text-xs">${i + 1}</td>
+                        <td class="border border-gray-400 p-2 font-bold text-gray-900 text-xs">${r.name}</td>
+                        <td class="border border-gray-400 p-2 text-gray-600 text-[10px] uppercase">${r.dept}</td>
+                        <td class="border border-gray-400 p-2 text-gray-500 text-[9px] italic leading-tight">${r.sessions}</td>
                         <td class="border border-gray-400 p-2 text-center font-bold">${r.count}</td>
-                        <td class="border border-gray-400 p-2 text-right font-mono text-gray-500">Rs. ${r.rate}</td>
-                        <td class="border border-gray-400 p-2 text-right font-bold text-indigo-700">Rs. ${r.amount}</td>
-                        <td class="border border-gray-400 p-2 h-10"></td>
-                        <td class="border border-gray-400 p-2"></td>
+                        <td class="border border-gray-400 p-2 text-right font-mono text-gray-500 text-xs">${r.rate}</td>
+                        <td class="border border-gray-400 p-2 text-right font-bold text-indigo-900 text-xs">${r.amount}</td>
+                        <td class="border border-gray-400 p-2 h-12"></td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -22576,4 +22684,3 @@ document.addEventListener("visibilitychange", () => {
         }
     }
 });
-

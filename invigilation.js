@@ -628,9 +628,10 @@ function isDateInVacation(dateObj) {
 
 
 // Updated: Calculate Duties Done based on actual attendance (Filtered by Current AY)
-function getDutiesDoneCount(email) {
+function getDutiesDoneCount(email, referenceDate = null) {
     let count = 0;
-    const acYear = getCurrentAcademicYear();
+    // Use referenceDate (e.g. from the slot being edited) to determine the relevant AY
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
 
     // Iterate through all slots to find confirmed attendance
     Object.keys(invigilationSlots).forEach(key => {
@@ -648,8 +649,8 @@ function getDutiesDoneCount(email) {
 }
 // NEW: Get duty count broken down per ROLE PERIOD
 // Returns an object: { "Chief Superintendent": 3, "Senior Asst. Superintendent": 5, "Regular": 7 }
-function getDutiesDoneByRole(email) {
-    const acYear = getCurrentAcademicYear();
+function getDutiesDoneByRole(email, referenceDate = null) {
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
     const staff = staffData.find(s => s.email === email);
     const breakdown = {};
 
@@ -676,12 +677,17 @@ function getDutiesDoneByRole(email) {
 
     return breakdown;
 }
-function getVacationDutiesDoneCount(email) {
+function getVacationDutiesDoneCount(email, referenceDate = null) {
     let count = 0;
+    const acYear = getAcademicYearForDate(referenceDate || new Date());
+
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
-        
+
+        // Ensure we only count duties within the same Academic Year as the referenceDate
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
+
         // Clean format conversion to catch manually added extra dates
         const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
         const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(isoDate);
@@ -708,21 +714,25 @@ function getPendingCountForSession(staffEmail, sessionKey) {
     const dateObj = sessionKey ? parseDate(sessionKey) : new Date();
 
     if (isDateInVacation(dateObj)) {
-        return Math.max(0, vacationDutyTarget - getVacationDutiesDoneCount(staffEmail));
+        return Math.max(0, vacationDutyTarget - getVacationDutiesDoneCount(staffEmail, dateObj));
     } else {
-        return Math.max(0, calculateStaffTarget(s) - getDutiesDoneCount(staffEmail));
+        return Math.max(0, calculateStaffTarget(s, dateObj) - getDutiesDoneCount(staffEmail, dateObj));
     }
 }
 
 
 
-function calculateStaffTarget(staff) {
+function calculateStaffTarget(staff, referenceDate = null) {
+    const ref = referenceDate || new Date();
     // 1. Get Academic Year Boundaries (June 1st to May 31st)
-    const acYear = getCurrentAcademicYear();
+    const acYear = getAcademicYearForDate(ref);
     const today = new Date();
+    
+    // Use the reference date for the calculation boundary if it's in the future
+    const boundaryDate = (ref > today) ? ref : today;
 
     // 2. Determine Calculation Period
-    let calcEnd = (today < acYear.end) ? today : acYear.end;
+    let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
     let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
@@ -3509,6 +3519,19 @@ function getNameFromEmail(email) {
     if (!staffData || staffData.length === 0) return email.split('@')[0];
     const s = staffData.find(st => st.email === email);
     return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
+}
+
+// Helper: Calculate Academic Year Boundaries for a SPECIFIC date
+function getAcademicYearForDate(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = d.getMonth(); // 0-11
+    const startYear = (month < 5) ? year - 1 : year;
+    return {
+        label: `${startYear}-${startYear + 1}`,
+        start: new Date(startYear, 5, 1), // June 1st
+        end: new Date(startYear + 1, 4, 31) // May 31st
+    };
 }
 
 // 2. Calculate Academic Year (Needed for stats)
@@ -7318,7 +7341,7 @@ window.renderManualCards = function() {
         if (s.isChecked) currentSelectionCount++;
 
         // Hide unavailable from Available pane
-        if (isUnavailable && !s.isChecked) return; 
+        //if (isUnavailable && !s.isChecked) return; 
 
         const disabledState = (!window.manualState.isFullEditMode && !s.isChecked) ? 'opacity-60 cursor-not-allowed pointer-events-none bg-gray-50' : 'cursor-pointer hover:shadow-md hover:border-indigo-300';
         const pendingColor = s.pending > 0 ? 'text-red-600 bg-red-50' : 'text-green-700 bg-green-50';
@@ -7371,6 +7394,21 @@ window.toggleManualStaffCard = function(email) {
     if (!window.manualState.isFullEditMode) return;
     const staff = window.manualState.rankedStaff.find(s => s.email === email);
     if (staff) {
+        // ALERT IF UNAVAILABLE OR EXCL
+        if (!staff.isChecked && window.manualState.allUnavailable) {
+            const unav = window.manualState.allUnavailable.find(u => (typeof u === 'string' ? u === email : (u.email === email)));
+            if (unav) {
+                const isRole = unav.type === 'Role';
+                const reason = unav.reason || (isRole ? `Admin Role (${unav.role})` : "Marked Unavailable");
+                const warningMsg = isRole 
+                    ? `🛡️ EXEMPTION ALERT: This staff member is marked as EXCL (Role: ${unav.role}).`
+                    : `⚠️ UNAVAILABILITY ALERT: This staff member is marked as UNAVAILABLE for this session.`;
+                
+                if (!confirm(`${warningMsg}\n\nReason: ${reason}\n\nAre you sure you want to assign them for this invigilation?`)) {
+                    return;
+                }
+            }
+        }
         staff.isChecked = !staff.isChecked;
         renderManualCards();
     }
@@ -7478,7 +7516,12 @@ window.openManualAllocationModal = function (key) {
 
     // 1. Build allUnavailable list FIRST so we can use it in the ranking
     const allUnavailable = [];
-    if (slot.unavailable) slot.unavailable.forEach(u => allUnavailable.push({...u, type: 'Session'}));
+    if (slot.unavailable) {
+        slot.unavailable.forEach(u => {
+            const entry = (typeof u === 'string') ? { email: u, reason: "Marked Unavailable" } : u;
+            allUnavailable.push({ ...entry, type: 'Session' });
+        });
+    }
 
     const [dateStr, timeStr] = key.split(' | ');
     let session = "FN";
@@ -7531,19 +7574,10 @@ window.openManualAllocationModal = function (key) {
 
     const isCurrentSlotVacation = isDateInVacation(targetDate) || (window.vacationDutyDates && window.vacationDutyDates.includes(slotTargetDateStr));
 
-    // 3. Filter and Rank Staff
+    // 3. Filter and Rank Staff (Modified: Do not exclude admin roles, sort them to bottom instead)
     const rankedStaff = staffData
         .filter(s => {
             if (s.status === 'archived') return false;
-            // Remove those strictly holding admin roles
-            if (s.roleHistory && Array.isArray(s.roleHistory)) {
-                const isExempt = s.roleHistory.some(r => {
-                    const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
-                });
-                if (isExempt) return false;
-            }
             return true;
         })
         .map(s => {
@@ -7575,18 +7609,16 @@ window.openManualAllocationModal = function (key) {
                 badges.push("Volunteer");
             }
 
-            // 🛡️ Smart Unavailability Penalty (Prevent Dodging)
+            // 🛡️ Smart Unavailability Penalty (Prevent Dodging & Sort to Bottom)
             const unavailableRecord = allUnavailable.find(u => (typeof u.email === 'undefined' ? u : u.email) === s.email);
             if (unavailableRecord) {
                 if (unavailableRecord.type === 'Role') {
-                    // Admin/Role Exclusions are fully excused
-                    score -= 100000; 
-                    badges.push("Role Excluded");
+                    // Admin/Role Exclusions are fully excused - Massive penalty to keep at bottom
+                    score -= 2000000; 
+                    badges.push(unavailableRecord.role || "EXCL");
                 } else {
-                    // Self-reported unavailability gets a minor penalty (-500).
-                    // Since 1 pending duty = +100 or +1000 points, they will still rank 
-                    // above available staff if they are dodging their target!
-                    score -= 500; 
+                    // Self-reported or Advance Unavailability - Large penalty to keep below available staff
+                    score -= 1000000; 
                     badges.push("Unavailable");
                 }
             }
@@ -7617,7 +7649,8 @@ window.openManualAllocationModal = function (key) {
         s.isChecked = assignedSet.has(s.email);
     });
 
-    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot };
+        // Store allUnavailable in state for selection alerts
+    window.manualState = { rankedStaff, isFullEditMode, key, slotInfo: slot, allUnavailable };
     renderManualCards();
 
     // Render Unavailable List manually at bottom right
@@ -9278,17 +9311,50 @@ function printVacationReport(data, start, end) {
 // ==========================================
 
 window.startNewAcademicYear = async function() {
-    // 1. Initial Warning
-    if(!confirm("⚠️ START NEW ACADEMIC YEAR ⚠️\n\nThis will:\n- Reset all Duty Counts to 0\n- Reset all Staff Joining Dates to June 1st\n- Delete all Exam Slots & Attendance records\n- Clear Unavailability & Logs\n\nIt will KEEP:\n- All Staff Profiles (Name, Dept, Phone)\n- Role History & Designations\n- System Settings\n\nDo you want to DOWNLOAD A BACKUP ARCHIVE first? (Highly Recommended)")) {
+    // 1. Discover all Academic Years present in the data
+    const discoveredYears = new Set();
+    Object.keys(invigilationSlots).forEach(key => {
+        const d = parseDate(key);
+        const ay = getAcademicYearForDate(d);
+        discoveredYears.add(ay.label);
+    });
+
+    // Add current year if not discovered
+    discoveredYears.add(getCurrentAcademicYear().label);
+
+    const yearList = Array.from(discoveredYears).sort().reverse();
+    
+    // 2. Select Year (Using a numbered list for precision in prompt)
+    let message = "⚠️ SURGICAL DATA CLEARANCE ⚠️\n\nSelect the Academic Year to DELETE:\n\n";
+    yearList.forEach((y, i) => { message += `${i + 1}. ${y}\n`; });
+    message += "\nEnter the NUMBER of the year to clear:";
+
+    const selection = prompt(message);
+    const index = parseInt(selection) - 1;
+
+    if (isNaN(index) || !yearList[index]) {
+        return alert("❌ Invalid selection.");
+    }
+
+    const targetAYLabel = yearList[index];
+
+    // 3. Calculate Boundaries
+    const parts = targetAYLabel.split('-');
+    const startYear = parseInt(parts[0]);
+    const ayStart = new Date(startYear, 5, 1);
+    const ayEnd = new Date(startYear + 1, 4, 31);
+
+    // 4. Initial Warning
+    if(!confirm(`⚠️ CONFIRM CLEARANCE FOR AY ${targetAYLabel} ⚠️\n\nThis will surgically DELETE:\n- ALL Exam Slots in this period\n- ALL Attendance for this period\n- ALL Unavailability blocks in this period\n\nProceed?`)) {
         return;
     }
 
-    // 2. Trigger Backup
+    // 5. Trigger Backup
     downloadMasterBackup();
 
-    // 3. Final Security Check
-    const check = prompt("🔴 FINAL CONFIRMATION\n\nTo reset duty data for the new year, please type 'RESET' in the box below:");
-    if (check !== "RESET") {
+    // 6. Final Security Check
+    const check = prompt(`🔴 FINAL SECURITY CHECK\n\nTo permanently DELETE data for ${targetAYLabel}, type 'DELETE' below:`);
+    if (check !== "DELETE") {
         return alert("❌ Action Cancelled. Incorrect confirmation code.");
     }
 
@@ -9310,40 +9376,64 @@ window.startNewAcademicYear = async function() {
         const d = String(acYear.start.getDate()).padStart(2, '0');
         const newJoinDate = `${y}-${m}-${d}`; // YYYY-MM-DD format
 
-        // B. Reset Staff Counters & Dates
-        staffData = staffData.map(s => ({
-            ...s,
-            dutiesDone: 0, 
-            dutiesAssigned: 0,
-            joiningDate: newJoinDate, // <--- RESET JOIN DATE
-            // Keep: name, email, phone, dept, designation, roleHistory, preferredDays
-        }));
+        // B. Surgical Slot Removal
+        const slotKeys = Object.keys(invigilationSlots);
+        slotKeys.forEach(key => {
+            const d = parseDate(key);
+            if (d >= ayStart && d <= ayEnd) {
+                delete invigilationSlots[key];
+            }
+        });
 
-        // C. Wipe Transactional Data
-        invigilationSlots = {};
-        advanceUnavailability = {};
-        vacationStart = "";
-        vacationEnd = "";
-        vacationExtraHolidays.clear();
+        // C. Surgical Unavailability Removal (Advance)
+        const unavKeys = Object.keys(advanceUnavailability);
+        unavKeys.forEach(dateStr => {
+            const d = new Date(dateStr);
+            if (d >= ayStart && d <= ayEnd) {
+                delete advanceUnavailability[dateStr];
+            }
+        });
+
+        // D. Reset Staff Duty Counters (Recalculate based on current year)
+        staffData = staffData.map(s => {
+            const currentYearDone = getDutiesDoneCount(s.email);
+            return {
+                ...s,
+                dutiesDone: currentYearDone,
+                dutiesAssigned: currentYearDone
+            };
+        });
+
+        // Optional: Clear vacation range if it falls within the target year
+        const vStart = vacationStart ? new Date(vacationStart) : null;
+        if (vStart && vStart >= ayStart && vStart <= ayEnd) {
+            vacationStart = "";
+            vacationEnd = "";
+            vacationExtraHolidays.clear();
+        }
 
         // 5. Update Main Cloud Document & Sub-Collections
           const collegeRef = doc(db, "colleges", currentCollegeId);
           const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
           const staffRef = doc(db, "colleges", currentCollegeId, "system_data", "staff");
 
-          // A. Wipe Root Document
+          // A. Update Root Document (Save surgically filtered data)
           await updateDoc(collegeRef, {
               examStaffData: JSON.stringify(staffData),
-              examInvigilationSlots: "{}",
-              invigAdvanceUnavailability: "{}",
-              invigVacationConfig: "{}",
+              examInvigilationSlots: JSON.stringify(invigilationSlots),
+              invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
+              invigVacationConfig: JSON.stringify({
+                  start: vacationStart,
+                  end: vacationEnd,
+                  extra: Array.from(vacationExtraHolidays)
+              }),
               autoAssignLogs: []
           });
 
-          // B. Wipe Sub-Collections (The REAL data locus)
+          // B. Update Sub-Collections
           await setDoc(slotsRef, {
-              examInvigilationSlots: "{}",
-              invigAdvanceUnavailability: "{}"
+              examInvigilationSlots: JSON.stringify(invigilationSlots),
+              invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
           }, { merge: true });
 
           await setDoc(staffRef, {
@@ -9368,7 +9458,7 @@ window.startNewAcademicYear = async function() {
         await logActivity("System Reset", `Started New Academic Year. Reset duty counts and set all staff joining dates to ${newJoinDate}.`);
 
         updateSyncStatus("Year Started", "success");
-        alert(`✅ New Academic Year Started Successfully.\n\n- All staff joining dates reset to ${newJoinDate}.\n- Duty counts reset to 0.\n- Previous sessions & logs cleared.`);
+        alert(`✅ Surgical Clearance Complete for AY ${targetAYLabel}.\n\n- Data for ${targetAYLabel} removed successfully.`);
         
         window.location.reload();
 

@@ -4,12 +4,14 @@
 const RATE_TEMPLATES = {
     "Regular": {
         // Supervision
-        chief_supdt: 113, senior_supdt: 105, office_supdt: 90,
+        chief_supdt: 123, senior_supdt: 105, office_supdt: 90,
         // Execution
-        invigilator: 90, invigilator_ratio: 30, invigilator_min_fraction: 0, scribe_invigilator_ratio: 1,
+        invigilator: 90, invigilator_ratio: 25, invigilator_min_fraction: 5, scribe_invigilator_ratio: 1,
         // Support
         clerk_full_slab: 113, clerk_slab_1: 38, clerk_slab_2: 75,
-        sweeper_rate: 25, sweeper_min: 35,
+        sweeper_rate: 35, sweeper_min: 25,
+        // Scheme (Legacy or Calicut_2026)
+        calculation_scheme: "Calicut_2026",
         // Fixed
         data_entry_operator: 890, accountant: 1000, contingent_charge: 0.40,
         // Flags
@@ -116,6 +118,13 @@ function renderRateConfigForm() {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div class="space-y-3">
                     <h4 class="font-semibold text-xs text-blue-600 uppercase border-b pb-1">Supervision (Per Session)</h4>
+                    <div class="mb-2">
+                        <label class="text-[9px] uppercase text-indigo-600 font-bold block">Calc Scheme</label>
+                        <select data-key="calculation_scheme" ${disabledAttr} class="rate-input w-full p-1 border rounded text-[10px] ${bgClass}">
+                            <option value="Calicut_2026" ${rates.calculation_scheme === "Calicut_2026" ? "selected" : ""}>Calicut Univ 2026</option>
+                            <option value="Legacy" ${rates.calculation_scheme === "Legacy" ? "selected" : ""}>Legacy Multiplier</option>
+                        </select>
+                    </div>
                     ${createRateInput('Chief Supdt', 'chief_supdt', rates.chief_supdt, disabledAttr, bgClass)}
                     ${createRateInput('Senior Supdt', 'senior_supdt', rates.senior_supdt, disabledAttr, bgClass)}
                     ${createRateInput('Office Supdt', 'office_supdt', rates.office_supdt, disabledAttr, bgClass)}
@@ -178,9 +187,26 @@ function renderRateConfigForm() {
         container.querySelectorAll('.rate-input').forEach(input => {
             input.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
-                allRates[currentStream][key] = parseFloat(e.target.value) || 0;
+                const val = e.target.value;
+
+                if (key === 'calculation_scheme') {
+                    allRates[currentStream][key] = val;
+                    
+                    // 🛡️ AUTO-SYNC: If switching to 2026, update the base rates automatically
+                    if (val === 'Calicut_2026') {
+                        allRates[currentStream]['chief_supdt'] = 123;
+                        allRates[currentStream]['invigilator_ratio'] = 25;
+                        allRates[currentStream]['invigilator_min_fraction'] = 5;
+                        allRates[currentStream]['sweeper_min'] = 25;
+                        allRates[currentStream]['sweeper_rate'] = 35;
+                        
+                        // Refresh the form immediately to show the new values
+                        renderRateConfigForm(); 
+                    }
+                } else {
+                    allRates[currentStream][key] = parseFloat(val) || 0;
+                }
                 
-                // AUTO-SAVE to Local Storage on input change (Safety)
                 localStorage.setItem(REMUNERATION_CONFIG_KEY, JSON.stringify(allRates));
             });
         });
@@ -319,18 +345,21 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             });
         });
     } else {
-        // REGULAR LOGIC
+        // REGULAR LOGIC (Calicut University 2026 Slab Engine)
         sessionData.forEach(session => {
             const normalStudents = session.normalCount || 0;
             const scribeStudents = session.scribeCount || 0;
             const totalStudents = normalStudents + scribeStudents;
+            const is2026 = (rates.calculation_scheme === "Calicut_2026");
             
+            // 1. INVIGILATORS (Rule: 1 per 25, extra if fraction > 5)
             let normalInvigs = 0;
-            const invigRatio = getNum(rates.invigilator_ratio) || 30;
-            
+            const ratio = is2026 ? 25 : (getNum(rates.invigilator_ratio) || 30);
+            const minFrac = is2026 ? 5 : getNum(rates.invigilator_min_fraction);
+
             if (totalStudents > 0) {
-                normalInvigs = Math.floor(totalStudents / invigRatio);
-                if ((totalStudents % invigRatio) > getNum(rates.invigilator_min_fraction)) normalInvigs++;
+                normalInvigs = Math.floor(totalStudents / ratio);
+                if ((totalStudents % ratio) > minFrac) normalInvigs++;
                 if (normalInvigs === 0) normalInvigs = 1; 
             }
             
@@ -342,24 +371,43 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
             const totalInvigs = normalInvigs + scribeInvigs;
             const invigCost = totalInvigs * getNum(rates.invigilator); 
 
-            // Clerk
+            // 2. CLERK & PEON (Cumulative Multipliers Restored)
             let clerkCost = 0;
-            const clerkFullBatches = Math.floor(totalStudents / 100);
-            const clerkRemainder = totalStudents % 100;
-            const fullSlab = getNum(rates.clerk_full_slab);
-            
-            clerkCost += clerkFullBatches * fullSlab;
-            if (clerkRemainder > 0) {
-                if (clerkRemainder <= 30) clerkCost += getNum(rates.clerk_slab_1);
-                else if (clerkRemainder <= 60) clerkCost += getNum(rates.clerk_slab_2);
-                else clerkCost += fullSlab;
+            if (totalStudents > 0) {
+                const fullSlab = getNum(rates.clerk_full_slab); // 113
+                const fullHundreds = Math.floor(totalStudents / 100);
+                const remainder = totalStudents % 100;
+
+                if (is2026) {
+                    // CALICUT 2026: Multiplies for every 100 + Slab Remainder
+                    clerkCost = fullHundreds * fullSlab;
+                    if (remainder > 0) {
+                        if (remainder <= 30) clerkCost += getNum(rates.clerk_slab_1); // +38
+                        else if (remainder <= 60) clerkCost += getNum(rates.clerk_slab_2); // +75
+                        else clerkCost += fullSlab; // +113
+                    }
+                } else {
+                    // LEGACY: Standard multiplier logic (Always rounds up to nearest 100)
+                    clerkCost = Math.ceil(totalStudents / 100) * fullSlab;
+                }
             }
 
-            // Sweeper
-            let sweeperCost = Math.ceil(totalStudents / 100) * getNum(rates.sweeper_rate);
-            if (sweeperCost < getNum(rates.sweeper_min)) sweeperCost = getNum(rates.sweeper_min);
+            // 3. SWEEPER (Rule: 35 per 100 + 25 for any remainder/fraction)
+            let sweeperCost = 0;
+            if (totalStudents > 0) {
+                const fullHundreds = Math.floor(totalStudents / 100);
+                const remainder = totalStudents % 100;
+                
+                sweeperCost = fullHundreds * getNum(rates.sweeper_rate); // 35 * hundreds
+                if (remainder > 0) {
+                    sweeperCost += getNum(rates.sweeper_min); // + 25
+                }
+                
+                // Absolute minimum for any session
+                if (sweeperCost < 25) sweeperCost = 25;
+            }
 
-            // Supervision
+            // 4. SUPERVISION
             const chiefCost = getNum(rates.chief_supdt);
             const seniorCost = getNum(rates.senior_supdt);
             const officeCost = getNum(rates.office_supdt);
