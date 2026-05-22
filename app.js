@@ -1919,7 +1919,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         });
     };
 
-async function deleteSessionFromCloud(sessionKey) {
+async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
     if (!currentCollegeId || !navigator.onLine) return;
     
     updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
@@ -1954,7 +1954,11 @@ async function deleteSessionFromCloud(sessionKey) {
             const data = indexSnap.data();
             if (data.sessions && data.sessions[sessionKey]) {
                 delete data.sessions[sessionKey];
-                await setDoc(indexRef, data); // Resave the cleaned index
+                                if (skipIndexUpdate) {
+                    console.log(`⚡ Skipped Public Index Update for ${sessionKey} (Bulk Mode)`);
+                } else {
+                    await setDoc(indexRef, data); // Resave the cleaned index
+                }
             }
         }
         // ---------------------------------------------------------
@@ -22046,8 +22050,8 @@ window.executeBulkDelete = async function() {
             );
 
             if (remainingInSession.length === 0) {
-                // Entire session is empty -> Full Delete from Cloud
-                await deleteSessionFromCloud(sessionKey);
+                // Entire session is empty -> Full Delete from Cloud (Skip indexHammer)
+                await deleteSessionFromCloud(sessionKey, true);
             } else {
                 // Session still has other exam data -> Re-sync updated state to Cloud
                 if (typeof syncSessionToCloud === 'function') {
@@ -22066,17 +22070,34 @@ window.executeBulkDelete = async function() {
         }
 
         // --- 🛡️ [FINAL INTEGRITY GUARD]: Authoritative Registry Update ---
-        // We derive the registry from the final data state to guarantee dropdown consistency.
-        const sessionsInDb = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-        localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessionsInDb)));
+        // We derive the registry from the final data state (Normalized) to guarantee dropdown consistency.
+        const sessionsInDb = new Set();
+        allStudentData.forEach(s => {
+            const d = (s.Date || "").trim().replace(/[-/]/g, '.');
+            const t = (s.Time || "").trim();
+            if (d && t) sessionsInDb.add(`${d} | ${t}`);
+        });
+        const finalRegistry = Array.from(sessionsInDb).sort();
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(finalRegistry));
 
-        // --- ⚡ [ATOMIC INDEX UPDATE]: Final Student Portal Sync ---
-        // After bulk cleaning, update the Public Index ONCE to finalize timestamps.
-        if (typeof publishSeatingToPublic === 'function' && sessionsToDelete.length > 0) {
-            const allRoomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const allScribeAllots = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-            // Trigger a single update using the first deleted/updated session as a trigger to refresh index
-            await publishSeatingToPublic(sessionsToDelete[0], allRoomAllots[sessionsToDelete[0]], allScribeAllots[sessionsToDelete[0]]);
+        // --- ⚡ [AUTHORITATIVE PORTAL FLUSH]: Final Student Portal Sync ---
+        // Authoritatively rebuild the Public Seating Index from the final registry.
+        if (typeof firebase !== 'undefined' && currentCollegeId) {
+            const { db, doc, setDoc } = window.firebase;
+            const indexRef = doc(db, 'public_seating', currentCollegeId);
+            const newPublicSessions = {};
+            
+            finalRegistry.forEach(sk => {
+                const docId = `${currentCollegeId}_${generateSessionId(sk)}`;
+                newPublicSessions[sk] = { docId, lastUpdated: Date.now() };
+            });
+
+            await setDoc(indexRef, {
+                collegeId: currentCollegeId,
+                collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                sessions: newPublicSessions
+            }, { merge: true });
+            console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");
         }
         // 4. Final Cloud Sync & Staff Recalculation
         if (typeof syncDataToCloud === 'function') {
