@@ -1486,8 +1486,9 @@ window.recalcInvigSlots = async function () {
             // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
             if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
                 console.log("🔄 Detected pending Drive Restore. Syncing local IDB to Firebase UP first...");
-                localStorage.removeItem('pendingDriveRestoreSync');
-                
+                // 🛡️ [RESTORATION FIX]: Flag is now removed at the END of this block 
+                // to keep the Live Sync listener paused during the upload.
+
                 const restoredData = await loadExamDataIDB() || [];
                 const sessionsToSync = new Set();
                 restoredData.forEach(s => sessionsToSync.add(`${s.Date.replace(/[-/]/g, '.')} | ${s.Time}`));
@@ -1512,6 +1513,23 @@ window.recalcInvigSlots = async function () {
                     }
                 }
 
+                // 🚀 [INTEGRITY BRIDGE]: Finalize the restore by updating master files.
+                // This makes the restored data the new "Source of Truth" in the cloud.
+                console.log("🚀 Finalizing Drive Restore: Updating Master Storage & Portal Index...");
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('baseData');
+                    await syncDataToCloud('ops');
+                    await syncDataToCloud('allocation');
+
+                    // Authoritatively update staff requirements
+                    if (typeof updateLocalSlotsFromStudents === 'function') {
+                        await updateLocalSlotsFromStudents();
+                        await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                    }
+                }
+
+                localStorage.removeItem('pendingDriveRestoreSync');
+                updateSyncStatus("Restore Finalized!", "success");
             }
 
             try {
@@ -1527,6 +1545,12 @@ window.recalcInvigSlots = async function () {
                 const todayMidnight = new Date();
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
+
+                // 🛡️ [SYNC GUARD]: Do not allow Live Sync to overwrite data during a Restore operation.
+                if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
+                    console.log("⏳ Live Sync Paused: Drive Restore in progress...");
+                    return;
+                }
 
                 // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
                     const sessionSnap = await getDocs(sessionsRef);
