@@ -11819,7 +11819,6 @@ window.downloadInvigilationCertificate = async function() {
     const acYear = getCurrentAcademicYear();
     let completedSessions = [];
 
-    // Gather completed duties for this Academic Year
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
@@ -11841,15 +11840,14 @@ window.downloadInvigilationCertificate = async function() {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // 1. Draw Professional Double Borders
+    // 1. Draw Borders
     doc.setDrawColor(30, 58, 138); doc.setLineWidth(1.5);
     doc.rect(5, 5, pageWidth - 10, pageHeight - 10);
     doc.setDrawColor(180, 83, 9); doc.setLineWidth(0.5);
     doc.rect(7, 7, pageWidth - 14, pageHeight - 14);
 
     // 2. Add Logo & Watermark
-    const img = new Image();
-    img.src = 'CollegeLogo.png';
+    const img = new Image(); img.src = 'CollegeLogo.png';
     try {
         doc.setGState(new doc.GState({ opacity: 0.04 }));
         doc.addImage(img, 'PNG', pageWidth/2 - 45, pageHeight/2 - 45, 90, 90);
@@ -11858,32 +11856,25 @@ window.downloadInvigilationCertificate = async function() {
     } catch(e) { console.warn("Logo load failed"); }
 
     // 3. Header Text
-    doc.setTextColor(30, 58, 138);
-    doc.setFont("times", "bold");
-    doc.setFontSize(32);
+    doc.setTextColor(30, 58, 138); doc.setFont("times", "bold"); doc.setFontSize(32);
     doc.text("CERTIFICATE", pageWidth / 2, 60, { align: "center" });
-    
-    doc.setFontSize(14);
-    doc.setFont("times", "italic");
-    doc.setTextColor(100);
+    doc.setFontSize(14); doc.setFont("times", "italic"); doc.setTextColor(100);
     doc.text(`Academic Year ${acYear.label}`, pageWidth / 2, 68, { align: "center" });
 
-    // 4. Certification Statement
-    doc.setTextColor(40);
-    doc.setFont("times", "normal");
-    doc.setFontSize(18);
-    const bodyText = `This is to certify that ${me.name}, of the Department of ${me.dept}, has successfully completed ${completedSessions.length} invigilation duties for the academic year ${acYear.label}.`;
+    // 4. Official Certification Statement
+    doc.setTextColor(40); doc.setFont("times", "normal"); doc.setFontSize(18);
+    const bodyText = `This is to certify that ${me.name}, of the Department of ${me.dept}, has successfully completed ${completedSessions.length} invigilation duties for the academic year ${acYear.label} as per the records.`;
     const splitText = doc.splitTextToSize(bodyText, pageWidth - 50);
     doc.text(splitText, pageWidth / 2, 85, { align: "center", lineHeightFactor: 1.6 });
 
-    // 5. Sessions Table (Ultra-Tidy Comma-Separated List)
+    // 5. Sessions Table (Justified Arrangement)
     doc.autoTable({
-        startY: 110,
+        startY: 115,
         margin: { left: 20, right: 20 },
         head: [['Staff Details', 'Sessions Completed']],
         body: [[
             { content: `${me.name}\n${me.dept}`, styles: { fontStyle: 'bold', valign: 'middle' } },
-            { content: completedSessions.join(", "), styles: { fontSize: 9, cellPadding: 8 } }
+            { content: completedSessions.join(", "), styles: { fontSize: 9, cellPadding: 8, textAlign: 'justify' } }
         ]],
         theme: 'grid',
         headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 11, halign: 'center' },
@@ -11891,7 +11882,7 @@ window.downloadInvigilationCertificate = async function() {
         columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
     });
 
-    // 6. Footer (Date & Signature)
+    // 6. Footer
     const finalY = doc.lastAutoTable.finalY + 40;
     const safeFooterY = finalY > pageHeight - 40 ? pageHeight - 45 : finalY;
     doc.setFontSize(12); doc.setTextColor(40);
@@ -11901,7 +11892,6 @@ window.downloadInvigilationCertificate = async function() {
     doc.setFont("times", "bold");
     doc.text("Chief Superintendent", pageWidth - 55, safeFooterY + 17, { align: "center" });
 
-    // 7. Save File
     doc.save(`Certificate_${me.name.split(' ')[0]}_${acYear.label.replace('-', '_')}.pdf`);
 };
 
