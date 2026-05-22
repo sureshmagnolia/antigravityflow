@@ -22018,7 +22018,32 @@ window.executeBulkDelete = async function() {
             }
         }
 
-        // 2. Remove Aux Data (ONLY if full session delete)
+        // --- 1c. [FINAL AUDIT FIX]: Clean Invigilation Slots ---
+        const slotsRaw = localStorage.getItem('examInvigilationSlots');
+        if (slotsRaw) {
+            const allSlots = JSON.parse(slotsRaw);
+            let slotsChanged = false;
+            sessionsToDelete.forEach(sk => {
+                if (allSlots[sk]) {
+                    const slot = allSlots[sk];
+                    const hasVolunteers = (slot.assigned && slot.assigned.length > 0) || (slot.unavailable && slot.unavailable.length > 0);
+                    
+                    if (!hasVolunteers || !targetExamName) {
+                        // If no volunteers OR it's a full delete -> Nuke the slot
+                        delete allSlots[sk];
+                        slotsChanged = true;
+                    } else {
+                        // Surgical delete + volunteers exist -> Zero out requirements but KEEP volunteers
+                        slot.required = 0;
+                        slot.reserveCount = 0;
+                        slot.studentCount = 0;
+                        slot.scribeCount = 0;
+                        slotsChanged = true;
+                    }
+                }
+            });
+            if (slotsChanged) localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
+        }
         // If surgical delete (targetExamName exists), we KEEP these as they are shared/session-wide.
         if (!targetExamName) {
             const auxKeys = [
@@ -22070,13 +22095,27 @@ window.executeBulkDelete = async function() {
         }
 
         // --- 🛡️ [FINAL INTEGRITY GUARD]: Authoritative Registry Update ---
-        // We derive the registry from the final data state (Normalized) to guarantee dropdown consistency.
+        // We derive the registry from Students + Active Slots to guarantee dropdown consistency.
         const sessionsInDb = new Set();
+        
+        // 1. Add sessions from Student Database
         allStudentData.forEach(s => {
             const d = (s.Date || "").trim().replace(/[-/]/g, '.');
             const t = (s.Time || "").trim();
             if (d && t) sessionsInDb.add(`${d} | ${t}`);
         });
+
+        // 2. Add sessions from Invigilation Slots (Preserves Virtual/Planned sessions)
+        const activeSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        Object.keys(activeSlots).forEach(sk => {
+            if (sk.includes('|')) {
+                const [dRaw, tRaw] = sk.split('|');
+                const d = dRaw.trim().replace(/[-/]/g, '.');
+                const t = tRaw.trim();
+                if (d && t) sessionsInDb.add(`${d} | ${t}`);
+            }
+        });
+
         const finalRegistry = Array.from(sessionsInDb).sort();
         localStorage.setItem('examAllKnownSessions', JSON.stringify(finalRegistry));
 
