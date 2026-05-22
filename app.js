@@ -1824,7 +1824,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
             // -----------------------------------------------------------------
 
             jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
-            await saveExamDataIDB(allStudentData);
+            
             
             // Do NOT rebuild dropdowns here — selections would be lost.
             // Each tab's change handler is responsible for rendering after this returns.
@@ -1841,7 +1841,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
              if (baseDoc.exists() && baseDoc.data().students) {
                  const students = baseDoc.data().students;
                  allStudentData = [...allStudentData, ...students];
-                 await saveExamDataIDB(allStudentData);
+                 
                  updateSyncStatus("Restored from Legacy V2!", "success");
                  return;
              }
@@ -1860,7 +1860,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
                      if (bulkData.examBaseData) {
                          const students = JSON.parse(bulkData.examBaseData);
                          allStudentData = [...allStudentData, ...students];
-                         await saveExamDataIDB(allStudentData);
+                         
                          updateSyncStatus("Restored from V1 Archive!", "success");
                          return;
                      }
@@ -2125,7 +2125,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
 
     // --- PUBLIC SEATING PORTAL PUBLISHER ---
-    async function publishSeatingToPublic(sessionKey, roomAllotment, scribeAllotment) {
+    async function publishSeatingToPublic(sessionKey, roomAllotment, scribeAllotment, skipIndexUpdate = false) {
         try {
             const { db, doc, setDoc, getDoc } = window.firebase;
             const cid = currentCollegeId;
@@ -2175,6 +2175,10 @@ async function deleteSessionFromCloud(sessionKey) {
             });
 
             // Update index doc so student.html can discover this session
+            if (skipIndexUpdate) {
+                console.log(`⚡ Skipped Index Update for ${sessionKey} (Bulk Mode)`);
+                return;
+            }
             const indexRef = doc(db, 'public_seating', cid);
             const existingSnap = await getDoc(indexRef);
             const existingData = existingSnap.exists() ? existingSnap.data() : {};
@@ -9791,7 +9795,7 @@ async function parseCsvAndLoadData(csvText) {
         // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
        // localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
-        await saveExamDataIDB(allStudentData);
+        
         // Add this after saveExamDataIDB(allStudentData);
         const modifiedSessions = new Set();
         finalBatch.forEach(s => modifiedSessions.add(`${s.Date} | ${s.Time}`));
@@ -14142,7 +14146,7 @@ window.real_disable_all_report_buttons = function (disabled) {
           
             // 3. Update the global variable and IDB
             allStudentData = updatedAllStudentData;
-            await saveExamDataIDB(allStudentData);
+            
 
 
 
@@ -14453,7 +14457,7 @@ Are you sure you want to update these records?
                 });
 
                 // 7. Save to IDB & Sync
-                await saveExamDataIDB(allStudentData);
+                
 
                 
                 alert(`✅ Updated ${updateCount} students! Syncing changes...`);
@@ -17802,7 +17806,7 @@ if (btnSessionReschedule) {
                 });
 
                 // Save to Local Storage
-                await saveExamDataIDB(allStudentData);
+                
 
                 // 2. Move Auxiliary Data (ONLY IF MOVING)
                 if (isMove) {
@@ -21910,7 +21914,9 @@ window.executeBulkDelete = async function() {
             return false; // Remove all students in range if no specific exam selected
         });
         //localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
-        await saveExamDataIDB(allStudentData);
+        // 🛡️ [PERFORMANCE FIX]: Skip global cloud sync to avoid 1MB Firestore limit.
+        // Modular cloud updates for individual sessions are handled in the loop below.
+        await saveExamDataIDB(allStudentData, true);
         
         // 🟢 FIX: Purge old legacy keys to prevent deleted data from resurrecting
         localStorage.removeItem('examBaseData');
@@ -22048,7 +22054,8 @@ window.executeBulkDelete = async function() {
                     if (typeof publishSeatingToPublic === 'function') {
                         const allRoomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                         const allScribeAllots = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-                        await publishSeatingToPublic(sessionKey, allRoomAllots[sessionKey], allScribeAllots[sessionKey]);
+                        // ⚡ BULK MODE: Update the session doc, but skip updating the master index every time.
+                        await publishSeatingToPublic(sessionKey, allRoomAllots[sessionKey], allScribeAllots[sessionKey], true);
                     }
                 }
             }
