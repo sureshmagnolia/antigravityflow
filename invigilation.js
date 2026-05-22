@@ -725,13 +725,17 @@ function getPendingCountForSession(staffEmail, sessionKey) {
 
 
 function calculateStaffTarget(staff, referenceDate = null) {
+    // 1. Determine the reference point (Passed session date OR today)
     const ref = referenceDate || new Date();
-    // 1. Get Academic Year Boundaries (June 1st to May 31st)
-    const acYear = getAcademicYearForDate(ref);
-    const today = new Date();
     
-    // Use the reference date for the calculation boundary if it's in the future
-    const boundaryDate = ref;
+    // 2. Get Academic Year Boundaries for that point
+    const acYear = getAcademicYearForDate(ref);
+    
+    // 🛡️ [REMISSION FIX]: Determine the end boundary strictly.
+    // If we are looking at a specific session (referenceDate is provided), 
+    // we ONLY calculate target for that month.
+    // If no session is passed (Dashboard view), we calculate up to Today.
+    const boundaryDate = referenceDate ? ref : new Date();
 
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
