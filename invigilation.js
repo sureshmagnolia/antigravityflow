@@ -7656,8 +7656,9 @@ window.openManualAllocationModal = function (key) {
                 score = pending * 1000; // High multiplier to strictly sort by deficit
             } else {
                 // Standard Logic
-                done = getDutiesDoneCount(s.email);
-                target = calculateStaffTarget(s);
+                // 🛡️ [REMISSION FIX]: Pass targetDate to ensure target is only for the session month
+                done = getDutiesDoneCount(s.email, targetDate);
+                target = calculateStaffTarget(s, targetDate);
                 pending = Math.max(0, target - done);
                 score = pending * 100;
             }
