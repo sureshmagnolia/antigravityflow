@@ -1483,67 +1483,7 @@ window.recalcInvigSlots = async function () {
 
 
             
-            // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
-            if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
-                console.log("🔄 Detected pending Drive Restore. Syncing local IDB to Firebase UP first...");
-                
-                // 🛡️ [NUCLEAR FIX]: Kill any active listeners immediately to prevent race-overwrites
-                if (typeof sessionsUnsub === 'function') { sessionsUnsub(); sessionsUnsub = null; }
-                if (typeof cloudSyncUnsubscribe === 'function') { cloudSyncUnsubscribe(); cloudSyncUnsubscribe = null; }
-                // 🛡️ [RESTORATION FIX]: Flag is now removed at the END of this block 
-                // to keep the Live Sync listener paused during the upload.
-
-                const restoredData = await loadExamDataIDB() || [];
-                const sessionsToSync = new Set();
-                restoredData.forEach(s => sessionsToSync.add(`${s.Date.replace(/[-/]/g, '.')} | ${s.Time}`));
-                
-                allStudentData = restoredData; // Temporarily update global memory for the sync function
-                
-                let count = 0;
-                const sessionArray = Array.from(sessionsToSync);
-                const BATCH_SIZE = 5; // Only 5 sessions per batch
-
-                for (let i = 0; i < sessionArray.length; i += BATCH_SIZE) {
-                    const batch = sessionArray.slice(i, i + BATCH_SIZE);
-                    count += batch.length;
-                    updateSyncStatus(`Uploading Restored Data ${count}/${sessionsToSync.size}...`, "neutral");
-                    
-                    // Process this small batch in parallel (safe size)
-                    await Promise.all(batch.map(key => syncSessionToCloud(key)));
-                    
-                    // 500ms breathing space between batches to prevent queue exhaustion
-                    if (i + BATCH_SIZE < sessionArray.length) {
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                }
-
-                // 🚀 [INTEGRITY BRIDGE]: Finalize the restore by updating master files.
-                // This makes the restored data the new "Source of Truth" in the cloud.
-                console.log("🚀 Finalizing Drive Restore: Updating Master Storage & Portal Index...");
-                if (typeof syncDataToCloud === 'function') {
-                    await syncDataToCloud('baseData');
-                    await syncDataToCloud('ops');
-                    await syncDataToCloud('allocation');
-
-                    // Authoritatively update staff requirements
-                    if (typeof updateLocalSlotsFromStudents === 'function') {
-                        await updateLocalSlotsFromStudents();
-                        await syncDataToCloud('slots', "FORCE_OVERWRITE");
-                    }
-
-                    // 🛡️ [DEFINITIVE FIX]: Wait until the entire Cloud Sync Queue is empty.
-                    // Previously, syncDataToCloud() returned immediately if busy, leaving the 
-                    // master data in a queue while the protection flag was removed.
-                    while (isSyncing || (typeof syncQueue !== 'undefined' && syncQueue.sections && syncQueue.sections.size > 0)) {
-                        console.log("⏳ [Integrity Bridge]: Draining Sync Queue... Please wait.");
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                }
-
-                localStorage.removeItem('pendingDriveRestoreSync');
-                updateSyncStatus("Restore Finalized!", "success");
-            }
-
+  
             try {
 
                 // A. TRY V2 (Modular Sessions) FIRST
