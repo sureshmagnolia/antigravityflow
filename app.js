@@ -22042,6 +22042,14 @@ window.executeBulkDelete = async function() {
                 // Session still has other exam data -> Re-sync updated state to Cloud
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
+                    
+                    // --- 🛡️ [AUDIT FIX]: Update Public Seating Portal ---
+                    // Ensures deleted students are removed from the searchable portal.
+                    if (typeof publishSeatingToPublic === 'function') {
+                        const allRoomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                        const allScribeAllots = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                        await publishSeatingToPublic(sessionKey, allRoomAllots[sessionKey], allScribeAllots[sessionKey]);
+                    }
                 }
             }
         }
@@ -22050,10 +22058,17 @@ window.executeBulkDelete = async function() {
         // We derive the registry from the final data state to guarantee dropdown consistency.
         const sessionsInDb = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
         localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessionsInDb)));
-        // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
+        // 4. Final Cloud Sync & Staff Recalculation
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
             await syncDataToCloud('allocation'); 
+            
+            // --- 🛡️ [AUDIT FIX]: Recalculate Staff Needs ---
+            // If we deleted students, we may need fewer invigilators.
+            if (typeof updateLocalSlotsFromStudents === 'function') {
+                await updateLocalSlotsFromStudents();
+                await syncDataToCloud('slots'); // Authoritatively update staff counts
+            }
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
