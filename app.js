@@ -1526,6 +1526,14 @@ window.recalcInvigSlots = async function () {
                         await updateLocalSlotsFromStudents();
                         await syncDataToCloud('slots', "FORCE_OVERWRITE");
                     }
+
+                    // 🛡️ [DEFINITIVE FIX]: Wait until the entire Cloud Sync Queue is empty.
+                    // Previously, syncDataToCloud() returned immediately if busy, leaving the 
+                    // master data in a queue while the protection flag was removed.
+                    while (isSyncing || (typeof syncQueue !== 'undefined' && syncQueue.sections && syncQueue.sections.size > 0)) {
+                        console.log("⏳ [Integrity Bridge]: Draining Sync Queue... Please wait.");
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
                 }
 
                 localStorage.removeItem('pendingDriveRestoreSync');
