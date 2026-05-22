@@ -21906,16 +21906,19 @@ window.executeBulkDelete = async function() {
                 let allotChanged = false;
                 sessionsToDelete.forEach(sk => {
                     if (allAllotments[sk] && Array.isArray(allAllotments[sk])) {
-                        allAllotments[sk].forEach(room => {
+                        const originalRoomCount = allAllotments[sk].length;
+                        allAllotments[sk] = allAllotments[sk].filter(room => {
                             if (room.students && Array.isArray(room.students)) {
-                                const originalCount = room.students.length;
                                 room.students = room.students.filter(st => {
                                     const regNo = (typeof st === 'object') ? (st['Register Number'] || st.RegisterNo) : st;
                                     return validRegNos.has((regNo || '').toString().trim());
                                 });
-                                if (room.students.length !== originalCount) allotChanged = true;
+                                // Keep the room ONLY if it still has students
+                                return room.students.length > 0;
                             }
+                            return true; // Keep rooms that don't follow standard student-array pattern
                         });
+                        if (allAllotments[sk].length !== originalRoomCount) allotChanged = true;
                     }
                 });
                 if (allotChanged) localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
