@@ -731,7 +731,7 @@ function calculateStaffTarget(staff, referenceDate = null) {
     const today = new Date();
     
     // Use the reference date for the calculation boundary if it's in the future
-    const boundaryDate = (ref > today) ? ref : today;
+    const boundaryDate = ref;
 
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
