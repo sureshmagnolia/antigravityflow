@@ -22008,26 +22008,26 @@ window.executeBulkDelete = async function() {
         // 3. Sync to Cloud (Smart Handling)
         for (const sessionKey of sessionsToDelete) {
             const [dPart, tPart] = sessionKey.split(' | ');
-            const remainingInSession = allStudentData.filter(s => 
-                (s.Date || "").trim() === (dPart || "").trim() && 
+            const remainingInSession = allStudentData.filter(s =>
+                (s.Date || "").trim() === (dPart || "").trim() &&
                 (s.Time || "").trim() === (tPart || "").trim()
             );
-            
+
             if (remainingInSession.length === 0) {
-                // Entire session is empty -> Full Delete
+                // Entire session is empty -> Full Delete from Cloud
                 await deleteSessionFromCloud(sessionKey);
-                
-                // Remove from Master Registry
-                let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-                known = known.filter(k => k !== sessionKey);
-                localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
             } else {
-                // Session still has other exam data -> Re-sync updated state
+                // Session still has other exam data -> Re-sync updated state to Cloud
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
                 }
             }
         }
+
+        // --- 🛡️ [FINAL INTEGRITY GUARD]: Authoritative Registry Update ---
+        // We derive the registry from the final data state to guarantee dropdown consistency.
+        const sessionsInDb = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessionsInDb)));
         // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
@@ -22035,14 +22035,6 @@ window.executeBulkDelete = async function() {
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
-        // For surgical deletes, Step 3 already handles removing individual sessions if they become empty.
-        if (!targetExamName) {
-            let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-            const toDeleteSet = new Set(sessionsToDelete);
-            known = known.filter(k => !toDeleteSet.has(k));
-            localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
-        }
-
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
