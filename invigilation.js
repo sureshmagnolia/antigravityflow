@@ -11805,3 +11805,156 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
+
+// ============================================================================
+// 🎓 PROFESSIONAL CERTIFICATE GENERATOR (PERPETUAL VERSION)
+// ============================================================================
+window.printInvigilationCertificate = function() {
+    if (!currentUser) return alert("Please log in to generate your certificate.");
+    
+    // Find staff record
+    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+    if (!me) return alert("Staff record not found.");
+
+    // Determine Academic Year based on current context
+    const acYear = getCurrentAcademicYear();
+    let completedDuties = [];
+
+    // Filter slots for COMPLETED duties in THIS academic year
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        // Only include dates within the current Academic Year bounds
+        if (dateObj >= acYear.start && dateObj <= acYear.end) {
+            if (slot.attendance && slot.attendance.includes(me.email)) {
+                completedDuties.push(key);
+            }
+        }
+    });
+
+    if (completedDuties.length === 0) {
+        return alert(`No completed duties found for AY ${acYear.label}. Certificates are issued only for completed sessions.`);
+    }
+
+    // Format table session list (clean monospace items)
+    const dutyListHtml = completedDuties.map(d => `<div style="padding: 4px 0; border-bottom: 1px dashed #e2e8f0; font-family: 'Courier New', Courier, monospace;">✔️ ${d}</div>`).join("");
+
+    const printWindow = window.open('', '_blank', 'width=1100,height=850');
+    
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Certificate - ${me.name}</title>
+        <style>
+            @page { size: A4 portrait; margin: 0; }
+            body { font-family: 'Times New Roman', serif; margin: 0; padding: 0; background: #f1f5f9; display: flex; justify-content: center; }
+            
+            .cert-container { 
+                background: white; width: 210mm; height: 297mm; padding: 15mm; box-sizing: border-box; 
+                position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.1); overflow: hidden;
+            }
+            
+            /* Double Border Styling */
+            .border-outer { border: 5px double #1e3a8a; height: 100%; box-sizing: border-box; padding: 5px; }
+            .border-inner { border: 2px solid #b45309; height: 100%; box-sizing: border-box; padding: 40px; text-align: center; position: relative; }
+            
+            /* Background Watermark */
+            .watermark { 
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                opacity: 0.04; width: 450px; z-index: 0; pointer-events: none;
+            }
+
+            .content { position: relative; z-index: 10; display: flex; flex-direction: column; height: 100%; }
+            
+            .header-logo { width: 110px; margin-bottom: 15px; }
+            .cert-title { font-size: 36px; color: #1e3a8a; text-transform: uppercase; letter-spacing: 3px; margin: 0; font-weight: bold; }
+            .ay-label { font-size: 18px; color: #64748b; margin: 5px 0 35px 0; font-style: italic; border-top: 1px solid #e2e8f0; display: inline-block; padding-top: 5px; }
+
+            .main-text { font-size: 22px; line-height: 1.7; color: #334155; text-align: justify; text-align-last: center; margin-bottom: 40px; }
+            .name-highlight { font-size: 26px; font-weight: bold; color: #0f172a; border-bottom: 2px solid #1e3a8a; padding: 0 8px; }
+            .count-highlight { font-size: 26px; font-weight: bold; color: #b45309; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 15px; }
+            th { background: #1e3a8a; color: white; padding: 12px; text-align: left; text-transform: uppercase; letter-spacing: 1px; }
+            td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; vertical-align: top; }
+            
+            .footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 20px; }
+            .sig-box { text-align: center; }
+            .sig-line { border-top: 1.5px solid #0f172a; width: 220px; margin-bottom: 8px; }
+            .sig-text { font-weight: bold; color: #1e3a8a; font-size: 18px; }
+
+            @media print {
+                body { background: white; }
+                .cert-container { box-shadow: none; width: 100%; height: 100%; padding: 10mm; }
+                .border-outer { border: 5px double #1e3a8a !important; -webkit-print-color-adjust: exact; }
+                th { background-color: #1e3a8a !important; color: white !important; -webkit-print-color-adjust: exact; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="cert-container">
+            <div class="border-outer">
+                <div class="border-inner">
+                    <img src="CollegeLogo.png" class="watermark" onerror="this.style.display='none'">
+                    
+                    <div class="content">
+                        <div>
+                            <img src="CollegeLogo.png" class="header-logo" onerror="this.style.display='none'">
+                            <h1 class="cert-title">Certificate of Invigilation</h1>
+                            <span class="ay-label">Academic Year ${acYear.label}</span>
+                        </div>
+
+                        <div class="main-text">
+                            This is to certify that <span class="name-highlight">${me.name}</span>, 
+                            of the Department of <span class="name-highlight">${me.dept}</span>, 
+                            has successfully completed <span class="count-highlight">${completedDuties.length}</span> 
+                            invigilation duties for the academic year ${acYear.label}.
+                        </div>
+
+                        <p style="text-align: left; font-weight: bold; color: #475569; margin-bottom: 8px;">Breakdown of Completed Sessions:</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th width="35%">Faculty Details</th>
+                                    <th width="65%">Sessions Completed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <b>${me.name}</b><br>
+                                        <small>${me.dept}</small>
+                                    </td>
+                                    <td>${dutyListHtml}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="footer">
+                            <div style="text-align: left; font-size: 16px;">
+                                <b>Generated on:</b><br>
+                                ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            </div>
+                            <div class="sig-box">
+                                <div class="sig-line"></div>
+                                <div class="sig-text">Chief Superintendent</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            window.onload = () => {
+                setTimeout(() => { window.print(); }, 1000);
+            }
+        </script>
+    </body>
+    </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+};
+
