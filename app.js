@@ -21861,6 +21861,16 @@ window.executeBulkDelete = async function() {
 
     // Execution
     try {
+        deleteBtn.innerHTML = "Hydrating...";
+        
+        // 🛡️ [FINAL AUDIT FIX]: Force fresh load from IndexedDB before filtering.
+        // This prevents accidental wipes if the global allStudentData is currently empty/loading.
+        const freshData = await loadExamDataIDB();
+        if (!freshData || freshData.length === 0) {
+            throw new Error("Critical: Master student database could not be loaded. Aborting to prevent data loss.");
+        }
+        allStudentData = freshData;
+
         deleteBtn.innerHTML = "Deleting...";
         deleteBtn.disabled = true;
 
@@ -21910,10 +21920,48 @@ window.executeBulkDelete = async function() {
                 });
                 if (allotChanged) localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
             }
+
+            // A-2. Clean Invigilator Mapping (Unassign from empty rooms)
+            const invigRaw = localStorage.getItem('examInvigilatorMapping');
+            const latestAllot = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            if (invigRaw) {
+                const invigMap = JSON.parse(invigRaw);
+                let invigChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (invigMap[sk]) {
+                        // Get list of rooms that STILL HAVE students in this session
+                        const activeRooms = new Set((latestAllot[sk] || []).map(r => r.roomName));
+                        Object.keys(invigMap[sk]).forEach(roomName => {
+                            if (!activeRooms.has(roomName)) {
+                                delete invigMap[sk][roomName];
+                                invigChanged = true;
+                            }
+                        });
+                    }
+                });
+                if (invigChanged) localStorage.setItem('examInvigilatorMapping', JSON.stringify(invigMap));
+            }
             
-            // B. Clean Scribe Allotments
-            const scribeAllotRaw = localStorage.getItem('examScribeAllotment');
-            if (scribeAllotRaw) {
+            // B. Clean Scribe Allotments (V1 & V2)
+            const scribeKeys = ['examScribeAllotment', 'examScribeAllotmentV2'];
+            scribeKeys.forEach(sKey => {
+                const scribeAllotRaw = localStorage.getItem(sKey);
+                if (scribeAllotRaw) {
+                    const allScribeAllots = JSON.parse(scribeAllotRaw);
+                    let scribeChanged = false;
+                    sessionsToDelete.forEach(sk => {
+                        if (allScribeAllots[sk]) {
+                            Object.keys(allScribeAllots[sk]).forEach(regNo => {
+                                if (!validRegNos.has((regNo || '').toString().trim())) {
+                                    delete allScribeAllots[sk][regNo];
+                                    scribeChanged = true;
+                                }
+                            });
+                        }
+                    });
+                    if (scribeChanged) localStorage.setItem(sKey, JSON.stringify(allScribeAllots));
+                }
+            });
                 const allScribeAllots = JSON.parse(scribeAllotRaw);
                 let scribeChanged = false;
                 sessionsToDelete.forEach(sk => {
