@@ -21728,6 +21728,7 @@ window.toggleBulkLock = function() {
     const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
     const startSelect = document.getElementById('edit-bulk-start-session');
     const endSelect = document.getElementById('edit-bulk-end-session');
+    const examSelect = document.getElementById('edit-bulk-exam-name');
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
     const controlsDiv = document.getElementById('bulk-delete-controls');
 
@@ -21754,6 +21755,17 @@ window.toggleBulkLock = function() {
                 const opt2 = new Option(session, session);
                 endSelect.add(opt2);
             });
+
+            // 1b. Populate Unique Exam Names
+            examSelect.innerHTML = '<option value="">-- All Exams --</option>';
+            const uniqueExamNames = new Set();
+            allStudentData.forEach(s => {
+                const name = s.examName || s['Exam Name'];
+                if (name) uniqueExamNames.add(name);
+            });
+            Array.from(uniqueExamNames).sort().forEach(name => {
+                examSelect.add(new Option(name, name));
+            });
         } else {
             alert("No exam sessions found to delete! (List empty)");
             return;
@@ -21762,6 +21774,7 @@ window.toggleBulkLock = function() {
         // 2. Enable Inputs
         startSelect.disabled = false;
         endSelect.disabled = false;
+        examSelect.disabled = false;
         deleteBtn.disabled = false;
 
         // 3. Visual Updates
@@ -21769,6 +21782,8 @@ window.toggleBulkLock = function() {
         startSelect.classList.add('bg-white');
         endSelect.classList.remove('bg-gray-100');
         endSelect.classList.add('bg-white');
+        examSelect.classList.remove('bg-gray-100');
+        examSelect.classList.add('bg-white');
         controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
 
         // 4. Update Button State
@@ -21807,6 +21822,7 @@ window.toggleBulkLock = function() {
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
+    const targetExamName = document.getElementById('edit-bulk-exam-name').value;
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
 
     // Validation
@@ -21832,7 +21848,13 @@ window.executeBulkDelete = async function() {
     const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
     // Confirmation
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\n✅ NOTE: Invigilation Volunteers & Unavailability will be SAVED/PRESERVED.\n\nType 'DELETE' to confirm:`;
+    let confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE data from ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n`;
+    if (targetExamName) {
+        confirmMsg += `\n🎯 TARGET EXAM: ${targetExamName.toUpperCase()}\n(Only students belonging to this exam will be removed. Other exam data in these sessions will be preserved.)\n`;
+    } else {
+        confirmMsg += `\n🚨 ALL EXAMS in this range will be deleted!\n`;
+    }
+    confirmMsg += `\n✅ NOTE: Invigilation Volunteers & Unavailability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
     const userInput = prompt(confirmMsg);
 
     if (userInput !== 'DELETE') return;
@@ -21844,10 +21866,16 @@ window.executeBulkDelete = async function() {
 
         const sessionSet = new Set(sessionsToDelete);
 
-        // 1. Remove Students (Filter Global Array)
+        // 1. Remove Students (Surgical Filter)
         allStudentData = allStudentData.filter(s => {
-            const key = `${s.Date} | ${s.Time}`;
-            return !sessionSet.has(key);
+            const sessionKey = `${s.Date} | ${s.Time}`;
+            if (!sessionSet.has(sessionKey)) return true; // Keep sessions outside range
+            
+            if (targetExamName) {
+                const sName = s.examName || s['Exam Name'];
+                return (sName !== targetExamName); // Keep students NOT belonging to target exam
+            }
+            return false; // Remove all students in range if no specific exam selected
         });
         //localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
@@ -21877,11 +21905,29 @@ window.executeBulkDelete = async function() {
             }
         });
 
-        // 3. Sync to Cloud
-        // A. DELETE MODULAR SESSIONS (V2)
+        // 3. Sync to Cloud (Smart Handling)
         for (const sessionKey of sessionsToDelete) {
-            await deleteSessionFromCloud(sessionKey);
+            const [dPart, tPart] = sessionKey.split(' | ');
+            const remainingInSession = allStudentData.filter(s => 
+                (s.Date || "").trim() === (dPart || "").trim() && 
+                (s.Time || "").trim() === (tPart || "").trim()
+            );
+            
+            if (remainingInSession.length === 0) {
+                // Entire session is empty -> Full Delete
+                await deleteSessionFromCloud(sessionKey);
+                
+                // Remove from Master Registry
+                let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                known = known.filter(k => k !== sessionKey);
+                localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+            } else {
+                // Session still has other exam data -> Re-sync updated state
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(sessionKey);
+                }
             }
+        }
         // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
