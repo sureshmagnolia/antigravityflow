@@ -21962,20 +21962,6 @@ window.executeBulkDelete = async function() {
                     if (scribeChanged) localStorage.setItem(sKey, JSON.stringify(allScribeAllots));
                 }
             });
-                const allScribeAllots = JSON.parse(scribeAllotRaw);
-                let scribeChanged = false;
-                sessionsToDelete.forEach(sk => {
-                    if (allScribeAllots[sk]) {
-                        Object.keys(allScribeAllots[sk]).forEach(regNo => {
-                            if (!validRegNos.has((regNo || '').toString().trim())) {
-                                delete allScribeAllots[sk][regNo];
-                                scribeChanged = true;
-                            }
-                        });
-                    }
-                });
-                if (scribeChanged) localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllots));
-            }
 
             // C. Clean Absentee List
             const absenteeRaw = localStorage.getItem('examAbsenteeList');
