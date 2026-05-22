@@ -650,8 +650,6 @@ function getDutiesDoneCount(email, referenceDate = null) {
 
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-        if (dateObj < acYear.start || dateObj > acYear.end) return;
-
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
         }
