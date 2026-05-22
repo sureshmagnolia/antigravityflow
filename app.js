@@ -1927,6 +1927,19 @@ async function deleteSessionFromCloud(sessionKey) {
     try {
         // 1. Delete main session from private admin area
         await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+
+        // --- 1b. [AUDIT FIX]: Delete associated student data (including chunks) ---
+        const studentDocRef = doc(db, 'colleges', currentCollegeId, 'session_students', sessionId);
+        const studentSnap = await getDoc(studentDocRef);
+        if (studentSnap.exists()) {
+            const sData = studentSnap.data();
+            if (sData.isChunked && sData.totalChunks) {
+                for (let i = 0; i < sData.totalChunks; i++) {
+                    await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
+                }
+            }
+            await deleteDoc(studentDocRef);
+        }
         
         // --- 2. NEW: Delete from public seating index and chunk ---
         const chunkId = `${currentCollegeId}_${sessionId}`;
@@ -1986,7 +1999,7 @@ async function deleteSessionFromCloud(sessionKey) {
         
         updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
 
-        const { db, doc, setDoc } = window.firebase;
+        const { db, doc, setDoc, getDoc, deleteDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
         
         // 1. Gather Data for THIS Session Only from Global Memory
@@ -2060,6 +2073,15 @@ async function deleteSessionFromCloud(sessionKey) {
      // --- NEW WEB APP HYBRID SYNC ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             
+    // --- 🛡️ [GHOST CHUNK GUARD]: Clean up any existing chunks before writing new ones ---
+        const oldStudentSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId));
+        if (oldStudentSnap.exists() && oldStudentSnap.data().isChunked) {
+            const oldTotal = oldStudentSnap.data().totalChunks;
+            for (let i = 0; i < oldTotal; i++) {
+                await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
+            }
+        }
+
         // --- PLAN A: Primary Student Record (Chunked to handle 800+ students) ---
             const jsonPayload = JSON.stringify(sessionStudentsDoc);
             const chunkSize = 1024 * 1024; // 1MB
