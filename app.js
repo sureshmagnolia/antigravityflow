@@ -21884,6 +21884,67 @@ window.executeBulkDelete = async function() {
         localStorage.removeItem('examBaseData');
         localStorage.removeItem('examData_v2');
 
+        // --- 1b. SURGICAL SNAPSHOT CLEAN (Crucial for report consistency) ---
+        // If surgical delete, we must clean allotments/absentees to avoid "ghost" records in reports.
+        if (targetExamName) {
+            const validRegNos = new Set(allStudentData.map(s => (s['Register Number'] || s.RegisterNo || '').toString().trim()));
+
+            // A. Clean Room Allotments
+            const allotRaw = localStorage.getItem('examRoomAllotment');
+            if (allotRaw) {
+                const allAllotments = JSON.parse(allotRaw);
+                let allotChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (allAllotments[sk] && Array.isArray(allAllotments[sk])) {
+                        allAllotments[sk].forEach(room => {
+                            if (room.students && Array.isArray(room.students)) {
+                                const originalCount = room.students.length;
+                                room.students = room.students.filter(st => {
+                                    const regNo = (typeof st === 'object') ? (st['Register Number'] || st.RegisterNo) : st;
+                                    return validRegNos.has((regNo || '').toString().trim());
+                                });
+                                if (room.students.length !== originalCount) allotChanged = true;
+                            }
+                        });
+                    }
+                });
+                if (allotChanged) localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
+            }
+            
+            // B. Clean Scribe Allotments
+            const scribeAllotRaw = localStorage.getItem('examScribeAllotment');
+            if (scribeAllotRaw) {
+                const allScribeAllots = JSON.parse(scribeAllotRaw);
+                let scribeChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (allScribeAllots[sk]) {
+                        Object.keys(allScribeAllots[sk]).forEach(regNo => {
+                            if (!validRegNos.has((regNo || '').toString().trim())) {
+                                delete allScribeAllots[sk][regNo];
+                                scribeChanged = true;
+                            }
+                        });
+                    }
+                });
+                if (scribeChanged) localStorage.setItem('examScribeAllotment', JSON.stringify(allScribeAllots));
+            }
+
+            // C. Clean Absentee List
+            const absenteeRaw = localStorage.getItem('examAbsenteeList');
+            if (absenteeRaw) {
+                const allAbsentees = JSON.parse(absenteeRaw);
+                let absChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (allAbsentees[sk] && Array.isArray(allAbsentees[sk])) {
+                        const originalCount = allAbsentees[sk].length;
+                        allAbsentees[sk] = allAbsentees[sk].filter(regNo => validRegNos.has((regNo || '').toString().trim()));
+                        if (allAbsentees[sk].length !== originalCount) absChanged = true;
+                    }
+                });
+                if (absChanged) localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
+            }
+        }
+
         // 2. Remove Aux Data (ONLY if full session delete)
         // If surgical delete (targetExamName exists), we KEEP these as they are shared/session-wide.
         if (!targetExamName) {
