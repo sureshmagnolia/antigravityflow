@@ -1486,6 +1486,10 @@ window.recalcInvigSlots = async function () {
             // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
             if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
                 console.log("🔄 Detected pending Drive Restore. Syncing local IDB to Firebase UP first...");
+                
+                // 🛡️ [NUCLEAR FIX]: Kill any active listeners immediately to prevent race-overwrites
+                if (typeof sessionsUnsub === 'function') { sessionsUnsub(); sessionsUnsub = null; }
+                if (typeof cloudSyncUnsubscribe === 'function') { cloudSyncUnsubscribe(); cloudSyncUnsubscribe = null; }
                 // 🛡️ [RESTORATION FIX]: Flag is now removed at the END of this block 
                 // to keep the Live Sync listener paused during the upload.
 
@@ -1554,14 +1558,19 @@ window.recalcInvigSlots = async function () {
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
 
-                // 🛡️ [SYNC GUARD]: Do not allow Live Sync to overwrite data during a Restore operation.
+                // 🛡️ [SYNC GUARD]: Definitive block for all cloud fetches during a Restore.
                 if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
-                    console.log("⏳ Live Sync Paused: Drive Restore in progress...");
+                    console.log("⏳ Live Sync Blocked: Restoration Integrity Bridge is active...");
                     return;
                 }
 
                 // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
-                    const sessionSnap = await getDocs(sessionsRef);
+                    // 🛡️ [CACHE SHIELD]: If a restore just happened, force fetch from SERVER to bypass stale local cache.
+                    const isRestoring = localStorage.getItem('pendingDriveRestoreSync') === 'true';
+                    const fetchOptions = isRestoring ? { source: 'server' } : {};
+                    
+                    if (isRestoring) console.log("🛡️ [Cache Shield]: Bypassing Firestore Cache for integrity...");
+                    const sessionSnap = await getDocs(sessionsRef, fetchOptions);
 
                     let cloudMetaFound = false;
                     
