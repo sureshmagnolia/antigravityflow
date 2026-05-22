@@ -22092,11 +22092,13 @@ window.executeBulkDelete = async function() {
                 newPublicSessions[sk] = { docId, lastUpdated: Date.now() };
             });
 
+            // 🛡️ [PURGE FIX]: Remove { merge: true } to authoritatively overwrite the index.
+            // This ensures that deleted sessions are actually removed from the student portal.
             await setDoc(indexRef, {
                 collegeId: currentCollegeId,
                 collegeName: localStorage.getItem('examCollegeName') || 'My College',
                 sessions: newPublicSessions
-            }, { merge: true });
+            });
             console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");
         }
         // 4. Final Cloud Sync & Staff Recalculation
@@ -22108,7 +22110,9 @@ window.executeBulkDelete = async function() {
             // If we deleted students, we may need fewer invigilators.
             if (typeof updateLocalSlotsFromStudents === 'function') {
                 await updateLocalSlotsFromStudents();
-                await syncDataToCloud('slots'); // Authoritatively update staff counts
+                // 🛡️ [PURGE FIX]: Use "FORCE_OVERWRITE" to ensure the cloud matches our cleaned local state.
+                // This prevents deleted sessions from being "merged back" from the cloud.
+                await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             }
         }
         
