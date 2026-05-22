@@ -1997,9 +1997,10 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
 
 
     
-   async function syncSessionToCloud(sessionKey) {
-        // Normalization Guard: Ensure all session keys use dots before cloud upload
-        sessionKey = sessionKey.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+   async function syncSessionToCloud(sessionKey, skipStaffSync = false) {
+        // 🛡️ [LOOKUP FIX]: Removed redundant sessionKey normalization here.
+        // It was breaking localStorage lookups for dash-dated sessions. 
+        // Cloud-safe IDs are already handled by generateSessionId().
 
         // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
         if (!currentCollegeId || !navigator.onLine) return;
@@ -2113,13 +2114,16 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
 
 
             
-            // Recalculate Invigilation Slots
-            if (typeof updateLocalSlotsFromStudents === 'function') {
-                await updateLocalSlotsFromStudents();
+            // --- ⚡ [SPEED FIX]: Skip heavy staff sync during bulk operations ---
+            if (!skipStaffSync) {
+                // Recalculate Invigilation Slots
+                if (typeof updateLocalSlotsFromStudents === 'function') {
+                    await updateLocalSlotsFromStudents();
+                }
+
+                // FIX: Global recalculation must be authoritative
+                await syncDataToCloud('slots', "FORCE_OVERWRITE");
             }
-            
-            // FIX: Global recalculation must be authoritative
-            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
 
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
             // that used to be here, which were causing the 1MB limit error.
@@ -22080,7 +22084,8 @@ window.executeBulkDelete = async function() {
             } else {
                 // Session still has other exam data -> Re-sync updated state to Cloud
                 if (typeof syncSessionToCloud === 'function') {
-                    await syncSessionToCloud(sessionKey);
+                    // ⚡ [SPEED FIX]: Skip staff sync inside the loop; we do a single sync at the end.
+                    await syncSessionToCloud(sessionKey, true);
                     
                     // --- 🛡️ [AUDIT FIX]: Update Public Seating Portal ---
                     // Ensures deleted students are removed from the searchable portal.
