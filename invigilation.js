@@ -1600,10 +1600,12 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
                 const isExempt = s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
                     let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                    
-                    // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
-                    if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
-                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+
+                    // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                    const roleEnd = r.end ? new Date(r.end) : null;
+                    const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                    if (isEndOfYear && targetStamp > endStamp) {
+                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -11657,10 +11659,12 @@ window.directAddStaff = function(key) {
                 if (s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
                     let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                    
-                    // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
-                    if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
-                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+
+                    // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                    const roleEnd = r.end ? new Date(r.end) : null;
+                    const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                    if (isEndOfYear && targetStamp > endStamp) {
+                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
