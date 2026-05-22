@@ -769,19 +769,24 @@ function calculateStaffTarget(staff, referenceDate = null) {
         }
         // ***********************************************
 
-        // --- STEP B: CHECK FOR ROLE OVERRIDE ---
-        if (staff.roleHistory && staff.roleHistory.length > 0) {
-            const activeRoles = staff.roleHistory.filter(r => {
-                const rStart = new Date(r.start);
-                // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
-                const roleEnd = r.end ? new Date(r.end) : null;
-                const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
-                if (isEndOfYear) {
-                    const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
-                    if (!hasNewerRole) rEnd = new Date("9999-12-31");
-                }
-                return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
-            });
+          // --- STEP B: CHECK FOR ROLE OVERRIDE ---
+          if (staff.roleHistory && staff.roleHistory.length > 0) {
+              const activeRoles = staff.roleHistory.filter(r => {
+                  const rStart = new Date(r.start);
+                  
+                  // Initialize rEnd (Default to Infinity if no end date exists)
+                  let rEnd = r.end ? new Date(r.end) : new Date("9999-12-31");
+
+                  // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                  const roleEndObj = r.end ? new Date(r.end) : null;
+                  const isEndOfYear = roleEndObj && roleEndObj.getMonth() === 4 && roleEndObj.getDate() === 31;
+                  
+                  if (isEndOfYear) {
+                      const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                      if (!hasNewerRole) rEnd = new Date("9999-12-31");
+                  }
+                  return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
+              });
 
             if (activeRoles.length > 0) {
                 let bestRoleTarget = monthlyRate;
