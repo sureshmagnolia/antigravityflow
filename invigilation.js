@@ -11817,7 +11817,7 @@ window.downloadInvigilationCertificate = async function() {
     if (!me) return alert("Staff record not found.");
 
     const acYear = getCurrentAcademicYear();
-    const collName = (collegeData && collegeData.examCollegeName) || "Government Victoria College";
+    const collName = (collegeData && collegeData.examCollegeName) || "Government Victoria College, Palakkad";
     let completedSessions = [];
 
     Object.keys(invigilationSlots).forEach(key => {
