@@ -22051,13 +22051,6 @@ window.executeBulkDelete = async function() {
                         slot.studentCount = 0;
                         slot.scribeCount = 0;
                         slotsChanged = true;
-                    } else {
-                        // Surgical delete + volunteers exist -> Zero out requirements but KEEP volunteers
-                        slot.required = 0;
-                        slot.reserveCount = 0;
-                        slot.studentCount = 0;
-                        slot.scribeCount = 0;
-                        slotsChanged = true;
                     }
                 }
             });
