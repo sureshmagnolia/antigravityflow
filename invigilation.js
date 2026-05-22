@@ -738,8 +738,14 @@ function calculateStaffTarget(staff, referenceDate = null) {
 
     // 2. Determine Calculation Period
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
+    // 🛡️ [ACADEMIC YEAR RESET]: Force the calculation to ignore everything before June 2026.
+    const resetWall = new Date(2026, 5, 1); // June 1st, 2026
     const joinDate = new Date(staff.joiningDate);
-    let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
+    
+    // Choose the LATEST of: Reset Wall, Staff Join Date, or Academic Year Start
+    let calcStart = acYear.start;
+    if (joinDate > calcStart) calcStart = joinDate;
+    if (resetWall > calcStart) calcStart = resetWall;
 
     if (calcStart > calcEnd) return 0;
 
