@@ -731,11 +731,21 @@ function calculateStaffTarget(staff, referenceDate = null) {
     // 2. Get Academic Year Boundaries for that point
     const acYear = getAcademicYearForDate(ref);
     
-    // 🛡️ [REMISSION FIX]: Determine the end boundary strictly.
-    // If we are looking at a specific session (referenceDate is provided), 
-    // we ONLY calculate target for that month.
-    // If no session is passed (Dashboard view), we calculate up to Today.
-    const boundaryDate = referenceDate ? ref : new Date();
+    // 🛡️ [CONTEXT FIX]: Determine the calculation boundary.
+    const today = new Date();
+    const currentAY = getCurrentAcademicYear();
+    let boundaryDate;
+
+    if (!referenceDate) {
+        // Dashboard View: Always show cumulative debt up to today.
+        boundaryDate = today;
+    } else if (ref > today || acYear.label !== currentAY.label) {
+        // Future Session OR Different Academic Year: Show only that month's target.
+        boundaryDate = ref;
+    } else {
+        // Current Academic Year Session: Show cumulative debt up to today.
+        boundaryDate = today;
+    }
 
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
