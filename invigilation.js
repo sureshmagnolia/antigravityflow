@@ -638,15 +638,8 @@ function getDutiesDoneCount(email, referenceDate = null) {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
 
-        // 🛡️ [JUNE RESET FIX]: Force a clean slate for the new Academic Year.
-        // Any duties performed before June 1st, 2026 are ignored.
-        const resetWall = new Date(2026, 5, 1); // Month 5 is June
-        if (dateObj < resetWall) return;
-
-        // 🛡️ [JUNE RESET FIX]: Force a clean slate for the new Academic Year.
-        // Any duties performed before June 1st, 2026 are ignored.
-        const resetWall = new Date(2026, 5, 1); // Month 5 is June
-        if (dateObj < resetWall) return;
+        // 🛡️ [PERPETUAL RESET]: Ignore duties before the start of the current Academic Year (June 1st)
+        if (dateObj < acYear.start) return;
 
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
@@ -741,18 +734,14 @@ function calculateStaffTarget(staff, referenceDate = null) {
     const boundaryDate = (ref > today) ? ref : today;
 
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
-    // 🛡️ [ACADEMIC YEAR RESET]: Force the calculation to ignore everything before June 2026.
-    const resetWall = new Date(2026, 5, 1); // June 1st, 2026
     const joinDate = new Date(staff.joiningDate);
     
-    // Choose the LATEST of: Reset Wall, Staff Join Date, or Academic Year Start
-    let calcStart = acYear.start;
-    if (joinDate > calcStart) calcStart = joinDate;
-    if (resetWall > calcStart) calcStart = resetWall;
+    // 🛡️ [PERPETUAL RESET]: Start calculation from the LATEST of: Join Date or Academic Year Start (June 1st)
+    let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
-    // 🛡️ [MONTHLY HEAD-START]: Ensure target includes the upcoming start month.
-    // If we are currently in May/June transition, move calcEnd to at least June 30th.
-    if (calcEnd < new Date(2026, 5, 30)) calcEnd = new Date(2026, 5, 30);
+    // 🛡️ [MONTHLY HEAD-START]: If calculating for the beginning of the year, ensure at least one month is covered.
+    const firstMonthEnd = new Date(acYear.start.getFullYear(), acYear.start.getMonth(), 30);
+    if (calcEnd < firstMonthEnd) calcEnd = firstMonthEnd;
 
     if (calcStart > calcEnd) return 0;
 
@@ -784,9 +773,10 @@ function calculateStaffTarget(staff, referenceDate = null) {
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRoles = staff.roleHistory.filter(r => {
                 const rStart = new Date(r.start);
-                // 🛡️ [ROLE PERSISTENCE]: Roles ending in May are extended until a new role starts
-                let rEnd = r.end ? new Date(r.end) : new Date("9999-12-31");
-                if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.'))) {
+                // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                const roleEnd = r.end ? new Date(r.end) : null;
+                const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                if (isEndOfYear) {
                     const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                     if (!hasNewerRole) rEnd = new Date("9999-12-31");
                 }
