@@ -355,6 +355,12 @@ async function findLatestBackupTime() {
 
 window.syncData = syncData; // 🛡️ Expose to HTML buttons
 async function syncData(source = "AUTO") {
+    // 🛡️ [AUDIT FIX]: Normalize source prefix to ensure backups are discoverable by restore function
+    if (!source.startsWith('ADMIN') && !source.startsWith('INVIG')) {
+        const isInvig = window.location.pathname.includes('invigilation');
+        source = (isInvig ? 'INVIG_' : 'ADMIN_') + source;
+    }
+
     window.isDriveSyncInProgress = true; // 🛡️ Raise the Busy Flag
     const btn = document.getElementById('btn-manual-sync');
     const originalText = btn ? btn.innerHTML : '';
@@ -608,7 +614,11 @@ async function syncDataSilent() {
 
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        const fileName = `Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        
+        // 🛡️ [AUDIT FIX]: Include prefix for silent backups
+        const isInvig = window.location.pathname.includes('invigilation');
+        const prefix = isInvig ? 'INVIG_AUTO' : 'ADMIN_AUTO';
+        const fileName = `${prefix}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
