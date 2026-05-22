@@ -21811,6 +21811,28 @@ window.toggleBulkLock = function() {
             Array.from(uniqueExamNames).sort().forEach(name => {
                 examSelect.add(new Option(name, name));
             });
+
+            // 🛡️ [SMART AUTO-RANGE]: Automatically detect start/end when exam is selected
+            examSelect.onchange = function() {
+                const targetName = this.value;
+                if (!targetName) return;
+
+                // 1. Find all sessions containing this exam
+                const examSessions = allStudentData
+                    .filter(s => (s.examName || s['Exam Name']) === targetName)
+                    .map(s => `${s.Date} | ${s.Time}`);
+                
+                if (examSessions.length > 0) {
+                    // 2. Sort them chronologically using the existing comparator
+                    const uniqueSorted = Array.from(new Set(examSessions)).sort(compareSessionStrings);
+                    
+                    // 3. Auto-fill the Start and End dropdowns
+                    startSelect.value = uniqueSorted[0];
+                    endSelect.value = uniqueSorted[uniqueSorted.length - 1];
+                    
+                    console.log(`🎯 Auto-Range Detected for ${targetName}: ${uniqueSorted[0]} TO ${uniqueSorted[uniqueSorted.length - 1]}`);
+                }
+            };
         } else {
             alert("No exam sessions found to delete! (List empty)");
             return;
