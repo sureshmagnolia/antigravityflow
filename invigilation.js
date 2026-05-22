@@ -638,6 +638,11 @@ function getDutiesDoneCount(email, referenceDate = null) {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
 
+        // 🛡️ [JUNE RESET FIX]: Force a clean slate for the new Academic Year.
+        // Any duties performed before June 1st, 2026 are ignored.
+        const resetWall = new Date(2026, 5, 1); // Month 5 is June
+        if (dateObj < resetWall) return;
+
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
 
@@ -1446,8 +1451,16 @@ const filteredItems = staffData
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRole = staff.roleHistory.find(r => {
                 const start = new Date(r.start);
+                // 🛡️ [ROLE PERSISTENCE FIX]: Treat roles as active until explicitly changed.
+                // If the end date is May 31st or later, we keep them active for the June cycle.
                 const end = r.end ? new Date(r.end) : new Date("9999-12-31");
-                return start <= today && end >= today;
+                const currentMonth = today.getMonth(); // 0-11
+                
+                // If we are in the June transition (Month 5), extend roles that ended in May
+                const safetyBuffer = (currentMonth === 5) ? 32 : 0; 
+                const adjustedEnd = new Date(end.getTime() + (safetyBuffer * 24 * 60 * 60 * 1000));
+                
+                return start <= today && adjustedEnd >= today;
             });
 
             if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
