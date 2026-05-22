@@ -926,6 +926,12 @@
                 <option value="">-- Locked --</option>
             </select>
         </div>
+        <div class="flex-1 w-full">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Exam Name (Optional)</label>
+            <select id="edit-bulk-exam-name" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-rose-500 focus:ring-rose-500 bg-gray-100" disabled>
+                <option value="">-- All Exams --</option>
+            </select>
+        </div>
         <button id="btn-edit-bulk-delete" onclick="executeBulkDelete()" class="w-full sm:w-auto bg-white border border-rose-300 text-rose-600 hover:bg-rose-600 hover:text-white px-4 py-2 rounded text-sm font-bold shadow-sm transition flex items-center justify-center gap-2" disabled>
             Delete Range
         </button>
@@ -1391,7 +1397,7 @@
     <div id="drive-controls" class="hidden mt-4 flex items-center gap-4">
         
         <div>
-                <button id="btn-manual-sync" onclick="syncData('ADMIN_MANUAL')"
+                <button id="btn-manual-sync" onclick="syncData('ADMIN_MANUAL')" 
                 class="bg-green-600 text-white px-4 py-2 rounded shadow hover:bg-green-700 font-bold flex items-center gap-2">
                 🔄 Sync Now (Push)
             </button>

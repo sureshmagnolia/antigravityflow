@@ -760,7 +760,6 @@ async function checkForNewerDataOnDrive(isManual = false) {
     }
 }
 // --- RESTORE UI ---
-// --- RESTORE UI ---
 window.restoreFromDrive = restoreFromDrive;
 async function restoreFromDrive() {
     // 🛡️ [AUDIT FIX]: Search based on Module Context (Admin vs Invig) 
@@ -963,17 +962,56 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
             }
         }
 
-        // --- 3. FINALIZE ---
+        // --- 3. [AUTHORITY SHIFT]: Direct Cloud Restoration ---
+        if (typeof window.currentCollegeId !== 'undefined' && window.currentCollegeId && navigator.onLine) {
+            console.log("🚀 [Authority Shift]: Direct Cloud Restore in progress...");
+            
+            // 1. Resolve sessions from the restored data
+            const sessionsToSync = new Set();
+            const restoredStudents = await loadExamDataIDB() || [];
+            restoredStudents.forEach(s => {
+                const d = (s.Date || "").trim().replace(/[-/]/g, '.');
+                const t = (s.Time || "").trim();
+                if (d && t) sessionsToSync.add(`${d} | ${t}`);
+            });
+
+            // 2. Perform Surgical Cloud Sync (Individual Sessions)
+            // Using the global allStudentData override fix from earlier
+            if (typeof window.syncSessionToCloud === 'function') {
+                const sessionArray = Array.from(sessionsToSync);
+                for (const key of sessionArray) {
+                    await window.syncSessionToCloud(key, true, restoredStudents);
+                }
+            }
+
+            // 3. Finalize Master Files authoritatively
+            if (typeof window.syncDataToCloud === 'function') {
+                await window.syncDataToCloud('baseData');
+                await window.syncDataToCloud('ops');
+                await window.syncDataToCloud('allocation');
+
+                // Recalculate staffauthoritatively
+                if (typeof window.updateLocalSlotsFromStudents === 'function') {
+                    await window.updateLocalSlotsFromStudents();
+                    await window.syncDataToCloud('slots', "FORCE_OVERWRITE");
+                }
+
+                // Authoritative Queue Drain
+                while (window.isSyncing || (typeof syncQueue !== 'undefined' && syncQueue.sections && syncQueue.sections.size > 0)) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+        }
+
         if (cloudTime) {
-            // 🛡️ SYNC: Update local timestamp to match the Cloud file we just took
             localStorage.setItem('lastUpdated', cloudTime);
         }
 
         localStorage.removeItem('examBaseData'); // Clean ghost legacy key
-        localStorage.setItem('pendingDriveRestoreSync', 'true');
+        // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
         window.isDriveRestoringData = false;
-        alert("✅ Restored successfully! Reloading to apply changes.");
+        alert("✅ Restored & Synced successfully! Reloading to apply changes.");
         location.reload();
 
     } catch (e) { 

@@ -638,9 +638,11 @@ function getDutiesDoneCount(email, referenceDate = null) {
         const slot = invigilationSlots[key];
         const dateObj = parseDate(key);
 
+        // 🛡️ [PERPETUAL RESET]: Ignore duties before the start of the current Academic Year (June 1st)
+        if (dateObj < acYear.start) return;
+
         // Filter by Academic Year (Ignore old duties)
         if (dateObj < acYear.start || dateObj > acYear.end) return;
-
         if (slot.attendance && slot.attendance.includes(email)) {
             count++;
         }
@@ -723,26 +725,51 @@ function getPendingCountForSession(staffEmail, sessionKey) {
 
 
 function calculateStaffTarget(staff, referenceDate = null) {
+    // 1. Determine the reference point (Passed session date OR today)
     const ref = referenceDate || new Date();
-    // 1. Get Academic Year Boundaries (June 1st to May 31st)
-    const acYear = getAcademicYearForDate(ref);
-    const today = new Date();
     
-    // Use the reference date for the calculation boundary if it's in the future
-    const boundaryDate = (ref > today) ? ref : today;
+    // 2. Get Academic Year Boundaries for that point
+    const acYear = getAcademicYearForDate(ref);
+    
+    // 🛡️ [CONTEXT FIX]: Determine the calculation boundary.
+    const today = new Date();
+    const currentAY = getCurrentAcademicYear();
+    let boundaryDate;
 
-    // 2. Determine Calculation Period
+    if (!referenceDate) {
+        // Dashboard View: Always show cumulative debt up to today.
+        boundaryDate = today;
+    } else if (ref > today || acYear.label !== currentAY.label) {
+        // Future Session OR Different Academic Year: Show only that month's target.
+        boundaryDate = ref;
+    } else {
+        // Current Academic Year Session: Show cumulative debt up to today.
+        boundaryDate = today;
+    }
+
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     const joinDate = new Date(staff.joiningDate);
+    
+    // 🛡️ [PERPETUAL RESET]: Start calculation from the LATEST of: Join Date or Academic Year Start (June 1st)
     let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
-    if (calcStart > calcEnd) return 0;
+      // 🛡️ [STRICT BOUNDARY]: If we are looking at the very start of the year (June 1st/2nd), 
+      // ensure we calculate for the full first month.
+      if (calcEnd.getMonth() === acYear.start.getMonth() && calcEnd.getFullYear() === acYear.start.getFullYear()) {
+          calcEnd = new Date(acYear.start.getFullYear(), acYear.start.getMonth(), 28);
+      }
 
-    let totalTarget = 0;
-    let cursor = new Date(calcStart);
+      if (calcStart > calcEnd) return 0;
 
-    // 3. Iterate Month by Month
-    while (cursor <= calcEnd) {
+      let totalTarget = 0;
+      // Normalize cursor to the 1st of the month to prevent day-offset skips
+      let cursor = new Date(calcStart.getFullYear(), calcStart.getMonth(), 1);
+      
+      // Use a Month-based marker to ensure the loop stops precisely
+      const endMonthMarker = new Date(calcEnd.getFullYear(), calcEnd.getMonth(), 1);
+
+      // 3. Iterate Month by Month
+      while (cursor <= endMonthMarker) {
         const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
         const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
 
@@ -762,13 +789,24 @@ function calculateStaffTarget(staff, referenceDate = null) {
         }
         // ***********************************************
 
-        // --- STEP B: CHECK FOR ROLE OVERRIDE ---
-        if (staff.roleHistory && staff.roleHistory.length > 0) {
-            const activeRoles = staff.roleHistory.filter(r => {
-                const rStart = new Date(r.start);
-                const rEnd = new Date(r.end);
-                return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
-            });
+          // --- STEP B: CHECK FOR ROLE OVERRIDE ---
+          if (staff.roleHistory && staff.roleHistory.length > 0) {
+              const activeRoles = staff.roleHistory.filter(r => {
+                  const rStart = new Date(r.start);
+                  
+                  // Initialize rEnd (Default to Infinity if no end date exists)
+                  let rEnd = r.end ? new Date(r.end) : new Date("9999-12-31");
+
+                  // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                  const roleEndObj = r.end ? new Date(r.end) : null;
+                  const isEndOfYear = roleEndObj && roleEndObj.getMonth() === 4 && roleEndObj.getDate() === 31;
+                  
+                  if (isEndOfYear) {
+                      const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                      if (!hasNewerRole) rEnd = new Date("9999-12-31");
+                  }
+                  return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
+              });
 
             if (activeRoles.length > 0) {
                 let bestRoleTarget = monthlyRate;
@@ -939,8 +977,17 @@ function isUserUnavailable(slot, email, key) {
             const targetStamp = new Date(slotTargetDateStr).getTime();
              if (staff.roleHistory.some(r => {
                  const startStamp = new Date(r.start).getTime();
-                 const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                 return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+
+                    // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                    const roleEnd = r.end ? new Date(r.end) : null;
+                    const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                    if (isEndOfYear && targetStamp > endStamp) {
+                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
              })) {
 
                  return true;
@@ -1446,8 +1493,16 @@ const filteredItems = staffData
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRole = staff.roleHistory.find(r => {
                 const start = new Date(r.start);
+                // 🛡️ [ROLE PERSISTENCE FIX]: Treat roles as active until explicitly changed.
+                // If the end date is May 31st or later, we keep them active for the June cycle.
                 const end = r.end ? new Date(r.end) : new Date("9999-12-31");
-                return start <= today && end >= today;
+                const currentMonth = today.getMonth(); // 0-11
+                
+                // If we are in the June transition (Month 5), extend roles that ended in May
+                const safetyBuffer = (currentMonth === 5) ? 32 : 0; 
+                const adjustedEnd = new Date(end.getTime() + (safetyBuffer * 24 * 60 * 60 * 1000));
+                
+                return start <= today && adjustedEnd >= today;
             });
 
             if (activeRole) activeRoleLabel = `<span class="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded ml-1 border border-purple-200 font-bold">${activeRole.role}</span>`;
@@ -1569,7 +1624,16 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
             if (s.roleHistory && Array.isArray(s.roleHistory)) {
                 const isExempt = s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+
+                    // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                    const roleEnd = r.end ? new Date(r.end) : null;
+                    const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                    if (isEndOfYear && targetStamp > endStamp) {
+                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
                     return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
                 });
                 if (isExempt) return false; // Hide them completely from selection
@@ -1577,9 +1641,9 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
             return true;
         })
         .map(s => {
-
-            const target = calculateStaffTarget(s);
-            const done = getDutiesDoneCount(s.email);
+            // 🛡️ [REMISSION FIX]: Pass targetDate to ensure main list counts are scoped
+            const target = calculateStaffTarget(s, targetDate);
+            const done = getDutiesDoneCount(s.email, targetDate);
             const pending = target - done;
             return { ...s, done, pending };
         })
@@ -1868,9 +1932,17 @@ function renderExchangeMarket(myEmail) {
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         if (slot.isAdminLocked) return;
+        // 🛡️ [MARKET FIX]: Ignore past sessions and verify assignments
+        const dateObj = parseDate(key);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dateObj < today) return; 
+
         if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
-            // *** CHANGE: Show ALL requests, including my own ***
-            slot.exchangeRequests.forEach(sellerEmail => {
+            // 🛡️ [MARKET FIX]: Only show requests for people who are STILL assigned to this slot
+            const validRequests = slot.exchangeRequests.filter(email => (slot.assigned || []).includes(email));
+            
+            validRequests.forEach(sellerEmail => {
                 marketSlots.push({
                     key: key,
                     seller: sellerEmail,
@@ -2650,6 +2722,10 @@ window.cancelDuty = async function (key, email, isLocked) {
     if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
     if (confirm("Cancel duty?")) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
+        // 🛡️ [CLEANUP FIX]: Remove from exchange market immediately if cancelled
+        if (invigilationSlots[key].exchangeRequests) {
+            invigilationSlots[key].exchangeRequests = invigilationSlots[key].exchangeRequests.filter(e => e !== email);
+        }
         const me = staffData.find(s => s.email === email);
         if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
         logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
@@ -7594,8 +7670,9 @@ window.openManualAllocationModal = function (key) {
                 score = pending * 1000; // High multiplier to strictly sort by deficit
             } else {
                 // Standard Logic
-                done = getDutiesDoneCount(s.email);
-                target = calculateStaffTarget(s);
+                // 🛡️ [REMISSION FIX]: Pass targetDate to ensure target is only for the session month
+                done = getDutiesDoneCount(s.email, targetDate);
+                target = calculateStaffTarget(s, targetDate);
                 pending = Math.max(0, target - done);
                 score = pending * 100;
             }
@@ -11607,7 +11684,16 @@ window.directAddStaff = function(key) {
                 const targetStamp = new Date(slotTargetDateStr).getTime();
                 if (s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+
+                    // 🛡️ [PERPETUAL ROLE]: Carry forward roles that end on the last day of ANY academic year
+                    const roleEnd = r.end ? new Date(r.end) : null;
+                    const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
+                    if (isEndOfYear && targetStamp > endStamp) {
+                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
                     return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
                 })) {
 
@@ -11719,3 +11805,93 @@ window.confirmDirectAdd = async function() {
     window.closeModal('direct-add-modal');
     alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
+
+// ============================================================================
+// 🎓 PROFESSIONAL PDF CERTIFICATE GENERATOR (A4 PORTRAIT)
+// ============================================================================
+window.downloadInvigilationCertificate = async function() {
+    if (!currentUser) return alert("Please log in to download your certificate.");
+    if (typeof jspdf === 'undefined') return alert("PDF library not loaded.");
+
+    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+    if (!me) return alert("Staff record not found.");
+
+    const acYear = getCurrentAcademicYear();
+    let completedSessions = [];
+
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        const dateObj = parseDate(key);
+        if (dateObj >= acYear.start && dateObj <= acYear.end) {
+            if (slot.attendance && slot.attendance.includes(me.email)) {
+                const [d, t] = key.split(' | ');
+                const session = (t.includes('PM') || t.startsWith('12:')) ? 'AN' : 'FN';
+                const parts = d.split('.');
+                const shortDate = `${parts[0]}.${parts[1]}.${parts[2].slice(-2)}`;
+                completedSessions.push(`${shortDate} (${session})`);
+            }
+        }
+    });
+
+    if (completedSessions.length === 0) return alert(`No completed duties found for AY ${acYear.label}.`);
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // 1. Draw Borders
+    doc.setDrawColor(30, 58, 138); doc.setLineWidth(1.5);
+    doc.rect(5, 5, pageWidth - 10, pageHeight - 10);
+    doc.setDrawColor(180, 83, 9); doc.setLineWidth(0.5);
+    doc.rect(7, 7, pageWidth - 14, pageHeight - 14);
+
+    // 2. Add Logo & Watermark
+    const img = new Image(); img.src = 'CollegeLogo.png';
+    try {
+        doc.setGState(new doc.GState({ opacity: 0.04 }));
+        doc.addImage(img, 'PNG', pageWidth/2 - 45, pageHeight/2 - 45, 90, 90);
+        doc.setGState(new doc.GState({ opacity: 1.0 }));
+        doc.addImage(img, 'PNG', pageWidth/2 - 15, 15, 30, 30);
+    } catch(e) { console.warn("Logo load failed"); }
+
+    // 3. Header Text
+    doc.setTextColor(30, 58, 138); doc.setFont("times", "bold"); doc.setFontSize(32);
+    doc.text("CERTIFICATE", pageWidth / 2, 60, { align: "center" });
+    doc.setFontSize(14); doc.setFont("times", "italic"); doc.setTextColor(100);
+    doc.text(`Academic Year ${acYear.label}`, pageWidth / 2, 68, { align: "center" });
+
+    // 4. Official Certification Statement
+    doc.setTextColor(40); doc.setFont("times", "normal"); doc.setFontSize(18);
+    const bodyText = `This is to certify that ${me.name}, of the Department of ${me.dept}, has successfully completed ${completedSessions.length} invigilation duties for the academic year ${acYear.label} as per the records.`;
+    const splitText = doc.splitTextToSize(bodyText, pageWidth - 50);
+    doc.text(splitText, pageWidth / 2, 85, { align: "center", lineHeightFactor: 1.6 });
+
+    // 5. Sessions Table (Justified Arrangement)
+    doc.autoTable({
+        startY: 115,
+        margin: { left: 20, right: 20 },
+        head: [['Staff Details', 'Sessions Completed']],
+        body: [[
+            { content: `${me.name}\n${me.dept}`, styles: { fontStyle: 'bold', valign: 'middle' } },
+            { content: completedSessions.join(", "), styles: { fontSize: 9, cellPadding: 8, textAlign: 'justify' } }
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 11, halign: 'center' },
+        styles: { font: "times", cellPadding: 5, overflow: 'linebreak' },
+        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
+    });
+
+    // 6. Footer
+    const finalY = doc.lastAutoTable.finalY + 40;
+    const safeFooterY = finalY > pageHeight - 40 ? pageHeight - 45 : finalY;
+    doc.setFontSize(12); doc.setTextColor(40);
+    doc.text(`Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 25, safeFooterY + 15);
+    doc.setDrawColor(0);
+    doc.line(pageWidth - 85, safeFooterY + 10, pageWidth - 25, safeFooterY + 10);
+    doc.setFont("times", "bold");
+    doc.text("Chief Superintendent", pageWidth - 55, safeFooterY + 17, { align: "center" });
+
+    doc.save(`Certificate_${me.name.split(' ')[0]}_${acYear.label.replace('-', '_')}.pdf`);
+};
+

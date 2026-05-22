@@ -1055,8 +1055,9 @@ function populateAllExamDropdowns() {
 
 // --- HELPER: Calculate Slot Requirements from Student Data ---
 async function updateLocalSlotsFromStudents() {
-    const students = await loadExamDataIDB();
-    if (!students || students.length === 0) return false;
+    const students = await loadExamDataIDB() || [];
+    // 🛡️ [INTEGRITY FIX]: Removed early return. Even if students are empty, 
+    // we must continue to zero-out requirements for sessions that no longer exist.
 
     try {
         const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
@@ -1482,37 +1483,7 @@ window.recalcInvigSlots = async function () {
 
 
             
-            // 🚨 FLAG CHECK: Push local data to Cloud BEFORE Cloud overwrites it!
-            if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
-                console.log("🔄 Detected pending Drive Restore. Syncing local IDB to Firebase UP first...");
-                localStorage.removeItem('pendingDriveRestoreSync');
-                
-                const restoredData = await loadExamDataIDB() || [];
-                const sessionsToSync = new Set();
-                restoredData.forEach(s => sessionsToSync.add(`${s.Date.replace(/[-/]/g, '.')} | ${s.Time}`));
-                
-                allStudentData = restoredData; // Temporarily update global memory for the sync function
-                
-                let count = 0;
-                const sessionArray = Array.from(sessionsToSync);
-                const BATCH_SIZE = 5; // Only 5 sessions per batch
-
-                for (let i = 0; i < sessionArray.length; i += BATCH_SIZE) {
-                    const batch = sessionArray.slice(i, i + BATCH_SIZE);
-                    count += batch.length;
-                    updateSyncStatus(`Uploading Restored Data ${count}/${sessionsToSync.size}...`, "neutral");
-                    
-                    // Process this small batch in parallel (safe size)
-                    await Promise.all(batch.map(key => syncSessionToCloud(key)));
-                    
-                    // 500ms breathing space between batches to prevent queue exhaustion
-                    if (i + BATCH_SIZE < sessionArray.length) {
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-                }
-
-            }
-
+  
             try {
 
                 // A. TRY V2 (Modular Sessions) FIRST
@@ -1527,8 +1498,19 @@ window.recalcInvigSlots = async function () {
                 todayMidnight.setHours(0, 0, 0, 0);
                 const midnightObj = todayMidnight.getTime();
 
+                // 🛡️ [SYNC GUARD]: Definitive block for all cloud fetches during a Restore.
+                if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
+                    console.log("⏳ Live Sync Blocked: Restoration Integrity Bridge is active...");
+                    return;
+                }
+
                 // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
-                    const sessionSnap = await getDocs(sessionsRef);
+                    // 🛡️ [CACHE SHIELD]: If a restore just happened, force fetch from SERVER to bypass stale local cache.
+                    const isRestoring = localStorage.getItem('pendingDriveRestoreSync') === 'true';
+                    const fetchOptions = isRestoring ? { source: 'server' } : {};
+                    
+                    if (isRestoring) console.log("🛡️ [Cache Shield]: Bypassing Firestore Cache for integrity...");
+                    const sessionSnap = await getDocs(sessionsRef, fetchOptions);
 
                     let cloudMetaFound = false;
                     
@@ -1614,11 +1596,23 @@ window.recalcInvigSlots = async function () {
                         if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
 
                         
-                        // Merge Students to IDB
+                        // 🛡️ [RESURRECTION FIX]: Session-Aware Merge
                         if (allStudents.length > 0) {
-                            const merged = [...localDB, ...allStudents];
-                            allStudentData = merged; 
-                            await saveExamDataIDB(merged, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce
+                            // 1. Identify which sessions are actually being updated from the cloud
+                            const updatedSessions = new Set(allStudents.map(s => `${s.Date} | ${s.Time}`));
+
+                            // 2. Filter localDB: Keep everything EXCEPT the sessions we are about to refresh
+                            // This ensures that deleted students STAY deleted because they aren't in the cloud update.
+                            const keptLocal = localDB.filter(s => {
+                                const sessionKey = `${s.Date} | ${s.Time}`;
+                                return !updatedSessions.has(sessionKey);
+                            });
+
+                            // 3. Merge the fresh session data into the clean local database
+                            const merged = [...keptLocal, ...allStudents];
+                            allStudentData = merged;
+                            await saveExamDataIDB(merged, true); 
+                            console.log(`🛡️ [Live Sync]: Session-Aware Merge Complete. Cleansed and synced ${allStudents.length} records.`);
                         }
                     } else {
                         console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
@@ -1825,6 +1819,9 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
 
             jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
             await saveExamDataIDB(allStudentData);
+
+            // Do NOT rebuild dropdowns here
+            
             
             // Do NOT rebuild dropdowns here — selections would be lost.
             // Each tab's change handler is responsible for rendering after this returns.
@@ -1860,7 +1857,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
                      if (bulkData.examBaseData) {
                          const students = JSON.parse(bulkData.examBaseData);
                          allStudentData = [...allStudentData, ...students];
-                         await saveExamDataIDB(allStudentData);
+                         
                          updateSyncStatus("Restored from V1 Archive!", "success");
                          return;
                      }
@@ -1916,7 +1913,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
         });
     };
 
-async function deleteSessionFromCloud(sessionKey) {
+async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
     if (!currentCollegeId || !navigator.onLine) return;
     
     updateSyncStatus(`Deleting ${sessionKey}...`, "neutral");
@@ -1927,6 +1924,19 @@ async function deleteSessionFromCloud(sessionKey) {
     try {
         // 1. Delete main session from private admin area
         await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+
+        // --- 1b. [AUDIT FIX]: Delete associated student data (including chunks) ---
+        const studentDocRef = doc(db, 'colleges', currentCollegeId, 'session_students', sessionId);
+        const studentSnap = await getDoc(studentDocRef);
+        if (studentSnap.exists()) {
+            const sData = studentSnap.data();
+            if (sData.isChunked && sData.totalChunks) {
+                for (let i = 0; i < sData.totalChunks; i++) {
+                    await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
+                }
+            }
+            await deleteDoc(studentDocRef);
+        }
         
         // --- 2. NEW: Delete from public seating index and chunk ---
         const chunkId = `${currentCollegeId}_${sessionId}`;
@@ -1938,20 +1948,30 @@ async function deleteSessionFromCloud(sessionKey) {
             const data = indexSnap.data();
             if (data.sessions && data.sessions[sessionKey]) {
                 delete data.sessions[sessionKey];
-                await setDoc(indexRef, data); // Resave the cleaned index
+                                if (skipIndexUpdate) {
+                    console.log(`⚡ Skipped Public Index Update for ${sessionKey} (Bulk Mode)`);
+                } else {
+                    await setDoc(indexRef, data); // Resave the cleaned index
+                }
             }
         }
         // ---------------------------------------------------------
 
-        // --- 3. NEW: Delete from Firebase Storage historical_sessions ---
+        // --- 3. NEW: Delete from Firebase Storage historical_sessions (Safe Guard) ---
         try {
-            const { storage, ref, deleteObject, getDownloadURL } = window.firebase;
+            const { storage, ref, deleteObject } = window.firebase;
             const dateStr = sessionKey.split(' | ')[0].trim();
-            const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
-            // Only delete if it actually exists (avoids error for sessions not yet archived)
-            await getDownloadURL(storageRef); // throws if missing
-            await deleteObject(storageRef);
-            console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
+            
+            // 🛡️ [AUDIT FIX]: Only delete the archive if NO other sessions for this date exist in the registry.
+            // This prevents deleting the Morning archive if only the Afternoon session is being deleted.
+            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
+            
+            if (sessionsForThisDate.length <= 1) { 
+                const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
+                await deleteObject(storageRef).catch(() => {}); 
+                console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
+            }
         } catch (storageErr) {
             // File didn't exist in Storage — that's fine, nothing to delete
         }
@@ -1977,16 +1997,17 @@ async function deleteSessionFromCloud(sessionKey) {
 
 
     
-   async function syncSessionToCloud(sessionKey) {
-        // Normalization Guard: Ensure all session keys use dots before cloud upload
-        sessionKey = sessionKey.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
+   async function syncSessionToCloud(sessionKey, skipStaffSync = false) {
+        // 🛡️ [LOOKUP FIX]: Removed redundant sessionKey normalization here.
+        // It was breaking localStorage lookups for dash-dated sessions. 
+        // Cloud-safe IDs are already handled by generateSessionId().
 
         // FIX: Use 'currentCollegeId' directly, NOT 'window.currentCollegeId'
         if (!currentCollegeId || !navigator.onLine) return;
         
         updateSyncStatus(`Saving ${sessionKey}...`, "neutral");
 
-        const { db, doc, setDoc } = window.firebase;
+        const { db, doc, setDoc, getDoc, deleteDoc } = window.firebase;
         const sessionId = generateSessionId(sessionKey);
         
         // 1. Gather Data for THIS Session Only from Global Memory
@@ -2060,6 +2081,15 @@ async function deleteSessionFromCloud(sessionKey) {
      // --- NEW WEB APP HYBRID SYNC ---
             await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
             
+    // --- 🛡️ [GHOST CHUNK GUARD]: Clean up any existing chunks before writing new ones ---
+        const oldStudentSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId));
+        if (oldStudentSnap.exists() && oldStudentSnap.data().isChunked) {
+            const oldTotal = oldStudentSnap.data().totalChunks;
+            for (let i = 0; i < oldTotal; i++) {
+                await deleteDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
+            }
+        }
+
         // --- PLAN A: Primary Student Record (Chunked to handle 800+ students) ---
             const jsonPayload = JSON.stringify(sessionStudentsDoc);
             const chunkSize = 1024 * 1024; // 1MB
@@ -2084,13 +2114,16 @@ async function deleteSessionFromCloud(sessionKey) {
 
 
             
-            // Recalculate Invigilation Slots
-            if (typeof updateLocalSlotsFromStudents === 'function') {
-                await updateLocalSlotsFromStudents();
+            // --- ⚡ [SPEED FIX]: Skip heavy staff sync during bulk operations ---
+            if (!skipStaffSync) {
+                // Recalculate Invigilation Slots
+                if (typeof updateLocalSlotsFromStudents === 'function') {
+                    await updateLocalSlotsFromStudents();
+                }
+
+                // FIX: Global recalculation must be authoritative
+                await syncDataToCloud('slots', "FORCE_OVERWRITE");
             }
-            
-            // FIX: Global recalculation must be authoritative
-            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
 
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
             // that used to be here, which were causing the 1MB limit error.
@@ -2103,7 +2136,7 @@ async function deleteSessionFromCloud(sessionKey) {
 
 
     // --- PUBLIC SEATING PORTAL PUBLISHER ---
-    async function publishSeatingToPublic(sessionKey, roomAllotment, scribeAllotment) {
+    async function publishSeatingToPublic(sessionKey, roomAllotment, scribeAllotment, skipIndexUpdate = false) {
         try {
             const { db, doc, setDoc, getDoc } = window.firebase;
             const cid = currentCollegeId;
@@ -2153,6 +2186,10 @@ async function deleteSessionFromCloud(sessionKey) {
             });
 
             // Update index doc so student.html can discover this session
+            if (skipIndexUpdate) {
+                console.log(`⚡ Skipped Index Update for ${sessionKey} (Bulk Mode)`);
+                return;
+            }
             const indexRef = doc(db, 'public_seating', cid);
             const existingSnap = await getDoc(indexRef);
             const existingData = existingSnap.exists() ? existingSnap.data() : {};
@@ -9768,8 +9805,8 @@ async function parseCsvAndLoadData(csvText) {
 
         // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-       // localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
         await saveExamDataIDB(allStudentData);
+        
         // Add this after saveExamDataIDB(allStudentData);
         const modifiedSessions = new Set();
         finalBatch.forEach(s => modifiedSessions.add(`${s.Date} | ${s.Time}`));
@@ -14121,6 +14158,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             // 3. Update the global variable and IDB
             allStudentData = updatedAllStudentData;
             await saveExamDataIDB(allStudentData);
+            
 
 
 
@@ -14431,7 +14469,7 @@ Are you sure you want to update these records?
                 });
 
                 // 7. Save to IDB & Sync
-                await saveExamDataIDB(allStudentData);
+                
 
                 
                 alert(`✅ Updated ${updateCount} students! Syncing changes...`);
@@ -17780,7 +17818,7 @@ if (btnSessionReschedule) {
                 });
 
                 // Save to Local Storage
-                await saveExamDataIDB(allStudentData);
+                
 
                 // 2. Move Auxiliary Data (ONLY IF MOVING)
                 if (isMove) {
@@ -21728,6 +21766,7 @@ window.toggleBulkLock = function() {
     const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
     const startSelect = document.getElementById('edit-bulk-start-session');
     const endSelect = document.getElementById('edit-bulk-end-session');
+    const examSelect = document.getElementById('edit-bulk-exam-name');
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
     const controlsDiv = document.getElementById('bulk-delete-controls');
 
@@ -21754,6 +21793,39 @@ window.toggleBulkLock = function() {
                 const opt2 = new Option(session, session);
                 endSelect.add(opt2);
             });
+
+            // 1b. Populate Unique Exam Names
+            examSelect.innerHTML = '<option value="">-- All Exams --</option>';
+            const uniqueExamNames = new Set();
+            allStudentData.forEach(s => {
+                const name = s.examName || s['Exam Name'];
+                if (name) uniqueExamNames.add(name);
+            });
+            Array.from(uniqueExamNames).sort().forEach(name => {
+                examSelect.add(new Option(name, name));
+            });
+
+            // 🛡️ [SMART AUTO-RANGE]: Automatically detect start/end when exam is selected
+            examSelect.onchange = function() {
+                const targetName = this.value;
+                if (!targetName) return;
+
+                // 1. Find all sessions containing this exam
+                const examSessions = allStudentData
+                    .filter(s => (s.examName || s['Exam Name']) === targetName)
+                    .map(s => `${s.Date} | ${s.Time}`);
+                
+                if (examSessions.length > 0) {
+                    // 2. Sort them chronologically using the existing comparator
+                    const uniqueSorted = Array.from(new Set(examSessions)).sort(compareSessionStrings);
+                    
+                    // 3. Auto-fill the Start and End dropdowns
+                    startSelect.value = uniqueSorted[0];
+                    endSelect.value = uniqueSorted[uniqueSorted.length - 1];
+                    
+                    console.log(`🎯 Auto-Range Detected for ${targetName}: ${uniqueSorted[0]} TO ${uniqueSorted[uniqueSorted.length - 1]}`);
+                }
+            };
         } else {
             alert("No exam sessions found to delete! (List empty)");
             return;
@@ -21762,6 +21834,7 @@ window.toggleBulkLock = function() {
         // 2. Enable Inputs
         startSelect.disabled = false;
         endSelect.disabled = false;
+        examSelect.disabled = false;
         deleteBtn.disabled = false;
 
         // 3. Visual Updates
@@ -21769,6 +21842,8 @@ window.toggleBulkLock = function() {
         startSelect.classList.add('bg-white');
         endSelect.classList.remove('bg-gray-100');
         endSelect.classList.add('bg-white');
+        examSelect.classList.remove('bg-gray-100');
+        examSelect.classList.add('bg-white');
         controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
 
         // 4. Update Button State
@@ -21807,6 +21882,7 @@ window.toggleBulkLock = function() {
 window.executeBulkDelete = async function() {
     const startSession = document.getElementById('edit-bulk-start-session').value;
     const endSession = document.getElementById('edit-bulk-end-session').value;
+    const targetExamName = document.getElementById('edit-bulk-exam-name').value;
     const deleteBtn = document.getElementById('btn-edit-bulk-delete');
 
     // Validation
@@ -21832,68 +21908,287 @@ window.executeBulkDelete = async function() {
     const sessionsToDelete = allStudentSessions.slice(startIndex, endIndex + 1);
 
     // Confirmation
-    const confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n\nThis will remove Student Data, Rooms, and Scribes.\n\n✅ NOTE: Invigilation Volunteers & Unavailability will be SAVED/PRESERVED.\n\nType 'DELETE' to confirm:`;
+    let confirmMsg = `🛑 CRITICAL WARNING 🛑\n\nYou are about to DELETE data from ${sessionsToDelete.length} SESSIONS.\nFrom: ${startSession}\nTo: ${endSession}\n`;
+    if (targetExamName) {
+        confirmMsg += `\n🎯 TARGET EXAM: ${targetExamName.toUpperCase()}\n(Only students belonging to this exam will be removed. Other exam data in these sessions will be preserved.)\n`;
+    } else {
+        confirmMsg += `\n🚨 ALL EXAMS in this range will be deleted!\n`;
+    }
+    confirmMsg += `\n✅ NOTE: Invigilation Volunteers & Unavailability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
     const userInput = prompt(confirmMsg);
 
     if (userInput !== 'DELETE') return;
 
     // Execution
     try {
+        deleteBtn.innerHTML = "Hydrating...";
+        
+        // 🛡️ [FINAL AUDIT FIX]: Force fresh load from IndexedDB before filtering.
+        // This prevents accidental wipes if the global allStudentData is currently empty/loading.
+        const freshData = await loadExamDataIDB();
+        if (!freshData || freshData.length === 0) {
+            throw new Error("Critical: Master student database could not be loaded. Aborting to prevent data loss.");
+        }
+        allStudentData = freshData;
+
         deleteBtn.innerHTML = "Deleting...";
         deleteBtn.disabled = true;
 
         const sessionSet = new Set(sessionsToDelete);
 
-        // 1. Remove Students (Filter Global Array)
+        // 1. Remove Students (Surgical Filter)
         allStudentData = allStudentData.filter(s => {
-            const key = `${s.Date} | ${s.Time}`;
-            return !sessionSet.has(key);
+            const sessionKey = `${s.Date} | ${s.Time}`;
+            if (!sessionSet.has(sessionKey)) return true; // Keep sessions outside range
+            
+            if (targetExamName) {
+                const sName = s.examName || s['Exam Name'];
+                return (sName !== targetExamName); // Keep students NOT belonging to target exam
+            }
+            return false; // Remove all students in range if no specific exam selected
         });
         //localStorage.setItem('examBaseData', JSON.stringify(allStudentData));
-        await saveExamDataIDB(allStudentData);
+        // 🛡️ [PERFORMANCE FIX]: Skip global cloud sync to avoid 1MB Firestore limit.
+        // Modular cloud updates for individual sessions are handled in the loop below.
+        await saveExamDataIDB(allStudentData, true);
         
         // 🟢 FIX: Purge old legacy keys to prevent deleted data from resurrecting
         localStorage.removeItem('examBaseData');
         localStorage.removeItem('examData_v2');
 
-        // 2. Remove Aux Data (Assignments, Rooms, etc.)
-        // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
-        const auxKeys = [
-            'examRoomAllotment', 
-            'examScribeAllotment', 
-            'examAbsenteeList', 
-            'examQPCodes' 
-        ];
-        
-        auxKeys.forEach(key => {
-            const raw = localStorage.getItem(key);
-            if(raw) {
-                const data = JSON.parse(raw);
-                let changed = false;
-                sessionsToDelete.forEach(s => {
-                    if(data[s]) { delete data[s]; changed = true; }
+        // --- 1b. SURGICAL SNAPSHOT CLEAN (Crucial for report consistency) ---
+        // If surgical delete, we must clean allotments/absentees to avoid "ghost" records in reports.
+        if (targetExamName) {
+            const validRegNos = new Set(allStudentData.map(s => (s['Register Number'] || s.RegisterNo || '').toString().trim()));
+
+            // A. Clean Room Allotments
+            const allotRaw = localStorage.getItem('examRoomAllotment');
+            if (allotRaw) {
+                const allAllotments = JSON.parse(allotRaw);
+                let allotChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (allAllotments[sk] && Array.isArray(allAllotments[sk])) {
+                        const originalRoomCount = allAllotments[sk].length;
+                        allAllotments[sk] = allAllotments[sk].filter(room => {
+                            if (room.students && Array.isArray(room.students)) {
+                                room.students = room.students.filter(st => {
+                                    const regNo = (typeof st === 'object') ? (st['Register Number'] || st.RegisterNo) : st;
+                                    return validRegNos.has((regNo || '').toString().trim());
+                                });
+                                // Keep the room ONLY if it still has students
+                                return room.students.length > 0;
+                            }
+                            return true; // Keep rooms that don't follow standard student-array pattern
+                        });
+                        if (allAllotments[sk].length !== originalRoomCount) allotChanged = true;
+                    }
                 });
-                if(changed) localStorage.setItem(key, JSON.stringify(data));
+                if (allotChanged) localStorage.setItem('examRoomAllotment', JSON.stringify(allAllotments));
+            }
+
+            // A-2. Clean Invigilator Mapping (Unassign from empty rooms)
+            const invigRaw = localStorage.getItem('examInvigilatorMapping');
+            const latestAllot = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            if (invigRaw) {
+                const invigMap = JSON.parse(invigRaw);
+                let invigChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (invigMap[sk]) {
+                        // Get list of rooms that STILL HAVE students in this session
+                        const activeRooms = new Set((latestAllot[sk] || []).map(r => r.roomName));
+                        Object.keys(invigMap[sk]).forEach(roomName => {
+                            if (!activeRooms.has(roomName)) {
+                                delete invigMap[sk][roomName];
+                                invigChanged = true;
+                            }
+                        });
+                    }
+                });
+                if (invigChanged) localStorage.setItem('examInvigilatorMapping', JSON.stringify(invigMap));
+            }
+            
+            // B. Clean Scribe Allotments (V1 & V2)
+            const scribeKeys = ['examScribeAllotment', 'examScribeAllotmentV2'];
+            scribeKeys.forEach(sKey => {
+                const scribeAllotRaw = localStorage.getItem(sKey);
+                if (scribeAllotRaw) {
+                    const allScribeAllots = JSON.parse(scribeAllotRaw);
+                    let scribeChanged = false;
+                    sessionsToDelete.forEach(sk => {
+                        if (allScribeAllots[sk]) {
+                            Object.keys(allScribeAllots[sk]).forEach(regNo => {
+                                if (!validRegNos.has((regNo || '').toString().trim())) {
+                                    delete allScribeAllots[sk][regNo];
+                                    scribeChanged = true;
+                                }
+                            });
+                        }
+                    });
+                    if (scribeChanged) localStorage.setItem(sKey, JSON.stringify(allScribeAllots));
+                }
+            });
+
+            // C. Clean Absentee List
+            const absenteeRaw = localStorage.getItem('examAbsenteeList');
+            if (absenteeRaw) {
+                const allAbsentees = JSON.parse(absenteeRaw);
+                let absChanged = false;
+                sessionsToDelete.forEach(sk => {
+                    if (allAbsentees[sk] && Array.isArray(allAbsentees[sk])) {
+                        const originalCount = allAbsentees[sk].length;
+                        allAbsentees[sk] = allAbsentees[sk].filter(regNo => validRegNos.has((regNo || '').toString().trim()));
+                        if (allAbsentees[sk].length !== originalCount) absChanged = true;
+                    }
+                });
+                if (absChanged) localStorage.setItem('examAbsenteeList', JSON.stringify(allAbsentees));
+            }
+        }
+
+        // --- 1c. [FINAL AUDIT FIX]: Clean Invigilation Slots ---
+        const slotsRaw = localStorage.getItem('examInvigilationSlots');
+        if (slotsRaw) {
+            const allSlots = JSON.parse(slotsRaw);
+            let slotsChanged = false;
+            sessionsToDelete.forEach(sk => {
+                if (allSlots[sk]) {
+                    const slot = allSlots[sk];
+                    const hasVolunteers = (slot.assigned && slot.assigned.length > 0) || (slot.unavailable && slot.unavailable.length > 0);
+                    
+                    if (!hasVolunteers) {
+                        // If no one volunteered, we can safely nuke the record.
+                        delete allSlots[sk];
+                        slotsChanged = true;
+                    } else {
+                        // 🛡️ [INTEGRITY FIX]: If volunteers exist, we MUST preserve the slot 
+                        // but zero out the requirements. This applies to both surgical and full deletes.
+                        slot.required = 0;
+                        slot.reserveCount = 0;
+                        slot.studentCount = 0;
+                        slot.scribeCount = 0;
+                        slotsChanged = true;
+                    }
+                }
+            });
+            if (slotsChanged) localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
+        }
+        // If surgical delete (targetExamName exists), we KEEP these as they are shared/session-wide.
+        if (!targetExamName) {
+            const auxKeys = [
+                'examRoomAllotment',
+                'examScribeAllotment',
+                'examAbsenteeList',
+                'examQPCodes',
+                'examInvigilatorMapping'
+            ];
+            
+            auxKeys.forEach(key => {
+                const raw = localStorage.getItem(key);
+                if(raw) {
+                    const data = JSON.parse(raw);
+                    let changed = false;
+                    sessionsToDelete.forEach(s => {
+                        if(data[s]) { delete data[s]; changed = true; }
+                    });
+                    if(changed) localStorage.setItem(key, JSON.stringify(data));
+                }
+            });
+        }
+
+        // 3. Sync to Cloud (Smart Handling)
+        for (const sessionKey of sessionsToDelete) {
+            const [dPart, tPart] = sessionKey.split(' | ');
+            const remainingInSession = allStudentData.filter(s =>
+                (s.Date || "").trim() === (dPart || "").trim() &&
+                (s.Time || "").trim() === (tPart || "").trim()
+            );
+
+            if (remainingInSession.length === 0) {
+                // Entire session is empty -> Full Delete from Cloud (Skip indexHammer)
+                await deleteSessionFromCloud(sessionKey, true);
+            } else {
+                // Session still has other exam data -> Re-sync updated state to Cloud
+                if (typeof syncSessionToCloud === 'function') {
+                    // ⚡ [SPEED FIX]: Skip staff sync inside the loop; we do a single sync at the end.
+                    await syncSessionToCloud(sessionKey, true);
+                    
+                    // --- 🛡️ [AUDIT FIX]: Update Public Seating Portal ---
+                    // Ensures deleted students are removed from the searchable portal.
+                    if (typeof publishSeatingToPublic === 'function') {
+                        const allRoomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                        const allScribeAllots = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                        // ⚡ BULK MODE: Update the session doc, but skip updating the master index every time.
+                        await publishSeatingToPublic(sessionKey, allRoomAllots[sessionKey], allScribeAllots[sessionKey], true);
+                    }
+                }
+            }
+        }
+
+        // --- 🛡️ [FINAL INTEGRITY GUARD]: Authoritative Registry Update ---
+        // We derive the registry from Students + Active Slots to guarantee dropdown consistency.
+        const sessionsInDb = new Set();
+        
+        // 1. Add sessions from Student Database
+        allStudentData.forEach(s => {
+            const d = (s.Date || "").trim().replace(/[-/]/g, '.');
+            const t = (s.Time || "").trim();
+            if (d && t) sessionsInDb.add(`${d} | ${t}`);
+        });
+
+        // 2. Add sessions from Invigilation Slots (Preserves Virtual/Planned sessions)
+        const activeSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        Object.keys(activeSlots).forEach(sk => {
+            if (sk.includes('|')) {
+                const [dRaw, tRaw] = sk.split('|');
+                const d = dRaw.trim().replace(/[-/]/g, '.');
+                const t = tRaw.trim();
+                if (d && t) sessionsInDb.add(`${d} | ${t}`);
             }
         });
 
-        // 3. Sync to Cloud
-        // A. DELETE MODULAR SESSIONS (V2)
-        for (const sessionKey of sessionsToDelete) {
-            await deleteSessionFromCloud(sessionKey);
-            }
-        // Only sync Ops & Allocation. Do NOT sync 'slots' or 'staff' to avoid overwriting with empty data.
+        const finalRegistry = Array.from(sessionsInDb).sort();
+        localStorage.setItem('examAllKnownSessions', JSON.stringify(finalRegistry));
+
+        // --- ⚡ [AUTHORITATIVE PORTAL FLUSH]: Final Student Portal Sync ---
+        // Authoritatively rebuild the Public Seating Index from the final registry.
+        if (typeof firebase !== 'undefined' && currentCollegeId) {
+            const { db, doc, setDoc } = window.firebase;
+            const indexRef = doc(db, 'public_seating', currentCollegeId);
+            const newPublicSessions = {};
+            
+            finalRegistry.forEach(sk => {
+                const docId = `${currentCollegeId}_${generateSessionId(sk)}`;
+                newPublicSessions[sk] = { docId, lastUpdated: Date.now() };
+            });
+
+            // 🛡️ [PURGE FIX]: Remove { merge: true } to authoritatively overwrite the index.
+            // This ensures that deleted sessions are actually removed from the student portal.
+            await setDoc(indexRef, {
+                collegeId: currentCollegeId,
+                collegeName: localStorage.getItem('examCollegeName') || 'My College',
+                sessions: newPublicSessions
+            });
+            console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");
+        }
+        // 4. Final Cloud Sync & Staff Recalculation
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
-            await syncDataToCloud('allocation'); 
+            await syncDataToCloud('allocation');
+
+            // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
+            // This prevents stale data from re-poisoning the local database on refresh.
+            await syncDataToCloud('baseData');
+
+            // --- 🛡️ [AUDIT FIX]: Recalculate Staff Needs ---
+            // If we deleted students, we may need fewer invigilators.
+            if (typeof updateLocalSlotsFromStudents === 'function') {
+                await updateLocalSlotsFromStudents();
+                // 🛡️ [PURGE FIX]: Use "FORCE_OVERWRITE" to ensure the cloud matches our cleaned local state.
+                // This prevents deleted sessions from being "merged back" from the cloud.
+                await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+            }
         }
         
-        // Update Master Registry for all deleted sessions in the range
-        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        const toDeleteSet = new Set(sessionsToDelete);
-        known = known.filter(k => !toDeleteSet.has(k));
-        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
-
+        // 4. Update Master Registry (ONLY if full session delete)
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
