@@ -966,7 +966,7 @@ function isUserUnavailable(slot, email, key) {
                     
                     // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
                     if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
-                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -1607,7 +1607,14 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
             if (s.roleHistory && Array.isArray(s.roleHistory)) {
                 const isExempt = s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    
+                    // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
+                    if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
                     return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
                 });
                 if (isExempt) return false; // Hide them completely from selection
@@ -11657,7 +11664,14 @@ window.directAddStaff = function(key) {
                 const targetStamp = new Date(slotTargetDateStr).getTime();
                 if (s.roleHistory.some(r => {
                     const startStamp = new Date(r.start).getTime();
-                    const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    
+                    // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
+                    if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
                     return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
                 })) {
 
