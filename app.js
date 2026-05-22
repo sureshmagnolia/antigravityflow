@@ -1615,11 +1615,23 @@ window.recalcInvigSlots = async function () {
                         if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
 
                         
-                        // Merge Students to IDB
+                        // 🛡️ [SYNC FIX]: Smart Merge to prevent deleted data from resurrecting
                         if (allStudents.length > 0) {
-                            const merged = [...localDB, ...allStudents];
-                            allStudentData = merged; 
-                            await saveExamDataIDB(merged, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce
+                            // 1. Map cloud students by Register Number for fast lookup
+                            const cloudRegNos = new Set(allStudents.map(s => (s['Register Number'] || s.RegisterNo || '').toString().trim()));
+                            
+                            // 2. Filter out local records that are being replaced by this cloud update
+                            // This ensures that "Fresh Cloud Data" always wins and we don't keep "Ghost" local copies.
+                            const keptLocal = localDB.filter(s => {
+                                const regNo = (s['Register Number'] || s.RegisterNo || '').toString().trim();
+                                return !cloudRegNos.has(regNo);
+                            });
+
+                            // 3. Combine kept local data with fresh cloud data
+                            const merged = [...keptLocal, ...allStudents];
+                            allStudentData = merged;
+                            await saveExamDataIDB(merged, true); // ⚡ Stop Infinite Cloud Bounce
+                            console.log(`🛡️ [Live Sync]: Smart Merge Complete. Integrated ${allStudents.length} fresh cloud records.`);
                         }
                     } else {
                         console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
