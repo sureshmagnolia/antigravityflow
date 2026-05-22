@@ -643,7 +643,13 @@ function getDutiesDoneCount(email, referenceDate = null) {
         const resetWall = new Date(2026, 5, 1); // Month 5 is June
         if (dateObj < resetWall) return;
 
+        // 🛡️ [JUNE RESET FIX]: Force a clean slate for the new Academic Year.
+        // Any duties performed before June 1st, 2026 are ignored.
+        const resetWall = new Date(2026, 5, 1); // Month 5 is June
+        if (dateObj < resetWall) return;
+
         // Filter by Academic Year (Ignore old duties)
+        if (dateObj < acYear.start || dateObj > acYear.end) return;
         if (dateObj < acYear.start || dateObj > acYear.end) return;
 
         if (slot.attendance && slot.attendance.includes(email)) {
@@ -736,7 +742,6 @@ function calculateStaffTarget(staff, referenceDate = null) {
     // Use the reference date for the calculation boundary if it's in the future
     const boundaryDate = (ref > today) ? ref : today;
 
-    // 2. Determine Calculation Period
     let calcEnd = (boundaryDate < acYear.end) ? boundaryDate : acYear.end;
     // 🛡️ [ACADEMIC YEAR RESET]: Force the calculation to ignore everything before June 2026.
     const resetWall = new Date(2026, 5, 1); // June 1st, 2026
@@ -746,6 +751,10 @@ function calculateStaffTarget(staff, referenceDate = null) {
     let calcStart = acYear.start;
     if (joinDate > calcStart) calcStart = joinDate;
     if (resetWall > calcStart) calcStart = resetWall;
+
+    // 🛡️ [MONTHLY HEAD-START]: Ensure target includes the upcoming start month.
+    // If we are currently in May/June transition, move calcEnd to at least June 30th.
+    if (calcEnd < new Date(2026, 5, 30)) calcEnd = new Date(2026, 5, 30);
 
     if (calcStart > calcEnd) return 0;
 
@@ -777,7 +786,12 @@ function calculateStaffTarget(staff, referenceDate = null) {
         if (staff.roleHistory && staff.roleHistory.length > 0) {
             const activeRoles = staff.roleHistory.filter(r => {
                 const rStart = new Date(r.start);
-                const rEnd = new Date(r.end);
+                // 🛡️ [ROLE PERSISTENCE]: Roles ending in May are extended until a new role starts
+                let rEnd = r.end ? new Date(r.end) : new Date("9999-12-31");
+                if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.'))) {
+                    const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                    if (!hasNewerRole) rEnd = new Date("9999-12-31");
+                }
                 return rStart <= currentMonthEnd && rEnd >= currentMonthStart;
             });
 
@@ -950,8 +964,15 @@ function isUserUnavailable(slot, email, key) {
             const targetStamp = new Date(slotTargetDateStr).getTime();
              if (staff.roleHistory.some(r => {
                  const startStamp = new Date(r.start).getTime();
-                 const endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
-                 return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
+                    let endStamp = r.end ? new Date(r.end).setHours(23, 59, 59, 999) : Infinity;
+                    
+                    // 🛡️ [ROLE PERSISTENCE]: Carry forward May 31st roles into the new year until a new role starts
+                    if (r.end && (r.end.includes('-05-31') || r.end.includes('.05.')) && targetStamp > endStamp) {
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        if (!hasNewerRole) endStamp = Infinity;
+                    }
+
+                    return exemptRoles.includes(r.role) && targetStamp >= startStamp && targetStamp <= endStamp;
              })) {
 
                  return true;
@@ -1887,9 +1908,17 @@ function renderExchangeMarket(myEmail) {
     Object.keys(invigilationSlots).forEach(key => {
         const slot = invigilationSlots[key];
         if (slot.isAdminLocked) return;
+        // 🛡️ [MARKET FIX]: Ignore past sessions and verify assignments
+        const dateObj = parseDate(key);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dateObj < today) return; 
+
         if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
-            // *** CHANGE: Show ALL requests, including my own ***
-            slot.exchangeRequests.forEach(sellerEmail => {
+            // 🛡️ [MARKET FIX]: Only show requests for people who are STILL assigned to this slot
+            const validRequests = slot.exchangeRequests.filter(email => (slot.assigned || []).includes(email));
+            
+            validRequests.forEach(sellerEmail => {
                 marketSlots.push({
                     key: key,
                     seller: sellerEmail,
@@ -2669,6 +2698,10 @@ window.cancelDuty = async function (key, email, isLocked) {
     if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
     if (confirm("Cancel duty?")) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
+        // 🛡️ [CLEANUP FIX]: Remove from exchange market immediately if cancelled
+        if (invigilationSlots[key].exchangeRequests) {
+            invigilationSlots[key].exchangeRequests = invigilationSlots[key].exchangeRequests.filter(e => e !== email);
+        }
         const me = staffData.find(s => s.email === email);
         if (me && me.dutiesAssigned > 0) me.dutiesAssigned--;
         logActivity("Duty Cancelled", `${getNameFromEmail(email)} cancelled duty for ${key}.`);
