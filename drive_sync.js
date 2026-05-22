@@ -763,8 +763,10 @@ async function checkForNewerDataOnDrive(isManual = false) {
 // --- RESTORE UI ---
 window.restoreFromDrive = restoreFromDrive;
 async function restoreFromDrive() {
-    const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
-    const prefix = isProUser ? 'INVIG_Backup' : 'ADMIN_Backup';
+    // 🛡️ [AUDIT FIX]: Search based on Module Context (Admin vs Invig) 
+    // This ensures Pro users can still see their Admin backups while in the Dashboard.
+    const isInvigModule = window.location.pathname.includes('invigilation');
+    const prefix = isInvigModule ? 'INVIG_Backup' : 'ADMIN_Backup';
 
     if (typeof currentCollegeId !== 'undefined' && currentCollegeId && navigator.onLine) {
         if (!(await UiModal.confirm("Drive Restore", "⚠️ FIREBASE ACTIVE: Restoring will overwrite local data. Continue?"))) return;
@@ -772,8 +774,15 @@ async function restoreFromDrive() {
 
     try {
         const folderId = await getBackupFolder();
+        
+        // 🛡️ [LEGACY FIX]: If in Admin module, also include generic 'Backup' and 'MANUAL_Backup' files
+        let query = `'${folderId}' in parents and name contains '${prefix}' and mimeType='application/json' and trashed=false`;
+        if (!isInvigModule) {
+            query = `'${folderId}' in parents and (name contains 'ADMIN_Backup' or name contains 'MANUAL_Backup' or name contains 'Backup_') and mimeType='application/json' and trashed=false`;
+        }
+
         const res = await gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and name contains '${prefix}' and mimeType='application/json' and trashed=false`,
+            q: query,
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
