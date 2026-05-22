@@ -1615,23 +1615,23 @@ window.recalcInvigSlots = async function () {
                         if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
 
                         
-                        // 🛡️ [SYNC FIX]: Smart Merge to prevent deleted data from resurrecting
+                        // 🛡️ [RESURRECTION FIX]: Session-Aware Merge
                         if (allStudents.length > 0) {
-                            // 1. Map cloud students by Register Number for fast lookup
-                            const cloudRegNos = new Set(allStudents.map(s => (s['Register Number'] || s.RegisterNo || '').toString().trim()));
-                            
-                            // 2. Filter out local records that are being replaced by this cloud update
-                            // This ensures that "Fresh Cloud Data" always wins and we don't keep "Ghost" local copies.
+                            // 1. Identify which sessions are actually being updated from the cloud
+                            const updatedSessions = new Set(allStudents.map(s => `${s.Date} | ${s.Time}`));
+
+                            // 2. Filter localDB: Keep everything EXCEPT the sessions we are about to refresh
+                            // This ensures that deleted students STAY deleted because they aren't in the cloud update.
                             const keptLocal = localDB.filter(s => {
-                                const regNo = (s['Register Number'] || s.RegisterNo || '').toString().trim();
-                                return !cloudRegNos.has(regNo);
+                                const sessionKey = `${s.Date} | ${s.Time}`;
+                                return !updatedSessions.has(sessionKey);
                             });
 
-                            // 3. Combine kept local data with fresh cloud data
+                            // 3. Merge the fresh session data into the clean local database
                             const merged = [...keptLocal, ...allStudents];
                             allStudentData = merged;
-                            await saveExamDataIDB(merged, true); // ⚡ Stop Infinite Cloud Bounce
-                            console.log(`🛡️ [Live Sync]: Smart Merge Complete. Integrated ${allStudents.length} fresh cloud records.`);
+                            await saveExamDataIDB(merged, true); 
+                            console.log(`🛡️ [Live Sync]: Session-Aware Merge Complete. Cleansed and synced ${allStudents.length} records.`);
                         }
                     } else {
                         console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
@@ -22191,8 +22191,12 @@ window.executeBulkDelete = async function() {
         // 4. Final Cloud Sync & Staff Recalculation
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
-            await syncDataToCloud('allocation'); 
-            
+            await syncDataToCloud('allocation');
+
+            // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
+            // This prevents stale data from re-poisoning the local database on refresh.
+            await syncDataToCloud('baseData');
+
             // --- 🛡️ [AUDIT FIX]: Recalculate Staff Needs ---
             // If we deleted students, we may need fewer invigilators.
             if (typeof updateLocalSlotsFromStudents === 'function') {
