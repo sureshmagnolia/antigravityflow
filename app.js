@@ -1055,8 +1055,9 @@ function populateAllExamDropdowns() {
 
 // --- HELPER: Calculate Slot Requirements from Student Data ---
 async function updateLocalSlotsFromStudents() {
-    const students = await loadExamDataIDB();
-    if (!students || students.length === 0) return false;
+    const students = await loadExamDataIDB() || [];
+    // 🛡️ [INTEGRITY FIX]: Removed early return. Even if students are empty, 
+    // we must continue to zero-out requirements for sessions that no longer exist.
 
     try {
         const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
@@ -1963,15 +1964,21 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         }
         // ---------------------------------------------------------
 
-        // --- 3. NEW: Delete from Firebase Storage historical_sessions ---
+        // --- 3. NEW: Delete from Firebase Storage historical_sessions (Safe Guard) ---
         try {
-            const { storage, ref, deleteObject, getDownloadURL } = window.firebase;
+            const { storage, ref, deleteObject } = window.firebase;
             const dateStr = sessionKey.split(' | ')[0].trim();
-            const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
-            // Only delete if it actually exists (avoids error for sessions not yet archived)
-            await getDownloadURL(storageRef); // throws if missing
-            await deleteObject(storageRef);
-            console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
+            
+            // 🛡️ [AUDIT FIX]: Only delete the archive if NO other sessions for this date exist in the registry.
+            // This prevents deleting the Morning archive if only the Afternoon session is being deleted.
+            const currentRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const sessionsForThisDate = currentRegistry.filter(sk => sk.startsWith(dateStr));
+            
+            if (sessionsForThisDate.length <= 1) { 
+                const storageRef = ref(storage, `historical_sessions/${currentCollegeId}/${dateStr}.json`);
+                await deleteObject(storageRef).catch(() => {}); 
+                console.log(`🗑️ Deleted historical_sessions Storage file: ${dateStr}.json`);
+            }
         } catch (storageErr) {
             // File didn't exist in Storage — that's fine, nothing to delete
         }
@@ -22032,9 +22039,17 @@ window.executeBulkDelete = async function() {
                     const slot = allSlots[sk];
                     const hasVolunteers = (slot.assigned && slot.assigned.length > 0) || (slot.unavailable && slot.unavailable.length > 0);
                     
-                    if (!hasVolunteers || !targetExamName) {
-                        // If no volunteers OR it's a full delete -> Nuke the slot
+                    if (!hasVolunteers) {
+                        // If no one volunteered, we can safely nuke the record.
                         delete allSlots[sk];
+                        slotsChanged = true;
+                    } else {
+                        // 🛡️ [INTEGRITY FIX]: If volunteers exist, we MUST preserve the slot 
+                        // but zero out the requirements. This applies to both surgical and full deletes.
+                        slot.required = 0;
+                        slot.reserveCount = 0;
+                        slot.studentCount = 0;
+                        slot.scribeCount = 0;
                         slotsChanged = true;
                     } else {
                         // Surgical delete + volunteers exist -> Zero out requirements but KEEP volunteers
@@ -22051,10 +22066,11 @@ window.executeBulkDelete = async function() {
         // If surgical delete (targetExamName exists), we KEEP these as they are shared/session-wide.
         if (!targetExamName) {
             const auxKeys = [
-                'examRoomAllotment', 
-                'examScribeAllotment', 
-                'examAbsenteeList', 
-                'examQPCodes' 
+                'examRoomAllotment',
+                'examScribeAllotment',
+                'examAbsenteeList',
+                'examQPCodes',
+                'examInvigilatorMapping'
             ];
             
             auxKeys.forEach(key => {
