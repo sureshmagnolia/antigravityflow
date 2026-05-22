@@ -1627,9 +1627,9 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
             return true;
         })
         .map(s => {
-
-            const target = calculateStaffTarget(s);
-            const done = getDutiesDoneCount(s.email);
+            // 🛡️ [REMISSION FIX]: Pass targetDate to ensure main list counts are scoped
+            const target = calculateStaffTarget(s, targetDate);
+            const done = getDutiesDoneCount(s.email, targetDate);
             const pending = target - done;
             return { ...s, done, pending };
         })
