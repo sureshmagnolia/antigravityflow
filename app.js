@@ -21884,26 +21884,28 @@ window.executeBulkDelete = async function() {
         localStorage.removeItem('examBaseData');
         localStorage.removeItem('examData_v2');
 
-        // 2. Remove Aux Data (Assignments, Rooms, etc.)
-        // 🟢 EXCLUDING 'examInvigilationSlots' and 'examInvigilatorMapping' so they survive.
-        const auxKeys = [
-            'examRoomAllotment', 
-            'examScribeAllotment', 
-            'examAbsenteeList', 
-            'examQPCodes' 
-        ];
-        
-        auxKeys.forEach(key => {
-            const raw = localStorage.getItem(key);
-            if(raw) {
-                const data = JSON.parse(raw);
-                let changed = false;
-                sessionsToDelete.forEach(s => {
-                    if(data[s]) { delete data[s]; changed = true; }
-                });
-                if(changed) localStorage.setItem(key, JSON.stringify(data));
-            }
-        });
+        // 2. Remove Aux Data (ONLY if full session delete)
+        // If surgical delete (targetExamName exists), we KEEP these as they are shared/session-wide.
+        if (!targetExamName) {
+            const auxKeys = [
+                'examRoomAllotment', 
+                'examScribeAllotment', 
+                'examAbsenteeList', 
+                'examQPCodes' 
+            ];
+            
+            auxKeys.forEach(key => {
+                const raw = localStorage.getItem(key);
+                if(raw) {
+                    const data = JSON.parse(raw);
+                    let changed = false;
+                    sessionsToDelete.forEach(s => {
+                        if(data[s]) { delete data[s]; changed = true; }
+                    });
+                    if(changed) localStorage.setItem(key, JSON.stringify(data));
+                }
+            });
+        }
 
         // 3. Sync to Cloud (Smart Handling)
         for (const sessionKey of sessionsToDelete) {
@@ -21934,11 +21936,14 @@ window.executeBulkDelete = async function() {
             await syncDataToCloud('allocation'); 
         }
         
-        // Update Master Registry for all deleted sessions in the range
-        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-        const toDeleteSet = new Set(sessionsToDelete);
-        known = known.filter(k => !toDeleteSet.has(k));
-        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+        // 4. Update Master Registry (ONLY if full session delete)
+        // For surgical deletes, Step 3 already handles removing individual sessions if they become empty.
+        if (!targetExamName) {
+            let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            const toDeleteSet = new Set(sessionsToDelete);
+            known = known.filter(k => !toDeleteSet.has(k));
+            localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+        }
 
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
