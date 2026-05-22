@@ -739,17 +739,23 @@ function calculateStaffTarget(staff, referenceDate = null) {
     // 🛡️ [PERPETUAL RESET]: Start calculation from the LATEST of: Join Date or Academic Year Start (June 1st)
     let calcStart = (joinDate > acYear.start) ? joinDate : acYear.start;
 
-    // 🛡️ [MONTHLY HEAD-START]: If calculating for the beginning of the year, ensure at least one month is covered.
-    const firstMonthEnd = new Date(acYear.start.getFullYear(), acYear.start.getMonth(), 30);
-    if (calcEnd < firstMonthEnd) calcEnd = firstMonthEnd;
+      // 🛡️ [STRICT BOUNDARY]: If we are looking at the very start of the year (June 1st/2nd), 
+      // ensure we calculate for the full first month.
+      if (calcEnd.getMonth() === acYear.start.getMonth() && calcEnd.getFullYear() === acYear.start.getFullYear()) {
+          calcEnd = new Date(acYear.start.getFullYear(), acYear.start.getMonth(), 28);
+      }
 
-    if (calcStart > calcEnd) return 0;
+      if (calcStart > calcEnd) return 0;
 
-    let totalTarget = 0;
-    let cursor = new Date(calcStart);
+      let totalTarget = 0;
+      // Normalize cursor to the 1st of the month to prevent day-offset skips
+      let cursor = new Date(calcStart.getFullYear(), calcStart.getMonth(), 1);
+      
+      // Use a Month-based marker to ensure the loop stops precisely
+      const endMonthMarker = new Date(calcEnd.getFullYear(), calcEnd.getMonth(), 1);
 
-    // 3. Iterate Month by Month
-    while (cursor <= calcEnd) {
+      // 3. Iterate Month by Month
+      while (cursor <= endMonthMarker) {
         const currentMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
         const currentMonthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
 
