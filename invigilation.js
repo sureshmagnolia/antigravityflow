@@ -11817,6 +11817,7 @@ window.downloadInvigilationCertificate = async function() {
     if (!me) return alert("Staff record not found.");
 
     const acYear = getCurrentAcademicYear();
+    const collName = (collegeData && collegeData.examCollegeName) || "Government Victoria College";
     let completedSessions = [];
 
     Object.keys(invigilationSlots).forEach(key => {
@@ -11826,72 +11827,101 @@ window.downloadInvigilationCertificate = async function() {
             if (slot.attendance && slot.attendance.includes(me.email)) {
                 const [d, t] = key.split(' | ');
                 const session = (t.includes('PM') || t.startsWith('12:')) ? 'AN' : 'FN';
-                const parts = d.split('.');
-                const shortDate = `${parts[0]}.${parts[1]}.${parts[2].slice(-2)}`;
-                completedSessions.push(`${shortDate} (${session})`);
+                completedSessions.push({
+                    date: dateObj,
+                    label: `${d.split('.').slice(0, 2).join('.')}.${d.split('.')[2].slice(-2)} (${session})`
+                });
             }
         }
     });
 
     if (completedSessions.length === 0) return alert(`No completed duties found for AY ${acYear.label}.`);
 
+    // Sort ascending by date
+    completedSessions.sort((a, b) => a.date - b.date);
+    const sessionLabels = completedSessions.map(s => s.label);
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // 1. Draw Borders
-    doc.setDrawColor(30, 58, 138); doc.setLineWidth(1.5);
-    doc.rect(5, 5, pageWidth - 10, pageHeight - 10);
-    doc.setDrawColor(180, 83, 9); doc.setLineWidth(0.5);
-    doc.rect(7, 7, pageWidth - 14, pageHeight - 14);
-
-    // 2. Add Logo & Watermark
-    const img = new Image(); img.src = 'CollegeLogo.png';
-    try {
-        doc.setGState(new doc.GState({ opacity: 0.04 }));
-        doc.addImage(img, 'PNG', pageWidth/2 - 45, pageHeight/2 - 45, 90, 90);
-        doc.setGState(new doc.GState({ opacity: 1.0 }));
-        doc.addImage(img, 'PNG', pageWidth/2 - 15, 15, 30, 30);
-    } catch(e) { console.warn("Logo load failed"); }
-
-    // 3. Header Text
-    doc.setTextColor(30, 58, 138); doc.setFont("times", "bold"); doc.setFontSize(32);
-    doc.text("CERTIFICATE", pageWidth / 2, 60, { align: "center" });
-    doc.setFontSize(14); doc.setFont("times", "italic"); doc.setTextColor(100);
-    doc.text(`Academic Year ${acYear.label}`, pageWidth / 2, 68, { align: "center" });
-
-    // 4. Official Certification Statement
-    doc.setTextColor(40); doc.setFont("times", "normal"); doc.setFontSize(18);
-    const bodyText = `This is to certify that ${me.name}, of the Department of ${me.dept}, has successfully completed ${completedSessions.length} invigilation duties for the academic year ${acYear.label} as per the records.`;
-    const splitText = doc.splitTextToSize(bodyText, pageWidth - 50);
-    doc.text(splitText, pageWidth / 2, 85, { align: "center", lineHeightFactor: 1.6 });
-
-    // 5. Sessions Table (Justified Arrangement)
-    doc.autoTable({
-        startY: 115,
-        margin: { left: 20, right: 20 },
-        head: [['Staff Details', 'Sessions Completed']],
-        body: [[
-            { content: `${me.name}\n${me.dept}`, styles: { fontStyle: 'bold', valign: 'middle' } },
-            { content: completedSessions.join(", "), styles: { fontSize: 9, cellPadding: 8, textAlign: 'justify' } }
-        ]],
-        theme: 'grid',
-        headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 11, halign: 'center' },
-        styles: { font: "times", cellPadding: 5, overflow: 'linebreak' },
-        columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
+    // --- Helper: Load Image ---
+    const loadImage = (src) => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
     });
 
-    // 6. Footer
-    const finalY = doc.lastAutoTable.finalY + 40;
-    const safeFooterY = finalY > pageHeight - 40 ? pageHeight - 45 : finalY;
-    doc.setFontSize(12); doc.setTextColor(40);
-    doc.text(`Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 25, safeFooterY + 15);
-    doc.setDrawColor(0);
-    doc.line(pageWidth - 85, safeFooterY + 10, pageWidth - 25, safeFooterY + 10);
-    doc.setFont("times", "bold");
-    doc.text("Chief Superintendent", pageWidth - 55, safeFooterY + 17, { align: "center" });
+    try {
+        // 1. Draw Borders
+        doc.setDrawColor(30, 58, 138); doc.setLineWidth(1.5);
+        doc.rect(5, 5, pageWidth - 10, pageHeight - 10);
+        doc.setDrawColor(180, 83, 9); doc.setLineWidth(0.5);
+        doc.rect(7, 7, pageWidth - 14, pageHeight - 14);
 
-    doc.save(`Certificate_${me.name.split(' ')[0]}_${acYear.label.replace('-', '_')}.pdf`);
+        // 2. Add Logo & Watermark
+        try {
+            const logo = await loadImage('CollegeLogo.png');
+            doc.setGState(new doc.GState({ opacity: 0.04 }));
+            doc.addImage(logo, 'PNG', pageWidth/2 - 45, pageHeight/2 - 45, 90, 90);
+            doc.setGState(new doc.GState({ opacity: 1.0 }));
+            doc.addImage(logo, 'PNG', pageWidth/2 - 15, 12, 30, 30);
+        } catch(e) { console.warn("Logo load failed", e); }
+
+        // 3. Header Text
+        let currentY = 52;
+        doc.setTextColor(30, 58, 138); doc.setFont("times", "bold"); doc.setFontSize(22);
+        doc.text(collName.toUpperCase(), pageWidth / 2, currentY, { align: "center" });
+        
+        currentY += 12;
+        doc.setFontSize(32);
+        doc.text("CERTIFICATE", pageWidth / 2, currentY, { align: "center" });
+        
+        currentY += 8;
+        doc.setFontSize(14); doc.setFont("times", "italic"); doc.setTextColor(100);
+        doc.text(`Academic Year ${acYear.label}`, pageWidth / 2, currentY, { align: "center" });
+
+        // 4. Official Certification Statement
+        currentY += 18;
+        doc.setTextColor(40); doc.setFont("times", "normal"); doc.setFontSize(18);
+        const bodyText = `This is to certify that ${me.name}, of the Department of ${me.dept}, has successfully completed ${sessionLabels.length} invigilation duties for the academic year ${acYear.label} as per the records.`;
+        const splitText = doc.splitTextToSize(bodyText, pageWidth - 50);
+        doc.text(splitText, pageWidth / 2, currentY, { align: "center", lineHeightFactor: 1.6 });
+
+        // 5. Sessions Table
+        const textHeight = (splitText.length * 18 * 1.6 * 0.3527); // approx mm
+        const tableStartY = Math.max(currentY + textHeight + 10, 115);
+
+        doc.autoTable({
+            startY: tableStartY,
+            margin: { left: 20, right: 20 },
+            head: [['Staff Details', 'Sessions Completed']],
+            body: [[
+                { content: `${me.name}\n${me.dept}`, styles: { fontStyle: 'bold', valign: 'middle' } },
+                { content: sessionLabels.join(", "), styles: { fontSize: 9, cellPadding: 8, textAlign: 'left' } }
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 11, halign: 'center' },
+            styles: { font: "times", cellPadding: 5, overflow: 'linebreak' },
+            columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 'auto' } }
+        });
+
+        // 6. Footer
+        const finalY = doc.lastAutoTable.finalY + 30;
+        const safeFooterY = finalY > pageHeight - 40 ? pageHeight - 45 : finalY;
+        doc.setFontSize(12); doc.setTextColor(40);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`, 25, safeFooterY + 15);
+        doc.setDrawColor(0);
+        doc.line(pageWidth - 85, safeFooterY + 10, pageWidth - 25, safeFooterY + 10);
+        doc.setFont("times", "bold");
+        doc.text("Chief Superintendent", pageWidth - 55, safeFooterY + 17, { align: "center" });
+
+        doc.save(`Certificate_${me.name.split(' ')[0]}_${acYear.label.replace('-', '_')}.pdf`);
+    } catch (err) {
+        console.error("PDF Generation Error:", err);
+        alert("Failed to generate PDF. Check console for details.");
+    }
 };
 
