@@ -1824,6 +1824,9 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
             // -----------------------------------------------------------------
 
             jsonDataStore.innerHTML = JSON.stringify(allStudentData); // Sync the store
+            await saveExamDataIDB(allStudentData);
+
+            // Do NOT rebuild dropdowns here
             
             
             // Do NOT rebuild dropdowns here — selections would be lost.
@@ -1841,7 +1844,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
              if (baseDoc.exists() && baseDoc.data().students) {
                  const students = baseDoc.data().students;
                  allStudentData = [...allStudentData, ...students];
-                 
+                 await saveExamDataIDB(allStudentData);
                  updateSyncStatus("Restored from Legacy V2!", "success");
                  return;
              }
@@ -9794,7 +9797,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // Save
         jsonDataStore.innerHTML = JSON.stringify(allStudentData);
-       // localStorage.setItem(BASE_DATA_KEY, JSON.stringify(allStudentData));
+        await saveExamDataIDB(allStudentData);
         
         // Add this after saveExamDataIDB(allStudentData);
         const modifiedSessions = new Set();
@@ -14146,6 +14149,7 @@ window.real_disable_all_report_buttons = function (disabled) {
           
             // 3. Update the global variable and IDB
             allStudentData = updatedAllStudentData;
+            await saveExamDataIDB(allStudentData);
             
 
 
@@ -22065,6 +22069,15 @@ window.executeBulkDelete = async function() {
         // We derive the registry from the final data state to guarantee dropdown consistency.
         const sessionsInDb = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
         localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessionsInDb)));
+
+        // --- ⚡ [ATOMIC INDEX UPDATE]: Final Student Portal Sync ---
+        // After bulk cleaning, update the Public Index ONCE to finalize timestamps.
+        if (typeof publishSeatingToPublic === 'function' && sessionsToDelete.length > 0) {
+            const allRoomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            const allScribeAllots = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+            // Trigger a single update using the first deleted/updated session as a trigger to refresh index
+            await publishSeatingToPublic(sessionsToDelete[0], allRoomAllots[sessionsToDelete[0]], allScribeAllots[sessionsToDelete[0]]);
+        }
         // 4. Final Cloud Sync & Staff Recalculation
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
