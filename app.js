@@ -566,6 +566,8 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
                   }
                   // --- Google Drive Auto-Sync ---
                   if (!skipCloudSync && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId) {
+                      // Automatically update the timestamp for conflict detection (Matches localStorage interceptor)
+                      localStorage.setItem('lastUpdated', new Date().toISOString());
                       window.triggerDriveAutoSync();
                   }
                 // --- NEW: Trigger Basic User Pruning silently in background ---
@@ -2455,16 +2457,15 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             console.error("Sync Failed:", e);
             updateSyncStatus("Save Error", "error");
     } finally {
-            isSyncing = false;
-            // CHECK THE QUEUE: If something was queued while we were busy, process it now.
-            if (syncQueue.sections.size > 0) {
-                const nextTarget = Array.from(syncQueue.sections)[0];
-                syncQueue.sections.delete(nextTarget);
-                console.log(`🔄 Processing Queued Sync: ${nextTarget}`);
-                syncDataToCloud(nextTarget);
-            }
+        isSyncing = false;
+        // CHECK THE QUEUE: If something was queued while we were busy, process it now.
+        if (syncQueue.sections.size > 0) {
+            const nextTarget = Array.from(syncQueue.sections)[0];
+            syncQueue.sections.delete(nextTarget);
+            console.log(`🔄 Processing Queued Sync: ${nextTarget}`);
+            await syncDataToCloud(nextTarget);
         }
-
+    }
     }
    
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
@@ -20370,6 +20371,7 @@ if (displayLoc) {
                         await syncDataToCloud('allocation');
                         await syncDataToCloud('staff');
                         await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                        await syncDataToCloud('baseData'); // ☁️ SYNC STUDENT DATABASE
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
@@ -22562,6 +22564,7 @@ window.downloadInvigilationListPDF = async function () {
                     await syncDataToCloud('staff');
                     // FIX: Force Sync should trust the local data 100%
                     await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                    await syncDataToCloud('baseData'); // ☁️ FORCE MASTER SYNC
                     // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
                     // Iteratively sync all sessions (Ensures V2 documents are fresh)
