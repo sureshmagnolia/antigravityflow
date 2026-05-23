@@ -10788,38 +10788,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         });
     }
-    // 3. Backup All Data
-    if (backupDataButton) {
-        backupDataButton.addEventListener('click', async () => {
-            const backupData = {};
-            for (const key of ALL_DATA_KEYS) {
-            if (key === BASE_DATA_KEY) {
-                const idbData = await loadExamDataIDB();
-                if (idbData && idbData.length > 0) backupData[key] = JSON.stringify(idbData);
-            } else {
-                const data = localStorage.getItem(key);
-                if (data) backupData[key] = data;
-            }
-        }
-
-
-            if (Object.keys(backupData).length === 0) {
-                alert("No data found in local storage to back up.");
-                return;
-            }
-
-            const jsonString = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            const date = new Date().toISOString().split('T')[0];
-            link.download = `UOC_Exam_Backup_${date}.json`;
-            link.href = url;
-            link.click();
-            URL.revokeObjectURL(url);
-        });
-    }
+    // 3. Backup All Data (HANDLED IN THE BUNKER SECTION BELOW)
+    // Removed redundant listener to prevent conflicts and ensure IndexedDB data is properly included.
 
     // 4. Restore All Data
     if (restoreDataButton) {
@@ -20290,19 +20260,38 @@ if (displayLoc) {
         const newBackupBtn = backupDataButton.cloneNode(true);
         backupDataButton.parentNode.replaceChild(newBackupBtn, backupDataButton);
 
-        newBackupBtn.addEventListener('click', () => {
+        newBackupBtn.addEventListener('click', async () => {
             const backup = {};
             // Gather all data defined in your ALL_DATA_KEYS constant
             if (typeof ALL_DATA_KEYS !== 'undefined') {
-                ALL_DATA_KEYS.forEach(key => {
-                    const val = localStorage.getItem(key);
-                    if (val) backup[key] = val;
-                });
+                for (const key of ALL_DATA_KEYS) {
+                    // Check for student data key (IndexedDB)
+                    if (key === 'examBaseData') {
+                        try {
+                            const idbData = await loadExamDataIDB();
+                            if (idbData && idbData.length > 0) {
+                                backup[key] = idbData;
+                            }
+                        } catch (err) {
+                            console.error("Backup Error: Failed to load student data from IDB", err);
+                        }
+                    } else {
+                        const val = localStorage.getItem(key);
+                        if (val) backup[key] = val;
+                    }
+                }
             } else {
                 // Fallback if constant missing
-                Object.keys(localStorage).forEach(key => {
-                    if(key.startsWith('exam')) backup[key] = localStorage.getItem(key);
-                });
+                for (const key of Object.keys(localStorage)) {
+                    if (key.startsWith('exam')) {
+                        backup[key] = localStorage.getItem(key);
+                    }
+                }
+                // Even in fallback, try to get IDB data
+                try {
+                    const idbData = await loadExamDataIDB();
+                    if (idbData && idbData.length > 0) backup['examBaseData'] = idbData;
+                } catch(e) {}
             }
 
             // Create and download file
