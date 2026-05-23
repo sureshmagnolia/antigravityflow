@@ -903,15 +903,6 @@ async function migrateFromLocalStorage() {
                   const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                   if (mergeBtn) mergeBtn.classList.add('hidden');
 
-                // [ADD THIS BLOCK] ---------------------------
-                // Show Cloud Features (Pro)
-                const portalSection = document.getElementById('student-portal-section');
-                if (portalSection) portalSection.classList.remove('hidden');
-
-                // Show Invigilation Slot Sync (Pro feature - login required)
-                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
-                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
-
                 // --- SHOW User Info & Sync Status ---
                 userInfoDiv.classList.add('md:block'); // Show on Desktop
                 if (mobileSyncDot) mobileSyncDot.classList.remove('hidden'); // Show on Mobile
@@ -943,9 +934,11 @@ async function migrateFromLocalStorage() {
                 // Hide Invigilation Button
                 if (btnInvigilation) btnInvigilation.classList.add('hidden');
 
-                // Hide Invigilation Slot Sync (requires login)
-                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
-                if (invigSlotWrapper) invigSlotWrapper.classList.add('hidden');
+                // Hide Pro Gated elements
+                document.getElementById('sync-status')?.classList.add('hidden');
+                document.getElementById('student-portal-section')?.classList.add('hidden');
+                document.getElementById('force-sync-allotment-button')?.classList.add('hidden');
+                document.getElementById('cloud-migration-wrapper')?.classList.add('hidden');
 
                 // Load Local Data & Finalize
                 await loadInitialData();
@@ -1376,6 +1369,17 @@ window.recalcInvigSlots = async function () {
 
                 if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
                 if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
+
+                // --- PRO FEATURES REVEAL (GATING) ---
+                const syncStatusDisplay = document.getElementById('sync-status');
+                const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
+                const portalSection = document.getElementById('student-portal-section');
+                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+
+                if (syncStatusDisplay) syncStatusDisplay.classList.remove('hidden');
+                if (forceSyncAllotmentButton) forceSyncAllotmentButton.classList.remove('hidden');
+                if (portalSection) portalSection.classList.remove('hidden');
+                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
 
                 updateHeaderCollegeName();
                 if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
