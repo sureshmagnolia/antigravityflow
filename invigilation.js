@@ -9375,7 +9375,7 @@ function printVacationReport(data, start, end) {
                         <th width="18%">Duty Dates (Unique)</th>
                         <th width="18%">Intervening Holidays (Claimable)</th>
                         <th width="5%">Hol. Count</th>
-                        <th width="7%">Total Eligible</th>
+                        <th width="7%">Total</th>
                         <th width="10%">Eligible Earned Leaves<br><small style="font-weight:normal;">(Duty / ${totalVacationDays} * 30)</small></th>
                     </tr>
                 </thead>
