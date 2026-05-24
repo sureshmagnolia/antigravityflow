@@ -9155,6 +9155,7 @@ window.generateVacationReport = function() {
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
     
     // Helper: Check if date is Holiday
     const isHoliday = (d) => {
@@ -9255,6 +9256,8 @@ window.generateVacationReport = function() {
         const sessionsStr = rawSessions.map(s => s.str).join(', ');
         const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
 
+        const eligibleEarnedLeaves = Math.floor((totalEligible / totalVacationDays) * 30);
+
         reportData.push({
             name: staff.name,
             desig: staff.designation,
@@ -9264,7 +9267,8 @@ window.generateVacationReport = function() {
             dutyDates: dutyDatesStr,
             interveningDates: interveningStr,
             interveningCount: interveningCount,
-            totalEligible: totalEligible
+            totalEligible: totalEligible,
+            eligibleEarnedLeaves: eligibleEarnedLeaves
         });
     });
 
@@ -9294,6 +9298,10 @@ function printVacationReport(data, start, end) {
     const [y2, m2, d2] = end.split('-');
     const rangeStr = `${d1}.${m1}.${y1} to ${d2}.${m2}.${y2}`;
 
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
     let rowsHtml = "";
     data.forEach((row, i) => {
         rowsHtml += `
@@ -9310,6 +9318,7 @@ function printVacationReport(data, start, end) {
                 <td>${row.interveningDates || "-"}</td>
                 <td style="text-align:center;">${row.interveningCount}</td>
                 <td style="text-align:center; font-weight:bold; font-size:11pt;">${row.totalEligible}</td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt; color: #1e40af;">${row.eligibleEarnedLeaves}</td>
             </tr>
         `;
     });
@@ -9361,12 +9370,13 @@ function printVacationReport(data, start, end) {
                 <thead>
                     <tr>
                         <th width="3%">#</th>
-                        <th width="20%">Staff Details</th>
-                        <th width="35%">Sessions Attended</th>
-                        <th width="20%">Duty Dates (Unique)</th>
-                        <th width="20%">Intervening Holidays (Claimable)</th>
-                        <th width="7%">Hol. Count</th>
-                        <th width="10%">Total Eligible</th>
+                        <th width="18%">Staff Details</th>
+                        <th width="30%">Sessions Attended</th>
+                        <th width="18%">Duty Dates (Unique)</th>
+                        <th width="18%">Intervening Holidays (Claimable)</th>
+                        <th width="5%">Hol. Count</th>
+                        <th width="7%">Total Eligible</th>
+                        <th width="10%">Eligible Earned Leaves<br><small style="font-weight:normal;">(Duty / ${totalVacationDays} * 30)</small></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -9818,6 +9828,7 @@ window.downloadVacationPDF = function() {
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
     // Helper: Check for Holidays (Sundays, Saturdays, Extra Holidays)
     const isHoliday = (d) => {
@@ -9897,6 +9908,9 @@ window.downloadVacationPDF = function() {
         const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
         const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
 
+        const totalEligible = dutyDates.length + interveningDates.length;
+        const eligibleEarnedLeaves = Math.floor((totalEligible / totalVacationDays) * 30);
+
         reportData.push({
             name: staff.name,
             desig: staff.designation || "",
@@ -9906,7 +9920,8 @@ window.downloadVacationPDF = function() {
             dutyDates: dutyDatesStr,
             interveningDates: interveningStr || "-",
             interveningCount: interveningDates.length,
-            total: dutyDates.length + interveningDates.length
+            total: totalEligible,
+            eligibleEarnedLeaves: eligibleEarnedLeaves
         });
     });
 
