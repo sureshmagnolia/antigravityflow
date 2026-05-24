@@ -13553,6 +13553,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         'generate-scribe-report-button',         // 7
         'generate-invigilator-report-button',    // 8
         'generate-room-summary-button',          // 9
+        'generate-scribe-master-report-button',  // 10
         'generate-absentee-report-button'
     ];
     ids.forEach(id => {
@@ -16032,6 +16033,8 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
         'generate-scribe-report-button',
         'generate-scribe-proforma-button',
         'generate-invigilator-report-button',
+        'generate-room-summary-button',
+        'generate-scribe-master-report-button',
         'generate-absentee-report-button'
     ];
     reportBtns.forEach(id => {
@@ -16539,9 +16542,146 @@ window.handlePythonExtraction = async function (jsonString) {
     const originalDisableFuncV2 = window.real_disable_all_report_buttons;
     window.real_disable_all_report_buttons = function (disabled) {
         if (originalDisableFuncV2) originalDisableFuncV2(disabled);
-        const btn = document.getElementById('generate-room-summary-button');
-        if (btn) btn.disabled = disabled;
+        const b9 = document.getElementById('generate-room-summary-button');
+        if (b9) b9.disabled = disabled;
+        const b10 = document.getElementById('generate-scribe-master-report-button');
+        if (b10) b10.disabled = disabled;
     };
+
+    // --- (V12.8) Event listener for "Scribe Assistance Master Report" ---
+    const generateScribeMasterBtn = document.getElementById('generate-scribe-master-report-button');
+    if (generateScribeMasterBtn) {
+        generateScribeMasterBtn.addEventListener('click', async () => {
+            generateScribeMasterBtn.disabled = true;
+            generateScribeMasterBtn.textContent = "Generating...";
+            reportOutputArea.innerHTML = "";
+            reportControls.classList.add('hidden');
+            roomCsvDownloadContainer.innerHTML = "";
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            try {
+                lastGeneratedReportType = "Scribe_Assistance_Master_Report";
+                reportOutputArea.innerHTML = "<div class='p-8 text-center'>⏳ Processing Scribe Data...</div>";
+                
+                const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+                const scribeRegNos = new Set(scribeListRaw.map(s => (s.regNo || "").toString().trim()));
+                const examMap = {}; 
+                
+                let students = allStudentData || [];
+                if (students.length === 0) { students = await loadExamDataIDB() || []; }
+
+                students.forEach(s => {
+                    const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || s.RegisterNo || s.regNo || "").toString().trim();
+                    if (regNo && scribeRegNos.has(regNo)) {
+                        const eName = s['Exam Name'] || s.ExamName || "Unspecified Exam";
+                        if (!examMap[eName]) examMap[eName] = new Map();
+                        const scribeEntry = scribeListRaw.find(gs => (gs.regNo || "").toString().trim() === regNo);
+                        const studentName = scribeEntry ? (scribeEntry.name || scribeEntry.studentName) : (s['Student Name'] || s.Name || s.studentName || "Unknown Student");
+                        examMap[eName].set(regNo, studentName);
+                    }
+                });
+
+                // REFINED: Only include exams that have at least one scribe
+                const activeExamNames = Object.keys(examMap).sort();
+
+                let html = `
+                    <div class="print:hidden mb-6 bg-pink-50 p-6 rounded-xl border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 bg-pink-100 text-pink-600 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-black text-pink-900 uppercase">Scribe Assistance Master Report</h3>
+                                <p class="text-xs text-pink-600 font-bold">Filter by Exam Name to view specific candidates.</p>
+                            </div>
+                        </div>
+                        <div class="w-full sm:w-80">
+                            <label class="block text-[10px] font-bold text-pink-700 uppercase mb-1 ml-1">Select Exam Name:</label>
+                            <select id="scribe-master-exam-filter" class="block w-full p-3 border-2 border-pink-200 rounded-xl text-sm font-bold text-pink-900 bg-white focus:border-pink-500 focus:ring-0 transition-all cursor-pointer">
+                                <option value="all">View All Exams (Grouped)</option>
+                                ${activeExamNames.map(name => `<option value="${name}">${name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div id="scribe-master-report-content" class="space-y-8"></div>
+                `;
+                
+                reportOutputArea.innerHTML = html;
+                reportOutputArea.style.display = 'block';
+                reportControls.classList.remove('hidden');
+                
+                const renderScribeTable = (filter) => {
+                    const contentArea = document.getElementById('scribe-master-report-content');
+                    if (!contentArea) return;
+                    const cName = localStorage.getItem(COLLEGE_NAME_KEY) || "Institution";
+                    let innerHtml = "";
+                    const sortedExams = (filter === "all") ? activeExamNames : [filter];
+                    
+                    sortedExams.forEach(en => {
+                        const studentsMap = examMap[en];
+                        if (!studentsMap) return;
+                        const studentList = Array.from(studentsMap.entries()).map(([rn, nm]) => ({ regNo: rn, name: nm }));
+                        innerHtml += `
+                            <div class="print-page bg-white p-10 mb-8 border border-gray-200 shadow-xl rounded-2xl max-w-[210mm] mx-auto overflow-hidden relative">
+                                <div class="text-center border-b-4 border-pink-600 pb-6 mb-8">
+                                    <h1 class="text-3xl font-black text-gray-900 uppercase tracking-tighter leading-none">${cName}</h1>
+                                    <div class="inline-block bg-pink-50 text-pink-700 px-4 py-1 rounded-full text-sm font-black uppercase mt-3 border border-pink-100">Scribe Assistance Report</div>
+                                    <div class="text-sm text-gray-500 font-bold mt-4 uppercase flex items-center justify-center gap-2">
+                                        <span class="w-8 h-px bg-gray-300"></span>
+                                        Exam: ${en}
+                                        <span class="w-8 h-px bg-gray-300"></span>
+                                    </div>
+                                </div>
+                                <table class="w-full border-separate border-spacing-0 border border-gray-300 rounded-lg overflow-hidden">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="border-b border-r border-gray-300 p-4 text-xs font-black uppercase text-gray-700 w-20">Sl.No</th>
+                                            <th class="border-b border-r border-gray-300 p-4 text-xs font-black uppercase text-gray-700">Register Number</th>
+                                            <th class="border-b border-gray-300 p-4 text-xs font-black uppercase text-gray-700 text-left">Student Name</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        ${studentList.map((s, i) => `
+                                            <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}">
+                                                <td class="border-r border-gray-300 p-4 text-center text-sm font-bold text-gray-500">${i + 1}</td>
+                                                <td class="border-r border-gray-300 p-4 text-center text-sm font-black font-mono text-pink-700 tracking-wider">${s.regNo}</td>
+                                                <td class="p-4 text-sm font-bold text-gray-800">${s.name}</td>
+                                            </tr>`).join('')}
+                                    </tbody>
+                                </table>
+                                <div class="mt-12 flex justify-between items-end px-2">
+                                    <div class="text-[10px] text-gray-400 font-bold italic flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        Generated via ExamFlow Orchestrator
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="w-56 border-b-2 border-gray-900 mb-2"></div>
+                                        <div class="text-sm font-black text-gray-900 uppercase tracking-widest">Chief Superintendent</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    });
+                    if (!innerHtml) innerHtml = `
+                        <div class="p-16 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                            <p class='text-gray-500 font-bold'>No scribe assistance data found.</p>
+                            <p class='text-xs text-gray-400 mt-2'>Note: Ensure students are tagged with an "Exam Name" and added to the Scribe List.</p>
+                        </div>`;
+                    contentArea.innerHTML = innerHtml;
+                };
+
+                const filterEl = document.getElementById('scribe-master-exam-filter');
+                if (filterEl) filterEl.addEventListener('change', (e) => renderScribeTable(e.target.value));
+                renderScribeTable("all");
+
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
+            } finally {
+                generateScribeMasterBtn.disabled = false;
+                generateScribeMasterBtn.textContent = "10-Generate Scribe Assistance Master Report";
+            }
+        });
+    }
     // ==========================================
     // ==========================================
     // ☢️ NUKE & SETTINGS MANAGER
