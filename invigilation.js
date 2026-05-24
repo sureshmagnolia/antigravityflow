@@ -11869,6 +11869,10 @@ window.confirmDirectAdd = async function() {
 // ============================================================================
 // 🎓 PROFESSIONAL PDF CERTIFICATE GENERATOR (A4 PORTRAIT)
 // ============================================================================
+/**
+ * NEW: Multi-Year Certificate Selection Logic (v12.8.9)
+ * Detects all academic years where the user has completed duties and presents a choice.
+ */
 window.downloadInvigilationCertificate = async function() {
     if (!currentUser) return alert("Please log in to download your certificate.");
     if (typeof jspdf === 'undefined') return alert("PDF library not loaded.");
@@ -11876,7 +11880,72 @@ window.downloadInvigilationCertificate = async function() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (!me) return alert("Staff record not found.");
 
-    const acYear = getCurrentAcademicYear();
+    // 1. Detect All Years with Attendance
+    const yearsMap = {}; // label -> { acYear, sessionCount }
+    
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        if (slot.attendance && slot.attendance.includes(me.email)) {
+            const dateObj = parseDate(key);
+            const acYear = getAcademicYearForDate(dateObj);
+            if (!yearsMap[acYear.label]) {
+                yearsMap[acYear.label] = { acYear, sessionCount: 0 };
+            }
+            yearsMap[acYear.label].sessionCount++;
+        }
+    });
+
+    const activeYears = Object.keys(yearsMap).sort().reverse();
+
+    if (activeYears.length === 0) {
+        return alert("No completed duties found in your record for any Academic Year.");
+    }
+
+    // 2. Selection Logic
+    if (activeYears.length === 1) {
+        // Only one year found, generate it immediately
+        await window.generateCertificateForAY(yearsMap[activeYears[0]].acYear);
+    } else {
+        // Multiple years found, show a clean selection modal
+        const modal = document.getElementById('completed-duties-modal');
+        const list = document.getElementById('completed-duties-list');
+        if (!modal || !list) return await window.generateCertificateForAY(getCurrentAcademicYear());
+
+        const headerTitle = document.querySelector('#completed-duties-modal h3');
+        const headerSub = document.querySelector('#completed-duties-modal p');
+        if (headerTitle) headerTitle.innerText = "Download Certificate";
+        if (headerSub) headerSub.innerText = "Select the Academic Year for your certificate:";
+
+        list.innerHTML = activeYears.map(label => {
+            const data = yearsMap[label];
+            return `
+                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center justify-between gap-4 hover:bg-indigo-100 transition mb-2">
+                    <div>
+                        <p class="text-sm font-black text-indigo-900">AY ${label}</p>
+                        <p class="text-[10px] text-indigo-600 font-bold">${data.sessionCount} Sessions Completed</p>
+                    </div>
+                    <button onclick="window.generateCertificateForAYById('${label}')" 
+                        class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm">
+                        Generate
+                    </button>
+                </div>`;
+        }).join('');
+
+        // Store active map globally for the callback
+        window._tempCertificateYearsMap = yearsMap;
+        window.openModal('completed-duties-modal');
+    }
+};
+
+window.generateCertificateForAYById = async function(label) {
+    if (window._tempCertificateYearsMap && window._tempCertificateYearsMap[label]) {
+        window.closeModal('completed-duties-modal');
+        await window.generateCertificateForAY(window._tempCertificateYearsMap[label].acYear);
+    }
+};
+
+window.generateCertificateForAY = async function(acYear) {
+    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     const collName = (collegeData && collegeData.examCollegeName) || "Government Victoria College, Palakkad";
     let completedSessions = [];
 
@@ -11895,7 +11964,7 @@ window.downloadInvigilationCertificate = async function() {
         }
     });
 
-    if (completedSessions.length === 0) return alert(`No completed duties found for AY ${acYear.label}.`);
+    if (completedSessions.length === 0) return alert("No completed duties found for this period.");
 
     // Sort ascending by date
     completedSessions.sort((a, b) => a.date - b.date);
