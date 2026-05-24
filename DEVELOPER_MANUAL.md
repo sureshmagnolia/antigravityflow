@@ -178,7 +178,7 @@ This annexure exhaustively lists every function found in the codebase. (Auto-Gen
 | **`downloadMasterBackup()`** | [Doc] 💾 MASTER BACKUP & RESTORE SYSTEM |
 | **`downloadPDF()`** | [Data] Loads 'downPDF' from storage/cloud. |
 | **`downloadStaffTemplate()`** | [Doc] 1. Download Template (Updated for DD-MM-YY) |
-| **`downloadVacationPDF()`** | [Doc] 2. VACATION REPORT PDF (Corrected: 7 Columns) |
+| **`downloadVacationPDF()`** | [Doc] 2. VACATION REPORT PDF (Corrected: 8 Columns) |
 | **`editRoleConfig(role, currentTarget)`** | Utility / Helper function. |
 | **`editStaff(index)`** | Utility / Helper function. |
 | **`executeReschedule()`** | Utility / Helper function. |

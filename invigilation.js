@@ -9819,7 +9819,7 @@ window.downloadAttendancePDF = function () {
 };
 
 
-// 2. VACATION REPORT PDF (Corrected: 7 Columns)
+// 2. VACATION REPORT PDF (Corrected: 8 Columns)
 window.downloadVacationPDF = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
@@ -9947,7 +9947,7 @@ window.downloadVacationPDF = function() {
     doc.text(`Vacation Duty & Earned Leave Report`, 14, 18);
     doc.text(`${startStr} to ${endStr}`, 240, 18);
 
-    // Table Body (7 Columns)
+    // Table Body (8 Columns)
     const tableBody = reportData.map((r, i) => [
         i + 1,
         `${r.name}\n${r.desig}\n${r.dept}\nPh: ${r.phone}`, // Combined Staff Details
@@ -9955,11 +9955,12 @@ window.downloadVacationPDF = function() {
         r.dutyDates,        // Unique Dates
         r.interveningDates, // Intervening Holidays
         r.interveningCount, // Hol. Count
-        r.total             // Total Eligible
+        r.total,            // Total
+        r.eligibleEarnedLeaves // Eligible EL
     ]);
 
     doc.autoTable({
-        head: [['#', 'Staff Details', 'Sessions Attended', 'Duty Dates', 'Intervening Holidays', 'Hol.', 'Total']],
+        head: [['#', 'Staff Details', 'Sessions Attended', 'Duty Dates', 'Intervening Holidays', 'Hol.', 'Total', 'Eligible EL']],
         body: tableBody,
         startY: 30,
         theme: 'grid',
@@ -9970,19 +9971,20 @@ window.downloadVacationPDF = function() {
             halign: 'center'
         },
         styles: { 
-            fontSize: 9, 
-            cellPadding: 3, 
+            fontSize: 8, 
+            cellPadding: 2, 
             valign: 'top', // Top align for multiline text
             overflow: 'linebreak'
         },
         columnStyles: {
             0: { cellWidth: 10, halign: 'center' }, // Index
-            1: { cellWidth: 50 },                   // Staff Details (Wider)
-            2: { cellWidth: 60 },                   // Sessions (Widest)
+            1: { cellWidth: 45 },                   // Staff Details
+            2: { cellWidth: 65 },                   // Sessions
             3: { cellWidth: 40 },                   // Duty Dates
             4: { cellWidth: 40 },                   // Intervening
-            5: { cellWidth: 15, halign: 'center' }, // Count
-            6: { cellWidth: 20, halign: 'center', fontStyle: 'bold', fillColor: [240, 253, 244] } // Total (Greenish)
+            5: { cellWidth: 12, halign: 'center' }, // Count
+            6: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }, // Total
+            7: { cellWidth: 20, halign: 'center', fontStyle: 'bold', fillColor: [239, 246, 255] } // Eligible EL
         }
     });
 
