@@ -11382,12 +11382,26 @@ window.printAttendanceReport = function () {
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
 
+    // --- V2.0 ENGINE CONFIGURATION ---
+    const AUTO_ASSIGN_WEIGHTS = {
+        WEEKLY_LIMIT: 5000,
+        SAME_DAY: 2000,
+        ADJACENT_DAY: 1000,
+        DEPT_SATURATION: 4000,
+        BASE_MULTIPLIER: 100
+    };
+
+    // --- 1. CREATE SIMULATION SANDBOX ---
+    // Deep clone to prevent mutating the UI until we are happy with the result
+    const trialSlots = JSON.parse(JSON.stringify(invigilationSlots));
+    const modifiedKeys = new Set(); // Track exactly what we change
+
     const targetSlots = [];
-    Object.keys(invigilationSlots).forEach(key => {
+    Object.keys(trialSlots).forEach(key => {
         const date = parseDate(key);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
-        const slot = invigilationSlots[key];
+        const slot = trialSlots[key];
         if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
             targetSlots.push({ key, date, slot });
         }
@@ -11451,30 +11465,51 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         for (let i = 0; i < needed; i++) {
             const candidates = eligibleStaff.map(s => {
                 let activePending = isVacDate ? s.vacationPending : s.regularPending;
-                let score = Math.max(0, activePending) * 100;
+                let baseScore = Math.max(0, activePending) * AUTO_ASSIGN_WEIGHTS.BASE_MULTIPLIER;
+                let score = baseScore;
                 let warnings = [];
-
+                let reasoning = { base: baseScore, penalties: {} };
 
                 if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
 
+                // --- 1. Weekly Soft Limit ---
                 const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) { score -= 5000; warnings.push("Max 3/wk"); }
+                if (dutiesThisWeek >= 3) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT; 
+                    warnings.push("Max 3/wk"); 
+                    reasoning.penalties.weekly = -AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT;
+                }
 
+                // --- 2. Same Day Rule ---
                 const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
-                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) { score -= 2000; warnings.push("Same Day"); }
+                if (sameDayKeys.some(sdk => trialSlots[sdk].assigned.includes(s.email))) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.SAME_DAY; 
+                    warnings.push("Same Day"); 
+                    reasoning.penalties.sameDay = -AUTO_ASSIGN_WEIGHTS.SAME_DAY;
+                }
 
+                // --- 3. Dept Saturation (Dynamic Check) ---
                 const dTotal = deptCounts[s.dept] || 0;
-                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { score -= 4000; warnings.push("Dept Saturation"); }
+                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION; 
+                    warnings.push("Dept Saturation"); 
+                    reasoning.penalties.dept = -AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION;
+                }
 
+                // --- 4. Adjacent Day Rule ---
                 let hasAdjacent = false;
                 targetSlots.forEach(t => {
                     if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
                         hasAdjacent = true;
                     }
                 });
-                if (hasAdjacent) { score -= 1000; warnings.push("Adjacent"); }
+                if (hasAdjacent) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY; 
+                    warnings.push("Adjacent"); 
+                    reasoning.penalties.adjacent = -AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY;
+                }
 
-                return { staff: s, score, warnings };
+                return { staff: s, score, warnings, reasoning };
             }).filter(c => c !== null);
 
             candidates.sort((a, b) => b.score - a.score);
@@ -11489,12 +11524,24 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 choice.staff.weeklyLoad[currentWeekKey]++;
                 slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
                 assignedCount++;
+                modifiedKeys.add(key); // Track that we altered this slot
 
-                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1"><span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> <span class="text-gray-500">(Score: ${choice.score})</span>${choice.warnings.length > 0 ? `<span class="text-red-500 ml-1">[${choice.warnings.join(', ')}]</span>` : ""}</div>`;
+                // Generate Traceable Log
+                const penaltyStr = Object.entries(choice.reasoning.penalties).map(([k,v]) => `${k}:${v}`).join(', ');
+                const debugInfo = penaltyStr ? `(Base: ${choice.reasoning.base} | ${penaltyStr})` : `(Base: ${choice.reasoning.base})`;
+
+                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1">
+                    <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
+                    <span class="text-gray-500 font-mono text-[9px] ml-1">${debugInfo}</span>
+                    ${choice.warnings.length > 0 ? `<span class="text-red-500 text-[10px] ml-1 font-bold">[BREACH: ${choice.warnings.join(', ')}]</span>` : ""}
+                </div>`;
+                
                 const skipped = candidates.slice(1, 4);
-                if (skipped.length > 0) logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                if (skipped.length > 0) {
+                    logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2 leading-tight"><b>Skipped:</b> ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                }
 
-                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
+                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold text-indigo-700">⚙️ Auto-Assign V2 (${timestamp})</div></div>`;
                 slot.allocationLog += logEntry;
 
                 if (choice.warnings.length > 0) logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
@@ -11502,18 +11549,31 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         }
     }
 
+    // --- FINAL VERIFICATION & COMMIT ---
+    if (assignedCount === 0) {
+        return alert("⚠️ Auto-Assign Finished, but no positions could be filled (or all targets were already met).");
+    }
+
+    // Merge Sandbox Back to Reality
+    modifiedKeys.forEach(k => {
+        invigilationSlots[k] = trialSlots[k];
+    });
+
     if (logEntries.length > 0) {
         const logRef = doc(db, "colleges", currentCollegeId);
         const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
         try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
     }
 
-    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud("FORCE_OVERWRITE"); 
+    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `V2 Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+    
+    // SURGICAL SYNC: Instead of FORCE_OVERWRITE, we rely on the standard sync function
+    // which intelligently merges local changes with the cloud.
+    await syncSlotsToCloud(); 
     renderSlotsGrid();
 
-    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
-    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated. Check Logs.`;
+    let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${assignedCount} positions across ${modifiedKeys.size} sessions.`;
+    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} constraint warnings generated. Check Admin Logs.`;
     alert(alertMsg);
 };
 
