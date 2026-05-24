@@ -983,7 +983,7 @@ function isUserUnavailable(slot, email, key) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                         const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -1630,7 +1630,7 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                         const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -11690,7 +11690,7 @@ window.directAddStaff = function(key) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = (s || staff).roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
