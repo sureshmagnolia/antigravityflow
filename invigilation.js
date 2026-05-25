@@ -2136,30 +2136,63 @@ window.openDayDetail = function (dateStr, email) {
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
 
     if (sessions.length > 0) {
-        // --- MODERN MOBILE CARDS ---
-        let cardStatus = "";
-        let cardActions = "";
-        let cardBg = "bg-white";
-        let borderColor = "border-gray-100";
+        sessions.forEach(key => {
+            const slot = invigilationSlots[key];
+            const filled = slot.assigned.length;
+            const needed = slot.required - filled;
 
-        if (isAssigned) {
-            cardBg = isPostedByMe ? "bg-orange-50/50" : "bg-green-50/50";
-            borderColor = isPostedByMe ? "border-orange-200" : "border-green-200";
-            const statusLabel = isPostedByMe ? "⏳ Exchange Posted" : "✅ Assigned";
-            const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
-            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
+            // Status Checks
+            const isUnavailable = isUserUnavailable(slot, email, key);
+            const isAssigned = slot.assigned.includes(email);
+            const isLocked = slot.isLocked;
+            const isAdminLocked = slot.isAdminLocked || false;
+            const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
+            const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
 
-            if (isPostedByMe) {
-                cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
-            } else if (isAdminLocked) {
-                cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
-            } else if (isLocked) {
-                cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
-            } else {
-                cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
+            const t = key.split(' | ')[1].toUpperCase();
+            const isAN = (t.includes("PM") || t.startsWith("12:") || t.startsWith("12."));
+            const sessLabel = isAN ? "AFTERNOON (AN)" : "FORENOON (FN)";
+
+            if (isAssigned) {
+                if (isAN) isAssignedAN = true;
+                else isAssignedFN = true;
             }
-        } else if (isUnavailable) {
-            cardBg = "bg-red-50/30";
+            if (isAdminLocked) {
+                if (isAN) adminLockAN = true;
+                else adminLockFN = true;
+            }
+
+            // --- MODERN MOBILE CARDS ---
+            let cardStatus = "";
+            let cardActions = "";
+            let cardBg = "bg-white";
+            let borderColor = "border-gray-100";
+
+            if (isRestricted) {
+                if (isAssigned) {
+                    cardActions = `<div class="w-full mt-2 bg-gray-100 text-gray-500 border border-gray-200 text-[10px] py-2 rounded-lg font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-white/50 px-2 py-0.5 rounded">${restrictLabel}</span></div>`;
+                } else if (isUnavailable) {
+                    cardActions = `<div class="w-full mt-2 bg-red-50 text-red-500 border border-red-100 text-[10px] py-2 rounded-lg font-bold text-center flex flex-col items-center gap-1"><span>⛔ Unavailable</span><span class="text-[9px] bg-white/50 px-2 py-0.5 rounded">${restrictLabel}</span></div>`;
+                } else {
+                    cardActions = `<div class="w-full mt-2 bg-gray-50 text-gray-400 border border-gray-100 text-[10px] py-2 rounded-lg text-center italic">Actions Disabled ${restrictLabel}</div>`;
+                }
+            } else if (isAssigned) {
+                cardBg = isPostedByMe ? "bg-orange-50/50" : "bg-green-50/50";
+                borderColor = isPostedByMe ? "border-orange-200" : "border-green-200";
+                const statusLabel = isPostedByMe ? "⏳ Exchange Posted" : "✅ Assigned";
+                const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
+                cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
+
+                if (isPostedByMe) {
+                    cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
+                } else if (isAdminLocked) {
+                    cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
+                } else if (isLocked) {
+                    cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
+                } else {
+                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
+                }
+            } else if (isUnavailable) {            cardBg = "bg-red-50/30";
             borderColor = "border-red-100";
             cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-red-600 bg-red-100">⛔ Unavailable</span>`;
             cardActions = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full mt-2 bg-white text-blue-600 border border-blue-200 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Undo Unavailability</button>`;
