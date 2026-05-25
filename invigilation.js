@@ -1226,7 +1226,7 @@ function renderSlotsGridAdmin() {
                 ➡️ <span class="hidden md:inline">Next</span>
             </button>
         </div>`;
-    ui.adminSlotsGrid.innerHTML = navHtml;
+    let fullHtml = navHtml;
 
     const slotItems = [];
 
@@ -1275,7 +1275,7 @@ function renderSlotsGridAdmin() {
     }
 
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        fullHtml += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
         return;
     }
 
@@ -1295,7 +1295,7 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        ui.adminSlotsGrid.innerHTML += `
+        fullHtml += `
             <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
                     Week ${group.week}
@@ -1329,7 +1329,7 @@ function renderSlotsGridAdmin() {
         group.items.forEach((item) => {
             if (item.type === 'GHOST') {
                 const encodedList = encodeURIComponent(JSON.stringify(item.list));
-                ui.adminSlotsGrid.innerHTML += `
+                fullHtml += `
                     <div class="relative border-l-[6px] border-gray-300 bg-gray-50 p-3 rounded-xl shadow-sm hover:shadow-md transition w-full mb-3 opacity-90 border border-gray-200 border-l-gray-400">
                         <div class="flex justify-between items-start mb-2">
                             <h4 class="font-bold text-gray-500 text-xs flex items-center gap-1">
@@ -1387,7 +1387,7 @@ function renderSlotsGridAdmin() {
                 ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
                 : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
 
-            ui.adminSlotsGrid.innerHTML += `
+            fullHtml += `
                 <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
@@ -1430,7 +1430,8 @@ function renderSlotsGridAdmin() {
                 </div>`;
         });
     });
-    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
+    fullHtml += `<div class="col-span-full h-32 w-full"></div>`;
+    ui.adminSlotsGrid.innerHTML = fullHtml;
 }
 
 
@@ -3756,10 +3757,30 @@ window.closeModal = function (id) {
 }
 
 // 1. Get Name from Email (Fixes your console error)
+// 🛡️ PERFORMANCE OPTIMIZATION: Global Staff Map for O(1) Lookups
+let staffMap = new Map();
+function refreshStaffMap() {
+    staffMap = new Map();
+    if (staffData && Array.isArray(staffData)) {
+        staffData.forEach(s => {
+            if (s.email) staffMap.set(s.email.toLowerCase(), s);
+        });
+    }
+}
+
 function getNameFromEmail(email) {
+    if (!email) return "N/A";
+    const e = email.toLowerCase();
+    if (staffMap.has(e)) return staffMap.get(e).name;
     if (!staffData || staffData.length === 0) return email.split('@')[0];
-    const s = staffData.find(st => st.email === email);
-    return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
+    
+    // Fallback and update map if found
+    const s = staffData.find(st => st.email.toLowerCase() === e);
+    if (s) {
+        staffMap.set(e, s);
+        return s.name;
+    }
+    return email.split('@')[0];
 }
 
 // Helper: Calculate Academic Year Boundaries for a SPECIFIC date
