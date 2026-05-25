@@ -1697,7 +1697,7 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -5414,30 +5414,6 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
     // --- Bulk Reserve Notification Check (Unchanged) ---
     alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
-}
-
-window.viewAutoAssignLogs = async function () {
-    const ref = doc(db, "colleges", currentCollegeId);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-        const logs = snap.data().autoAssignLogs || [];
-        if (logs.length === 0) return alert("No logs found.");
-
-        // Show in a simple modal or reuse 'inconvenience-modal'
-        const list = document.getElementById('inconvenience-list');
-        const title = document.getElementById('inconvenience-modal-subtitle');
-        document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
-        title.textContent = "History of automated decisions & overrides.";
-
-        list.innerHTML = logs.reverse().map(l => {
-            const isWarn = l.includes("WARN");
-            const isErr = l.includes("ERROR");
-            const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
-            return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
-        }).join('');
-
-        window.openModal('inconvenience-modal');
-    }
 }
 
 window.openFacultyPeriodReport = function() {
@@ -11778,7 +11754,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     // SURGICAL SYNC: Instead of FORCE_OVERWRITE, we rely on the standard sync function
     // which intelligently merges local changes with the cloud.
     await syncSlotsToCloud(); 
-    renderSlotsGrid();
+    renderSlotsGridAdmin();
 
     let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${assignedCount} positions across ${modifiedKeys.size} sessions.`;
     if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} constraint warnings generated. Check Admin Logs.`;
@@ -11844,62 +11820,11 @@ window.saveManualAllocation = async function () {
         }
         
         if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-        else renderSlotsGrid();
+        else renderSlotsGridAdmin();
     } catch (e) {
         console.error("Save failed:", e);
         alert('Error saving. Check console.');
     }
-};
-
-// --- EMERGENCY / ADMIN DIRECT ADD FUNCTION ---
-window.directAddStaff = async function(key) {
-    const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot data not found.");
-
-    // Prompt the admin for the Email ID or Name
-    const rawInput = prompt("Enter the exact Full Name or Email of the Invigilator to add:");
-    if (!rawInput) return; // Action Cancelled
-    
-    const query = rawInput.toLowerCase().trim();
-    
-    // Attempt to locate the exact staff member securely
-    let staff = staffData.find(s => s.email.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase().includes(query)); // Fallback to partial name
-    
-    if (!staff) {
-        return alert("❌ Could not find any staff member matching '" + rawInput + "'. Please check spelling or use their email ID.");
-    }
-    
-    if (slot.assigned.includes(staff.email)) {
-        return alert("⚠️ " + staff.name + " is already assigned to this duty.");
-    }
-    
-    // Add to slot assignment list
-    slot.assigned.push(staff.email);
-    
-    // Ensure the 'Admin' tracking tag is correctly appended
-    if (!slot.assignmentMeta) slot.assignmentMeta = {};
-    slot.assignmentMeta[staff.email] = {
-        source: 'Admin',
-        timestamp: new Date().toISOString()
-    };
-    
-    // Log the override if the activity log feature is present
-    if (typeof logActivity === 'function') {
-        logActivity("Admin Override Add", `Admin explicitly added ${staff.name} to slot ${key}.`);
-    }
-    
-    // Write changes to Firebase/Local and refresh UI
-    if (typeof syncSlotsToCloud === 'function') {
-        await syncSlotsToCloud(key); // FIX: Direct add should stick
-    }
-    
-    if (typeof renderSlotsGridAdmin === 'function') {
-        renderSlotsGridAdmin();
-    }
-    
-    alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
 
 // --- EMERGENCY / ADMIN DIRECT ADD FUNCTIONS (Searchable) ---
@@ -11958,7 +11883,7 @@ window.directAddStaff = function(key) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
