@@ -395,7 +395,7 @@ function setupLiveSync(collegeId, mode) {
 
     // --- 2. LISTEN TO SLOTS (Always Live, High Priority) ---
     const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
-    const shardsRef = collection(db, "colleges", collegeId, "slots_data");
+    const shardsRef = collection(db, "colleges", collegeId, "slots_daily");
 
     // Helper to refresh UI
     function refreshSlotsUI() {
@@ -443,16 +443,27 @@ function setupLiveSync(collegeId, mode) {
             advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
             
             // 🚀 AUTO-MIGRATION CHECK
-            if (data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
-                if (mode === 'admin') {
+            if (mode === 'admin') {
+                // 1. Check Legacy Root Field
+                if (data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
                     migrateOldSlotsData(collegeId, data.examInvigilationSlots);
-                } else {
-                    // Staff mode: just load it if shards are empty
-                    if (Object.keys(invigilationSlots).length === 0) {
-                        invigilationSlots = JSON.parse(data.examInvigilationSlots);
-                        localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
-                        refreshSlotsUI();
+                }
+                // 2. Check failed monthly shards (slots_data)
+                const legacyShardsRef = collection(db, "colleges", collegeId, "slots_data");
+                getDocs(legacyShardsRef).then(snap => {
+                    if (!snap.empty) {
+                        console.log("♻️ Found monthly shards. Re-migrating to daily shards...");
+                        let combined = {};
+                        snap.forEach(s => Object.assign(combined, JSON.parse(s.data().data || '{}')));
+                        migrateOldSlotsData(collegeId, JSON.stringify(combined), true);
                     }
+                });
+            } else {
+                // Staff mode: just load legacy if shards are empty
+                if (Object.keys(invigilationSlots).length === 0 && data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
+                    invigilationSlots = JSON.parse(data.examInvigilationSlots);
+                    localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+                    refreshSlotsUI();
                 }
             }
         }
@@ -2298,14 +2309,15 @@ async function syncSlotsToCloud(affectedKey = null) {
                 const dStr = dRaw.replace(/-/g, '.');
                 const parts = dStr.split('.');
                 if (parts.length < 3) return "unknown";
-                return `${parts[2]}-${parts[1].padStart(2, '0')}`; // YYYY-MM
+                // Shard by Day: YYYY-MM-DD
+                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
             } catch (e) { return "unknown"; }
         }
 
         if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
             // --- OPTIMIZED SINGLE SHARD UPDATE ---
             const shardId = getShardId(affectedKey);
-            const shardRef = doc(db, "colleges", currentCollegeId, "slots_data", shardId);
+            const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", shardId);
             
             // We still need to merge with cloud data for THIS shard to prevent overwriting others' changes in the same month
             const cloudSnap = await getDoc(shardRef);
@@ -2338,7 +2350,7 @@ async function syncSlotsToCloud(affectedKey = null) {
             // --- FULL SYNC OR BATCH UPDATE ---
             
             // 1. Fetch existing shards to ensure we clear ones that no longer have data
-            const shardsColRef = collection(db, "colleges", currentCollegeId, "slots_data");
+            const shardsColRef = collection(db, "colleges", currentCollegeId, "slots_daily");
             const existingShardsSnap = await getDocs(shardsColRef);
             const existingShardIds = new Set();
             existingShardsSnap.forEach(s => existingShardIds.add(s.id));
@@ -2354,7 +2366,7 @@ async function syncSlotsToCloud(affectedKey = null) {
             const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
             
             allShardIds.forEach(sid => {
-                const shardRef = doc(db, "colleges", currentCollegeId, "slots_data", sid);
+                const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
                 if (Object.keys(shardData).length > 0) {
                     batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
@@ -2374,9 +2386,9 @@ async function syncSlotsToCloud(affectedKey = null) {
     }
 }
 
-async function migrateOldSlotsData(collegeId, oldData) {
+async function migrateOldSlotsData(collegeId, oldData, fromMonthlyShards = false) {
     if (!oldData || oldData === '{}') return;
-    console.log("🚀 Starting Slot Data Migration to Shards...");
+    console.log("🚀 Starting Slot Data Migration to Daily Shards...");
     try {
         const slots = JSON.parse(oldData);
         const shards = {};
@@ -2387,7 +2399,7 @@ async function migrateOldSlotsData(collegeId, oldData) {
                 const dStr = dRaw.replace(/-/g, '.');
                 const parts = dStr.split('.');
                 if (parts.length < 3) return "unknown";
-                return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
             } catch (e) { return "unknown"; }
         }
 
@@ -2399,16 +2411,23 @@ async function migrateOldSlotsData(collegeId, oldData) {
 
         const batch = writeBatch(db);
         Object.keys(shards).forEach(sid => {
-            const shardRef = doc(db, "colleges", collegeId, "slots_data", sid);
+            const shardRef = doc(db, "colleges", collegeId, "slots_daily", sid);
             batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: serverTimestamp() });
         });
 
-        // 🛡️ Remove the old bloated field after sharding
-        const oldRef = doc(db, "colleges", collegeId, "system_data", "slots");
-        batch.update(oldRef, { examInvigilationSlots: deleteField() });
+        if (fromMonthlyShards) {
+            // Clean up old monthly shards
+            const legacyShardsRef = collection(db, "colleges", collegeId, "slots_data");
+            const legacySnap = await getDocs(legacyShardsRef);
+            legacySnap.forEach(s => batch.delete(s.ref));
+        } else {
+            // 🛡️ Remove the old bloated field after sharding
+            const oldRef = doc(db, "colleges", collegeId, "system_data", "slots");
+            batch.update(oldRef, { examInvigilationSlots: deleteField() });
+        }
 
         await batch.commit();
-        console.log("✅ Slot Migration Complete. Bloated document cleared.");
+        console.log("✅ Daily Slot Migration Complete. Legacy data cleared.");
     } catch (e) {
         console.error("❌ Slot Migration Failed:", e);
     }
@@ -3007,7 +3026,7 @@ window.calculateSlotsFromSchedule = async function () {
         
         // 1. Fetch ALL shards from the subcollection
         const { db, collection, getDocs, doc, getDoc } = window.firebase;
-        const shardsRef = collection(db, "colleges", currentCollegeId, "slots_data");
+        const shardsRef = collection(db, "colleges", currentCollegeId, "slots_daily");
         const shardsSnap = await getDocs(shardsRef);
 
         let cloudSlots = {};
