@@ -1224,14 +1224,13 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 
 function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
-    ui.adminSlotsGrid.innerHTML = '';
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthStr = monthNames[currentAdminDate.getMonth()];
     const currentYear = currentAdminDate.getFullYear();
 
     // 1. Navigation Bar
-    const navHtml = `
+    let html = `
         <div class="col-span-full flex justify-between items-center glass-panel p-2 md:p-3 rounded-lg border-0 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
             <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
                 <span class="hidden md:inline">Prev</span> ⬅️
@@ -1243,7 +1242,6 @@ function renderSlotsGridAdmin() {
                 ➡️ <span class="hidden md:inline">Next</span>
             </button>
         </div>`;
-    ui.adminSlotsGrid.innerHTML = navHtml;
 
     const slotItems = [];
 
@@ -1253,7 +1251,7 @@ function renderSlotsGridAdmin() {
 
         const date = parseDate(key);
         if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
-            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });
+            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });  
         }
     });
 
@@ -1271,12 +1269,12 @@ function renderSlotsGridAdmin() {
                     if (item.type !== 'REAL') return false;
                     const [kDate, kTime] = item.key.split(' | ');
                     if (kDate !== dateStr) return false;
-                    
-                    let [h] = kTime.trim().split(':')[0].split(' '); 
+
+                    let [h] = kTime.trim().split(':')[0].split(' ');
                     let t = kTime.trim().toUpperCase();
-                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;
+                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;        
                     if (t.includes('AM') && parseInt(h) === 12) h = 0;
-                    
+
                     const slotPeriod = h < 13 ? 'FN' : 'AN';
                     return slotPeriod === sessionType;
                 });
@@ -1292,14 +1290,15 @@ function renderSlotsGridAdmin() {
     }
 
     if (slotItems.length === 0) {
-        ui.adminSlotsGrid.innerHTML += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        html += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        ui.adminSlotsGrid.innerHTML = html;
         return;
     }
 
     // 3. Group by Week
     const groupedSlots = {};
     slotItems.forEach(item => {
-        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' }); 
         const weekNum = getWeekOfMonth(item.date);
         const groupKey = `${mStr}-W${weekNum}`;
         if (!groupedSlots[groupKey]) groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
@@ -1312,8 +1311,8 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        ui.adminSlotsGrid.innerHTML += `
-            <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
+        html += `
+            <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">       
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
                     Week ${group.week}
                 </span>
@@ -1323,14 +1322,14 @@ function renderSlotsGridAdmin() {
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
                     </div>
                     <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button> 
                         <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
                     </div>
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
-                    
+
                     <!-- NEW LOGS BUTTON -->
                     <button onclick="viewAutoAssignLogs()" class="text-[10px] bg-gray-600 text-white border border-gray-700 px-2 py-1 rounded hover:bg-gray-700 font-bold shadow-sm" title="View Logs">📜</button>
-                    
+
                     <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" class="text-[10px] bg-green-600 text-white border border-green-700 px-2 py-1 rounded hover:bg-green-700 font-bold shadow-sm flex items-center gap-1">📢 Notify</button>
                 </div>
             </div>`;
@@ -1346,11 +1345,11 @@ function renderSlotsGridAdmin() {
         group.items.forEach((item) => {
             if (item.type === 'GHOST') {
                 const encodedList = encodeURIComponent(JSON.stringify(item.list));
-                ui.adminSlotsGrid.innerHTML += `
+                html += `
                     <div class="relative border-l-[6px] border-gray-300 bg-gray-50 p-3 rounded-xl shadow-sm hover:shadow-md transition w-full mb-3 opacity-90 border border-gray-200 border-l-gray-400">
                         <div class="flex justify-between items-start mb-2">
                             <h4 class="font-bold text-gray-500 text-xs flex items-center gap-1">
-                                <span class="text-sm">🗓️</span> 
+                                <span class="text-sm">🗓️</span>
                                 <span>${item.key}</span>
                             </h4>
                             <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">No Exam</span>
@@ -1372,23 +1371,29 @@ function renderSlotsGridAdmin() {
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
 
             const uniqueIssues = new Set();
-            
+
             // 1. Add Session Specific
             if (slot.unavailable) {
-                slot.unavailable.forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+                slot.unavailable.forEach(u => {
+                    const email = (typeof u === 'string') ? u : u.email;
+                    if (email) uniqueIssues.add(email.toLowerCase());
+                });
             }
-            
+
             // 2. Add Advance Leave
             if (typeof advanceUnavailability !== 'undefined' && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-                advanceUnavailability[dateStr][session].forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+                advanceUnavailability[dateStr][session].forEach(u => {
+                    const email = (typeof u === 'string') ? u : u.email;
+                    if (email) uniqueIssues.add(email.toLowerCase());
+                });
             }
-            
+
             const totalIssues = uniqueIssues.size;
             // -----------------------------------------------------------
 
             let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
             let statusIcon = "🔓";
-            
+
             if (isAdminLocked) {
                 themeClasses = "border-amber-500 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100";
                 statusIcon = "🛡️";
@@ -1400,15 +1405,15 @@ function renderSlotsGridAdmin() {
                 statusIcon = "✅";
             }
 
-            const adminBtnStyle = isAdminLocked 
-                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
+            const adminBtnStyle = isAdminLocked
+                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700"
                 : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
 
-            ui.adminSlotsGrid.innerHTML += `
+            html += `
                 <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
-                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span>
                             <span>${key}</span>
                         </h4>
                         <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
@@ -1417,21 +1422,21 @@ function renderSlotsGridAdmin() {
                             <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 font-bold">+</button>
                         </div>
                     </div>
-                    
+
                     <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm min-h-[1.5rem]">
                         <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
-                    
+
                     ${isAdminLocked ? '<div class="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-200 mb-2 text-center">🛡️ Posting Restricted (Admin)</div>' : ''}
-                    
+
                     ${totalIssues > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2 shadow-sm transition">⛔ ${totalIssues} Issue(s) Reported</button>` : ''}
-                    
+
                     <div class="flex gap-1.5 mt-2">
                         <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
                             ${slot.isLocked ? '🔓 Open Std' : '🔒 Lock Std'}
                         </button>
                         <button onclick="toggleAdminLock('${key}')" class="flex-1 text-[10px] border rounded-lg py-1.5 font-bold shadow-sm ${adminBtnStyle}">
-                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}
+                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}        
                         </button>
                     </div>
 
@@ -1439,17 +1444,17 @@ function renderSlotsGridAdmin() {
                         <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold transition shadow-sm" title="Direct Add Staff">+ Add</button>
                         <button onclick="directUnavailStaff('${key}')" class="bg-red-50 text-red-700 border border-red-200 rounded py-1 hover:bg-red-100 text-[10px] font-bold transition shadow-sm" title="Mark Staff Unavailable">⛔ Excuse</button>
                         <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
-                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
+                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button> 
+                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>     
                          <button onclick="openManualAllocationModal('${key}')" class="bg-white text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-50 text-[10px]">Edit</button>
                          <button onclick="deleteSlot('${key}')" class="bg-white text-red-600 border border-red-200 rounded py-1 hover:bg-red-50 text-[10px]">🗑️</button>
                     </div>
                 </div>`;
         });
     });
-    ui.adminSlotsGrid.innerHTML += `<div class="col-span-full h-32 w-full"></div>`;
+    html += `<div class="col-span-full h-32 w-full"></div>`;
+    ui.adminSlotsGrid.innerHTML = html;
 }
-
 
 
 
