@@ -419,22 +419,37 @@ function setupLiveSync(collegeId, mode) {
         }
     }
 
-    // A. Listen to Shards (Aggregated)
-    slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
-        let newSlots = {};
-        querySnap.forEach(shardDoc => {
-            try {
-                const shardMap = JSON.parse(shardDoc.data().data || '{}');
-                Object.assign(newSlots, shardMap);
-            } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
-        });
-        
-        if (Object.keys(newSlots).length > 0) {
-            invigilationSlots = newSlots;
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
-            refreshSlotsUI();
-        }
-    });
+      // A. Listen to Shards (Aggregated)
+      slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
+          let newSlots = {};
+          querySnap.forEach(shardDoc => {
+              try {
+                  const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                  
+                  // 🛡️ DATA CLEANUP: Prune duplicates during aggregation to prevent hangs
+                  Object.keys(shardMap).forEach(key => {
+                      const slot = shardMap[key];
+                      if (slot.unavailable && Array.isArray(slot.unavailable)) {
+                          const seen = new Set();
+                          slot.unavailable = slot.unavailable.filter(u => {
+                              const email = (typeof u === 'string') ? u : u.email;
+                              if (!email || seen.has(email)) return false;
+                              seen.add(email);
+                              return true;
+                          });
+                      }
+                  });
+
+                  Object.assign(newSlots, shardMap);
+              } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
+          });
+
+          if (Object.keys(newSlots).length > 0) {
+              invigilationSlots = newSlots;
+              localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+              refreshSlotsUI();
+          }
+      });
 
     // B. Listen to Metadata (Unavailability & Migration)
     const metaUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
@@ -2330,8 +2345,19 @@ async function syncSlotsToCloud(affectedKey = null) {
                          // Preserve cloud state for other keys in the same shard
                          const cloudAssigned = shardData[k].assigned || [];
                          localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+                         
                          const cloudUnavail = shardData[k].unavailable || [];
-                         localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                         const combinedUnavail = [...(localSlots[k].unavailable || []), ...cloudUnavail];
+                         const uniqueUnavail = [];
+                         const seenUnavail = new Set();
+                         combinedUnavail.forEach(u => {
+                             const email = (typeof u === 'string') ? u : u.email;
+                             if (email && !seenUnavail.has(email)) {
+                                 uniqueUnavail.push(u);
+                                 seenUnavail.add(email);
+                             }
+                         });
+                         localSlots[k].unavailable = uniqueUnavail;
                          if (shardData[k].allocationLog && !localSlots[k].allocationLog) {
                              localSlots[k].allocationLog = shardData[k].allocationLog;
                          }
@@ -3681,9 +3707,10 @@ window.openInconvenienceModal = function (key) {
     const list = document.getElementById('inconvenience-list');
     list.innerHTML = '';
 
+    let html = "";
     allUnavailable.forEach(u => {
         const s = staffData.find(st => st.email === u.email) || { name: u.email };
-        
+
         // --- GOD MODE TAGS ---
         let sourceTag = "";
         if (u.markedBy === 'Admin') {
@@ -3696,7 +3723,7 @@ window.openInconvenienceModal = function (key) {
         const details = u.details || "No details provided.";
         const badgeColor = u.type === 'Advance' ? 'bg-orange-100 text-orange-700' : 'bg-red-50 text-red-600';
 
-        list.innerHTML += `
+        html += `
             <div class="bg-white border border-gray-200 p-3 rounded-lg shadow-sm mb-2">
                 <div class="flex justify-between items-start mb-1">
                     <div>
@@ -3710,7 +3737,7 @@ window.openInconvenienceModal = function (key) {
                 <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 italic mb-2">"${details}"</div>
             </div>`;
     });
-    window.openModal('inconvenience-modal');
+    list.innerHTML = html;    window.openModal('inconvenience-modal');
 };
 
 
