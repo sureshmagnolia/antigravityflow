@@ -455,11 +455,26 @@ function setupLiveSync(collegeId, mode) {
     const metaUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
-            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
-            
+            const rawUnavail = JSON.parse(data.invigAdvanceUnavailability || '{}');
+
+            // 🛡️ DATA CLEANUP: Prune duplicates in advanceUnavailability
+            Object.keys(rawUnavail).forEach(date => {
+                ['FN', 'AN'].forEach(sess => {
+                    if (rawUnavail[date][sess] && Array.isArray(rawUnavail[date][sess])) {
+                        const seen = new Set();
+                        rawUnavail[date][sess] = rawUnavail[date][sess].filter(u => {
+                            const email = (typeof u === 'string') ? u : u.email;
+                            if (!email || seen.has(email)) return false;
+                            seen.add(email);
+                            return true;
+                        });
+                    }
+                });
+            });
+            advanceUnavailability = rawUnavail;
+
             // 🚀 AUTO-MIGRATION CHECK
-            if (mode === 'admin') {
-                // 1. Check Legacy Root Field
+            if (mode === 'admin') {                // 1. Check Legacy Root Field
                 if (data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
                     migrateOldSlotsData(collegeId, data.examInvigilationSlots);
                 }
@@ -504,6 +519,7 @@ function setupLiveSync(collegeId, mode) {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
+                refreshStaffMap();
                 localStorage.setItem('examStaffData', data.examStaffData || '[]');
                 
                 // Update Admin UI immediately
@@ -518,6 +534,7 @@ function setupLiveSync(collegeId, mode) {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
+                refreshStaffMap();
                 localStorage.setItem('examStaffData', data.examStaffData || '[]');
 
                 // If user is just logging in, initialize their dashboard now
@@ -3756,10 +3773,30 @@ window.closeModal = function (id) {
 }
 
 // 1. Get Name from Email (Fixes your console error)
+// 🛡️ PERFORMANCE OPTIMIZATION: Global Staff Map for O(1) Lookups
+let staffMap = new Map();
+function refreshStaffMap() {
+    staffMap = new Map();
+    if (staffData && Array.isArray(staffData)) {
+        staffData.forEach(s => {
+            if (s.email) staffMap.set(s.email.toLowerCase(), s);
+        });
+    }
+}
+
 function getNameFromEmail(email) {
+    if (!email) return "N/A";
+    const e = email.toLowerCase();
+    if (staffMap.has(e)) return staffMap.get(e).name;
     if (!staffData || staffData.length === 0) return email.split('@')[0];
-    const s = staffData.find(st => st.email === email);
-    return s ? s.name : email.split('@')[0]; // Return Name or Email prefix if not found
+    
+    // Fallback and update map if found
+    const s = staffData.find(st => st.email.toLowerCase() === e);
+    if (s) {
+        staffMap.set(e, s);
+        return s.name;
+    }
+    return email.split('@')[0];
 }
 
 // Helper: Calculate Academic Year Boundaries for a SPECIFIC date
