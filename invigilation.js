@@ -1,6 +1,6 @@
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged  }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit, startAfter, endBefore, limitToLast }
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, deleteField, collection, query, where, getDocs, orderBy, onSnapshot, serverTimestamp, limit, startAfter, endBefore, limitToLast, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 // --- NEW IMPORTS FOR RECAPTCHA (Add this) ---
 import { initializeAppCheck, ReCaptchaV3Provider } 
@@ -395,59 +395,78 @@ function setupLiveSync(collegeId, mode) {
 
     // --- 2. LISTEN TO SLOTS (Always Live, High Priority) ---
     const slotsRef = doc(db, "colleges", collegeId, "system_data", "slots");
-    slotsUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            invigilationSlots = JSON.parse(data.examInvigilationSlots || '{}');
-            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+    const shardsRef = collection(db, "colleges", collegeId, "slots_data");
 
-            // Dynamic UI Refresh based on what is visible
-            const adminView = document.getElementById('view-admin');
-            const staffView = document.getElementById('view-staff');
-if (adminView && !adminView.classList.contains('hidden')) {
-    renderSlotsGridAdmin();
-    renderAdminTodayStats();
-    populateAttendanceSessions();
-} else if (staffView && !staffView.classList.contains('hidden')) {
-    // If staff view is open, refresh calendar
-    let emailToRender = currentUser ? currentUser.email : null;
-    if (staffData.length > 0 && currentUser) {
-         const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-         if (me) emailToRender = me.email;
-    }
-    if (emailToRender) {
-        renderStaffCalendar(emailToRender);
-        if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
-        if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
-    }
-} else if (mode === 'admin') {
-    // Mobile fallback: admin view not ready yet when first snapshot fires
-    setTimeout(() => {
+    // Helper to refresh UI
+    function refreshSlotsUI() {
+        const adminView = document.getElementById('view-admin');
+        const staffView = document.getElementById('view-staff');
         if (adminView && !adminView.classList.contains('hidden')) {
             renderSlotsGridAdmin();
             renderAdminTodayStats();
             populateAttendanceSessions();
+        } else if (staffView && !staffView.classList.contains('hidden')) {
+            let emailToRender = currentUser ? currentUser.email : null;
+            if (staffData.length > 0 && currentUser) {
+                 const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
+                 if (me) emailToRender = me.email;
+            }
+            if (emailToRender) {
+                renderStaffCalendar(emailToRender);
+                if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
+                if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
+            }
         }
-    }, 800);
-} else if (mode === 'staff') {
-    // Mobile fallback: staff view not ready yet when first snapshot fires
-    setTimeout(() => {
-        if (staffView && !staffView.classList.contains('hidden') && currentUser) {
-            let emailToRender = currentUser.email;
-            const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-            if (me) emailToRender = me.email;
-            renderStaffCalendar(emailToRender);
-            if (typeof renderExchangeMarket === "function") renderExchangeMarket(emailToRender);
-            if (typeof renderStaffUpcomingSummary === "function") renderStaffUpcomingSummary(emailToRender);
-        }
-    }, 800);
-}
+    }
 
-
+    // A. Listen to Shards (Aggregated)
+    slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
+        let newSlots = {};
+        querySnap.forEach(shardDoc => {
+            try {
+                const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                Object.assign(newSlots, shardMap);
+            } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
+        });
         
+        if (Object.keys(newSlots).length > 0) {
+            invigilationSlots = newSlots;
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+            refreshSlotsUI();
         }
     });
+
+    // B. Listen to Metadata (Unavailability & Migration)
+    const metaUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
+            
+            // 🚀 AUTO-MIGRATION CHECK
+            if (data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
+                if (mode === 'admin') {
+                    migrateOldSlotsData(collegeId, data.examInvigilationSlots);
+                } else {
+                    // Staff mode: just load it if shards are empty
+                    if (Object.keys(invigilationSlots).length === 0) {
+                        invigilationSlots = JSON.parse(data.examInvigilationSlots);
+                        localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+                        refreshSlotsUI();
+                    }
+                }
+            }
+        }
+    });
+
+    // Add metaUnsubscribe to the cleanup list if needed, or wrap it
+    const originalSlotsUnsub = slotsUnsubscribe;
+    slotsUnsubscribe = () => {
+        originalSlotsUnsub();
+        metaUnsubscribe();
+    };
+
+    // Mobile fallback: views might not be ready
+    setTimeout(refreshSlotsUI, 1200);
 
     // --- 3. STAFF DATA (Optimized: Live for Admin, Once for Staff) ---
     const staffRef = doc(db, "colleges", collegeId, "system_data", "staff");
@@ -2267,46 +2286,131 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud(affectedKey = null) {updateSyncStatus("Saving...", "neutral");
+async function syncSlotsToCloud(affectedKey = null) {
+    updateSyncStatus("Saving...", "neutral");
     try {
-        const ref = doc(db, "colleges", currentCollegeId, "system_data", "slots");
         const localSlots = invigilationSlots;
+        const batch = writeBatch(db);
 
-        // 1. SMART MERGE (Conditional)
-        if (affectedKey === "FORCE_OVERWRITE") {
-            console.log("⚡ FORCE OVERWRITE: Skipping cloud merge for batch update.");
+        function getShardId(key) {
+            try {
+                const [dRaw] = key.split(' | ');
+                const dStr = dRaw.replace(/-/g, '.');
+                const parts = dStr.split('.');
+                if (parts.length < 3) return "unknown";
+                return `${parts[2]}-${parts[1].padStart(2, '0')}`; // YYYY-MM
+            } catch (e) { return "unknown"; }
+        }
+
+        if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
+            // --- OPTIMIZED SINGLE SHARD UPDATE ---
+            const shardId = getShardId(affectedKey);
+            const shardRef = doc(db, "colleges", currentCollegeId, "slots_data", shardId);
+            
+            // We still need to merge with cloud data for THIS shard to prevent overwriting others' changes in the same month
+            const cloudSnap = await getDoc(shardRef);
+            const shardData = cloudSnap.exists() ? JSON.parse(cloudSnap.data().data || '{}') : {};
+
+            // Merge local changes for this shard
+            Object.keys(localSlots).forEach(k => {
+                if (getShardId(k) === shardId) {
+                    if (shardData[k] && k !== affectedKey) {
+                         // Preserve cloud state for other keys in the same shard
+                         const cloudAssigned = shardData[k].assigned || [];
+                         localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+                         const cloudUnavail = shardData[k].unavailable || [];
+                         localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
+                         if (shardData[k].allocationLog && !localSlots[k].allocationLog) {
+                             localSlots[k].allocationLog = shardData[k].allocationLog;
+                         }
+                    }
+                }
+            });
+
+            // Filter localSlots to only include keys for this shard
+            const finalShardMap = {};
+            Object.keys(localSlots).forEach(k => {
+                if (getShardId(k) === shardId) finalShardMap[k] = localSlots[k];
+            });
+
+            batch.set(shardRef, { data: JSON.stringify(finalShardMap), lastUpdated: serverTimestamp() });
         } else {
-            const cloudSnap = await getDoc(ref);
-            const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
+            // --- FULL SYNC OR BATCH UPDATE ---
+            
+            // 1. Fetch existing shards to ensure we clear ones that no longer have data
+            const shardsColRef = collection(db, "colleges", currentCollegeId, "slots_data");
+            const existingShardsSnap = await getDocs(shardsColRef);
+            const existingShardIds = new Set();
+            existingShardsSnap.forEach(s => existingShardIds.add(s.id));
 
-            Object.keys(cloudSlots).forEach(k => {
-                if (localSlots[k]) {
-                    if (k !== affectedKey) {
-                        const cloudAssigned = cloudSlots[k].assigned || [];
-                        localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
+            const shards = {};
+            Object.keys(localSlots).forEach(k => {
+                const sid = getShardId(k);
+                if (!shards[sid]) shards[sid] = {};
+                shards[sid][k] = localSlots[k];
+            });
 
-                        const cloudUnavail = cloudSlots[k].unavailable || [];
-                        localSlots[k].unavailable = [...new Set([...(localSlots[k].unavailable || []), ...cloudUnavail])];
-                    }
-                    if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                        localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                    }
+            // 2. Update or Clear all shards
+            const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
+            
+            allShardIds.forEach(sid => {
+                const shardRef = doc(db, "colleges", currentCollegeId, "slots_data", sid);
+                const shardData = shards[sid] || {};
+                if (Object.keys(shardData).length > 0) {
+                    batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
-                    localSlots[k] = cloudSlots[k];
+                    // Delete shard if it has no data
+                    batch.delete(shardRef);
                 }
             });
         }
 
-        // 2. AUTHORITATIVE SAVE (Always runs)
-        await setDoc(ref, {
-            examInvigilationSlots: JSON.stringify(localSlots)
-        }, { merge: true });
-
+        await batch.commit();
         updateSyncStatus("Synced", "success");
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
     } catch (e) {
         console.error("Slot Sync Failed:", e);
         updateSyncStatus("Save Failed", "error");
+    }
+}
+
+async function migrateOldSlotsData(collegeId, oldData) {
+    if (!oldData || oldData === '{}') return;
+    console.log("🚀 Starting Slot Data Migration to Shards...");
+    try {
+        const slots = JSON.parse(oldData);
+        const shards = {};
+        
+        function getShardId(key) {
+            try {
+                const [dRaw] = key.split(' | ');
+                const dStr = dRaw.replace(/-/g, '.');
+                const parts = dStr.split('.');
+                if (parts.length < 3) return "unknown";
+                return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+            } catch (e) { return "unknown"; }
+        }
+
+        Object.keys(slots).forEach(k => {
+            const sid = getShardId(k);
+            if (!shards[sid]) shards[sid] = {};
+            shards[sid][k] = slots[k];
+        });
+
+        const batch = writeBatch(db);
+        Object.keys(shards).forEach(sid => {
+            const shardRef = doc(db, "colleges", collegeId, "slots_data", sid);
+            batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: serverTimestamp() });
+        });
+
+        // 🛡️ Remove the old bloated field after sharding
+        const oldRef = doc(db, "colleges", collegeId, "system_data", "slots");
+        batch.update(oldRef, { examInvigilationSlots: deleteField() });
+
+        await batch.commit();
+        console.log("✅ Slot Migration Complete. Bloated document cleared.");
+    } catch (e) {
+        console.error("❌ Slot Migration Failed:", e);
     }
 }
 
@@ -2901,25 +3005,40 @@ window.calculateSlotsFromSchedule = async function () {
 
         updateSyncStatus("Fetching Slots...", "neutral");
         
-        // 1. Fetch ONLY the slots document
-        const { db, doc, getDoc } = window.firebase;
-        const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
-        const snapshot = await getDoc(slotsRef);
+        // 1. Fetch ALL shards from the subcollection
+        const { db, collection, getDocs, doc, getDoc } = window.firebase;
+        const shardsRef = collection(db, "colleges", currentCollegeId, "slots_data");
+        const shardsSnap = await getDocs(shardsRef);
 
-        if (snapshot.exists()) {
-            const data = snapshot.data();
-            const cloudSlots = JSON.parse(data.examInvigilationSlots || '{}');
-            
-            // 2. Update Local State
+        let cloudSlots = {};
+        shardsSnap.forEach(shardDoc => {
+            try {
+                const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                Object.assign(cloudSlots, shardMap);
+            } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
+        });
+
+        // 2. Fallback for unmigrated data
+        const oldSlotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+        const oldSnap = await getDoc(oldSlotsRef);
+        if (oldSnap.exists()) {
+            const oldData = oldSnap.data();
+            if (oldData.examInvigilationSlots && oldData.examInvigilationSlots !== '{}') {
+                const legacySlots = JSON.parse(oldData.examInvigilationSlots);
+                Object.assign(cloudSlots, legacySlots);
+            }
+            if (oldData.invigAdvanceUnavailability) {
+                advanceUnavailability = JSON.parse(oldData.invigAdvanceUnavailability || '{}');
+                localStorage.setItem('invigAdvanceUnavailability', oldData.invigAdvanceUnavailability);
+            }
+        }
+
+        if (Object.keys(cloudSlots).length > 0) {
+            // 3. Update Local State
             invigilationSlots = cloudSlots;
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
             
-            if (data.invigAdvanceUnavailability) {
-                advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
-                localStorage.setItem('invigAdvanceUnavailability', data.invigAdvanceUnavailability);
-            }
-
-            // 3. Update UI
+            // 4. Update UI
             if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
             
             alert("✅ Synced! Loaded latest invigilation requirements from cloud.");
@@ -7077,7 +7196,6 @@ window.handleMasterRestore = function (input) {
                 // Prepare Full Payload
                 updatePayload = {
                     examStaffData: JSON.stringify(staffData),
-                    examInvigilationSlots: JSON.stringify(invigilationSlots),
                     invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
                     invigRoles: JSON.stringify(rolesConfig),
                     invigDesignations: JSON.stringify(designationsConfig),
@@ -7119,15 +7237,17 @@ window.handleMasterRestore = function (input) {
 
                 console.log(`Partial Restore: Updated duty data for ${restoreCount} slots.`);
 
-                // Prepare Partial Payload
+                // Prepare Partial Payload (Metadata only)
                 updatePayload = {
-                    examInvigilationSlots: JSON.stringify(invigilationSlots),
                     invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
                 };
             }
 
             // 3. Save to Cloud
             await updateDoc(ref, updatePayload);
+            
+            // 🛡️ Save Slots using Sharded Logic
+            await syncSlotsToCloud("FORCE_OVERWRITE");
 
             // 4. Refresh UI
             updateAdminUI();
@@ -9507,7 +9627,6 @@ window.startNewAcademicYear = async function() {
           // A. Update Root Document (Save surgically filtered data)
           await updateDoc(collegeRef, {
               examStaffData: JSON.stringify(staffData),
-              examInvigilationSlots: JSON.stringify(invigilationSlots),
               invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
               invigVacationConfig: JSON.stringify({
                   start: vacationStart,
@@ -9517,11 +9636,12 @@ window.startNewAcademicYear = async function() {
               autoAssignLogs: []
           });
 
-          // B. Update Sub-Collections
+          // B. Update Sub-Collections (New Sharded Logic)
           await setDoc(slotsRef, {
-              examInvigilationSlots: JSON.stringify(invigilationSlots),
               invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
           }, { merge: true });
+
+          await syncSlotsToCloud("FORCE_OVERWRITE");
 
           await setDoc(staffRef, {
               examStaffData: JSON.stringify(staffData)
