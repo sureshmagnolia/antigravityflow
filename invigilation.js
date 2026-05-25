@@ -2136,109 +2136,92 @@ window.openDayDetail = function (dateStr, email) {
     const sessions = Object.keys(invigilationSlots).filter(k => k.startsWith(dateStr));
 
     if (sessions.length > 0) {
-        sessions.forEach(key => {
-            const slot = invigilationSlots[key];
-            const filled = slot.assigned.length;
-            const needed = slot.required - filled;
+        // --- MODERN MOBILE CARDS ---
+        let cardStatus = "";
+        let cardActions = "";
+        let cardBg = "bg-white";
+        let borderColor = "border-gray-100";
 
-            // Status Checks
-            const isUnavailable = isUserUnavailable(slot, email, key);
-            const isAssigned = slot.assigned.includes(email);
-            const isLocked = slot.isLocked;
-            const isAdminLocked = slot.isAdminLocked || false;
-            const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(email);
-            const marketOffers = slot.exchangeRequests ? slot.exchangeRequests.filter(e => e !== email) : [];
+        if (isAssigned) {
+            cardBg = isPostedByMe ? "bg-orange-50/50" : "bg-green-50/50";
+            borderColor = isPostedByMe ? "border-orange-200" : "border-green-200";
+            const statusLabel = isPostedByMe ? "⏳ Exchange Posted" : "✅ Assigned";
+            const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
+            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
 
-            const t = key.split(' | ')[1].toUpperCase();
-            const isAN = (t.includes("PM") || t.startsWith("12:") || t.startsWith("12."));
-            const sessLabel = isAN ? "AFTERNOON (AN)" : "FORENOON (FN)";
-
-            if (isAssigned) {
-                if (isAN) isAssignedAN = true;
-                else isAssignedFN = true;
+            if (isPostedByMe) {
+                cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
+            } else if (isAdminLocked) {
+                cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
+            } else if (isLocked) {
+                cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
+            } else {
+                cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
             }
-            
-            // Track Admin Locks
+        } else if (isUnavailable) {
+            cardBg = "bg-red-50/30";
+            borderColor = "border-red-100";
+            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-red-600 bg-red-100">⛔ Unavailable</span>`;
+            cardActions = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full mt-2 bg-white text-blue-600 border border-blue-200 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Undo Unavailability</button>`;
+        } else if (marketOffers.length > 0) {
+            cardBg = "bg-purple-50/50";
+            borderColor = "border-purple-200";
+            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-purple-700 bg-purple-100">♻️ ${marketOffers.length} Exchange Offer(s)</span>`;
+            const takeBtn = marketOffers.map(seller => `<button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Take Duty from ${getNameFromEmail(seller)}</button>`).join('');
+            cardActions = takeBtn;
+        } else {
+            const isFull = needed <= 0;
+            cardStatus = isFull ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-gray-500 bg-gray-100">Full</span>` : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-indigo-600 bg-indigo-100">${needed} Spot(s) Open</span>`;
+
+            const volBtn = (isFull || isLocked || isAdminLocked) ? "" : `<button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Volunteer</button>`;
+            const unavBtn = (isAdminLocked) ? "" : `<button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white text-red-600 border border-red-200 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Unavailable</button>`;
+
             if (isAdminLocked) {
-                if (isAN) adminLockAN = true;
-                else adminLockFN = true;
+                cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Posting Restricted by Admin</div>`;
+            } else if (isLocked && !isFull) {
+                cardActions = `<div class="flex gap-2 mt-2"><div class="flex-1 bg-gray-100 text-gray-400 py-2 rounded-lg text-xs font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
+            } else if (isFull) {
+                cardActions = `<div class="flex gap-2 mt-2"><div class="flex-1 bg-gray-50 text-gray-400 py-2 rounded-lg text-xs font-bold text-center border border-gray-100">Slot Full</div>${unavBtn}</div>`;
+            } else {
+                cardActions = `<div class="flex gap-2 mt-2">${volBtn}${unavBtn}</div>`;
             }
+        }
 
-            // --- Action Buttons ---
-            let actionHtml = "";
-            
-            if (isRestricted) {
-                 if (isAssigned) {
-                     actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
-                 } else if (isUnavailable) {
-                     actionHtml = `<div class="w-full bg-red-50 text-red-500 border border-red-100 text-xs py-2 rounded font-bold text-center">⛔ Marked Unavailable ${restrictLabel}</div>`;
-                 } else {
-                     actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
-                 }
-            } 
-            else if (isAdminLocked) {
-                 if (isAssigned) {
-                     if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                     } else {
-                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
-                     }
-                 } else {
-                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm"><span>🛡️</span> Posting Restricted by Admin</div>`;
-                 }
-            }
-            else {
-                if (isAssigned) {
-                    if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                    } else if (isLocked) {
-                        actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
-                    } else {
-                        actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
-                    }
-                } else if (marketOffers.length > 0) {
-                     let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
-                     actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
-                } else if (isUnavailable) {
-                    actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
-                } else {
-                    const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
-                    if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
-                    else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
-                    else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
-                }
-            }
+        // --- STAFF LIST RENDER ---
+        let staffListHtml = '';
+        if (slot.assigned.length > 0) {
+            const listItems = slot.assigned.map(st => {
+                const s = staffMap.get(st.toLowerCase()) || { name: st.split('@')[0] };
+                const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
+                const statusIcon = isExchanging ? "⏳" : "✅";
+                const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
+                const contactBtns = (phone && st !== email) ? `
+                    <div class="flex items-center gap-1">
+                        <a href="tel:${phone}" class="p-1.5 text-green-600 bg-green-50 rounded-full border border-green-100 active:bg-green-100 transition-colors"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg></a>
+                        <a href="https://wa.me/91${phone}" target="_blank" class="p-1.5 text-emerald-600 bg-emerald-50 rounded-full border border-emerald-100 active:bg-emerald-100 transition-colors"><svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+                    </div>` : '';
+                return `<div class="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-white/50 mb-1"><div class="flex items-center gap-1.5 min-w-0"><span class="text-xs shrink-0">${statusIcon}</span><span class="text-[11px] font-bold text-gray-700 truncate">${s.name}</span></div>${contactBtns}</div>`;
+            }).join('');
 
-            // --- STAFF LIST RENDER (FIXED) ---
-            let staffListHtml = '';
-            if (slot.assigned.length > 0) {
-                const listItems = slot.assigned.map(st => {
-    const s = staffData.find(sd => sd.email === st);
-    if (!s) return '';
-    const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
-    const statusIcon = isExchanging ? "⏳" : "✅";
-    const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
-      const contactBtns = (phone && st !== email) ? `
-          <div class="flex items-center gap-1 shrink-0">
-              <a href="tel:${phone}" class="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded hover:bg-green-100 transition" title="Call ${s.name}">📞 Call</a>
-              <a href="https://wa.me/91${phone}" target="_blank" class="flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition" title="WhatsApp ${s.name}">
-                  <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> 
-                  Chat
-              </a>
+            staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-100/50"><div class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">Current Team</div><div class="space-y-1 max-h-32 overflow-y-auto custom-scroll">${listItems}</div></div>`;
+        }
 
-          
-          </div>` : '';
-      return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span>${contactBtns}</div>`;
-
-}).join('');
-
-                
-                staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
-            }
-
-            container.innerHTML += `<div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${staffListHtml}</div>`;
-        });
-    } else {
+        container.innerHTML += `
+            <div class="${cardBg} p-4 rounded-2xl border ${borderColor} shadow-sm transition-all duration-300">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="min-w-0">
+                        <h4 class="font-black text-gray-800 text-sm leading-tight mb-0.5">${sessLabel}</h4>
+                        <p class="text-[10px] text-gray-500 font-medium">${key.split('|')[1]}</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1.5">
+                        ${cardStatus}
+                        <span class="text-[10px] font-bold text-gray-400 bg-white/80 px-2 py-0.5 rounded border border-gray-100">${filled}/${slot.required} filled</span>
+                    </div>
+                </div>
+                ${cardActions}
+                ${staffListHtml}
+            </div>`;
+        });    } else {
         container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
 
