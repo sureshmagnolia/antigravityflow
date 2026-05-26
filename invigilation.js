@@ -10343,7 +10343,7 @@ window.downloadVacationCertificates = function() {
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
-    const collegeName = collegeData.examCollegeName || "GOVERNMENT VICTORIA COLLEGE, PALAKKAD";
+    const collegeName = (collegeData ? collegeData.examCollegeName : "") || "Government Victoria College, Palakkad";
 
     // Format period dates for body text (DD/MM/YY)
     const formatDateShort = (d) => {
@@ -10420,7 +10420,7 @@ window.downloadVacationCertificates = function() {
         doc.setFont("times", "bold");
         doc.setFontSize(16);
         doc.setTextColor(30, 41, 59);
-        doc.text(collegeName.toUpperCase(), 105, yOffset + 40, { align: "center" });
+        doc.text(collegeName, 105, yOffset + 40, { align: "center" });
 
         // Certificate Title
         doc.setFontSize(16);
