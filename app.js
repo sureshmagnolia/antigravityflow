@@ -14589,7 +14589,7 @@ Are you sure you want to update these records?
                         <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100 last:border-0">
                             <span class="font-medium text-slate-700">${strm}</span>
                             <span class="text-slate-600">
-                                <span class="inline-block w-8 text-right font-bold">${count}</span> <span class="text-[10px] text-slate-300 mx-1">▶</span> <strong class="text-indigo-600 inline-block w-4 text-right">${requiredInvigs}</strong>
+                                <span class="inline-block w-8 text-right font-bold">${count}</span> <span class="text-[10px] text-slate-300 mx-1">:</span> <strong class="text-indigo-600 inline-block w-4 text-right">${requiredInvigs}</strong>
                             </span>
                         </div>
                     `);
@@ -14616,7 +14616,7 @@ Are you sure you want to update these records?
                             ${streamHtmlParts.join('')}
                         </td>
                         <td class="border border-slate-300 print:border-slate-400 p-3 align-middle text-sm text-center">
-                             ${scribeCount > 0 ? `<div class="bg-amber-50 print:bg-transparent rounded px-2 py-1 border border-amber-100 print:border-0 tracking-tight"><strong class="text-amber-800 print:text-black">${scribeCount}</strong> Scr <span class="text-[10px] text-amber-300 print:text-black mx-1">▶</span> <strong class="text-amber-600 print:text-black">${scribeInvigs}</strong> Inv</div>` : '<span class="text-slate-300">-</span>'}
+                             ${scribeCount > 0 ? `<div class="bg-amber-50 print:bg-transparent rounded px-2 py-1 border border-amber-100 print:border-0 tracking-tight"><strong class="text-amber-800 print:text-black">${scribeCount}</strong> Scribes <span class="text-[10px] text-amber-300 print:text-black mx-1">:</span> <strong class="text-amber-600 print:text-black">${scribeInvigs}</strong> Invigilators</div>` : '<span class="text-slate-300">-</span>'}
                         </td>
                         <td class="border border-slate-300 print:border-slate-400 p-3 text-center align-middle font-bold text-teal-700 bg-teal-50/50 print:bg-transparent print:text-black text-lg">
                             ${sessionTotalInvigs}
@@ -14658,10 +14658,10 @@ Are you sure you want to update these records?
                             <thead>
                                 <tr class="bg-slate-100 print:bg-slate-200 text-slate-600 print:text-slate-900 uppercase text-xs tracking-wider border-b-2 border-slate-300 print:border-slate-400">
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-1/5">Date / Time</th>
-                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400">Stream-wise Required (1:30)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400">Stream Requirements</th>
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-32 text-center">Scribes (1:5)</th>
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-teal-700">Base</th>
-                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-amber-600">Resv(10%)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-amber-600">Reserve (10%)</th>
                                     <th class="p-4 font-bold text-center w-24 text-rose-700">Total</th>
                                 </tr>
                             </thead>
@@ -20826,7 +20826,7 @@ window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
 
-// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
+// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Improved & Professional) ---
 function generateInvigilatorSummaryPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -20836,27 +20836,37 @@ function generateInvigilatorSummaryPDF() {
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
     try {
-        // 1. Header Information
+        // 1. Professional Header with Logo
         const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        doc.setFontSize(14);
+        try {
+            // Attempt to add logo if available
+            doc.addImage("CollegeLogo.png", "PNG", 15, 10, 20, 20);
+        } catch (e) { console.warn("Logo not found for PDF"); }
+
+        doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
+        doc.setTextColor(31, 41, 55); // slate-800
+        doc.text(collegeName.toUpperCase(), 105, 18, { align: "center" });
         
-        doc.setFontSize(11);
-        doc.text("Invigilator Requirement Summary", 105, 22, { align: "center" });
+        doc.setFontSize(12);
+        doc.setTextColor(75, 85, 99); // slate-600
+        doc.text("Invigilator Requirement Summary", 105, 25, { align: "center" });
         
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 105, 31, { align: "center" });
 
-        // Check for "Upcoming Only" Filter Badge (matches HTML visual)
-        const filterBadge = document.querySelector('.print-header-group span.bg-teal-100');
+        // Filter Badge (If applicable)
+        const filterBadge = document.querySelector('.print-page .bg-emerald-100'); 
         if (filterBadge) {
-            doc.setTextColor(13, 148, 136); // Teal Color to match HTML
+            doc.setFillColor(209, 250, 229); // emerald-100
+            doc.roundedRect(80, 34, 50, 6, 3, 3, 'F');
+            doc.setTextColor(6, 95, 70); // emerald-800
+            doc.setFontSize(8);
             doc.setFont("helvetica", "bold");
-            doc.text("Filtered: Upcoming Exams Only", 105, 34, { align: "center" });
-            doc.setTextColor(0, 0, 0); // Reset color
+            doc.text("Upcoming Exams Only", 105, 38, { align: "center" });
+            doc.setTextColor(0, 0, 0); 
         }
 
         // 2. Generate Table from HTML
@@ -20865,59 +20875,78 @@ function generateInvigilatorSummaryPDF() {
 
         doc.autoTable({
             html: tableEl,
-            startY: 40,
+            startY: 45,
             theme: 'grid',
             styles: {
                 font: 'helvetica',
                 fontSize: 9,
                 cellPadding: 3,
                 valign: 'middle',
-                lineColor: [200, 200, 200],
+                lineColor: [229, 231, 235], // gray-200
                 lineWidth: 0.1
             },
             headStyles: {
                 fillColor: [243, 244, 246], // Gray-100 background
-                textColor: 20,              // Dark Gray text
+                textColor: [31, 41, 55],    // Gray-800 text
                 fontStyle: 'bold',
-                halign: 'left',
+                halign: 'center',
                 lineWidth: 0.1,
-                lineColor: [200, 200, 200]
+                lineColor: [209, 213, 219]
             },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 40 }, // Date | Time column
-                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] } // Total Column (Teal)
+                0: { fontStyle: 'bold', cellWidth: 40, halign: 'left' }, // Date | Time column
+                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] }, // Base Column
+                4: { halign: 'center', fontStyle: 'bold', textColor: [217, 119, 6] },  // Reserve Column
+                5: { halign: 'center', fontStyle: 'bold', textColor: [190, 18, 60] }   // Total Column
             },
             didParseCell: function(data) {
-                // Formatting Hacks: Clean up HTML content inside cells
-                if (data.section === 'body' && data.column.index === 1) {
-                    // Safety check for cell raw data
-                    if (data.cell && data.cell.raw && data.cell.raw.innerText) {
-                        let text = data.cell.raw.innerText;
-                        // Replace double newlines with single to save vertical space
-                        data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
+                // Formatting Hacks: Clean up HTML content inside cells & Fix unprofessional characters
+                if (data.cell && data.cell.raw && data.cell.raw.innerText) {
+                    let rawText = data.cell.raw.innerText;
+                    // Replace problematic characters and abbreviations
+                    let cleanText = rawText.replace(/▶/g, ":")
+                                           .replace(/Scr/g, "Scribes")
+                                           .replace(/Inv/g, "Invigilators");
+                    
+                    if (data.section === 'body' && data.column.index === 1) {
+                        data.cell.text = cleanText.split('\n').filter(t => t.trim().length > 0).join('\n');
+                    } else {
+                        data.cell.text = cleanText.trim();
                     }
                 }
                 
-                // Style the Grand Total Row (Green Background)
-                // 🟢 FIX: Added robust safety check for row.raw and innerText
+                // Style the Grand Total Row (Professional Dark Header)
                 if (data.row && data.row.raw && typeof data.row.raw.innerText === 'string') {
                     if (data.row.raw.innerText.toUpperCase().includes("GRAND TOTAL")) {
-                        data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
-                        data.cell.styles.textColor = [13, 148, 136];  // Teal Text
+                        data.cell.styles.fillColor = [31, 41, 55]; // Slate-800
+                        data.cell.styles.textColor = [255, 255, 255];
                         data.cell.styles.fontStyle = 'bold';
+                        if(data.column.index === 5) data.cell.styles.fontSize = 12;
                     }
                 }
             }
         });
 
-        // 3. Footer Note
-        const finalY = doc.lastAutoTable.finalY || 40;
+        // 3. Footer Note (Improved consistency)
+        const finalY = doc.lastAutoTable.finalY || 50;
+        doc.setDrawColor(229, 231, 235);
+        doc.line(15, finalY + 5, 195, finalY + 5);
+
         doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text("Note: Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.", 14, finalY + 10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(107, 114, 128); // gray-500
+        doc.text("Calculation Rules & Notes:", 15, finalY + 10);
+        
+        doc.setFont("helvetica", "normal");
+        const noteLines = [
+            "1. Base requirement: 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.",
+            "2. A 10 percent (10%) Reserve Buffer is applied to the base requirement for each individual session.",
+            "3. Total Duties represent the sum of Base Requirements and the Reserve Buffer."
+        ];
+        doc.text(noteLines, 15, finalY + 14);
 
         // 4. Save File
-        doc.save(`Invigilator_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`Invigilator_Requirement_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
 
     } catch (e) {
         console.error("PDF Gen Error:", e);
