@@ -10420,7 +10420,7 @@ window.downloadVacationCertificates = function() {
         doc.setFont("times", "bold");
         doc.setFontSize(16);
         doc.setTextColor(30, 41, 59);
-        doc.text(collegeName, 105, yOffset + 40, { align: "center" });
+        doc.text(collegeName.toUpperCase(), 105, yOffset + 40, { align: "center" });
 
         // Certificate Title
         doc.setFontSize(16);
