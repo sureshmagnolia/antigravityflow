@@ -20841,11 +20841,6 @@ function generateRoomSummaryPDF() {
         // 1. Professional Header
         const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        try {
-            // Attempt to add logo if available
-            doc.addImage("CollegeLogo.png", "PNG", 15, 10, 18, 18);
-        } catch (e) { console.warn("Logo not found for Room Summary PDF"); }
-
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(31, 41, 55); // slate-800
@@ -20952,14 +20947,9 @@ function generateInvigilatorSummaryPDF() {
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
     try {
-        // 1. Professional Header with Logo
+        // 1. Professional Header
         const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        try {
-            // Attempt to add logo if available
-            doc.addImage("CollegeLogo.png", "PNG", 15, 10, 20, 20);
-        } catch (e) { console.warn("Logo not found for PDF"); }
-
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(31, 41, 55); // slate-800
