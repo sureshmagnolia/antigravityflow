@@ -1875,8 +1875,8 @@ function renderStaffCalendar(myEmail) {
 
                 const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
                 const isAssigned = slot.assigned.includes(myEmail);
-                const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
-                const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
+                const isPostedByMe = !isPast && slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
+                const isMarketAvailable = !isPast && slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isAdminLocked = slot.isAdminLocked || false;
                 const isCompleted = (slot.attendance && slot.attendance.includes(myEmail)) || (isAssigned && isPast);
 

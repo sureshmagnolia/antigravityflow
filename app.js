@@ -16338,6 +16338,10 @@ window.handlePythonExtraction = async function (jsonString) {
     if (generateRoomSummaryButton) {
         generateRoomSummaryButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
+            if (!sessionKey || sessionKey === "all") {
+                alert("Please select a specific session for the Room Allotment Summary.");
+                return;
+            }
             if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
 
             generateRoomSummaryButton.disabled = true;
@@ -16360,6 +16364,11 @@ window.handlePythonExtraction = async function (jsonString) {
 
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
                 const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+
+                if (sessionRegularAllotment.length === 0 && Object.keys(sessionScribeMap).length === 0) {
+                    alert("No room allotments found for this session. Please allot rooms first.");
+                    return;
+                }
 
                 // 3. Get Serial Numbers (Unified)
                 const roomSerialMap = getRoomSerialMap(sessionKey);
