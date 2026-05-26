@@ -10335,6 +10335,141 @@ window.downloadVacationPDF = function() {
     window.closeModal('vacation-report-modal');
 };
 
+window.downloadVacationCertificates = function() {
+    const startStr = document.getElementById('vac-start').value;
+    const endStr = document.getElementById('vac-end').value;
+
+    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    
+    const startDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    const collegeName = collegeData.examCollegeName || "GOVERNMENT VICTORIA COLLEGE, PALAKKAD";
+
+    const certificatesData = [];
+
+    staffData.forEach(staff => {
+        if (staff.status === 'archived') return;
+
+        const dutyDates = [];
+        const sessions = [];
+
+        Object.keys(invigilationSlots).forEach(key => {
+            const slot = invigilationSlots[key];
+            const dateObj = parseDate(key);
+            
+            if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
+                const [dStr, tStr] = key.split(' | ');
+                const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+                const sessCode = isAN ? "AN" : "FN";
+                
+                sessions.push(`${dStr} (${sessCode})`);
+
+                const dateKey = dateObj.toDateString();
+                if (!dutyDates.some(d => d.toDateString() === dateKey)) {
+                    dutyDates.push(dateObj);
+                }
+            }
+        });
+
+        if (dutyDates.length === 0) return;
+
+        dutyDates.sort((a, b) => a - b);
+        certificatesData.push({
+            name: staff.name,
+            desig: staff.designation || "",
+            dept: staff.dept || "",
+            count: sessions.length,
+            dates: dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ')
+        });
+    });
+
+    if (certificatesData.length === 0) return alert("No duties found in range.");
+
+    // Sort by Dept, then Name
+    certificatesData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    certificatesData.forEach((data, index) => {
+        if (index > 0 && index % 2 === 0) {
+            doc.addPage();
+        }
+
+        const yOffset = (index % 2) * 148.5; // Half A4 height
+        
+        // --- Professional Certificate Layout ---
+        
+        // Border
+        doc.setDrawColor(30, 41, 59);
+        doc.setLineWidth(0.8);
+        doc.rect(5, yOffset + 5, 200, 138.5); // Outer
+        doc.setLineWidth(0.2);
+        doc.rect(7, yOffset + 7, 196, 134.5); // Inner
+
+        // Logo
+        try {
+            doc.addImage("CollegeLogo.png", "PNG", 95, yOffset + 12, 20, 20);
+        } catch (e) {
+            console.warn("Logo failed to load for certificate:", e);
+        }
+
+        // College Name
+        doc.setFont("times", "bold");
+        doc.setFontSize(16);
+        doc.setTextColor(30, 41, 59);
+        doc.text(collegeName.toUpperCase(), 105, yOffset + 40, { align: "center" });
+
+        // Certificate Title
+        doc.setFontSize(14);
+        doc.setCharSpace(1);
+        doc.text("CERTIFICATE OF VACATION DUTY", 105, yOffset + 50, { align: "center" });
+        doc.setCharSpace(0);
+
+        // Divider
+        doc.setDrawColor(200);
+        doc.line(60, yOffset + 53, 150, yOffset + 53);
+
+        // Body Text
+        doc.setFont("times", "normal");
+        doc.setFontSize(12);
+        doc.setTextColor(0, 0, 0);
+        
+        const bodyText = `This is to certify that ${data.name}, ${data.desig} of the Department of ${data.dept} has performed ${data.count} session(s) of vacation duty during the vacation period ${startStr} to ${endStr}.`;
+        const splitText = doc.splitTextToSize(bodyText, 170);
+        doc.text(splitText, 20, yOffset + 65, { align: "justify", maxWidth: 170 });
+
+        // Dates Section
+        doc.setFont("times", "bold");
+        doc.text("Dates of Duty:", 20, yOffset + 85);
+        
+        doc.setFont("times", "normal");
+        doc.setFontSize(10);
+        const datesText = data.dates;
+        const splitDates = doc.splitTextToSize(datesText, 170);
+        doc.text(splitDates, 20, yOffset + 92);
+
+        // Signature Area
+        doc.setFontSize(11);
+        doc.text("Place: Palakkad", 20, yOffset + 125);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 20, yOffset + 131);
+
+        doc.setFont("times", "bold");
+        doc.text("PRINCIPAL", 185, yOffset + 131, { align: "right" });
+        
+        // Horizontal Cut Line (only for top certificate)
+        if (index % 2 === 0 && (index + 1) < certificatesData.length) {
+            doc.setDrawColor(230);
+            doc.setLineDashPattern([2, 2], 0);
+            doc.line(0, 148.5, 210, 148.5);
+            doc.setLineDashPattern([], 0);
+        }
+    });
+
+    doc.save(`Vacation_Certificates_${startStr}_${endStr}.pdf`);
+    window.closeModal('vacation-report-modal');
+};
+
 //handles the "View List" click from the ghost card.
 
 window.openGhostUnavailabilityModal = function(title, encodedList) {
