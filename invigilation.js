@@ -10345,6 +10345,17 @@ window.downloadVacationCertificates = function() {
     const endDate = new Date(endStr);
     const collegeName = collegeData.examCollegeName || "GOVERNMENT VICTORIA COLLEGE, PALAKKAD";
 
+    // Format period dates for body text (DD/MM/YY)
+    const formatDateShort = (d) => {
+        const date = new Date(d);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = String(date.getFullYear()).slice(-2);
+        return `${day}/${month}/${year}`;
+    };
+    const periodStart = formatDateShort(startDate);
+    const periodEnd = formatDateShort(endDate);
+
     const certificatesData = [];
 
     staffData.forEach(staff => {
@@ -10369,7 +10380,6 @@ window.downloadVacationCertificates = function() {
         dutyDates.sort((a, b) => a - b);
         certificatesData.push({
             name: staff.name,
-            desig: staff.designation || "",
             dept: staff.dept || "",
             dates: dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ')
         });
@@ -10413,36 +10423,37 @@ window.downloadVacationCertificates = function() {
         doc.text(collegeName.toUpperCase(), 105, yOffset + 40, { align: "center" });
 
         // Certificate Title
-        doc.setFontSize(14);
-        doc.setCharSpace(1);
-        doc.text("CERTIFICATE OF VACATION DUTY", 105, yOffset + 50, { align: "center" });
+        doc.setFontSize(16);
+        doc.setCharSpace(2);
+        doc.text("DUTY CERTIFICATE", 105, yOffset + 50, { align: "center" });
         doc.setCharSpace(0);
 
         // Divider
         doc.setDrawColor(200);
-        doc.line(60, yOffset + 53, 150, yOffset + 53);
+        doc.line(75, yOffset + 53, 135, yOffset + 53);
 
         // Body Text
         doc.setFont("times", "normal");
-        doc.setFontSize(12);
+        doc.setFontSize(14); // Increased font size
         doc.setTextColor(0, 0, 0);
         
-        const bodyText = `This is to certify that ${data.name}, ${data.desig} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${startStr} to ${endStr}.`;
+        const bodyText = `This is to certify that ${data.name} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${periodStart} to ${periodEnd}.`;
         const splitText = doc.splitTextToSize(bodyText, 170);
-        doc.text(splitText, 20, yOffset + 65, { align: "justify", maxWidth: 170 });
+        doc.text(splitText, 20, yOffset + 68, { align: "justify", maxWidth: 170 });
 
         // Dates Section
         doc.setFont("times", "bold");
-        doc.text("Dates of Duty:", 20, yOffset + 85);
+        doc.setFontSize(13);
+        doc.text("Dates of Duty:", 20, yOffset + 90);
         
         doc.setFont("times", "normal");
-        doc.setFontSize(10);
+        doc.setFontSize(12); // Increased font size for dates
         const datesText = data.dates;
         const splitDates = doc.splitTextToSize(datesText, 170);
-        doc.text(splitDates, 20, yOffset + 92);
+        doc.text(splitDates, 20, yOffset + 98);
 
         // Signature Area
-        doc.setFontSize(11);
+        doc.setFontSize(12);
         doc.text("Place: Palakkad", 20, yOffset + 125);
         doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 20, yOffset + 131);
 
