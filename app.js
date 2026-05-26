@@ -2960,6 +2960,7 @@ window.downloadReportPDF = function() {
         "qp-wise": generateQPDistributionPDF,
         "Scribe_Proforma": generateScribeProformaPDF,
         "Room_Stickers": generateRoomStickersPDF,
+        "Room_Summary": generateRoomSummaryPDF,
         "Invigilator_Summary": generateInvigilatorSummaryPDF  // <--- The New Feature
     };
 
@@ -16498,7 +16499,7 @@ window.handlePythonExtraction = async function (jsonString) {
             `;
 
                 reportOutputArea.innerHTML = reportHtml;
-                reportOutputArea.style.display = 'block';
+                reportOutputArea.style.display = 'block'; // Ensure visibility
                 reportStatus.textContent = `Generated summary for ${grandTotalRooms} rooms.`;
                 reportControls.classList.remove('hidden');
                 lastGeneratedReportType = "Room_Summary";
@@ -20824,6 +20825,121 @@ function confirmDialSelection() {
 // Make functions global for inline onclick handlers
 window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
+
+
+
+// --- GENERATOR: ROOM ALLOTMENT SUMMARY PDF (Professional & Integrated) ---
+function generateRoomSummaryPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    
+    // Feedback Button State
+    const btn = document.getElementById('download-pdf-report-btn');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+
+    try {
+        // 1. Professional Header
+        const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+        
+        try {
+            // Attempt to add logo if available
+            doc.addImage("CollegeLogo.png", "PNG", 15, 10, 18, 18);
+        } catch (e) { console.warn("Logo not found for Room Summary PDF"); }
+
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(31, 41, 55); // slate-800
+        doc.text(collegeName.toUpperCase(), 105, 18, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(75, 85, 99); // slate-600
+        doc.text("Room Allotment Summary", 105, 25, { align: "center" });
+        
+        // Extract Session Info from HTML (h3)
+        const sessionInfo = document.querySelector('#report-output-area h3')?.innerText.trim() || "";
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(sessionInfo, 105, 32, { align: "center" });
+
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 105, 38, { align: "center" });
+
+        // 2. Generate Table from HTML
+        const tableEl = document.querySelector('#report-output-area table');
+        if (!tableEl) throw new Error("Table not found in report area.");
+
+        doc.autoTable({
+            html: tableEl,
+            startY: 45,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 9,
+                cellPadding: 4,
+                valign: 'middle',
+                lineColor: [229, 231, 235], // gray-200
+                lineWidth: 0.1
+            },
+            headStyles: {
+                fillColor: [243, 244, 246], // Gray-100 background
+                textColor: [31, 41, 55],    // Gray-800 text
+                fontStyle: 'bold',
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [209, 213, 219]
+            },
+            columnStyles: {
+                0: { halign: 'center', fontStyle: 'bold', cellWidth: 30 }, // Serial No
+                1: { halign: 'left', cellWidth: 'auto' },                // Location
+                2: { halign: 'center', fontStyle: 'bold', cellWidth: 40 } // Students Allotted
+            },
+            didParseCell: function(data) {
+                // Style Stream Headers (Subheaders)
+                if (data.section === 'body' && data.cell.raw && data.cell.raw.innerText.includes('Stream')) {
+                    data.cell.styles.fillColor = [249, 250, 251]; // gray-50
+                    data.cell.styles.textColor = [55, 65, 81];    // gray-700
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fontSize = 10;
+                }
+
+                // Style Grand Total Row (at bottom)
+                if (data.row.section === 'foot' || (data.cell.raw && data.cell.raw.innerText.includes('GRAND TOTAL'))) {
+                    data.cell.styles.fillColor = [31, 41, 55]; // slate-800
+                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fontSize = 11;
+                }
+            }
+        });
+
+        // 3. Footer Signature Section
+        const finalY = doc.lastAutoTable.finalY || 50;
+        if (finalY + 40 > 280) doc.addPage();
+        
+        const footerY = doc.addPage ? 30 : finalY + 30; // Handle page break logic simplified
+        const actualFooterY = (finalY + 40 > 280) ? 30 : finalY + 30;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(31, 41, 55);
+        
+        doc.line(20, actualFooterY, 70, actualFooterY);
+        doc.text("Verified By", 45, actualFooterY + 5, { align: 'center' });
+
+        doc.line(140, actualFooterY, 190, actualFooterY);
+        doc.text("Chief Superintendent", 165, actualFooterY + 5, { align: 'center' });
+
+        // 4. Save File
+        doc.save(`Room_Allotment_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
+
+    } catch (e) {
+        console.error("Room Summary PDF Gen Error:", e);
+        alert("Error generating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
 
 
 // --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Improved & Professional) ---
