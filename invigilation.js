@@ -10425,16 +10425,18 @@ window.downloadVacationCertificates = function() {
         // Certificate Title
         doc.setFontSize(16);
         doc.setCharSpace(2);
-        doc.text("DUTY CERTIFICATE", 105, yOffset + 50, { align: "center" });
+        const titleStr = "DUTY CERTIFICATE";
+        const titleWidth = doc.getTextWidth(titleStr);
+        doc.text(titleStr, 105 - (titleWidth / 2), yOffset + 50);
         doc.setCharSpace(0);
 
         // Divider
         doc.setDrawColor(200);
-        doc.line(75, yOffset + 53, 135, yOffset + 53);
+        doc.line(80, yOffset + 53, 130, yOffset + 53);
 
         // Body Text
         doc.setFont("times", "normal");
-        doc.setFontSize(14); // Increased font size
+        doc.setFontSize(15); // Increased font size
         doc.setTextColor(0, 0, 0);
         
         const bodyText = `This is to certify that ${data.name} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${periodStart} to ${periodEnd}.`;
@@ -10443,11 +10445,11 @@ window.downloadVacationCertificates = function() {
 
         // Dates Section
         doc.setFont("times", "bold");
-        doc.setFontSize(13);
+        doc.setFontSize(14);
         doc.text("Dates of Duty:", 20, yOffset + 90);
         
         doc.setFont("times", "normal");
-        doc.setFontSize(12); // Increased font size for dates
+        doc.setFontSize(13); // Increased font size for dates
         const datesText = data.dates;
         const splitDates = doc.splitTextToSize(datesText, 170);
         doc.text(splitDates, 20, yOffset + 98);
