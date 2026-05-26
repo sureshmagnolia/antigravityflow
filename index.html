@@ -173,7 +173,7 @@
 
             <div id="user-info" class="text-xs text-right hidden mr-2">
                 <div id="user-name" class="font-bold text-white">User</div>
-                <div id="sync-status" class="text-[10px] text-green-400">Synced</div>
+                <div id="sync-status" class="hidden text-[10px] text-green-400">Synced</div>
             </div>
 
             <button id="btn-invigilation-portal" onclick="window.open('invigilation.html', '_blank')"
@@ -219,7 +219,7 @@
 
                   <button id="btn-manual-push" onclick="event.stopPropagation(); if(window.triggerDriveAutoSync) window.triggerDriveAutoSync(true)" 
                       class="px-2 py-0.5 bg-gray-700 hover:bg-blue-600 text-[10px] text-white font-bold rounded transition-all border border-gray-600 flex items-center gap-1 shadow-inner">
-                      <span id="save-btn-icon">☁️</span> <span id="save-btn-text">Save to Cloud</span>
+                      <span id="save-btn-icon">📁</span> <span id="save-btn-text">Save to Drive</span>
                   </button>
                     <button id="btn-drive-merge-prompt" onclick="event.stopPropagation(); if(window.executeDriveRestore) window.executeDriveRestore()"
                         class="hidden ml-1 px-1.5 py-0.5 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-bold rounded animate-bounce">
@@ -1333,7 +1333,7 @@
                         <div id="college-name-status" class="text-sm font-medium text-green-600 mt-2 block h-5"></div>
                     </div>
 
-                   <div id="student-portal-section" class="bg-teal-50 border border-teal-200 p-4 rounded-lg mb-6">
+                   <div id="student-portal-section" class="hidden bg-teal-50 border border-teal-200 p-4 rounded-lg mb-6">
                         <h2 class="text-xl font-bold text-teal-800 mb-2 pb-2 border-b border-teal-300">Student Portal
                             Link</h2>
                         <p class="text-sm text-gray-600 mb-3">Share this link with your students.</p>
@@ -1739,6 +1739,12 @@
                             class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-indigo-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
                                 disabled>
                             9-Generate Room Allotment Summary
+                        </button>
+
+                        <button id="generate-scribe-master-report-button"
+                            class="w-full inline-flex justify-center items-center rounded-md border border-transparent bg-pink-600 py-3 px-4 text-sm font-medium text-white shadow-sm hover:bg-pink-700 disabled:opacity-50"
+                            disabled>
+                            10-Generate Scribe Assistance Master Report
                         </button>
 
     </div>  <div id="report-controls" class="mt-6 bg-gray-50 border border-gray-200 p-4 rounded-lg hidden">
@@ -2175,7 +2181,7 @@
     </button>
     <!-- Force Sync Button -->
     <button id="force-sync-allotment-button"
-        class="w-full mt-2 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 transition">
+        class="hidden w-full mt-2 inline-flex justify-center items-center rounded-md border border-gray-300 bg-white py-2 px-4 text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 transition">
         <svg class="w-3.5 h-3.5 mr-1.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>

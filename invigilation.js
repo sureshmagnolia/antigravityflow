@@ -419,19 +419,50 @@ function setupLiveSync(collegeId, mode) {
         }
     }
 
-    // A. Listen to Shards (Aggregated)
-    slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
-        let newSlots = {};
-        querySnap.forEach(shardDoc => {
-            try {
-                const shardMap = JSON.parse(shardDoc.data().data || '{}');
-                
-                // 🛡️ DATA CLEANUP: Prune duplicates during aggregation to prevent hangs
-                Object.keys(shardMap).forEach(key => {
-                    const slot = shardMap[key];
-                    if (slot.unavailable && Array.isArray(slot.unavailable)) {
+      // A. Listen to Shards (Aggregated)
+      slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
+          let newSlots = {};
+          querySnap.forEach(shardDoc => {
+              try {
+                  const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                  
+                  // 🛡️ DATA CLEANUP: Prune duplicates during aggregation to prevent hangs
+                  Object.keys(shardMap).forEach(key => {
+                      const slot = shardMap[key];
+                      if (slot.unavailable && Array.isArray(slot.unavailable)) {
+                          const seen = new Set();
+                          slot.unavailable = slot.unavailable.filter(u => {
+                              const email = (typeof u === 'string') ? u : u.email;
+                              if (!email || seen.has(email)) return false;
+                              seen.add(email);
+                              return true;
+                          });
+                      }
+                  });
+
+                  Object.assign(newSlots, shardMap);
+              } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
+          });
+
+          if (Object.keys(newSlots).length > 0) {
+              invigilationSlots = newSlots;
+              localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+              refreshSlotsUI();
+          }
+      });
+
+    // B. Listen to Metadata (Unavailability & Migration)
+    const metaUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            const rawUnavail = JSON.parse(data.invigAdvanceUnavailability || '{}');
+
+            // 🛡️ DATA CLEANUP: Prune duplicates in advanceUnavailability
+            Object.keys(rawUnavail).forEach(date => {
+                ['FN', 'AN'].forEach(sess => {
+                    if (rawUnavail[date][sess] && Array.isArray(rawUnavail[date][sess])) {
                         const seen = new Set();
-                        slot.unavailable = slot.unavailable.filter(u => {
+                        rawUnavail[date][sess] = rawUnavail[date][sess].filter(u => {
                             const email = (typeof u === 'string') ? u : u.email;
                             if (!email || seen.has(email)) return false;
                             seen.add(email);
@@ -439,27 +470,11 @@ function setupLiveSync(collegeId, mode) {
                         });
                     }
                 });
+            });
+            advanceUnavailability = rawUnavail;
 
-                Object.assign(newSlots, shardMap);
-            } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
-        });
-        
-        if (Object.keys(newSlots).length > 0) {
-            invigilationSlots = newSlots;
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
-            refreshSlotsUI();
-        }
-    });
-
-    // B. Listen to Metadata (Unavailability & Migration)
-    const metaUnsubscribe = onSnapshot(slotsRef, (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            advanceUnavailability = JSON.parse(data.invigAdvanceUnavailability || '{}');
-            
             // 🚀 AUTO-MIGRATION CHECK
-            if (mode === 'admin') {
-                // 1. Check Legacy Root Field
+            if (mode === 'admin') {                // 1. Check Legacy Root Field
                 if (data.examInvigilationSlots && data.examInvigilationSlots !== '{}') {
                     migrateOldSlotsData(collegeId, data.examInvigilationSlots);
                 }
@@ -504,6 +519,7 @@ function setupLiveSync(collegeId, mode) {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
+                refreshStaffMap();
                 localStorage.setItem('examStaffData', data.examStaffData || '[]');
                 
                 // Update Admin UI immediately
@@ -518,6 +534,7 @@ function setupLiveSync(collegeId, mode) {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 staffData = JSON.parse(data.examStaffData || '[]');
+                refreshStaffMap();
                 localStorage.setItem('examStaffData', data.examStaffData || '[]');
 
                 // If user is just logging in, initialize their dashboard now
@@ -1028,7 +1045,7 @@ function isUserUnavailable(slot, email, key) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                         const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -1207,14 +1224,13 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
 
 function renderSlotsGridAdmin() {
     if (!ui.adminSlotsGrid) return;
-    ui.adminSlotsGrid.innerHTML = '';
 
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthStr = monthNames[currentAdminDate.getMonth()];
     const currentYear = currentAdminDate.getFullYear();
 
     // 1. Navigation Bar
-    const navHtml = `
+    let html = `
         <div class="col-span-full flex justify-between items-center glass-panel p-2 md:p-3 rounded-lg border-0 shadow-sm mb-2 sticky top-0 z-30 mx-1 mt-1">
             <button onclick="changeAdminMonth(-1)" class="px-2 py-1.5 md:px-3 text-xs font-bold text-gray-700 hover:bg-white/50 rounded border border-gray-200/50 flex items-center gap-1 transition">
                 <span class="hidden md:inline">Prev</span> ⬅️
@@ -1226,7 +1242,6 @@ function renderSlotsGridAdmin() {
                 ➡️ <span class="hidden md:inline">Next</span>
             </button>
         </div>`;
-    let fullHtml = navHtml;
 
     const slotItems = [];
 
@@ -1236,7 +1251,7 @@ function renderSlotsGridAdmin() {
 
         const date = parseDate(key);
         if (date.getMonth() === currentAdminDate.getMonth() && date.getFullYear() === currentAdminDate.getFullYear()) {
-            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });
+            slotItems.push({ key, date: date, slot: invigilationSlots[key], type: 'REAL' });  
         }
     });
 
@@ -1254,12 +1269,12 @@ function renderSlotsGridAdmin() {
                     if (item.type !== 'REAL') return false;
                     const [kDate, kTime] = item.key.split(' | ');
                     if (kDate !== dateStr) return false;
-                    
-                    let [h] = kTime.trim().split(':')[0].split(' '); 
+
+                    let [h] = kTime.trim().split(':')[0].split(' ');
                     let t = kTime.trim().toUpperCase();
-                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;
+                    if (t.includes('PM') && !t.startsWith('12')) h = parseInt(h) + 12;        
                     if (t.includes('AM') && parseInt(h) === 12) h = 0;
-                    
+
                     const slotPeriod = h < 13 ? 'FN' : 'AN';
                     return slotPeriod === sessionType;
                 });
@@ -1275,14 +1290,15 @@ function renderSlotsGridAdmin() {
     }
 
     if (slotItems.length === 0) {
-        fullHtml += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        html += `<div class="col-span-full text-center py-16 text-gray-400">No sessions this month. <button onclick="openAddSlotModal()" class="text-indigo-600 font-bold hover:underline">Add Slot</button></div>`;
+        ui.adminSlotsGrid.innerHTML = html;
         return;
     }
 
     // 3. Group by Week
     const groupedSlots = {};
     slotItems.forEach(item => {
-        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const mStr = item.date.toLocaleString('default', { month: 'long', year: 'numeric' }); 
         const weekNum = getWeekOfMonth(item.date);
         const groupKey = `${mStr}-W${weekNum}`;
         if (!groupedSlots[groupKey]) groupedSlots[groupKey] = { month: mStr, week: weekNum, items: [] };
@@ -1295,8 +1311,8 @@ function renderSlotsGridAdmin() {
     sortedGroupKeys.forEach(gKey => {
         const group = groupedSlots[gKey];
 
-        fullHtml += `
-            <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">
+        html += `
+            <div class="glass-card col-span-full mt-3 mb-1 flex flex-wrap justify-between items-center bg-indigo-50/50 px-3 py-2 rounded border border-indigo-100/50 shadow-sm mx-1">       
                 <span class="text-indigo-900 text-[10px] font-bold uppercase tracking-wider bg-white/60 px-2 py-0.5 rounded border border-indigo-100/30">
                     Week ${group.week}
                 </span>
@@ -1306,14 +1322,14 @@ function renderSlotsGridAdmin() {
                         <button onclick="toggleWeekLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-white border border-gray-300 text-gray-500 px-2 py-1 rounded-r hover:bg-gray-50 font-bold" title="Unlock Standard Booking">🔓</button>
                     </div>
                     <div class="flex rounded shadow-sm">
-                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button>
+                        <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, true)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-l hover:bg-amber-200 font-bold border-r-0" title="Lock Admin Posting">🛡️ Admin</button> 
                         <button onclick="toggleWeekAdminLock('${group.month}', ${group.week}, false)" class="text-[10px] bg-amber-100 border border-amber-300 text-amber-700 px-2 py-1 rounded-r hover:bg-amber-200 font-bold" title="Unlock Admin Posting">🔓</button>
                     </div>
                     <button onclick="runWeeklyAutoAssign('${group.month}', ${group.week})" class="text-[10px] bg-indigo-600 text-white border border-indigo-700 px-2 py-1 rounded hover:bg-indigo-700 font-bold shadow-sm">⚡ Auto</button>
-                    
+
                     <!-- NEW LOGS BUTTON -->
                     <button onclick="viewAutoAssignLogs()" class="text-[10px] bg-gray-600 text-white border border-gray-700 px-2 py-1 rounded hover:bg-gray-700 font-bold shadow-sm" title="View Logs">📜</button>
-                    
+
                     <button onclick="openWeeklyNotificationModal('${group.month}', ${group.week})" class="text-[10px] bg-green-600 text-white border border-green-700 px-2 py-1 rounded hover:bg-green-700 font-bold shadow-sm flex items-center gap-1">📢 Notify</button>
                 </div>
             </div>`;
@@ -1329,11 +1345,11 @@ function renderSlotsGridAdmin() {
         group.items.forEach((item) => {
             if (item.type === 'GHOST') {
                 const encodedList = encodeURIComponent(JSON.stringify(item.list));
-                fullHtml += `
+                html += `
                     <div class="relative border-l-[6px] border-gray-300 bg-gray-50 p-3 rounded-xl shadow-sm hover:shadow-md transition w-full mb-3 opacity-90 border border-gray-200 border-l-gray-400">
                         <div class="flex justify-between items-start mb-2">
                             <h4 class="font-bold text-gray-500 text-xs flex items-center gap-1">
-                                <span class="text-sm">🗓️</span> 
+                                <span class="text-sm">🗓️</span>
                                 <span>${item.key}</span>
                             </h4>
                             <span class="text-[9px] uppercase font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">No Exam</span>
@@ -1355,23 +1371,29 @@ function renderSlotsGridAdmin() {
             if (t.includes("PM") || t.startsWith("12:") || t.startsWith("12.")) session = "AN";
 
             const uniqueIssues = new Set();
-            
+
             // 1. Add Session Specific
             if (slot.unavailable) {
-                slot.unavailable.forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+                slot.unavailable.forEach(u => {
+                    const email = (typeof u === 'string') ? u : u.email;
+                    if (email) uniqueIssues.add(email.toLowerCase());
+                });
             }
-            
+
             // 2. Add Advance Leave
             if (typeof advanceUnavailability !== 'undefined' && advanceUnavailability[dateStr] && advanceUnavailability[dateStr][session]) {
-                advanceUnavailability[dateStr][session].forEach(u => uniqueIssues.add(typeof u === 'string' ? u : u.email));
+                advanceUnavailability[dateStr][session].forEach(u => {
+                    const email = (typeof u === 'string') ? u : u.email;
+                    if (email) uniqueIssues.add(email.toLowerCase());
+                });
             }
-            
+
             const totalIssues = uniqueIssues.size;
             // -----------------------------------------------------------
 
             let themeClasses = "border-orange-400 bg-gradient-to-br from-white via-orange-50 to-orange-100";
             let statusIcon = "🔓";
-            
+
             if (isAdminLocked) {
                 themeClasses = "border-amber-500 bg-gradient-to-br from-white via-amber-50 to-amber-100 shadow-amber-100";
                 statusIcon = "🛡️";
@@ -1383,15 +1405,15 @@ function renderSlotsGridAdmin() {
                 statusIcon = "✅";
             }
 
-            const adminBtnStyle = isAdminLocked 
-                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700" 
+            const adminBtnStyle = isAdminLocked
+                ? "bg-amber-600 text-white border-amber-700 hover:bg-amber-700"
                 : "bg-white text-amber-600 border-amber-200 hover:bg-amber-50";
 
-            fullHtml += `
+            html += `
                 <div class="relative border-l-[6px] ${themeClasses} p-3 rounded-xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 w-full mb-3 group">
                     <div class="flex justify-between items-start mb-2">
                         <h4 class="font-black text-gray-800 text-xs w-2/3 flex items-center gap-1">
-                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span> 
+                            <span class="text-sm shadow-sm bg-white/50 rounded-full w-6 h-6 flex items-center justify-center border border-white/50">${statusIcon}</span>
                             <span>${key}</span>
                         </h4>
                         <div class="flex items-center bg-white/90 border border-gray-200 rounded-lg text-[10px] overflow-hidden">
@@ -1400,21 +1422,21 @@ function renderSlotsGridAdmin() {
                             <button onclick="changeSlotReq('${key}', 1)" class="px-2 py-1 hover:bg-gray-100 border-l border-gray-200 font-bold">+</button>
                         </div>
                     </div>
-                    
+
                     <div class="text-[10px] text-gray-600 mb-2 bg-white/40 p-1.5 rounded-lg border border-white/50 shadow-sm min-h-[1.5rem]">
                         <strong>Staff:</strong> ${slot.assigned.map(email => getNameFromEmail(email)).join(', ') || "None"}
                     </div>
-                    
+
                     ${isAdminLocked ? '<div class="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded border border-amber-200 mb-2 text-center">🛡️ Posting Restricted (Admin)</div>' : ''}
-                    
+
                     ${totalIssues > 0 ? `<button onclick="openInconvenienceModal('${key}')" class="mt-2 w-full bg-white/80 text-red-700 border border-red-200 px-2 py-1.5 rounded-lg text-[10px] font-bold hover:bg-red-50 mb-2 shadow-sm transition">⛔ ${totalIssues} Issue(s) Reported</button>` : ''}
-                    
+
                     <div class="flex gap-1.5 mt-2">
                         <button onclick="toggleLock('${key}')" class="flex-1 text-[10px] border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 text-gray-700 font-bold bg-white shadow-sm">
                             ${slot.isLocked ? '🔓 Open Std' : '🔒 Lock Std'}
                         </button>
                         <button onclick="toggleAdminLock('${key}')" class="flex-1 text-[10px] border rounded-lg py-1.5 font-bold shadow-sm ${adminBtnStyle}">
-                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}
+                            ${isAdminLocked ? '🔓 Open Admin' : '🛡️ Lock Admin'}        
                         </button>
                     </div>
 
@@ -1422,18 +1444,17 @@ function renderSlotsGridAdmin() {
                         <button onclick="directAddStaff('${key}')" class="bg-indigo-50 text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-100 text-[10px] font-bold transition shadow-sm" title="Direct Add Staff">+ Add</button>
                         <button onclick="directUnavailStaff('${key}')" class="bg-red-50 text-red-700 border border-red-200 rounded py-1 hover:bg-red-100 text-[10px] font-bold transition shadow-sm" title="Mark Staff Unavailable">⛔ Excuse</button>
                         <button onclick="openDashboardInvigModal('${key}')" class="bg-white text-blue-600 border border-blue-200 rounded py-1 hover:bg-blue-50 text-[10px] font-bold" title="View Dashboard / God Mode">👁️</button>
-                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button>
-                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>
+                         <button onclick="openSlotReminderModal('${key}')" class="bg-white text-green-700 border border-green-200 rounded py-1 hover:bg-green-50 text-[10px]">🔔</button> 
+                         <button onclick="printSessionReport('${key}')" class="bg-white text-gray-700 border border-gray-300 rounded py-1 hover:bg-gray-50 text-[10px]">🖨️</button>     
                          <button onclick="openManualAllocationModal('${key}')" class="bg-white text-indigo-700 border border-indigo-200 rounded py-1 hover:bg-indigo-50 text-[10px]">Edit</button>
                          <button onclick="deleteSlot('${key}')" class="bg-white text-red-600 border border-red-200 rounded py-1 hover:bg-red-50 text-[10px]">🗑️</button>
                     </div>
                 </div>`;
         });
     });
-    fullHtml += `<div class="col-span-full h-32 w-full"></div>`;
-    ui.adminSlotsGrid.innerHTML = fullHtml;
+    html += `<div class="col-span-full h-32 w-full"></div>`;
+    ui.adminSlotsGrid.innerHTML = html;
 }
-
 
 
 
@@ -1676,7 +1697,7 @@ function renderStaffRankList(myEmail, targetDate = new Date()) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                         const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -1854,8 +1875,8 @@ function renderStaffCalendar(myEmail) {
 
                 const isUnavailable = isUserUnavailable(slot, myEmail, slot.key);
                 const isAssigned = slot.assigned.includes(myEmail);
-                const isPostedByMe = slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
-                const isMarketAvailable = slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
+                const isPostedByMe = !isPast && slot.exchangeRequests && slot.exchangeRequests.includes(myEmail);
+                const isMarketAvailable = !isPast && slot.exchangeRequests && slot.exchangeRequests.length > 0 && !isAssigned;
                 const isAdminLocked = slot.isAdminLocked || false;
                 const isCompleted = (slot.attendance && slot.attendance.includes(myEmail)) || (isAssigned && isPast);
 
@@ -2136,88 +2157,104 @@ window.openDayDetail = function (dateStr, email) {
                 if (isAN) isAssignedAN = true;
                 else isAssignedFN = true;
             }
-            
-            // Track Admin Locks
             if (isAdminLocked) {
                 if (isAN) adminLockAN = true;
                 else adminLockFN = true;
             }
 
-            // --- Action Buttons ---
-            let actionHtml = "";
-            
+            // --- MODERN MOBILE CARDS ---
+            let cardStatus = "";
+            let cardActions = "";
+            let cardBg = "bg-white";
+            let borderColor = "border-gray-100";
+
             if (isRestricted) {
-                 if (isAssigned) {
-                     actionHtml = `<div class="w-full bg-gray-100 text-gray-500 border border-gray-200 text-xs py-2 rounded font-bold text-center">✅ Duty Assigned ${restrictLabel}</div>`;
-                 } else if (isUnavailable) {
-                     actionHtml = `<div class="w-full bg-red-50 text-red-500 border border-red-100 text-xs py-2 rounded font-bold text-center">⛔ Marked Unavailable ${restrictLabel}</div>`;
-                 } else {
-                     actionHtml = `<div class="w-full bg-gray-50 text-gray-400 border border-gray-100 text-xs py-2 rounded text-center italic">Actions Disabled ${restrictLabel}</div>`;
-                 }
-            } 
-            else if (isAdminLocked) {
-                 if (isAssigned) {
-                     if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                     } else {
-                         actionHtml = `<div class="w-full bg-green-50 text-green-700 border border-green-200 text-xs py-2 rounded font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">🛡️ Admin Finalizing</span></div>`;
-                     }
-                 } else {
-                     actionHtml = `<div class="w-full bg-amber-50 text-amber-600 border border-amber-200 text-xs py-3 rounded font-bold text-center flex items-center justify-center gap-2 shadow-sm"><span>🛡️</span> Posting Restricted by Admin</div>`;
-                 }
-            }
-            else {
                 if (isAssigned) {
-                    if (isPostedByMe) {
-                         actionHtml = `<div class="w-full bg-orange-50 p-2 rounded border border-orange-200"><div class="text-xs text-orange-700 font-bold mb-1 text-center">⏳ Posted for Exchange</div><p class="text-[10px] text-orange-600 text-center mb-2 leading-tight">You remain liable until accepted.</p><button onclick="withdrawExchange('${key}', '${email}')" class="w-full bg-white text-orange-700 border border-orange-300 text-xs py-2 rounded font-bold hover:bg-orange-100 shadow-sm transition">↩️ Withdraw Request</button></div>`;
-                    } else if (isLocked) {
-                        actionHtml = `<button onclick="postForExchange('${key}', '${email}')" class="w-full bg-purple-100 text-purple-700 border border-purple-300 text-xs py-2 rounded font-bold hover:bg-purple-200 transition shadow-sm">♻️ Post for Exchange</button>`;
-                    } else {
-                        actionHtml = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full bg-green-100 text-green-700 border border-green-300 text-xs py-2 rounded font-bold">✅ Assigned (Click to Cancel)</button>`;
-                    }
-                } else if (marketOffers.length > 0) {
-                     let offersHtml = marketOffers.map(seller => `<div class="flex justify-between items-center bg-purple-50 p-2 rounded border border-purple-100 mb-1"><span class="text-xs font-bold text-purple-800">${getNameFromEmail(seller)}</span><button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="bg-purple-600 text-white text-[10px] px-2 py-1 rounded font-bold">Take</button></div>`).join('');
-                     actionHtml = `<div class="w-full mb-1">${offersHtml}</div>`;
+                    cardActions = `<div class="w-full mt-2 bg-gray-100 text-gray-500 border border-gray-200 text-[10px] py-2 rounded-lg font-bold text-center flex flex-col items-center gap-1"><span>✅ Assigned</span><span class="text-[9px] bg-white/50 px-2 py-0.5 rounded">${restrictLabel}</span></div>`;
                 } else if (isUnavailable) {
-                    actionHtml = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-2 rounded transition">Undo "Unavailable"</button>`;
+                    cardActions = `<div class="w-full mt-2 bg-red-50 text-red-500 border border-red-100 text-[10px] py-2 rounded-lg font-bold text-center flex flex-col items-center gap-1"><span>⛔ Unavailable</span><span class="text-[9px] bg-white/50 px-2 py-0.5 rounded">${restrictLabel}</span></div>`;
                 } else {
-                    const unavBtn = `<button onclick="setAvailability('${key}', '${email}', false)" class="bg-white border border-red-200 text-red-600 text-xs py-2 px-4 rounded font-bold">Unavailable</button>`;
-                    if (isLocked) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-100 text-gray-500 text-xs py-2 rounded font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
-                    else if (needed <= 0) actionHtml = `<div class="flex gap-2 w-full"><div class="flex-1 bg-gray-50 text-gray-400 text-xs py-2 rounded font-bold text-center border border-gray-200">Full</div>${unavBtn}</div>`;
-                    else actionHtml = `<div class="flex gap-2 w-full"><button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white text-xs py-2 rounded font-bold">Volunteer</button>${unavBtn}</div>`;
+                    cardActions = `<div class="w-full mt-2 bg-gray-50 text-gray-400 border border-gray-100 text-[10px] py-2 rounded-lg text-center italic">Actions Disabled ${restrictLabel}</div>`;
                 }
+            } else if (isAssigned) {
+                cardBg = isPostedByMe ? "bg-orange-50/50" : "bg-green-50/50";
+                borderColor = isPostedByMe ? "border-orange-200" : "border-green-200";
+                const statusLabel = isPostedByMe ? "⏳ Exchange Posted" : "✅ Assigned";
+                const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
+                cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
+
+                if (isPostedByMe) {
+                    cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
+                } else if (isAdminLocked) {
+                    cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
+                } else if (isLocked) {
+                    cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
+                } else {
+                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
+                }
+            } else if (isUnavailable) {            cardBg = "bg-red-50/30";
+            borderColor = "border-red-100";
+            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-red-600 bg-red-100">⛔ Unavailable</span>`;
+            cardActions = `<button onclick="setAvailability('${key}', '${email}', true)" class="w-full mt-2 bg-white text-blue-600 border border-blue-200 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Undo Unavailability</button>`;
+        } else if (marketOffers.length > 0) {
+            cardBg = "bg-purple-50/50";
+            borderColor = "border-purple-200";
+            cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-purple-700 bg-purple-100">♻️ ${marketOffers.length} Exchange Offer(s)</span>`;
+            const takeBtn = marketOffers.map(seller => `<button onclick="acceptExchange('${key}', '${email}', '${seller}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Take Duty from ${getNameFromEmail(seller)}</button>`).join('');
+            cardActions = takeBtn;
+        } else {
+            const isFull = needed <= 0;
+            cardStatus = isFull ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-gray-500 bg-gray-100">Full</span>` : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold text-indigo-600 bg-indigo-100">${needed} Spot(s) Open</span>`;
+
+            const volBtn = (isFull || isLocked || isAdminLocked) ? "" : `<button onclick="volunteer('${key}', '${email}')" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all">Volunteer</button>`;
+            const unavBtn = (isAdminLocked) ? "" : `<button onclick="setAvailability('${key}', '${email}', false)" class="flex-1 bg-white text-red-600 border border-red-200 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Unavailable</button>`;
+
+            if (isAdminLocked) {
+                cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Posting Restricted by Admin</div>`;
+            } else if (isLocked && !isFull) {
+                cardActions = `<div class="flex gap-2 mt-2"><div class="flex-1 bg-gray-100 text-gray-400 py-2 rounded-lg text-xs font-bold text-center border border-gray-200">🔒 Locked</div>${unavBtn}</div>`;
+            } else if (isFull) {
+                cardActions = `<div class="flex gap-2 mt-2"><div class="flex-1 bg-gray-50 text-gray-400 py-2 rounded-lg text-xs font-bold text-center border border-gray-100">Slot Full</div>${unavBtn}</div>`;
+            } else {
+                cardActions = `<div class="flex gap-2 mt-2">${volBtn}${unavBtn}</div>`;
             }
+        }
 
-            // --- STAFF LIST RENDER (FIXED) ---
-            let staffListHtml = '';
-            if (slot.assigned.length > 0) {
-                const listItems = slot.assigned.map(st => {
-    const s = staffData.find(sd => sd.email === st);
-    if (!s) return '';
-    const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
-    const statusIcon = isExchanging ? "⏳" : "✅";
-    const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
-      const contactBtns = (phone && st !== email) ? `
-          <div class="flex items-center gap-1 shrink-0">
-              <a href="tel:${phone}" class="flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded hover:bg-green-100 transition" title="Call ${s.name}">📞 Call</a>
-              <a href="https://wa.me/91${phone}" target="_blank" class="flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition" title="WhatsApp ${s.name}">
-                  <svg class="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> 
-                  Chat
-              </a>
+        // --- STAFF LIST RENDER ---
+        let staffListHtml = '';
+        if (slot.assigned.length > 0) {
+            const listItems = slot.assigned.map(st => {
+                const s = staffMap.get(st.toLowerCase()) || { name: st.split('@')[0] };
+                const isExchanging = slot.exchangeRequests && slot.exchangeRequests.includes(st);
+                const statusIcon = isExchanging ? "⏳" : "✅";
+                const phone = s.phone ? s.phone.replace(/\D/g, '') : '';
+                const contactBtns = (phone && st !== email) ? `
+                    <div class="flex items-center gap-1">
+                        <a href="tel:${phone}" class="p-1.5 text-green-600 bg-green-50 rounded-full border border-green-100 active:bg-green-100 transition-colors"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg></a>
+                        <a href="https://wa.me/91${phone}" target="_blank" class="p-1.5 text-emerald-600 bg-emerald-50 rounded-full border border-emerald-100 active:bg-emerald-100 transition-colors"><svg class="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></a>
+                    </div>` : '';
+                return `<div class="flex justify-between items-center bg-white/60 p-2 rounded-lg border border-white/50 mb-1"><div class="flex items-center gap-1.5 min-w-0"><span class="text-xs shrink-0">${statusIcon}</span><span class="text-[11px] font-bold text-gray-700 truncate">${s.name}</span></div>${contactBtns}</div>`;
+            }).join('');
 
-          
-          </div>` : '';
-      return `<div class="flex justify-between items-center text-xs bg-white p-1.5 rounded border border-gray-100 mb-1"><span class="font-bold text-gray-700 flex items-center">${statusIcon} <span class="ml-1">${s.name}</span></span>${contactBtns}</div>`;
+            staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-100/50"><div class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">Current Team</div><div class="space-y-1 max-h-32 overflow-y-auto custom-scroll">${listItems}</div></div>`;
+        }
 
-}).join('');
-
-                
-                staffListHtml = `<div class="mt-3 pt-2 border-t border-gray-200"><div class="flex justify-between items-center mb-1.5"><div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assigned Staff</div></div><div class="space-y-0.5 max-h-24 overflow-y-auto custom-scroll">${listItems}</div></div>`;
-            }
-
-            container.innerHTML += `<div class="bg-gray-50 p-3 rounded border border-gray-200 mb-2"><div class="flex justify-between items-center mb-2"><span class="font-bold text-gray-800 text-sm">${sessLabel} <span class="text-[10px] text-gray-500 font-normal ml-1">${key.split('|')[1]}</span></span><span class="text-xs bg-white border px-2 py-0.5 rounded">${filled}/${slot.required}</span></div><div class="mt-2">${actionHtml}</div>${staffListHtml}</div>`;
-        });
-    } else {
+        container.innerHTML += `
+            <div class="${cardBg} p-4 rounded-2xl border ${borderColor} shadow-sm transition-all duration-300">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="min-w-0">
+                        <h4 class="font-black text-gray-800 text-sm leading-tight mb-0.5">${sessLabel}</h4>
+                        <p class="text-[10px] text-gray-500 font-medium">${key.split('|')[1]}</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-1.5">
+                        ${cardStatus}
+                        <span class="text-[10px] font-bold text-gray-400 bg-white/80 px-2 py-0.5 rounded border border-gray-100">${filled}/${slot.required} filled</span>
+                    </div>
+                </div>
+                ${cardActions}
+                ${staffListHtml}
+            </div>`;
+        });    } else {
         container.innerHTML = `<p class="text-gray-400 text-sm text-center py-4 bg-gray-50 rounded border border-gray-100 mb-4">No exam sessions scheduled.</p>`;
     }
 
@@ -2381,6 +2418,14 @@ async function syncSlotsToCloud(affectedKey = null) {
             const existingShardsSnap = await getDocs(shardsColRef);
             const existingShardIds = new Set();
             existingShardsSnap.forEach(s => existingShardIds.add(s.id));
+
+            // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
+            // If local storage is completely empty, do NOT delete cloud shards unless explicitly requested.
+            // This prevents a fresh localhost connection from destroying the live database.
+            if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
+                console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe.");
+                return; 
+            }
 
             const shards = {};
             Object.keys(localSlots).forEach(k => {
@@ -5412,30 +5457,6 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 
-window.viewAutoAssignLogs = async function () {
-    const ref = doc(db, "colleges", currentCollegeId);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-        const logs = snap.data().autoAssignLogs || [];
-        if (logs.length === 0) return alert("No logs found.");
-
-        // Show in a simple modal or reuse 'inconvenience-modal'
-        const list = document.getElementById('inconvenience-list');
-        const title = document.getElementById('inconvenience-modal-subtitle');
-        document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
-        title.textContent = "History of automated decisions & overrides.";
-
-        list.innerHTML = logs.reverse().map(l => {
-            const isWarn = l.includes("WARN");
-            const isErr = l.includes("ERROR");
-            const color = isErr ? "text-red-600 bg-red-50" : (isWarn ? "text-orange-600 bg-orange-50" : "text-gray-600");
-            return `<div class="text-xs p-2 border-b border-gray-100 ${color} font-mono">${l}</div>`;
-        }).join('');
-
-        window.openModal('inconvenience-modal');
-    }
-}
-
 window.openFacultyPeriodReport = function() {
     const normalizeKey = k => k.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
     const seenNorm = new Set();
@@ -7202,6 +7223,135 @@ window.downloadMasterBackup = function () {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+window.emergencyLogRecovery = async function() {
+    if (!confirm("⚠️ EMERGENCY RECOVERY ⚠️\n\nThis will scan all activity logs on the server to rebuild lost Volunteering and Unavailability data.\n\nAre you sure you want to proceed?")) return;
+
+    try {
+        updateSyncStatus("Fetching Logs for Recovery...", "syncing");
+        
+        // Fetch logs
+        const logsRef = collection(db, "colleges", currentCollegeId, "logs");
+        // Using getDocs to fetch all. For safety, we pull all and sort client-side.
+        const snapshot = await getDocs(logsRef);
+        
+        let logs = [];
+        snapshot.forEach(doc => logs.push(doc.data()));
+        
+        if (logs.length === 0) {
+            alert("❌ No logs found on the server to recover from.");
+            updateSyncStatus("Synced", "success");
+            return;
+        }
+
+        // Sort oldest to newest
+        logs.sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+
+        // Regex helpers
+        function extractDateAndTime(str) {
+            const match = str.match(/(\d{2}\.\d{2}\.\d{4} \| \d{2}:\d{2} [AP]M)/i);
+            return match ? match[1] : null;
+        }
+        function timeToSession(tStr) {
+            const upper = tStr.toUpperCase();
+            return (upper.includes("PM") || upper.includes("12:") || upper.includes("12.")) ? "AN" : "FN";
+        }
+
+        let recoveredCount = 0;
+
+        logs.forEach(log => {
+            const a = log.a;
+            const d = log.d || "";
+            const email = log.u;
+            
+            if (!email) return;
+
+            if (a === 'Volunteered' || a === 'Admin Override Add') {
+                const dt = extractDateAndTime(d);
+                if (dt) {
+                    if (!invigilationSlots[dt]) invigilationSlots[dt] = { assigned: [], unavailable: [] };
+                    if (!invigilationSlots[dt].assigned) invigilationSlots[dt].assigned = [];
+                    if (!invigilationSlots[dt].assigned.includes(email)) {
+                        invigilationSlots[dt].assigned.push(email);
+                        recoveredCount++;
+                    }
+                }
+            } 
+            else if (a === 'Duty Cancelled' || a === 'Admin Force Remove' || a === 'Admin Removed (Exchange Cleared)') {
+                const dt = extractDateAndTime(d);
+                if (dt && invigilationSlots[dt] && invigilationSlots[dt].assigned) {
+                    invigilationSlots[dt].assigned = invigilationSlots[dt].assigned.filter(e => e !== email);
+                }
+            }
+            else if (a === 'Advance Unavailability' || a === 'Session Unavailability' || d.includes('unavailable')) {
+                let dates = [];
+                const wholeMatch = d.match(/WHOLE DAY on (\d{2}\.\d{2}\.\d{4})/i);
+                const fnanMatch = d.match(/(\d{2}\.\d{2}\.\d{4})\s*\((FN|AN)\)/i);
+                const dtMatch = extractDateAndTime(d);
+
+                if (wholeMatch) {
+                    dates.push({ date: wholeMatch[1], session: 'FN' });
+                    dates.push({ date: wholeMatch[1], session: 'AN' });
+                } else if (fnanMatch) {
+                    dates.push({ date: fnanMatch[1], session: fnanMatch[2].toUpperCase() });
+                } else if (dtMatch) {
+                    const split = dtMatch.split(' | ');
+                    dates.push({ date: split[0].trim(), session: timeToSession(split[1]) });
+                }
+
+                dates.forEach(({date, session}) => {
+                    if (!advanceUnavailability[date]) advanceUnavailability[date] = { FN: [], AN: [] };
+                    if (!advanceUnavailability[date][session]) advanceUnavailability[date][session] = [];
+                    if (!advanceUnavailability[date][session].includes(email)) {
+                        advanceUnavailability[date][session].push(email);
+                        recoveredCount++;
+                    }
+                });
+            }
+            else if (a === 'Advance Unavailability Removed') {
+                let dates = [];
+                const wholeMatch = d.match(/Whole Day (\d{2}\.\d{2}\.\d{4})/i);
+                const fnanMatch = d.match(/(\d{2}\.\d{2}\.\d{4})\s*\((FN|AN)\)/i);
+
+                if (wholeMatch) {
+                    dates.push({ date: wholeMatch[1], session: 'FN' });
+                    dates.push({ date: wholeMatch[1], session: 'AN' });
+                } else if (fnanMatch) {
+                    dates.push({ date: fnanMatch[1], session: fnanMatch[2].toUpperCase() });
+                }
+
+                dates.forEach(({date, session}) => {
+                    if (advanceUnavailability[date] && advanceUnavailability[date][session]) {
+                        advanceUnavailability[date][session] = advanceUnavailability[date][session].filter(e => e !== email);
+                    }
+                });
+            }
+        });
+
+        // Save back to local storage
+        localStorage.setItem('invigilationSlots', JSON.stringify(invigilationSlots));
+        localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(advanceUnavailability));
+        
+        // Sync authoritatively to cloud
+        await syncSlotsToCloud("FORCE_OVERWRITE");
+        
+        // Update root doc for advanceUnavailability
+        const collegeRef = doc(db, "colleges", currentCollegeId);
+        await updateDoc(collegeRef, {
+            invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
+        });
+
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+
+        alert(`✅ Recovery Complete!\n\nSuccessfully reconstructed ${recoveredCount} data points from activity logs.\n\nThe page will now reload to apply the recovered data.`);
+        location.reload();
+
+    } catch (error) {
+        console.error("Recovery failed:", error);
+        alert("❌ Recovery Failed: " + error.message);
+        updateSyncStatus("Error", "error");
+    }
 }
 
 window.handleMasterRestore = function (input) {
@@ -9342,6 +9492,7 @@ window.generateVacationReport = function() {
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
     
     // Helper: Check if date is Holiday
     const isHoliday = (d) => {
@@ -9442,6 +9593,8 @@ window.generateVacationReport = function() {
         const sessionsStr = rawSessions.map(s => s.str).join(', ');
         const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
 
+        const eligibleEarnedLeaves = Math.floor((totalEligible / totalVacationDays) * 30);
+
         reportData.push({
             name: staff.name,
             desig: staff.designation,
@@ -9451,7 +9604,8 @@ window.generateVacationReport = function() {
             dutyDates: dutyDatesStr,
             interveningDates: interveningStr,
             interveningCount: interveningCount,
-            totalEligible: totalEligible
+            totalEligible: totalEligible,
+            eligibleEarnedLeaves: eligibleEarnedLeaves
         });
     });
 
@@ -9481,6 +9635,10 @@ function printVacationReport(data, start, end) {
     const [y2, m2, d2] = end.split('-');
     const rangeStr = `${d1}.${m1}.${y1} to ${d2}.${m2}.${y2}`;
 
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
     let rowsHtml = "";
     data.forEach((row, i) => {
         rowsHtml += `
@@ -9497,6 +9655,7 @@ function printVacationReport(data, start, end) {
                 <td>${row.interveningDates || "-"}</td>
                 <td style="text-align:center;">${row.interveningCount}</td>
                 <td style="text-align:center; font-weight:bold; font-size:11pt;">${row.totalEligible}</td>
+                <td style="text-align:center; font-weight:bold; font-size:11pt; color: #1e40af;">${row.eligibleEarnedLeaves}</td>
             </tr>
         `;
     });
@@ -9548,12 +9707,13 @@ function printVacationReport(data, start, end) {
                 <thead>
                     <tr>
                         <th width="3%">#</th>
-                        <th width="20%">Staff Details</th>
-                        <th width="35%">Sessions Attended</th>
-                        <th width="20%">Duty Dates (Unique)</th>
-                        <th width="20%">Intervening Holidays (Claimable)</th>
-                        <th width="7%">Hol. Count</th>
-                        <th width="10%">Total Eligible</th>
+                        <th width="18%">Staff Details</th>
+                        <th width="30%">Sessions Attended</th>
+                        <th width="18%">Duty Dates (Unique)</th>
+                        <th width="18%">Intervening Holidays (Claimable)</th>
+                        <th width="5%">Hol. Count</th>
+                        <th width="7%">Total</th>
+                        <th width="10%">Eligible Earned Leaves<br><small style="font-weight:normal;">(Duty / ${totalVacationDays} * 30)</small></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -9996,7 +10156,7 @@ window.downloadAttendancePDF = function () {
 };
 
 
-// 2. VACATION REPORT PDF (Corrected: 7 Columns)
+// 2. VACATION REPORT PDF (Corrected: 8 Columns)
 window.downloadVacationPDF = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
@@ -10005,6 +10165,7 @@ window.downloadVacationPDF = function() {
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
+    const totalVacationDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
     // Helper: Check for Holidays (Sundays, Saturdays, Extra Holidays)
     const isHoliday = (d) => {
@@ -10084,6 +10245,9 @@ window.downloadVacationPDF = function() {
         const dutyDatesStr = dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
         const interveningStr = interveningDates.map(d => d.toLocaleDateString('en-GB')).join(', ');
 
+        const totalEligible = dutyDates.length + interveningDates.length;
+        const eligibleEarnedLeaves = Math.floor((totalEligible / totalVacationDays) * 30);
+
         reportData.push({
             name: staff.name,
             desig: staff.designation || "",
@@ -10093,7 +10257,8 @@ window.downloadVacationPDF = function() {
             dutyDates: dutyDatesStr,
             interveningDates: interveningStr || "-",
             interveningCount: interveningDates.length,
-            total: dutyDates.length + interveningDates.length
+            total: totalEligible,
+            eligibleEarnedLeaves: eligibleEarnedLeaves
         });
     });
 
@@ -10119,7 +10284,7 @@ window.downloadVacationPDF = function() {
     doc.text(`Vacation Duty & Earned Leave Report`, 14, 18);
     doc.text(`${startStr} to ${endStr}`, 240, 18);
 
-    // Table Body (7 Columns)
+    // Table Body (8 Columns)
     const tableBody = reportData.map((r, i) => [
         i + 1,
         `${r.name}\n${r.desig}\n${r.dept}\nPh: ${r.phone}`, // Combined Staff Details
@@ -10127,11 +10292,12 @@ window.downloadVacationPDF = function() {
         r.dutyDates,        // Unique Dates
         r.interveningDates, // Intervening Holidays
         r.interveningCount, // Hol. Count
-        r.total             // Total Eligible
+        r.total,            // Total
+        r.eligibleEarnedLeaves // Eligible EL
     ]);
 
     doc.autoTable({
-        head: [['#', 'Staff Details', 'Sessions Attended', 'Duty Dates', 'Intervening Holidays', 'Hol.', 'Total']],
+        head: [['#', 'Staff Details', 'Sessions Attended', 'Duty Dates', 'Intervening Holidays', 'Hol.', 'Total', 'Eligible EL']],
         body: tableBody,
         startY: 30,
         theme: 'grid',
@@ -10142,19 +10308,20 @@ window.downloadVacationPDF = function() {
             halign: 'center'
         },
         styles: { 
-            fontSize: 9, 
-            cellPadding: 3, 
+            fontSize: 8, 
+            cellPadding: 2, 
             valign: 'top', // Top align for multiline text
             overflow: 'linebreak'
         },
         columnStyles: {
             0: { cellWidth: 10, halign: 'center' }, // Index
-            1: { cellWidth: 50 },                   // Staff Details (Wider)
-            2: { cellWidth: 60 },                   // Sessions (Widest)
+            1: { cellWidth: 45 },                   // Staff Details
+            2: { cellWidth: 65 },                   // Sessions
             3: { cellWidth: 40 },                   // Duty Dates
             4: { cellWidth: 40 },                   // Intervening
-            5: { cellWidth: 15, halign: 'center' }, // Count
-            6: { cellWidth: 20, halign: 'center', fontStyle: 'bold', fillColor: [240, 253, 244] } // Total (Greenish)
+            5: { cellWidth: 12, halign: 'center' }, // Count
+            6: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }, // Total
+            7: { cellWidth: 20, halign: 'center', fontStyle: 'bold', fillColor: [239, 246, 255] } // Eligible EL
         }
     });
 
@@ -11569,12 +11736,26 @@ window.printAttendanceReport = function () {
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
 
+    // --- V2.0 ENGINE CONFIGURATION ---
+    const AUTO_ASSIGN_WEIGHTS = {
+        WEEKLY_LIMIT: 5000,
+        SAME_DAY: 2000,
+        ADJACENT_DAY: 1000,
+        DEPT_SATURATION: 4000,
+        BASE_MULTIPLIER: 100
+    };
+
+    // --- 1. CREATE SIMULATION SANDBOX ---
+    // Deep clone to prevent mutating the UI until we are happy with the result
+    const trialSlots = JSON.parse(JSON.stringify(invigilationSlots));
+    const modifiedKeys = new Set(); // Track exactly what we change
+
     const targetSlots = [];
-    Object.keys(invigilationSlots).forEach(key => {
+    Object.keys(trialSlots).forEach(key => {
         const date = parseDate(key);
         const mStr = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const wNum = getWeekOfMonth(date);
-        const slot = invigilationSlots[key];
+        const slot = trialSlots[key];
         if (mStr === monthStr && wNum === weekNum && slot.isLocked) {
             targetSlots.push({ key, date, slot });
         }
@@ -11638,30 +11819,51 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         for (let i = 0; i < needed; i++) {
             const candidates = eligibleStaff.map(s => {
                 let activePending = isVacDate ? s.vacationPending : s.regularPending;
-                let score = Math.max(0, activePending) * 100;
+                let baseScore = Math.max(0, activePending) * AUTO_ASSIGN_WEIGHTS.BASE_MULTIPLIER;
+                let score = baseScore;
                 let warnings = [];
-
+                let reasoning = { base: baseScore, penalties: {} };
 
                 if (slot.assigned.includes(s.email) || isUserUnavailable(slot, s.email, key) || s.status === 'archived') return null;
 
+                // --- 1. Weekly Soft Limit ---
                 const dutiesThisWeek = s.weeklyLoad[currentWeekKey] || 0;
-                if (dutiesThisWeek >= 3) { score -= 5000; warnings.push("Max 3/wk"); }
+                if (dutiesThisWeek >= 3) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT; 
+                    warnings.push("Max 3/wk"); 
+                    reasoning.penalties.weekly = -AUTO_ASSIGN_WEIGHTS.WEEKLY_LIMIT;
+                }
 
+                // --- 2. Same Day Rule ---
                 const sameDayKeys = targetSlots.filter(t => t.date.toDateString() === date.toDateString() && t.key !== key).map(t => t.key);
-                if (sameDayKeys.some(sdk => invigilationSlots[sdk].assigned.includes(s.email))) { score -= 2000; warnings.push("Same Day"); }
+                if (sameDayKeys.some(sdk => trialSlots[sdk].assigned.includes(s.email))) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.SAME_DAY; 
+                    warnings.push("Same Day"); 
+                    reasoning.penalties.sameDay = -AUTO_ASSIGN_WEIGHTS.SAME_DAY;
+                }
 
+                // --- 3. Dept Saturation (Dynamic Check) ---
                 const dTotal = deptCounts[s.dept] || 0;
-                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { score -= 4000; warnings.push("Dept Saturation"); }
+                if (dTotal > 1 && (slotDeptCounts[s.dept] || 0) >= Math.ceil(dTotal * 0.6)) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION; 
+                    warnings.push("Dept Saturation"); 
+                    reasoning.penalties.dept = -AUTO_ASSIGN_WEIGHTS.DEPT_SATURATION;
+                }
 
+                // --- 4. Adjacent Day Rule ---
                 let hasAdjacent = false;
                 targetSlots.forEach(t => {
                     if ((t.date.toDateString() === prevDate.toDateString() || t.date.toDateString() === nextDate.toDateString()) && t.slot.assigned.includes(s.email)) {
                         hasAdjacent = true;
                     }
                 });
-                if (hasAdjacent) { score -= 1000; warnings.push("Adjacent"); }
+                if (hasAdjacent) { 
+                    score -= AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY; 
+                    warnings.push("Adjacent"); 
+                    reasoning.penalties.adjacent = -AUTO_ASSIGN_WEIGHTS.ADJACENT_DAY;
+                }
 
-                return { staff: s, score, warnings };
+                return { staff: s, score, warnings, reasoning };
             }).filter(c => c !== null);
 
             candidates.sort((a, b) => b.score - a.score);
@@ -11676,12 +11878,24 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                 choice.staff.weeklyLoad[currentWeekKey]++;
                 slotDeptCounts[choice.staff.dept] = (slotDeptCounts[choice.staff.dept] || 0) + 1;
                 assignedCount++;
+                modifiedKeys.add(key); // Track that we altered this slot
 
-                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1"><span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> <span class="text-gray-500">(Score: ${choice.score})</span>${choice.warnings.length > 0 ? `<span class="text-red-500 ml-1">[${choice.warnings.join(', ')}]</span>` : ""}</div>`;
+                // Generate Traceable Log
+                const penaltyStr = Object.entries(choice.reasoning.penalties).map(([k,v]) => `${k}:${v}`).join(', ');
+                const debugInfo = penaltyStr ? `(Base: ${choice.reasoning.base} | ${penaltyStr})` : `(Base: ${choice.reasoning.base})`;
+
+                let logEntry = `<div class="text-xs border-b border-gray-100 pb-1 mb-1">
+                    <span class="text-green-700 font-bold">Auto-Assigned:</span> <b>${choice.staff.name}</b> 
+                    <span class="text-gray-500 font-mono text-[9px] ml-1">${debugInfo}</span>
+                    ${choice.warnings.length > 0 ? `<span class="text-red-500 text-[10px] ml-1 font-bold">[BREACH: ${choice.warnings.join(', ')}]</span>` : ""}
+                </div>`;
+                
                 const skipped = candidates.slice(1, 4);
-                if (skipped.length > 0) logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2">Skipped: ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                if (skipped.length > 0) {
+                    logEntry += `<div class="text-[10px] text-gray-500 ml-2 mb-2 leading-tight"><b>Skipped:</b> ` + skipped.map(s => `${s.staff.name} (${s.score})`).join(', ') + `</div>`;
+                }
 
-                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold">Auto-Assign Run (${timestamp})</div></div>`;
+                if (!slot.allocationLog) slot.allocationLog = `<div class="mb-2 pb-2 border-b"><div class="font-bold text-indigo-700">⚙️ Auto-Assign V2 (${timestamp})</div></div>`;
                 slot.allocationLog += logEntry;
 
                 if (choice.warnings.length > 0) logEntries.push({ type: "WARN", msg: `Assigned ${choice.staff.name} to ${key}. Breached: ${choice.warnings.join(", ")}` });
@@ -11689,18 +11903,31 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         }
     }
 
+    // --- FINAL VERIFICATION & COMMIT ---
+    if (assignedCount === 0) {
+        return alert("⚠️ Auto-Assign Finished, but no positions could be filled (or all targets were already met).");
+    }
+
+    // Merge Sandbox Back to Reality
+    modifiedKeys.forEach(k => {
+        invigilationSlots[k] = trialSlots[k];
+    });
+
     if (logEntries.length > 0) {
         const logRef = doc(db, "colleges", currentCollegeId);
         const newLogs = logEntries.map(e => `[${timestamp}] ${e.type}: ${e.msg}`);
         try { await updateDoc(logRef, { autoAssignLogs: arrayUnion(...newLogs) }); } catch (e) { }
     }
 
-    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
-    await syncSlotsToCloud("FORCE_OVERWRITE"); 
-    renderSlotsGrid();
+    if (typeof logActivity === 'function') logActivity("Auto-Assign Week", `V2 Run for ${monthStr} Week ${weekNum}. Filled ${assignedCount} slots.`);
+    
+    // SURGICAL SYNC: Instead of FORCE_OVERWRITE, we rely on the standard sync function
+    // which intelligently merges local changes with the cloud.
+    await syncSlotsToCloud(); 
+    renderSlotsGridAdmin();
 
-    let alertMsg = `✅ Auto-Assign Complete!\nFilled ${assignedCount} positions.`;
-    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} alerts generated. Check Logs.`;
+    let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${assignedCount} positions across ${modifiedKeys.size} sessions.`;
+    if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} constraint warnings generated. Check Admin Logs.`;
     alert(alertMsg);
 };
 
@@ -11763,62 +11990,11 @@ window.saveManualAllocation = async function () {
         }
         
         if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
-        else renderSlotsGrid();
+        else renderSlotsGridAdmin();
     } catch (e) {
         console.error("Save failed:", e);
         alert('Error saving. Check console.');
     }
-};
-
-// --- EMERGENCY / ADMIN DIRECT ADD FUNCTION ---
-window.directAddStaff = async function(key) {
-    const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot data not found.");
-
-    // Prompt the admin for the Email ID or Name
-    const rawInput = prompt("Enter the exact Full Name or Email of the Invigilator to add:");
-    if (!rawInput) return; // Action Cancelled
-    
-    const query = rawInput.toLowerCase().trim();
-    
-    // Attempt to locate the exact staff member securely
-    let staff = staffData.find(s => s.email.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase() === query);
-    if (!staff) staff = staffData.find(s => s.name.toLowerCase().includes(query)); // Fallback to partial name
-    
-    if (!staff) {
-        return alert("❌ Could not find any staff member matching '" + rawInput + "'. Please check spelling or use their email ID.");
-    }
-    
-    if (slot.assigned.includes(staff.email)) {
-        return alert("⚠️ " + staff.name + " is already assigned to this duty.");
-    }
-    
-    // Add to slot assignment list
-    slot.assigned.push(staff.email);
-    
-    // Ensure the 'Admin' tracking tag is correctly appended
-    if (!slot.assignmentMeta) slot.assignmentMeta = {};
-    slot.assignmentMeta[staff.email] = {
-        source: 'Admin',
-        timestamp: new Date().toISOString()
-    };
-    
-    // Log the override if the activity log feature is present
-    if (typeof logActivity === 'function') {
-        logActivity("Admin Override Add", `Admin explicitly added ${staff.name} to slot ${key}.`);
-    }
-    
-    // Write changes to Firebase/Local and refresh UI
-    if (typeof syncSlotsToCloud === 'function') {
-        await syncSlotsToCloud(key); // FIX: Direct add should stick
-    }
-    
-    if (typeof renderSlotsGridAdmin === 'function') {
-        renderSlotsGridAdmin();
-    }
-    
-    alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
 
 // --- EMERGENCY / ADMIN DIRECT ADD FUNCTIONS (Searchable) ---
@@ -11877,7 +12053,7 @@ window.directAddStaff = function(key) {
                     const roleEnd = r.end ? new Date(r.end) : null;
                     const isEndOfYear = roleEnd && roleEnd.getMonth() === 4 && roleEnd.getDate() === 31;
                     if (isEndOfYear && targetStamp > endStamp) {
-                        const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                        const hasNewerRole = s.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
                         if (!hasNewerRole) endStamp = Infinity;
                     }
 
@@ -11996,6 +12172,10 @@ window.confirmDirectAdd = async function() {
 // ============================================================================
 // 🎓 PROFESSIONAL PDF CERTIFICATE GENERATOR (A4 PORTRAIT)
 // ============================================================================
+/**
+ * NEW: Multi-Year Certificate Selection Logic (v12.8.9)
+ * Detects all academic years where the user has completed duties and presents a choice.
+ */
 window.downloadInvigilationCertificate = async function() {
     if (!currentUser) return alert("Please log in to download your certificate.");
     if (typeof jspdf === 'undefined') return alert("PDF library not loaded.");
@@ -12003,7 +12183,72 @@ window.downloadInvigilationCertificate = async function() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (!me) return alert("Staff record not found.");
 
-    const acYear = getCurrentAcademicYear();
+    // 1. Detect All Years with Attendance
+    const yearsMap = {}; // label -> { acYear, sessionCount }
+    
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        if (slot.attendance && slot.attendance.includes(me.email)) {
+            const dateObj = parseDate(key);
+            const acYear = getAcademicYearForDate(dateObj);
+            if (!yearsMap[acYear.label]) {
+                yearsMap[acYear.label] = { acYear, sessionCount: 0 };
+            }
+            yearsMap[acYear.label].sessionCount++;
+        }
+    });
+
+    const activeYears = Object.keys(yearsMap).sort().reverse();
+
+    if (activeYears.length === 0) {
+        return alert("No completed duties found in your record for any Academic Year.");
+    }
+
+    // 2. Selection Logic
+    if (activeYears.length === 1) {
+        // Only one year found, generate it immediately
+        await window.generateCertificateForAY(yearsMap[activeYears[0]].acYear);
+    } else {
+        // Multiple years found, show a clean selection modal
+        const modal = document.getElementById('completed-duties-modal');
+        const list = document.getElementById('completed-duties-list');
+        if (!modal || !list) return await window.generateCertificateForAY(getCurrentAcademicYear());
+
+        const headerTitle = document.querySelector('#completed-duties-modal h3');
+        const headerSub = document.querySelector('#completed-duties-modal p');
+        if (headerTitle) headerTitle.innerText = "Download Certificate";
+        if (headerSub) headerSub.innerText = "Select the Academic Year for your certificate:";
+
+        list.innerHTML = activeYears.map(label => {
+            const data = yearsMap[label];
+            return `
+                <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center justify-between gap-4 hover:bg-indigo-100 transition mb-2">
+                    <div>
+                        <p class="text-sm font-black text-indigo-900">AY ${label}</p>
+                        <p class="text-[10px] text-indigo-600 font-bold">${data.sessionCount} Sessions Completed</p>
+                    </div>
+                    <button onclick="window.generateCertificateForAYById('${label}')" 
+                        class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm">
+                        Generate
+                    </button>
+                </div>`;
+        }).join('');
+
+        // Store active map globally for the callback
+        window._tempCertificateYearsMap = yearsMap;
+        window.openModal('completed-duties-modal');
+    }
+};
+
+window.generateCertificateForAYById = async function(label) {
+    if (window._tempCertificateYearsMap && window._tempCertificateYearsMap[label]) {
+        window.closeModal('completed-duties-modal');
+        await window.generateCertificateForAY(window._tempCertificateYearsMap[label].acYear);
+    }
+};
+
+window.generateCertificateForAY = async function(acYear) {
+    const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     const collName = (collegeData && collegeData.examCollegeName) || "Government Victoria College, Palakkad";
     let completedSessions = [];
 
@@ -12022,7 +12267,7 @@ window.downloadInvigilationCertificate = async function() {
         }
     });
 
-    if (completedSessions.length === 0) return alert(`No completed duties found for AY ${acYear.label}.`);
+    if (completedSessions.length === 0) return alert("No completed duties found for this period.");
 
     // Sort ascending by date
     completedSessions.sort((a, b) => a.date - b.date);

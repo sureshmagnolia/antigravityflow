@@ -409,9 +409,10 @@ async function syncData(source = "AUTO") {
                 }
             }
         }
-        if (btn) btn.innerHTML = "⏳ Mirroring to Firebase...";
-        // --- Plan A: Ensure Firebase has the latest Master Chunks ---
-        if (window.syncDataToCloud) {
+        // --- Plan A: Ensure Firebase has the latest Master Chunks (Pro Users Only) ---
+        const isProUser = !!window.currentCollegeId || localStorage.getItem('isAdminUser') === 'true';
+        if (window.syncDataToCloud && isProUser) {
+            if (btn) btn.innerHTML = "⏳ Mirroring to Firebase...";
             await window.syncDataToCloud('baseData');
             await window.syncDataToCloud('settings');
             await window.syncDataToCloud('staff');
@@ -509,11 +510,15 @@ async function syncData(source = "AUTO") {
 // --- ⚡ REACTIVE SYNC (Triggered by data changes) ---
 let reactiveSyncTimer = null;
 window.triggerReactiveDriveSync = function() {
-    const isAdmin = localStorage.getItem('isAdminUser') === 'true';
+    const isProUser = !!window.currentCollegeId;
+    const isProAdmin = localStorage.getItem('isAdminUser') === 'true';
     const isDriveConnected = localStorage.getItem('isDriveConnected') === 'true';
 
-    // 🛡️ Guard: Only queue if Admin is active, Drive is linked, and Online
-    if (!isAdmin || !isDriveConnected || !navigator.onLine) return;
+    // 🛡️ Guard:
+    // 1. If Pro, must be Admin to sync (Team members are read-only for config).
+    // 2. If Basic, just must be connected and online.
+    if (isProUser && !isProAdmin) return;
+    if (!isDriveConnected || !navigator.onLine) return;
 
     // Reset the timer (Debounce)
     if (reactiveSyncTimer) clearTimeout(reactiveSyncTimer);

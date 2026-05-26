@@ -566,6 +566,8 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
                   }
                   // --- Google Drive Auto-Sync ---
                   if (!skipCloudSync && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId) {
+                      // Automatically update the timestamp for conflict detection (Matches localStorage interceptor)
+                      localStorage.setItem('lastUpdated', new Date().toISOString());
                       window.triggerDriveAutoSync();
                   }
                 // --- NEW: Trigger Basic User Pruning silently in background ---
@@ -766,8 +768,8 @@ async function migrateFromLocalStorage() {
 
     // --- Helper: Chronological Session Sort (Oldest First) ---
     function compareSessionStrings(a, b) {
+        if (!a || !b) return 0;
         // Split "DD.MM.YYYY | HH:MM AM"
-        // If separator is missing, treat whole string as date
         const splitA = a.includes('|') ? a.split('|') : [a, ''];
         const splitB = b.includes('|') ? b.split('|') : [b, ''];
 
@@ -776,24 +778,34 @@ async function migrateFromLocalStorage() {
         const dateBStr = splitB[0].trim();
         const timeBStr = splitB[1].trim();
 
-        // 1. Compare Dates (Normalize separators for split)
-        const [dA, mA, yA] = dateAStr.replace(/[-/]/g, '.').split('.');
-        const [dB, mB, yB] = dateBStr.replace(/[-/]/g, '.').split('.');
-        const dateA = new Date(yA, mA - 1, dA);
-        const dateB = new Date(yB, mB - 1, dB);
+        // 1. Compare Dates (Normalize separators)
+        const parseDate = (dStr) => {
+            const parts = dStr.replace(/[-/]/g, '.').split('.');
+            if (parts.length !== 3) return new Date(0);
+            const d = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            const y = parseInt(parts[2]);
+            return new Date(y < 100 ? 2000 + y : y, m - 1, d);
+        };
 
-        if (dateA < dateB) return -1;
-        if (dateA > dateB) return 1;
+        const dateA = parseDate(dateAStr);
+        const dateB = parseDate(dateBStr);
+
+        if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime();
+        }
 
         // 2. Compare Times (if dates are equal)
         if (timeAStr && timeBStr) {
             const parseTime = (t) => {
-                const [time, mod] = t.split(' ');
-                let [h, m] = time.split(':');
-                h = parseInt(h);
+                const parts = t.trim().split(' ');
+                if (parts.length < 2) return 0;
+                const timePart = parts[0];
+                const mod = parts[1].toUpperCase();
+                let [h, m] = timePart.split(':').map(Number);
                 if (mod === 'PM' && h !== 12) h += 12;
                 if (mod === 'AM' && h === 12) h = 0;
-                return h * 60 + parseInt(m);
+                return h * 60 + (m || 0);
             };
             return parseTime(timeAStr) - parseTime(timeBStr);
         }
@@ -901,15 +913,6 @@ async function migrateFromLocalStorage() {
                   const mergeBtn = document.getElementById('btn-drive-merge-prompt');
                   if (mergeBtn) mergeBtn.classList.add('hidden');
 
-                // [ADD THIS BLOCK] ---------------------------
-                // Show Cloud Features (Pro)
-                const portalSection = document.getElementById('student-portal-section');
-                if (portalSection) portalSection.classList.remove('hidden');
-
-                // Show Invigilation Slot Sync (Pro feature - login required)
-                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
-                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
-
                 // --- SHOW User Info & Sync Status ---
                 userInfoDiv.classList.add('md:block'); // Show on Desktop
                 if (mobileSyncDot) mobileSyncDot.classList.remove('hidden'); // Show on Mobile
@@ -941,9 +944,11 @@ async function migrateFromLocalStorage() {
                 // Hide Invigilation Button
                 if (btnInvigilation) btnInvigilation.classList.add('hidden');
 
-                // Hide Invigilation Slot Sync (requires login)
-                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
-                if (invigSlotWrapper) invigSlotWrapper.classList.add('hidden');
+                // Hide Pro Gated elements
+                document.getElementById('sync-status')?.classList.add('hidden');
+                document.getElementById('student-portal-section')?.classList.add('hidden');
+                document.getElementById('force-sync-allotment-button')?.classList.add('hidden');
+                document.getElementById('cloud-migration-wrapper')?.classList.add('hidden');
 
                 // Load Local Data & Finalize
                 await loadInitialData();
@@ -1284,6 +1289,14 @@ window.recalcInvigSlots = async function () {
             await window.fetchSlotsData();
         }
 
+        // 🛡️ V2 ARCHITECTURE SHIELD: 
+        // app.js doesn't natively fetch daily shards. If local memory is empty, abort to prevent a wipe.
+        const currentSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
+        if (Object.keys(currentSlots).length === 0) {
+            alert('⚠️ SAFETY ABORT: Your local slot cache is empty. \n\nPlease open the "Staff & Invigilation" tab briefly to allow the system to fully sync the cloud database shards before recalculating slots.');
+            return;
+        }
+
         const changed = await updateLocalSlotsFromStudents();
 
         if (changed) {
@@ -1374,6 +1387,17 @@ window.recalcInvigSlots = async function () {
 
                 if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
                 if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
+
+                // --- PRO FEATURES REVEAL (GATING) ---
+                const syncStatusDisplay = document.getElementById('sync-status');
+                const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
+                const portalSection = document.getElementById('student-portal-section');
+                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+
+                if (syncStatusDisplay) syncStatusDisplay.classList.remove('hidden');
+                if (forceSyncAllotmentButton) forceSyncAllotmentButton.classList.remove('hidden');
+                if (portalSection) portalSection.classList.remove('hidden');
+                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
 
                 updateHeaderCollegeName();
                 if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
@@ -1539,15 +1563,25 @@ window.recalcInvigSlots = async function () {
                             // 🛡️ [V3 SMART SHIELD]: Do NOT overwrite local data if we have unsaved manual changes.
                             // This prevents "Ghosting" where cloud (empty/old) wipes out manual (new) work.
                             
-                            const isDirty = (sessionKey === currentSessionKey && hasUnsavedAllotment);
+                            const isAllotmentDirty = (sessionKey === currentSessionKey && hasUnsavedAllotment);
+                            const isScribeDirty = (sessionKey === currentSessionKey && hasUnsavedScribes);
 
-                            if (s.roomAllotment && !isDirty) {
+                            if (s.roomAllotment && !isAllotmentDirty) {
                                 allAllotments[sessionKey] = s.roomAllotment;
                             }
-                              if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
-                              if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                              if (s.scribeAllotment) allScribeAllotments[sessionKey] = s.scribeAllotment;
-                              if (s.invigilatorMapping) allInvigMapping[sessionKey] = s.invigilatorMapping;
+                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
+                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
+                            
+                            if (s.scribeAllotment && !isScribeDirty) {
+                                allScribeAllotments[sessionKey] = s.scribeAllotment;
+                            }
+                            
+                            // Prevent invigilators from disappearing if they are actively being edited
+                            // We don't have a specific global hasUnsavedInvigilators, but using isAllotmentDirty is a safe proxy 
+                            // because invigilators are tied to the room allotment panel.
+                            if (s.invigilatorMapping && !isAllotmentDirty) {
+                                allInvigMapping[sessionKey] = s.invigilatorMapping;
+                            }
                             
                             // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
                             if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
@@ -2366,6 +2400,14 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                       const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
                       const localSlots = JSON.parse(localRaw);
 
+                      // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
+                      if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
+                          console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe in app.js.");
+                          isSyncing = false;
+                          updateSyncStatus("Sync Protected", "neutral");
+                          return; 
+                      }
+
                       // 1. SMART MERGE (Conditional)
                       if (affectedKey !== "FORCE_OVERWRITE") {
                           Object.keys(cloudSlots).forEach(k => {
@@ -2455,16 +2497,15 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             console.error("Sync Failed:", e);
             updateSyncStatus("Save Error", "error");
     } finally {
-            isSyncing = false;
-            // CHECK THE QUEUE: If something was queued while we were busy, process it now.
-            if (syncQueue.sections.size > 0) {
-                const nextTarget = Array.from(syncQueue.sections)[0];
-                syncQueue.sections.delete(nextTarget);
-                console.log(`🔄 Processing Queued Sync: ${nextTarget}`);
-                syncDataToCloud(nextTarget);
-            }
+        isSyncing = false;
+        // CHECK THE QUEUE: If something was queued while we were busy, process it now.
+        if (syncQueue.sections.size > 0) {
+            const nextTarget = Array.from(syncQueue.sections)[0];
+            syncQueue.sections.delete(nextTarget);
+            console.log(`🔄 Processing Queued Sync: ${nextTarget}`);
+            await syncDataToCloud(nextTarget);
         }
-
+    }
     }
    
     // --- 3. ADMIN / TEAM MANAGEMENT LOGIC ---
@@ -2955,6 +2996,7 @@ window.downloadReportPDF = function() {
         "qp-wise": generateQPDistributionPDF,
         "Scribe_Proforma": generateScribeProformaPDF,
         "Room_Stickers": generateRoomStickersPDF,
+        "Room_Summary": generateRoomSummaryPDF,
         "Invigilator_Summary": generateInvigilatorSummaryPDF  // <--- The New Feature
     };
 
@@ -6366,18 +6408,26 @@ if (toggleButton && sidebar) {
 
             // 🛡️ UNIFIED PIPELINE (V8): Read actual database, don't simulate!
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const sessionAllotment = allAllotments[sessionKey] || [];
             
-            if (sessionAllotment.length === 0) { 
-                alert("Please allot rooms before generating the Room-wise report."); 
-                generateReportButton.disabled = false;
-                generateReportButton.textContent = "Generate Room-wise Seating Report";
-                return; 
+            let sessionsToProcess = [];
+            if (filterSessionRadio.checked) {
+                sessionsToProcess = [sessionKey];
+            } else {
+                sessionsToProcess = Object.keys(allAllotments);
+                // Apply "Upcoming Exams only" filter if checked
+                const filterFutureOnly = document.getElementById('filter-future-only');
+                if (filterFutureOnly && filterFutureOnly.checked) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    sessionsToProcess = sessionsToProcess.filter(sk => {
+                        const [dStr] = sk.split('|');
+                        if (!dStr) return false;
+                        const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                        return new Date(yyyy, mm - 1, dd) >= today;
+                    });
+                }
             }
 
-            const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            
-            // 🛡️ SCRIBE DETECTION: Load the official scribe list
             const scribeListRaw = JSON.parse(localStorage.getItem(typeof SCRIBE_LIST_KEY !== 'undefined' ? SCRIBE_LIST_KEY : 'examScribeList') || '[]');
             const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
             
@@ -6385,19 +6435,29 @@ if (toggleButton && sidebar) {
 
 
             // Flatten saved allotment into student rows
-            sessionAllotment.forEach(room => {
-                (room.students || []).forEach(s => {
-                    const isOfficialScribe = scribeRegNos.has(s['Register Number']);
-                    final_student_list_for_report.push({
-                        ...s,                      // Original Student Keys
-                        'Room No': room.roomName, // Physical Room
-                        seatNumber: s.seat || '?', // The STICKY SEAT
-                        isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
-                        isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
-                        Stream: room.stream || 'Regular'
+            sessionsToProcess.forEach(sk => {
+                const sessionAllotment = allAllotments[sk] || [];
+                sessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        const isOfficialScribe = scribeRegNos.has(s['Register Number']);
+                        final_student_list_for_report.push({
+                            ...s,                      // Original Student Keys
+                            'Room No': room.roomName, // Physical Room
+                            seatNumber: s.seat || '?', // The STICKY SEAT
+                            isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
+                            isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
+                            Stream: room.stream || 'Regular'
+                        });
                     });
+                });
             });
-        });
+
+            if (final_student_list_for_report.length === 0) { 
+                alert("Please allot rooms before generating the Room-wise report."); 
+                generateReportButton.disabled = false;
+                generateReportButton.textContent = "Generate Room-wise Seating Report";
+                return; 
+            }
 
             const sessions = {};
 
@@ -6802,25 +6862,54 @@ if (toggleButton && sidebar) {
 
             // 🛡️ UNIFIED PIPELINE (V9): Direct database source
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const sessionAllotment = allAllotments[sessionKey] || [];
-            if (sessionAllotment.length === 0) { 
+            
+            let sessionsToProcess = [];
+            if (filterSessionRadio.checked) {
+                sessionsToProcess = [sessionKey];
+            } else {
+                sessionsToProcess = Object.keys(allAllotments);
+                // Apply "Upcoming Exams only" filter if checked
+                const filterFutureOnly = document.getElementById('filter-future-only');
+                if (filterFutureOnly && filterFutureOnly.checked) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    sessionsToProcess = sessionsToProcess.filter(sk => {
+                        const [dStr] = sk.split('|');
+                        if (!dStr) return false;
+                        const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                        return new Date(yyyy, mm - 1, dd) >= today;
+                    });
+                }
+            }
+
+            const baseData = [];
+            sessionsToProcess.forEach(sk => {
+                const currentSessionAllotment = allAllotments[sk] || [];
+                currentSessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        baseData.push({
+                            ...s,
+                            'Room No': room.roomName,
+                            seatNumber: s.seat || '?',
+                            Stream: room.stream || 'Regular'
+                        });
+                    });
+                });
+            });
+
+            // 🛡️ CHRONOLOGICAL SORT (Bulk Support)
+            baseData.sort((a, b) => {
+                const sessionA = `${a.Date} | ${a.Time}`;
+                const sessionB = `${b.Date} | ${b.Time}`;
+                return compareSessionStrings(sessionA, sessionB);
+            });
+
+            if (baseData.length === 0) { 
                 alert("Please allot rooms before generating this report."); 
                 generateDaywiseReportButton.disabled = false;
                 generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
                 return; 
             }
-
-            const baseData = [];
-            sessionAllotment.forEach(room => {
-                (room.students || []).forEach(s => {
-                    baseData.push({
-                        ...s,
-                        'Room No': room.roomName,
-                        seatNumber: s.seat || '?',
-                        Stream: room.stream || 'Regular'
-                    });
-                });
-            });
 
             // 1. Split Data by Stream
             const dataByStream = {};
@@ -6886,7 +6975,7 @@ if (toggleButton && sidebar) {
             const STUDENTS_PER_PAGE = STUDENTS_PER_COLUMN * COLUMNS_PER_PAGE;
 
             // Helper to build a small table for one column (Fixed Widths for PDF)
-            function buildColumnTable(studentChunk) {
+            function buildColumnTable(studentChunk, sessionKey) {
                 // 1. Pre-process data for RowSpans
                 const processedRows = studentChunk.map((student, index) => {
                     const prevCourse = (index === 0) ? "" : studentChunk[index - 1].Course;
@@ -7010,35 +7099,24 @@ if (toggleButton && sidebar) {
             const scribeRegSet = new Set(globalScribeList.map(s => s.regNo));
 
             for (const streamName of sortedStreamNames) {
-                // Flatten the saved database for this stream
-                let processed_rows = [];
-                sessionAllotment.forEach(room => {
-                    const roomStream = room.stream || "Regular";
-                    if (roomStream === streamName) {
-                        (room.students || []).forEach(s => {
-                            const reg = s['Register Number'] || s.RegisterNo || '';
-                            processed_rows.push({
-                                ...s,
-                                'Room No': room.roomName,
-                                seatNumber: s.seat || '?',
-                                Stream: roomStream,
-                                // FIX: Stamp isScribe flag from the global scribe list
-                                isScribe: scribeRegSet.has(reg)
-                            });
-                        });
-                    }
+                // Use the already prepared stream data
+                const processed_rows = (dataByStream[streamName] || []).map(s => {
+                    const reg = s['Register Number'] || s.RegisterNo || '';
+                    return {
+                        ...s,
+                        isScribe: scribeRegSet.has(reg)
+                    };
                 });
-
 
                 const daySessions = {};
 
                 processed_rows.forEach(student => {
-                    const key = `${student.Date}_${student.Time}`;
+                    const key = `${student.Date} | ${student.Time}`;
                     if (!daySessions[key]) daySessions[key] = { Date: student.Date, Time: student.Time, students: [] };
                     daySessions[key].students.push(student);
                 });
 
-                const sortedSessionKeys = Object.keys(daySessions).sort();
+                const sortedSessionKeys = Object.keys(daySessions).sort(compareSessionStrings);
 
                 sortedSessionKeys.forEach(key => {
                     const session = daySessions[key];
@@ -8021,7 +8099,7 @@ if (toggleButton && sidebar) {
             const sessions = {};
 
             filteredData.forEach(item => {
-                const key = `${item.Date}_${item.Time}`;
+                const key = `${item.Date} | ${item.Time}`;
                 const stream = item.Stream || "Regular";
 
                 if (!sessions[key]) sessions[key] = { Date: item.Date, Time: item.Time, streams: {} };
@@ -8036,7 +8114,7 @@ if (toggleButton && sidebar) {
 
             let allPagesHtml = '';
             let totalPages = 0;
-            const sortedSessionKeys = Object.keys(sessions).sort();
+            const sortedSessionKeys = Object.keys(sessions).sort(compareSessionStrings);
 
             sortedSessionKeys.forEach(key => {
                 const session = sessions[key];
@@ -8154,38 +8232,58 @@ if (toggleButton && sidebar) {
 
             // 🛡️ UNIFIED PIPELINE (V8): Use actual database for Room-wise
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const sessionAllotment = allAllotments[sessionKey] || [];
             
-            if (sessionAllotment.length === 0) { 
-                alert("Please allot rooms before generating the Room-wise report."); 
-                generateReportButton.disabled = false;
-                generateReportButton.textContent = "Generate Room-wise Seating Report";
-                return; 
+            let sessionsToProcess = [];
+            if (filterSessionRadio.checked) {
+                sessionsToProcess = [sessionKey];
+            } else {
+                sessionsToProcess = Object.keys(allAllotments);
+                // Apply "Upcoming Exams only" filter if checked
+                const filterFutureOnly = document.getElementById('filter-future-only');
+                if (filterFutureOnly && filterFutureOnly.checked) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    sessionsToProcess = sessionsToProcess.filter(sk => {
+                        const [dStr] = sk.split('|');
+                        if (!dStr) return false;
+                        const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                        return new Date(yyyy, mm - 1, dd) >= today;
+                    });
+                }
             }
 
             const processed_rows_with_rooms = [];
-            sessionAllotment.forEach(room => {
-                (room.students || []).forEach(s => {
-                    processed_rows_with_rooms.push({
-                        ...s,
-                        'Room No': room.roomName,
-                        seatNumber: s.seat || '?',
-                        Stream: room.stream || 'Regular'
+            sessionsToProcess.forEach(sk => {
+                const currentSessionAllotment = allAllotments[sk] || [];
+                currentSessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        processed_rows_with_rooms.push({
+                            ...s,
+                            'Room No': room.roomName,
+                            seatNumber: s.seat || '?',
+                            Stream: room.stream || 'Regular'
+                        });
                     });
                 });
             });
+            
+            if (processed_rows_with_rooms.length === 0) { 
+                alert("Please allot rooms before generating the report."); 
+                generateQpDistributionReportButton.disabled = false;
+                generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
+                return; 
+            }
 
                 const sessions = {};
 
                 // 1. Grouping Logic
                 for (const student of processed_rows_with_rooms) {
-                    const sessionKey = `${student.Date}_${student.Time}`;
+                    const sessionKey = `${student.Date} | ${student.Time}`;
                     const roomName = student['Room No'];
                     const streamName = student.Stream || "Regular";
                     const paperKey = getQpKey(student.Course, streamName);
 
-                    const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-                    const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
+                    const sessionQPCodes = qpCodeMap[sessionKey] || {};
                     const qpCodeDisplay = sessionQPCodes[paperKey] || 'N/A';
 
                     if (!sessions[sessionKey]) {
@@ -8682,44 +8780,73 @@ if (toggleButton && sidebar) {
             currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
 
-            const data = getFilteredReportData('scribe-report');
-            if (!data || data.length === 0) { alert("No data found."); return; }
             loadGlobalScribeList();
             const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-            const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
-            if (allScribeStudents.length === 0) { alert("No scribe students found."); return; }
 
             // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            const sessionAllotment = allAllotments[sessionKey] || [];
-            const originalRoomMap = {};
             
-            sessionAllotment.forEach(room => {
-                const roomSerialMap = getRoomSerialMap(sessionKey);
-                const serial = roomSerialMap[room.roomName] || '-';
-                (room.students || []).forEach(s => {
-                    const reg = s['Register Number'] || s.RegisterNo;
-                    if (reg) {
-                        originalRoomMap[`${s.Date}|${s.Time}|${reg}`] = { 
-                            room: room.roomName, 
-                            seat: s.seat || '?' 
-                        };
-                    }
+            let sessionsToProcess = [];
+            if (filterSessionRadio.checked) {
+                sessionsToProcess = [sessionKey];
+            } else {
+                sessionsToProcess = Object.keys(allAllotments);
+                // Apply "Upcoming Exams only" filter if checked
+                const filterFutureOnly = document.getElementById('filter-future-only');
+                if (filterFutureOnly && filterFutureOnly.checked) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    sessionsToProcess = sessionsToProcess.filter(sk => {
+                        const [dStr] = sk.split('|');
+                        if (!dStr) return false;
+                        const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                        return new Date(yyyy, mm - 1, dd) >= today;
+                    });
+                }
+            }
+
+            const allScribeStudents = [];
+            const originalRoomMap = {};
+
+            sessionsToProcess.forEach(sk => {
+                const sessionAllotment = allAllotments[sk] || [];
+                sessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        const reg = s['Register Number'] || s.RegisterNo;
+                        if (reg) {
+                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            originalRoomMap[lookupKey] = { 
+                                room: room.roomName, 
+                                seat: s.seat || '?' 
+                            };
+                            
+                            if (scribeRegNos.has(reg)) {
+                                allScribeStudents.push(s);
+                            }
+                        }
+                    });
                 });
             });
+
+            if (allScribeStudents.length === 0) { 
+                alert("No scribe students found in the selected sessions."); 
+                generateScribeReportButton.disabled = false;
+                generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
+                return; 
+            }
 
             const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
             loadQPCodes();
 
             const reportRows = [];
             for (const s of allScribeStudents) {
-                const sessionKey = `${s.Date} | ${s.Time}`;
-                const sessionScribeRooms = allScribeAllotments[sessionKey] || {};
-                const sessionQPCodes = qpCodeMap[sessionKey] || {};
+                const sKey = `${s.Date} | ${s.Time}`;
+                const sessionScribeRooms = allScribeAllotments[sKey] || {};
+                const sessionQPCodes = qpCodeMap[sKey] || {};
                 const courseKey = getQpKey(s.Course, s.Stream);
                 const lookupKey = `${s.Date}|${s.Time}|${s['Register Number']}`;
                 const originalRoomData = originalRoomMap[lookupKey] || { room: 'N/A', seat: 'N/A' };
-                const roomSerialMap = getRoomSerialMap(sessionKey);
+                const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sKey) : {};
                 const orgSerial = roomSerialMap[originalRoomData.room] || '-';
                 const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
                 const rawScribeRoom = sessionScribeRooms[s['Register Number']];
@@ -8742,14 +8869,14 @@ if (toggleButton && sidebar) {
 
             const sessions = {};
             for (const row of reportRows) {
-                const key = `${row.Date}_${row.Time}`;
+                const key = `${row.Date} | ${row.Time}`;
                 if (!sessions[key]) sessions[key] = { Date: row.Date, Time: row.Time, students: [] };
                 sessions[key].students.push(row);
             }
 
             let allPagesHtml = '';
             let totalPages = 0;
-            const sortedSessionKeys = Object.keys(sessions).sort();
+            const sortedSessionKeys = Object.keys(sessions).sort(compareSessionStrings);
 
             sortedSessionKeys.forEach(key => {
                 const session = sessions[key];
@@ -8760,9 +8887,8 @@ if (toggleButton && sidebar) {
                 const streamLabel = streamsInSession.size === 1 ? Array.from(streamsInSession)[0] : "Combined";
 
                 // --- NEW: Get Exam Name ---
-                // If Combined, we might miss specific names, but we try with the first available stream or fallback
                 const lookupStream = (streamLabel !== "Combined") ? streamLabel : "Regular";
-                const examName = getExamName(session.Date, session.Time, lookupStream);
+                const examName = (typeof getExamName === 'function') ? getExamName(session.Date, session.Time, lookupStream) : "";
                 const examNameHtml = examName ? `<h2 style="font-size:13pt; font-weight:bold; margin:2px 0; text-transform:uppercase;">${examName}</h2>` : "";
 
                 let tableRowsHtml = '';
@@ -8843,47 +8969,71 @@ if (toggleButton && sidebar) {
             currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
 
-            const data = getFilteredReportData('scribe-proforma');
-            if (!data || data.length === 0) throw new Error("No student data found for the selected session.");
-
-            const globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
-            if (globalScribeList.length === 0) throw new Error("Scribe List is empty.");
+            loadGlobalScribeList();
             const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
 
-            const allScribeStudents = data.filter(s => scribeRegNos.has(s['Register Number']));
-            if (allScribeStudents.length === 0) throw new Error("No scribe students found in the selected session.");
-
-            // 🛡️ UNIFIED PIPELINE (V12): Use actual database for Original Rooms
+            // 🛡️ UNIFIED PIPELINE (V12): Use actual database for Students & Rooms
             const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-            // FIX: Derive sessionKey from the UI dropdown (was undefined before the for-loop)
-            const sessionKey = reportsSessionSelect.value;
-            const sessionAllotment = allAllotments[sessionKey] || [];
             
+            let sessionsToProcess = [];
+            if (filterSessionRadio.checked) {
+                const sessionKey = reportsSessionSelect.value;
+                sessionsToProcess = [sessionKey];
+            } else {
+                sessionsToProcess = Object.keys(allAllotments);
+                // Apply "Upcoming Exams only" filter if checked
+                const filterFutureOnly = document.getElementById('filter-future-only');
+                if (filterFutureOnly && filterFutureOnly.checked) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    sessionsToProcess = sessionsToProcess.filter(sk => {
+                        const [dStr] = sk.split('|');
+                        if (!dStr) return false;
+                        const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                        return new Date(yyyy, mm - 1, dd) >= today;
+                    });
+                }
+            }
+
+            const allScribeStudents = [];
             const originalRoomMap = {};
-            sessionAllotment.forEach(room => {
-                (room.students || []).forEach(s => {
-                    const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
-                    originalRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
+
+            sessionsToProcess.forEach(sk => {
+                const sessionAllotment = allAllotments[sk] || [];
+                sessionAllotment.forEach(room => {
+                    (room.students || []).forEach(s => {
+                        const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                        if (reg) {
+                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            originalRoomMap[lookupKey] = { 
+                                room: room.roomName, 
+                                seat: s.seat || '?' 
+                            };
+                            if (scribeRegNos.has(reg)) {
+                                allScribeStudents.push(s);
+                            }
+                        }
+                    });
                 });
             });
 
-            // 🛡️ SCR1, SCR2 SEQUENTIAL MAPPING
-            // 1. Identify all unique rooms used for scribes in this session
-            const currentSessionScribeRooms = allScribeAllotments[sessionKey] || {};
-            const uniqueScribeRoomsInSession = [...new Set(Object.values(currentSessionScribeRooms))];
-            
-            // 2. Sort them by their physical Room Serial to assign SCR numbers in order
-            const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sessionKey) : {};
-            uniqueScribeRoomsInSession.sort((a, b) => {
-                const serialA = parseInt(roomSerialMap[a]) || 999;
-                const serialB = parseInt(roomSerialMap[b]) || 999;
-                return serialA - serialB;
-            });
+            if (allScribeStudents.length === 0) throw new Error("No scribe students found in the selected sessions.");
 
-            // 3. Create the Scribe Mapping (e.g., "Room 5" -> "SCR1")
-            const scribeRoomLabelMap = {};
-            uniqueScribeRoomsInSession.forEach((roomName, idx) => {
-                scribeRoomLabelMap[roomName] = `SCR${idx + 1}`;
+            // 🛡️ SCR1, SCR2 SEQUENTIAL MAPPING PER SESSION
+            const scribeRoomLabelMapPerSession = {};
+            sessionsToProcess.forEach(sk => {
+                const currentSessionScribeRooms = allScribeAllotments[sk] || {};
+                const uniqueScribeRoomsInSession = [...new Set(Object.values(currentSessionScribeRooms))];
+                const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sk) : {};
+                uniqueScribeRoomsInSession.sort((a, b) => {
+                    const serialA = parseInt(roomSerialMap[a]) || 999;
+                    const serialB = parseInt(roomSerialMap[b]) || 999;
+                    return serialA - serialB;
+                });
+                scribeRoomLabelMapPerSession[sk] = {};
+                uniqueScribeRoomsInSession.forEach((roomName, idx) => {
+                    scribeRoomLabelMapPerSession[sk][roomName] = `SCR${idx + 1}`;
+                });
             });
 
             const reportRows = [];
@@ -8898,8 +9048,8 @@ if (toggleButton && sidebar) {
                 // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
                 const courseKey = getQpKey(s.Course, s.Stream);
 
-                const originalRoomData = originalRoomMap[s['Register Number']] || { room: 'N/A', seat: 'N/A' };
-                const roomSerialMap = getRoomSerialMap(sessionKey);
+                const originalRoomData = originalRoomMap[`${s.Date}|${s.Time}|${s['Register Number']}`] || { room: 'N/A', seat: 'N/A' };
+                const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sessionKey) : {};
 
                 // --- Format Original Room (Fixed) ---
                 const orgSerial = roomSerialMap[originalRoomData.room] || '-';
@@ -8916,7 +9066,7 @@ if (toggleButton && sidebar) {
                         if (rLoc) locText = ` (${rLoc})`;
                     }
                     const scribeSerial = roomSerialMap[rawScribeRoom] || '-';
-                    const scribeLabel = scribeRoomLabelMap[rawScribeRoom] || 'SCR?';
+                    const scribeLabel = scribeRoomLabelMapPerSession[sessionKey]?.[rawScribeRoom] || 'SCR?';
                     // Display style: SCR1 - Hall #10
                     scribeRoomDisplay = `<strong><span style="color:#2563eb;">${scribeLabel}</span> - Hall #${scribeSerial}</strong>${locText}`;
                 }
@@ -9031,91 +9181,7 @@ if (toggleButton && sidebar) {
         }
     });
 
-    // --- 🤝 REPORT 7: SCRIBE ASSISTANCE SUMMARY ---
-    generateScribeReportButton.addEventListener('click', async () => {
-        if (!reportsSessionSelect.value) { return alert("Please select an Exam Session."); }
-        
-        generateScribeReportButton.disabled = true;
-        generateScribeReportButton.textContent = "Generating...";
-        reportStatus.textContent = "Processing Scribe Summary...";
-
-        try {
-            const scribeListKey = 'examScribeList';
-            const scribeAllotmentKey = 'examScribeAllotment';
-            const allScribesData = JSON.parse(localStorage.getItem(scribeListKey) || '[]');
-            const allScribesAllotment = JSON.parse(localStorage.getItem(scribeAllotmentKey) || '{}');
-            const sessionAllotments = allScribesAllotment[reportsSessionSelect.value] || {};
-            const scribeRegKeys = Object.keys(sessionAllotments);
-
-            if (scribeRegKeys.length === 0) { return alert("No Scribes allotted for this session."); }
-
-            // Fetch students to cross-reference their Course and Name
-            const allStudentsForReport = getFilteredReportData('day-wise');
-            let htmlRows = '';
-            
-            // Generate clean Table Rows
-            scribeRegKeys.forEach((regNo, idx) => {
-                const roomName = sessionAllotments[regNo];
-                const scribeObj = allScribesData.find(s => s.regNo === regNo) || {};
-                const studentObj = allStudentsForReport.find(s => s['Register Number'] === regNo) || {};
-                
-                const candName = studentObj.Name || "Unknown Candidate";
-                const courseName = studentObj.Course || "Unknown Course";
-                const scribeName = scribeObj.name || "Unknown Scribe";
-
-                htmlRows += `
-                    <tr>
-                        <td style="text-align:center; padding:5px; border:1px solid #000;">${idx + 1}</td>
-                        <td style="font-weight:bold; padding:5px; border:1px solid #000;">${regNo}</td>
-                        <td style="padding:5px; border:1px solid #000; font-size:9pt;">${candName}</td>
-                        <td style="padding:5px; border:1px solid #000; font-size:9pt;">${courseName}</td>
-                        <td style="font-weight:bold; color:#059669; padding:5px; border:1px solid #000;">${scribeName}</td>
-                        <td style="text-align:center; font-weight:bold; padding:5px; border:1px solid #000;">${roomName}</td>
-                        <td style="padding:5px; border:1px solid #000;"></td>
-                    </tr>
-                `;
-            });
-
-            const html = `
-                <style> @media print { .print-page { box-shadow: none !important; border: none !important; margin: 0 auto !important; } } </style>
-                <div class="print-page bg-white text-black p-8 mx-auto my-4 shadow-lg border border-gray-200" style="width: 210mm; min-height: 297mm;">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <h1 style="font-size: 16pt; font-weight: bold; margin: 0;">${typeof currentCollegeName !== 'undefined' ? currentCollegeName : "College Name"}</h1>
-                        <h2 style="font-size: 14pt; margin: 5px 0;">SCRIBE ASSISTANCE SUMMARY</h2>
-                        <h3 style="font-size: 11pt; font-weight: normal; margin: 5px 0;">Session: ${reportsSessionSelect.value}</h3>
-                    </div>
-                    <table style="width:100%; border-collapse:collapse; font-size:10pt;">
-                        <thead>
-                            <tr style="background-color:#f3f4f6;">
-                                <th style="width:5%; border:1px solid #000; padding:6px;">Sl No</th>
-                                <th style="width:15%; border:1px solid #000; padding:6px;">Reg No</th>
-                                <th style="width:25%; border:1px solid #000; padding:6px;">Candidate Name</th>
-                                <th style="width:15%; border:1px solid #000; padding:6px;">Course</th>
-                                <th style="width:20%; border:1px solid #000; padding:6px;">Scribe Name</th>
-                                <th style="width:10%; border:1px solid #000; padding:6px;">Room</th>
-                                <th style="width:10%; border:1px solid #000; padding:6px;">Sign</th>
-                            </tr>
-                        </thead>
-                        <tbody>${htmlRows}</tbody>
-                    </table>
-                </div>
-            `;
-
-            reportOutputArea.innerHTML = html;
-            reportOutputArea.style.display = 'block';
-            reportStatus.textContent = "Generated Scribe Assistance Summary.";
-            reportControls.classList.remove('hidden');
-            lastGeneratedReportType = "Scribe_Summary";
-
-        } catch (e) {
-            console.error("Scribe Summary Error:", e);
-            alert("Error generating report: " + e.message);
-            reportStatus.textContent = "Generation failed.";
-        } finally {
-            generateScribeReportButton.disabled = false;
-            generateScribeReportButton.textContent = "7-Generate Scribe Assistance Report";
-        }
-    });
+    // --- Conflicting Scribe Summary Removed ---
 
     // --- V96: Removed PDF Download Functionality (Replaced with native Print) ---
     // downloadPdfButton.addEventListener('click', ... removed ...)
@@ -10788,38 +10854,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         });
     }
-    // 3. Backup All Data
-    if (backupDataButton) {
-        backupDataButton.addEventListener('click', async () => {
-            const backupData = {};
-            for (const key of ALL_DATA_KEYS) {
-            if (key === BASE_DATA_KEY) {
-                const idbData = await loadExamDataIDB();
-                if (idbData && idbData.length > 0) backupData[key] = JSON.stringify(idbData);
-            } else {
-                const data = localStorage.getItem(key);
-                if (data) backupData[key] = data;
-            }
-        }
-
-
-            if (Object.keys(backupData).length === 0) {
-                alert("No data found in local storage to back up.");
-                return;
-            }
-
-            const jsonString = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            const date = new Date().toISOString().split('T')[0];
-            link.download = `UOC_Exam_Backup_${date}.json`;
-            link.href = url;
-            link.click();
-            URL.revokeObjectURL(url);
-        });
-    }
+    // 3. Backup All Data (HANDLED IN THE BUNKER SECTION BELOW)
+    // Removed redundant listener to prevent conflicts and ensure IndexedDB data is properly included.
 
     // 4. Restore All Data
     if (restoreDataButton) {
@@ -11988,12 +12024,6 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (!confirm('Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
 
         currentSessionAllotment.forEach(roomData => {
-            if (roomData && roomData.students) {
-                roomData.students.forEach(s => {
-                    const reg = (typeof s === 'object') ? s['Register Number'] : s;
-                    if (currentScribeAllotment[reg]) delete currentScribeAllotment[reg];
-                });
-            }
             const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
             if (allInvigMappings[currentSessionKey] && allInvigMappings[currentSessionKey][roomData.roomName]) {
                 delete allInvigMappings[currentSessionKey][roomData.roomName];
@@ -12191,16 +12221,15 @@ window.real_populate_qp_code_session_dropdown = function () {
     // RE-ALLOTMENT CLEANUP: Clear current students and stale assignments before applying new strategy
       currentSessionAllotment = [];
 
-      // 🛡️ [AUDIT FIX] Clean up stale Scribe & Invigilator links for this session
+      // 🛡️ [AUDIT FIX] Clean up stale Invigilator links for this session
+      // Note: Scribe and Invigilator assignments are preserved during auto-allotment to prevent "ghosting" and data loss.
       const sessionKey = currentSessionKey;
-      const allScribeMap = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-      if (allScribeMap[sessionKey]) delete allScribeMap[sessionKey];
-      localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeMap));
 
       const allInvigMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-      if (allInvigMappings[sessionKey]) delete allInvigMappings[sessionKey];
-      localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvigMappings));
-      if (window.currentInvigMapping) window.currentInvigMapping = {};
+      // We no longer delete the entire mapping. We let the user manually clear or adjust them.
+      // if (allInvigMappings[sessionKey]) delete allInvigMappings[sessionKey];
+      // localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allInvigMappings));
+      if (window.currentInvigMapping) window.currentInvigMapping = allInvigMappings[sessionKey] || {};
     
     // Map selected rooms
     let selectedRooms = checkedBoxes.map(cb => ({
@@ -13578,6 +13607,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         'generate-scribe-report-button',         // 7
         'generate-invigilator-report-button',    // 8
         'generate-room-summary-button',          // 9
+        'generate-scribe-master-report-button',  // 10
         'generate-absentee-report-button'
     ];
     ids.forEach(id => {
@@ -14613,7 +14643,7 @@ Are you sure you want to update these records?
                         <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100 last:border-0">
                             <span class="font-medium text-slate-700">${strm}</span>
                             <span class="text-slate-600">
-                                <span class="inline-block w-8 text-right font-bold">${count}</span> <span class="text-[10px] text-slate-300 mx-1">▶</span> <strong class="text-indigo-600 inline-block w-4 text-right">${requiredInvigs}</strong>
+                                <span class="inline-block w-8 text-right font-bold">${count}</span> <span class="text-[10px] text-slate-300 mx-1">:</span> <strong class="text-indigo-600 inline-block w-4 text-right">${requiredInvigs}</strong>
                             </span>
                         </div>
                     `);
@@ -14640,7 +14670,7 @@ Are you sure you want to update these records?
                             ${streamHtmlParts.join('')}
                         </td>
                         <td class="border border-slate-300 print:border-slate-400 p-3 align-middle text-sm text-center">
-                             ${scribeCount > 0 ? `<div class="bg-amber-50 print:bg-transparent rounded px-2 py-1 border border-amber-100 print:border-0 tracking-tight"><strong class="text-amber-800 print:text-black">${scribeCount}</strong> Scr <span class="text-[10px] text-amber-300 print:text-black mx-1">▶</span> <strong class="text-amber-600 print:text-black">${scribeInvigs}</strong> Inv</div>` : '<span class="text-slate-300">-</span>'}
+                             ${scribeCount > 0 ? `<div class="bg-amber-50 print:bg-transparent rounded px-2 py-1 border border-amber-100 print:border-0 tracking-tight"><strong class="text-amber-800 print:text-black">${scribeCount}</strong> Scribes <span class="text-[10px] text-amber-300 print:text-black mx-1">:</span> <strong class="text-amber-600 print:text-black">${scribeInvigs}</strong> Invigilators</div>` : '<span class="text-slate-300">-</span>'}
                         </td>
                         <td class="border border-slate-300 print:border-slate-400 p-3 text-center align-middle font-bold text-teal-700 bg-teal-50/50 print:bg-transparent print:text-black text-lg">
                             ${sessionTotalInvigs}
@@ -14682,10 +14712,10 @@ Are you sure you want to update these records?
                             <thead>
                                 <tr class="bg-slate-100 print:bg-slate-200 text-slate-600 print:text-slate-900 uppercase text-xs tracking-wider border-b-2 border-slate-300 print:border-slate-400">
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-1/5">Date / Time</th>
-                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400">Stream-wise Required (1:30)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400">Stream Requirements</th>
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-32 text-center">Scribes (1:5)</th>
                                     <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-teal-700">Base</th>
-                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-amber-600">Resv(10%)</th>
+                                    <th class="p-4 font-bold border-r border-slate-300 print:border-slate-400 w-20 text-center text-amber-600">Reserve (10%)</th>
                                     <th class="p-4 font-bold text-center w-24 text-rose-700">Total</th>
                                 </tr>
                             </thead>
@@ -14759,9 +14789,42 @@ Are you sure you want to update these records?
 
                 // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers
                 const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-                const sessionAllotment = allAllotments[sessionKey] || [];
                 
-                if (sessionAllotment.length === 0) { 
+                let sessionsToProcess = [];
+                if (filterSessionRadio.checked) {
+                    sessionsToProcess = [sessionKey];
+                } else {
+                    sessionsToProcess = Object.keys(allAllotments);
+                    // Apply "Upcoming Exams only" filter if checked
+                    const filterFutureOnly = document.getElementById('filter-future-only');
+                    if (filterFutureOnly && filterFutureOnly.checked) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        sessionsToProcess = sessionsToProcess.filter(sk => {
+                            const [dStr] = sk.split('|');
+                            if (!dStr) return false;
+                            const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                            return new Date(yyyy, mm - 1, dd) >= today;
+                        });
+                    }
+                }
+
+                const final_student_list_for_stickers = [];
+                sessionsToProcess.forEach(sk => {
+                    const currentSessionAllotment = allAllotments[sk] || [];
+                    currentSessionAllotment.forEach(room => {
+                        (room.students || []).forEach(s => {
+                            final_student_list_for_stickers.push({
+                                ...s,
+                                'Room No': room.roomName,
+                                seatNumber: s.seat || '?',
+                                Stream: room.stream || 'Regular'
+                            });
+                        });
+                    });
+                });
+                
+                if (final_student_list_for_stickers.length === 0) { 
                     alert("Please allot rooms before generating stickers."); 
                     generateStickerButton.disabled = false;
                     generateStickerButton.textContent = "Generate Stickers";
@@ -14769,19 +14832,7 @@ Are you sure you want to update these records?
                 }
 
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                const final_student_list_for_stickers = [];
-
-                // Load from database
-                sessionAllotment.forEach(room => {
-                    (room.students || []).forEach(s => {
-                        final_student_list_for_stickers.push({
-                            ...s,
-                            'Room No': room.roomName,
-                            seatNumber: s.seat || '?',
-                            Stream: room.stream || 'Regular'
-                        });
-                    });
-                });
+                const final_student_list_for_stickers_flattened = []; // Unused but kept for structure
 
                 // 1. Group by Session -> Room
                 const sessions = {};
@@ -14807,7 +14858,21 @@ Are you sure you want to update these records?
                     sessions[key].students.push({ ...student, isScribeDisplay: isScribe });
                 });
 
-                const sortedKeys = Object.keys(sessions).sort((a, b) => getNumericSortKey(a).localeCompare(getNumericSortKey(b)));
+                const sortedKeys = Object.keys(sessions).sort((a, b) => {
+                    const partsA = a.split('_'); // Expected: Date, Time, Room
+                    const partsB = b.split('_');
+                    const sessionA = `${partsA[0]} | ${partsA[1]}`;
+                    const sessionB = `${partsB[0]} | ${partsB[1]}`;
+                    const timeDiff = compareSessionStrings(sessionA, sessionB);
+                    if (timeDiff !== 0) return timeDiff;
+                    
+                    // Same session, sort by room numeric part
+                    const roomA = partsA.slice(2).join('_');
+                    const roomB = partsB.slice(2).join('_');
+                    const numA = parseInt(roomA.replace(/\D/g, ''), 10) || 0;
+                    const numB = parseInt(roomB.replace(/\D/g, ''), 10) || 0;
+                    return numA - numB;
+                });
 
                 // Helper: Truncate Name
                 function getTruncatedName(name, maxLen = 18) {
@@ -14827,7 +14892,10 @@ Are you sure you want to update these records?
 
                     // Header Logic
                     const hasLocation = (roomInfo.location && roomInfo.location.trim() !== "");
-                    const roomSerialMap = getRoomSerialMap(sessionKey);
+                    
+                    // FIX: Dynamic Serial Number based on actual session of the room
+                    const sessionKeyForSerial = `${session.Date} | ${session.Time}`;
+                    const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sessionKeyForSerial) : {};
                     const serialNo = roomSerialMap[session.Room] || '-';
                     const headerTitle = hasLocation ? roomInfo.location : `Hall #${serialNo}`;
                     const roomSubTitle = hasLocation ? `<span style="font-size: 14pt; font-weight: bold; margin-left: 5px;">(Hall #${serialNo})</span>` : "";
@@ -16057,6 +16125,8 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
         'generate-scribe-report-button',
         'generate-scribe-proforma-button',
         'generate-invigilator-report-button',
+        'generate-room-summary-button',
+        'generate-scribe-master-report-button',
         'generate-absentee-report-button'
     ];
     reportBtns.forEach(id => {
@@ -16372,156 +16442,186 @@ window.handlePythonExtraction = async function (jsonString) {
                 currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
                 getRoomCapacitiesFromStorage(); // Ensure config is loaded
 
-                // 1. Get Session Data
-                const [date, time] = sessionKey.split(' | ');
-
-                // 2. Fetch Allotments
+                // 🛡️ UNIFIED PIPELINE (V13): Bulk Session Handling
                 const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-                const sessionRegularAllotment = allAllotments[sessionKey] || [];
-
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                const sessionScribeMap = allScribeAllotments[sessionKey] || {};
-
-                // 3. Get Serial Numbers (Unified)
-                const roomSerialMap = getRoomSerialMap(sessionKey);
-
-                // 4. Prepare Data Structure
-                const roomGroups = {}; // { "Regular": [rooms], "Distance": [rooms], "Scribe": [rooms] }
-
-                // A. Process Regular/Distance Rooms
-                sessionRegularAllotment.forEach(room => {
-                    const stream = room.stream || "Regular";
-                    if (!roomGroups[stream]) roomGroups[stream] = [];
-
-                    roomGroups[stream].push({
-                        serial: roomSerialMap[room.roomName] || 999,
-                        name: room.roomName,
-                        count: room.students.length,
-                        type: 'normal'
-                    });
-                });
-
-                // B. Process Scribe Rooms
-                // Invert map: { roomName: [students] }
-                const scribeRoomsInv = {};
-                Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
-                    if (!scribeRoomsInv[roomName]) scribeRoomsInv[roomName] = 0;
-                    scribeRoomsInv[roomName]++;
-                });
-
-                if (Object.keys(scribeRoomsInv).length > 0) {
-                    roomGroups['Scribe'] = [];
-                    Object.entries(scribeRoomsInv).forEach(([roomName, count]) => {
-                        roomGroups['Scribe'].push({
-                            serial: roomSerialMap[roomName] || 999,
-                            name: roomName,
-                            count: count,
-                            type: 'scribe'
+                
+                let sessionsToProcess = [];
+                if (filterSessionRadio.checked) {
+                    sessionsToProcess = [sessionKey];
+                } else {
+                    sessionsToProcess = Object.keys(allAllotments);
+                    // Apply "Upcoming Exams only" filter if checked
+                    const filterFutureOnly = document.getElementById('filter-future-only');
+                    if (filterFutureOnly && filterFutureOnly.checked) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        sessionsToProcess = sessionsToProcess.filter(sk => {
+                            const [dStr] = sk.split('|');
+                            if (!dStr) return false;
+                            const [dd, mm, yyyy] = dStr.trim().split(/[\.\-\/]/).map(Number);
+                            return new Date(yyyy, mm - 1, dd) >= today;
                         });
-                    });
+                    }
                 }
 
-                // 5. Sort Streams (Regular First)
-                const sortedStreams = Object.keys(roomGroups).sort((a, b) => {
-                    if (a === "Regular") return -1;
-                    if (b === "Regular") return 1;
-                    if (a === "Scribe") return 1; // Scribe last
-                    if (b === "Scribe") return -1;
-                    return a.localeCompare(b);
+                // Filter out empty sessions
+                sessionsToProcess = sessionsToProcess.filter(sk => {
+                    const regular = allAllotments[sk] || [];
+                    const scribes = allScribeAllotments[sk] || {};
+                    return regular.length > 0 || Object.keys(scribes).length > 0;
                 });
 
-                // 6. Generate HTML
-                let tableContent = '';
-                let grandTotalStudents = 0;
-                let grandTotalRooms = 0;
+                if (sessionsToProcess.length === 0) {
+                    alert("No room allotments found for the selected sessions. Please allot rooms first.");
+                    return;
+                }
 
-                sortedStreams.forEach(stream => {
-                    const rooms = roomGroups[stream];
-                    // Sort rooms by Serial Number
-                    rooms.sort((a, b) => a.serial - b.serial);
+                // Chronological Sort
+                sessionsToProcess.sort(compareSessionStrings);
 
-                    // Stream Header
-                    tableContent += `
-                    <tr class="bg-gray-100 print:bg-gray-100">
-                        <td colspan="3" style="padding: 8px; font-weight: bold; border: 1px solid #000; text-transform: uppercase; font-size: 0.9em;">
-                            ${stream} Stream
-                        </td>
-                    </tr>
-                `;
+                let allPagesHtml = '';
+                let totalRoomsCount = 0;
 
-                    let streamTotal = 0;
-                    rooms.forEach(room => {
-                        const roomInfo = currentRoomConfig[room.name] || {};
-                        const location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
+                sessionsToProcess.forEach(sk => {
+                    const [date, time] = sk.split(' | ');
+                    const sessionRegularAllotment = allAllotments[sk] || [];
+                    const sessionScribeMap = allScribeAllotments[sk] || {};
 
-                        tableContent += `
-                        <tr>
-                            <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 15%; font-weight: bold;">
-                                ${room.serial}
-                            </td>
-                            <td style="padding: 6px; border: 1px solid #000; width: 65%;">
-                                ${location}
-                            </td>
-                            <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 20%; font-weight: bold;">
-                                ${room.count}
-                            </td>
-                        </tr>
-                    `;
-                        streamTotal += room.count;
+                    // 3. Get Serial Numbers (Unified)
+                    const roomSerialMap = getRoomSerialMap(sk);
+
+                    // 4. Prepare Data Structure
+                    const roomGroups = {}; // { "Regular": [rooms], "Distance": [rooms], "Scribe": [rooms] }
+
+                    // A. Process Regular/Distance Rooms
+                    sessionRegularAllotment.forEach(room => {
+                        const stream = room.stream || "Regular";
+                        if (!roomGroups[stream]) roomGroups[stream] = [];
+
+                        roomGroups[stream].push({
+                            serial: roomSerialMap[room.roomName] || 999,
+                            name: room.roomName,
+                            count: room.students.length,
+                            type: 'normal'
+                        });
                     });
 
-                    // Stream Subtotal (Optional, but good for checking)
-                    // tableContent += `<tr><td colspan="2" class="text-right pr-2 font-bold border border-black">Total:</td><td class="text-center font-bold border border-black">${streamTotal}</td></tr>`;
+                    // B. Process Scribe Rooms
+                    const scribeRoomsInv = {};
+                    Object.entries(sessionScribeMap).forEach(([regNo, roomName]) => {
+                        if (!scribeRoomsInv[roomName]) scribeRoomsInv[roomName] = 0;
+                        scribeRoomsInv[roomName]++;
+                    });
 
-                    grandTotalStudents += streamTotal;
-                    grandTotalRooms += rooms.length;
-                });
+                    if (Object.keys(scribeRoomsInv).length > 0) {
+                        roomGroups['Scribe'] = [];
+                        Object.entries(scribeRoomsInv).forEach(([roomName, count]) => {
+                            roomGroups['Scribe'].push({
+                                serial: roomSerialMap[roomName] || 999,
+                                name: roomName,
+                                count: count,
+                                type: 'scribe'
+                            });
+                        });
+                    }
 
-                const reportHtml = `
-                <div class="print-page">
-                    <div class="print-header-group" style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
-                        <h1>${currentCollegeName}</h1>
-                        <h2>Room Allotment Summary</h2>
-                        <h3>${date} &nbsp;|&nbsp; ${time}</h3>
-                    </div>
+                    // 5. Sort Streams (Regular First)
+                    const sortedStreams = Object.keys(roomGroups).sort((a, b) => {
+                        if (a === "Regular") return -1;
+                        if (b === "Regular") return 1;
+                        if (a === "Scribe") return 1; // Scribe last
+                        if (b === "Scribe") return -1;
+                        return a.localeCompare(b);
+                    });
 
-                    <table class="w-full border-collapse border border-black text-sm">
-                        <thead>
-                            <tr class="bg-gray-200 print:bg-gray-200">
-                                <th style="padding: 8px; border: 1px solid #000; text-align: center;">Serial No</th>
-                                <th style="padding: 8px; border: 1px solid #000; text-align: left;">Location / Room</th>
-                                <th style="padding: 8px; border: 1px solid #000; text-align: center;">Students Allotted</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableContent}
-                        </tbody>
-                        <tfoot>
+                    // 6. Generate Session Table Content
+                    let tableContent = '';
+                    let sessionTotalStudents = 0;
+                    let sessionTotalRooms = 0;
+
+                    sortedStreams.forEach(stream => {
+                        const rooms = roomGroups[stream];
+                        rooms.sort((a, b) => a.serial - b.serial);
+
+                        tableContent += `
                             <tr class="bg-gray-100 print:bg-gray-100">
-                                <td colspan="2" style="padding: 8px; border: 1px solid #000; text-align: right; font-weight: bold;">
-                                    GRAND TOTAL (${grandTotalRooms} Rooms):
-                                </td>
-                                <td style="padding: 8px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 1.1em;">
-                                    ${grandTotalStudents}
+                                <td colspan="3" style="padding: 8px; font-weight: bold; border: 1px solid #000; text-transform: uppercase; font-size: 0.9em;">
+                                    ${stream} Stream
                                 </td>
                             </tr>
-                        </tfoot>
-                    </table>
-                    
-                    <div style="margin-top: 40px; display: flex; justify-content: space-between;">
-                        <div class="text-xs text-gray-500">Generated by ExamFlow</div>
-                        <div class="text-center">
-                            <div style="border-top: 1px solid #000; width: 200px; padding-top: 5px; font-weight: bold;">
-                                Chief Superintendent
+                        `;
+
+                        rooms.forEach(room => {
+                            const roomInfo = currentRoomConfig[room.name] || {};
+                            const location = roomInfo.location ? roomInfo.location : `Hall #${room.serial}`;
+
+                            tableContent += `
+                                <tr>
+                                    <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 15%; font-weight: bold;">
+                                        ${room.serial}
+                                    </td>
+                                    <td style="padding: 6px; border: 1px solid #000; width: 65%;">
+                                        ${location}
+                                    </td>
+                                    <td style="padding: 6px; border: 1px solid #000; text-align: center; width: 20%; font-weight: bold;">
+                                        ${room.count}
+                                    </td>
+                                </tr>
+                            `;
+                            sessionTotalStudents += room.count;
+                            sessionTotalRooms++;
+                        });
+                    });
+
+                    totalRoomsCount += sessionTotalRooms;
+
+                    allPagesHtml += `
+                        <div class="print-page">
+                            <div class="print-header-group" style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
+                                <h1>${currentCollegeName}</h1>
+                                <h2>Room Allotment Summary</h2>
+                                <h3>${date} &nbsp;|&nbsp; ${time}</h3>
+                            </div>
+
+                            <table class="w-full border-collapse border border-black text-sm">
+                                <thead>
+                                    <tr class="bg-gray-200 print:bg-gray-200">
+                                        <th style="padding: 8px; border: 1px solid #000; text-align: center;">Serial No</th>
+                                        <th style="padding: 8px; border: 1px solid #000; text-align: left;">Location / Room</th>
+                                        <th style="padding: 8px; border: 1px solid #000; text-align: center;">Students Allotted</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${tableContent}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="bg-gray-100 print:bg-gray-100">
+                                        <td colspan="2" style="padding: 8px; border: 1px solid #000; text-align: right; font-weight: bold;">
+                                            SESSION TOTAL (${sessionTotalRooms} Rooms):
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #000; text-align: center; font-weight: bold; font-size: 1.1em;">
+                                            ${sessionTotalStudents}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            
+                            <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+                                <div class="text-xs text-gray-500">Generated by ExamFlow</div>
+                                <div class="text-center">
+                                    <div style="border-top: 1px solid #000; width: 200px; padding-top: 5px; font-weight: bold;">
+                                        Chief Superintendent
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            `;
+                    `;
+                });
 
-                reportOutputArea.innerHTML = reportHtml;
+                reportOutputArea.innerHTML = allPagesHtml;
                 reportOutputArea.style.display = 'block';
-                reportStatus.textContent = `Generated summary for ${grandTotalRooms} rooms.`;
+                reportStatus.textContent = `Generated summary for ${totalRoomsCount} total rooms across allotted sessions.`;
                 reportControls.classList.remove('hidden');
                 lastGeneratedReportType = "Room_Summary";
 
@@ -16564,9 +16664,146 @@ window.handlePythonExtraction = async function (jsonString) {
     const originalDisableFuncV2 = window.real_disable_all_report_buttons;
     window.real_disable_all_report_buttons = function (disabled) {
         if (originalDisableFuncV2) originalDisableFuncV2(disabled);
-        const btn = document.getElementById('generate-room-summary-button');
-        if (btn) btn.disabled = disabled;
+        const b9 = document.getElementById('generate-room-summary-button');
+        if (b9) b9.disabled = disabled;
+        const b10 = document.getElementById('generate-scribe-master-report-button');
+        if (b10) b10.disabled = disabled;
     };
+
+    // --- (V12.8) Event listener for "Scribe Assistance Master Report" ---
+    const generateScribeMasterBtn = document.getElementById('generate-scribe-master-report-button');
+    if (generateScribeMasterBtn) {
+        generateScribeMasterBtn.addEventListener('click', async () => {
+            generateScribeMasterBtn.disabled = true;
+            generateScribeMasterBtn.textContent = "Generating...";
+            reportOutputArea.innerHTML = "";
+            reportControls.classList.add('hidden');
+            roomCsvDownloadContainer.innerHTML = "";
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            try {
+                lastGeneratedReportType = "Scribe_Assistance_Master_Report";
+                reportOutputArea.innerHTML = "<div class='p-8 text-center'>⏳ Processing Scribe Data...</div>";
+                
+                const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
+                const scribeRegNos = new Set(scribeListRaw.map(s => (s.regNo || "").toString().trim()));
+                const examMap = {}; 
+                
+                let students = allStudentData || [];
+                if (students.length === 0) { students = await loadExamDataIDB() || []; }
+
+                students.forEach(s => {
+                    const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || s.RegisterNo || s.regNo || "").toString().trim();
+                    if (regNo && scribeRegNos.has(regNo)) {
+                        const eName = s['Exam Name'] || s.ExamName || "Unspecified Exam";
+                        if (!examMap[eName]) examMap[eName] = new Map();
+                        const scribeEntry = scribeListRaw.find(gs => (gs.regNo || "").toString().trim() === regNo);
+                        const studentName = scribeEntry ? (scribeEntry.name || scribeEntry.studentName) : (s['Student Name'] || s.Name || s.studentName || "Unknown Student");
+                        examMap[eName].set(regNo, studentName);
+                    }
+                });
+
+                // REFINED: Only include exams that have at least one scribe
+                const activeExamNames = Object.keys(examMap).sort();
+
+                let html = `
+                    <div class="print:hidden mb-6 bg-pink-50 p-6 rounded-xl border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 bg-pink-100 text-pink-600 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-black text-pink-900 uppercase">Scribe Assistance Master Report</h3>
+                                <p class="text-xs text-pink-600 font-bold">Filter by Exam Name to view specific candidates.</p>
+                            </div>
+                        </div>
+                        <div class="w-full sm:w-80">
+                            <label class="block text-[10px] font-bold text-pink-700 uppercase mb-1 ml-1">Select Exam Name:</label>
+                            <select id="scribe-master-exam-filter" class="block w-full p-3 border-2 border-pink-200 rounded-xl text-sm font-bold text-pink-900 bg-white focus:border-pink-500 focus:ring-0 transition-all cursor-pointer">
+                                <option value="all">View All Exams (Grouped)</option>
+                                ${activeExamNames.map(name => `<option value="${name}">${name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div id="scribe-master-report-content" class="space-y-8"></div>
+                `;
+                
+                reportOutputArea.innerHTML = html;
+                reportOutputArea.style.display = 'block';
+                reportControls.classList.remove('hidden');
+                
+                const renderScribeTable = (filter) => {
+                    const contentArea = document.getElementById('scribe-master-report-content');
+                    if (!contentArea) return;
+                    const cName = localStorage.getItem(COLLEGE_NAME_KEY) || "Institution";
+                    let innerHtml = "";
+                    const sortedExams = (filter === "all") ? activeExamNames : [filter];
+                    
+                    sortedExams.forEach(en => {
+                        const studentsMap = examMap[en];
+                        if (!studentsMap) return;
+                        const studentList = Array.from(studentsMap.entries()).map(([rn, nm]) => ({ regNo: rn, name: nm }));
+                        innerHtml += `
+                            <div class="print-page bg-white p-10 mb-8 border border-gray-200 shadow-xl rounded-2xl max-w-[210mm] mx-auto overflow-hidden relative">
+                                <div class="text-center border-b-4 border-pink-600 pb-6 mb-8">
+                                    <h1 class="text-3xl font-black text-gray-900 uppercase tracking-tighter leading-none">${cName}</h1>
+                                    <div class="inline-block bg-pink-50 text-pink-700 px-4 py-1 rounded-full text-sm font-black uppercase mt-3 border border-pink-100">Scribe Assistance Report</div>
+                                    <div class="text-sm text-gray-500 font-bold mt-4 uppercase flex items-center justify-center gap-2">
+                                        <span class="w-8 h-px bg-gray-300"></span>
+                                        Exam: ${en}
+                                        <span class="w-8 h-px bg-gray-300"></span>
+                                    </div>
+                                </div>
+                                <table class="w-full border-separate border-spacing-0 border border-gray-300 rounded-lg overflow-hidden">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="border-b border-r border-gray-300 p-4 text-xs font-black uppercase text-gray-700 w-20">Sl.No</th>
+                                            <th class="border-b border-r border-gray-300 p-4 text-xs font-black uppercase text-gray-700">Register Number</th>
+                                            <th class="border-b border-gray-300 p-4 text-xs font-black uppercase text-gray-700 text-left">Student Name</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        ${studentList.map((s, i) => `
+                                            <tr class="${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}">
+                                                <td class="border-r border-gray-300 p-4 text-center text-sm font-bold text-gray-500">${i + 1}</td>
+                                                <td class="border-r border-gray-300 p-4 text-center text-sm font-black font-mono text-pink-700 tracking-wider">${s.regNo}</td>
+                                                <td class="p-4 text-sm font-bold text-gray-800">${s.name}</td>
+                                            </tr>`).join('')}
+                                    </tbody>
+                                </table>
+                                <div class="mt-12 flex justify-between items-end px-2">
+                                    <div class="text-[10px] text-gray-400 font-bold italic flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        Generated via ExamFlow Orchestrator
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="w-56 border-b-2 border-gray-900 mb-2"></div>
+                                        <div class="text-sm font-black text-gray-900 uppercase tracking-widest">Chief Superintendent</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    });
+                    if (!innerHtml) innerHtml = `
+                        <div class="p-16 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                            <p class='text-gray-500 font-bold'>No scribe assistance data found.</p>
+                            <p class='text-xs text-gray-400 mt-2'>Note: Ensure students are tagged with an "Exam Name" and added to the Scribe List.</p>
+                        </div>`;
+                    contentArea.innerHTML = innerHtml;
+                };
+
+                const filterEl = document.getElementById('scribe-master-exam-filter');
+                if (filterEl) filterEl.addEventListener('change', (e) => renderScribeTable(e.target.value));
+                renderScribeTable("all");
+
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
+            } finally {
+                generateScribeMasterBtn.disabled = false;
+                generateScribeMasterBtn.textContent = "10-Generate Scribe Assistance Master Report";
+            }
+        });
+    }
     // ==========================================
     // ==========================================
     // ☢️ NUKE & SETTINGS MANAGER
@@ -20290,19 +20527,38 @@ if (displayLoc) {
         const newBackupBtn = backupDataButton.cloneNode(true);
         backupDataButton.parentNode.replaceChild(newBackupBtn, backupDataButton);
 
-        newBackupBtn.addEventListener('click', () => {
+        newBackupBtn.addEventListener('click', async () => {
             const backup = {};
             // Gather all data defined in your ALL_DATA_KEYS constant
             if (typeof ALL_DATA_KEYS !== 'undefined') {
-                ALL_DATA_KEYS.forEach(key => {
-                    const val = localStorage.getItem(key);
-                    if (val) backup[key] = val;
-                });
+                for (const key of ALL_DATA_KEYS) {
+                    // Check for student data key (IndexedDB)
+                    if (key === 'examBaseData') {
+                        try {
+                            const idbData = await loadExamDataIDB();
+                            if (idbData && idbData.length > 0) {
+                                backup[key] = idbData;
+                            }
+                        } catch (err) {
+                            console.error("Backup Error: Failed to load student data from IDB", err);
+                        }
+                    } else {
+                        const val = localStorage.getItem(key);
+                        if (val) backup[key] = val;
+                    }
+                }
             } else {
                 // Fallback if constant missing
-                Object.keys(localStorage).forEach(key => {
-                    if(key.startsWith('exam')) backup[key] = localStorage.getItem(key);
-                });
+                for (const key of Object.keys(localStorage)) {
+                    if (key.startsWith('exam')) {
+                        backup[key] = localStorage.getItem(key);
+                    }
+                }
+                // Even in fallback, try to get IDB data
+                try {
+                    const idbData = await loadExamDataIDB();
+                    if (idbData && idbData.length > 0) backup['examBaseData'] = idbData;
+                } catch(e) {}
             }
 
             // Create and download file
@@ -20381,6 +20637,7 @@ if (displayLoc) {
                         await syncDataToCloud('allocation');
                         await syncDataToCloud('staff');
                         await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                        await syncDataToCloud('baseData'); // ☁️ SYNC STUDENT DATABASE
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
@@ -20691,7 +20948,117 @@ window.closeDialModal = closeDialModal;
 window.confirmDialSelection = confirmDialSelection;
 
 
-// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Fixed & Safe) ---
+
+// --- GENERATOR: ROOM ALLOTMENT SUMMARY PDF (Professional & Integrated) ---
+function generateRoomSummaryPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    
+    // Feedback Button State
+    const btn = document.getElementById('download-pdf-report-btn');
+    if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
+
+    try {
+        // 1. Professional Header
+        const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+        
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(31, 41, 55); // slate-800
+        doc.text(collegeName.toUpperCase(), 105, 18, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(75, 85, 99); // slate-600
+        doc.text("Room Allotment Summary", 105, 25, { align: "center" });
+        
+        // Extract Session Info from HTML (h3)
+        const sessionInfo = document.querySelector('#report-output-area h3')?.innerText.trim() || "";
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(sessionInfo, 105, 32, { align: "center" });
+
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 105, 38, { align: "center" });
+
+        // 2. Generate Table from HTML
+        const tableEl = document.querySelector('#report-output-area table');
+        if (!tableEl) throw new Error("Table not found in report area.");
+
+        doc.autoTable({
+            html: tableEl,
+            startY: 45,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: 9,
+                cellPadding: 4,
+                valign: 'middle',
+                lineColor: [229, 231, 235], // gray-200
+                lineWidth: 0.1
+            },
+            headStyles: {
+                fillColor: [243, 244, 246], // Gray-100 background
+                textColor: [31, 41, 55],    // Gray-800 text
+                fontStyle: 'bold',
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [209, 213, 219]
+            },
+            columnStyles: {
+                0: { halign: 'center', fontStyle: 'bold', cellWidth: 30 }, // Serial No
+                1: { halign: 'left', cellWidth: 'auto' },                // Location
+                2: { halign: 'center', fontStyle: 'bold', cellWidth: 40 } // Students Allotted
+            },
+            didParseCell: function(data) {
+                // Style Stream Headers (Subheaders)
+                if (data.section === 'body' && data.cell.raw && data.cell.raw.innerText.includes('Stream')) {
+                    data.cell.styles.fillColor = [249, 250, 251]; // gray-50
+                    data.cell.styles.textColor = [55, 65, 81];    // gray-700
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fontSize = 10;
+                }
+
+                // Style Grand Total Row (at bottom)
+                if (data.row.section === 'foot' || (data.cell.raw && data.cell.raw.innerText.includes('GRAND TOTAL'))) {
+                    data.cell.styles.fillColor = [31, 41, 55]; // slate-800
+                    data.cell.styles.textColor = [255, 255, 255];
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fontSize = 11;
+                }
+            }
+        });
+
+        // 3. Footer Signature Section
+        const finalY = doc.lastAutoTable.finalY || 50;
+        if (finalY + 40 > 280) doc.addPage();
+        
+        const footerY = doc.addPage ? 30 : finalY + 30; // Handle page break logic simplified
+        const actualFooterY = (finalY + 40 > 280) ? 30 : finalY + 30;
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(31, 41, 55);
+        
+        doc.line(20, actualFooterY, 70, actualFooterY);
+        doc.text("Verified By", 45, actualFooterY + 5, { align: 'center' });
+
+        doc.line(140, actualFooterY, 190, actualFooterY);
+        doc.text("Chief Superintendent", 165, actualFooterY + 5, { align: 'center' });
+
+        // 4. Save File
+        doc.save(`Room_Allotment_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
+
+    } catch (e) {
+        console.error("Room Summary PDF Gen Error:", e);
+        alert("Error generating PDF: " + e.message);
+    } finally {
+        if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
+    }
+}
+
+
+// --- GENERATOR: INVIGILATOR REQUIREMENT SUMMARY (Improved & Professional) ---
 function generateInvigilatorSummaryPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -20701,27 +21068,32 @@ function generateInvigilatorSummaryPDF() {
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
 
     try {
-        // 1. Header Information
+        // 1. Professional Header
         const collegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
         
-        doc.setFontSize(14);
+        doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text(collegeName.toUpperCase(), 105, 15, { align: "center" });
+        doc.setTextColor(31, 41, 55); // slate-800
+        doc.text(collegeName.toUpperCase(), 105, 18, { align: "center" });
         
-        doc.setFontSize(11);
-        doc.text("Invigilator Requirement Summary", 105, 22, { align: "center" });
+        doc.setFontSize(12);
+        doc.setTextColor(75, 85, 99); // slate-600
+        doc.text("Invigilator Requirement Summary", 105, 25, { align: "center" });
         
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+        doc.text(`Generated: ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}`, 105, 31, { align: "center" });
 
-        // Check for "Upcoming Only" Filter Badge (matches HTML visual)
-        const filterBadge = document.querySelector('.print-header-group span.bg-teal-100');
+        // Filter Badge (If applicable)
+        const filterBadge = document.querySelector('.print-page .bg-emerald-100'); 
         if (filterBadge) {
-            doc.setTextColor(13, 148, 136); // Teal Color to match HTML
+            doc.setFillColor(209, 250, 229); // emerald-100
+            doc.roundedRect(80, 34, 50, 6, 3, 3, 'F');
+            doc.setTextColor(6, 95, 70); // emerald-800
+            doc.setFontSize(8);
             doc.setFont("helvetica", "bold");
-            doc.text("Filtered: Upcoming Exams Only", 105, 34, { align: "center" });
-            doc.setTextColor(0, 0, 0); // Reset color
+            doc.text("Upcoming Exams Only", 105, 38, { align: "center" });
+            doc.setTextColor(0, 0, 0); 
         }
 
         // 2. Generate Table from HTML
@@ -20730,59 +21102,78 @@ function generateInvigilatorSummaryPDF() {
 
         doc.autoTable({
             html: tableEl,
-            startY: 40,
+            startY: 45,
             theme: 'grid',
             styles: {
                 font: 'helvetica',
                 fontSize: 9,
                 cellPadding: 3,
                 valign: 'middle',
-                lineColor: [200, 200, 200],
+                lineColor: [229, 231, 235], // gray-200
                 lineWidth: 0.1
             },
             headStyles: {
                 fillColor: [243, 244, 246], // Gray-100 background
-                textColor: 20,              // Dark Gray text
+                textColor: [31, 41, 55],    // Gray-800 text
                 fontStyle: 'bold',
-                halign: 'left',
+                halign: 'center',
                 lineWidth: 0.1,
-                lineColor: [200, 200, 200]
+                lineColor: [209, 213, 219]
             },
             columnStyles: {
-                0: { fontStyle: 'bold', cellWidth: 40 }, // Date | Time column
-                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] } // Total Column (Teal)
+                0: { fontStyle: 'bold', cellWidth: 40, halign: 'left' }, // Date | Time column
+                3: { halign: 'center', fontStyle: 'bold', textColor: [13, 148, 136] }, // Base Column
+                4: { halign: 'center', fontStyle: 'bold', textColor: [217, 119, 6] },  // Reserve Column
+                5: { halign: 'center', fontStyle: 'bold', textColor: [190, 18, 60] }   // Total Column
             },
             didParseCell: function(data) {
-                // Formatting Hacks: Clean up HTML content inside cells
-                if (data.section === 'body' && data.column.index === 1) {
-                    // Safety check for cell raw data
-                    if (data.cell && data.cell.raw && data.cell.raw.innerText) {
-                        let text = data.cell.raw.innerText;
-                        // Replace double newlines with single to save vertical space
-                        data.cell.text = text.split('\n').filter(t => t.trim().length > 0).join('\n');
+                // Formatting Hacks: Clean up HTML content inside cells & Fix unprofessional characters
+                if (data.cell && data.cell.raw && data.cell.raw.innerText) {
+                    let rawText = data.cell.raw.innerText;
+                    // Replace problematic characters and abbreviations
+                    let cleanText = rawText.replace(/▶/g, ":")
+                                           .replace(/Scr/g, "Scribes")
+                                           .replace(/Inv/g, "Invigilators");
+                    
+                    if (data.section === 'body' && data.column.index === 1) {
+                        data.cell.text = cleanText.split('\n').filter(t => t.trim().length > 0).join('\n');
+                    } else {
+                        data.cell.text = cleanText.trim();
                     }
                 }
                 
-                // Style the Grand Total Row (Green Background)
-                // 🟢 FIX: Added robust safety check for row.raw and innerText
+                // Style the Grand Total Row (Professional Dark Header)
                 if (data.row && data.row.raw && typeof data.row.raw.innerText === 'string') {
                     if (data.row.raw.innerText.toUpperCase().includes("GRAND TOTAL")) {
-                        data.cell.styles.fillColor = [240, 253, 244]; // Light Green (Green-50)
-                        data.cell.styles.textColor = [13, 148, 136];  // Teal Text
+                        data.cell.styles.fillColor = [31, 41, 55]; // Slate-800
+                        data.cell.styles.textColor = [255, 255, 255];
                         data.cell.styles.fontStyle = 'bold';
+                        if(data.column.index === 5) data.cell.styles.fontSize = 12;
                     }
                 }
             }
         });
 
-        // 3. Footer Note
-        const finalY = doc.lastAutoTable.finalY || 40;
+        // 3. Footer Note (Improved consistency)
+        const finalY = doc.lastAutoTable.finalY || 50;
+        doc.setDrawColor(229, 231, 235);
+        doc.line(15, finalY + 5, 195, finalY + 5);
+
         doc.setFontSize(8);
-        doc.setTextColor(100);
-        doc.text("Note: Calculation based on 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.", 14, finalY + 10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(107, 114, 128); // gray-500
+        doc.text("Calculation Rules & Notes:", 15, finalY + 10);
+        
+        doc.setFont("helvetica", "normal");
+        const noteLines = [
+            "1. Base requirement: 1 Invigilator per 30 Candidates (Normal) and 1 Invigilator per 5 Scribes.",
+            "2. A 10 percent (10%) Reserve Buffer is applied to the base requirement for each individual session.",
+            "3. Total Duties represent the sum of Base Requirements and the Reserve Buffer."
+        ];
+        doc.text(noteLines, 15, finalY + 14);
 
         // 4. Save File
-        doc.save(`Invigilator_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
+        doc.save(`Invigilator_Requirement_Summary_${new Date().toISOString().slice(0,10)}.pdf`);
 
     } catch (e) {
         console.error("PDF Gen Error:", e);
@@ -22573,6 +22964,7 @@ window.downloadInvigilationListPDF = async function () {
                     await syncDataToCloud('staff');
                     // FIX: Force Sync should trust the local data 100%
                     await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                    await syncDataToCloud('baseData'); // ☁️ FORCE MASTER SYNC
                     // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
                     // Iteratively sync all sessions (Ensures V2 documents are fresh)
