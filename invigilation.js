@@ -2419,6 +2419,14 @@ async function syncSlotsToCloud(affectedKey = null) {
             const existingShardIds = new Set();
             existingShardsSnap.forEach(s => existingShardIds.add(s.id));
 
+            // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
+            // If local storage is completely empty, do NOT delete cloud shards unless explicitly requested.
+            // This prevents a fresh localhost connection from destroying the live database.
+            if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
+                console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe.");
+                return; 
+            }
+
             const shards = {};
             Object.keys(localSlots).forEach(k => {
                 const sid = getShardId(k);
@@ -7215,6 +7223,135 @@ window.downloadMasterBackup = function () {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+window.emergencyLogRecovery = async function() {
+    if (!confirm("⚠️ EMERGENCY RECOVERY ⚠️\n\nThis will scan all activity logs on the server to rebuild lost Volunteering and Unavailability data.\n\nAre you sure you want to proceed?")) return;
+
+    try {
+        updateSyncStatus("Fetching Logs for Recovery...", "syncing");
+        
+        // Fetch logs
+        const logsRef = collection(db, "colleges", currentCollegeId, "logs");
+        // Using getDocs to fetch all. For safety, we pull all and sort client-side.
+        const snapshot = await getDocs(logsRef);
+        
+        let logs = [];
+        snapshot.forEach(doc => logs.push(doc.data()));
+        
+        if (logs.length === 0) {
+            alert("❌ No logs found on the server to recover from.");
+            updateSyncStatus("Synced", "success");
+            return;
+        }
+
+        // Sort oldest to newest
+        logs.sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+
+        // Regex helpers
+        function extractDateAndTime(str) {
+            const match = str.match(/(\d{2}\.\d{2}\.\d{4} \| \d{2}:\d{2} [AP]M)/i);
+            return match ? match[1] : null;
+        }
+        function timeToSession(tStr) {
+            const upper = tStr.toUpperCase();
+            return (upper.includes("PM") || upper.includes("12:") || upper.includes("12.")) ? "AN" : "FN";
+        }
+
+        let recoveredCount = 0;
+
+        logs.forEach(log => {
+            const a = log.a;
+            const d = log.d || "";
+            const email = log.u;
+            
+            if (!email) return;
+
+            if (a === 'Volunteered' || a === 'Admin Override Add') {
+                const dt = extractDateAndTime(d);
+                if (dt) {
+                    if (!invigilationSlots[dt]) invigilationSlots[dt] = { assigned: [], unavailable: [] };
+                    if (!invigilationSlots[dt].assigned) invigilationSlots[dt].assigned = [];
+                    if (!invigilationSlots[dt].assigned.includes(email)) {
+                        invigilationSlots[dt].assigned.push(email);
+                        recoveredCount++;
+                    }
+                }
+            } 
+            else if (a === 'Duty Cancelled' || a === 'Admin Force Remove' || a === 'Admin Removed (Exchange Cleared)') {
+                const dt = extractDateAndTime(d);
+                if (dt && invigilationSlots[dt] && invigilationSlots[dt].assigned) {
+                    invigilationSlots[dt].assigned = invigilationSlots[dt].assigned.filter(e => e !== email);
+                }
+            }
+            else if (a === 'Advance Unavailability' || a === 'Session Unavailability' || d.includes('unavailable')) {
+                let dates = [];
+                const wholeMatch = d.match(/WHOLE DAY on (\d{2}\.\d{2}\.\d{4})/i);
+                const fnanMatch = d.match(/(\d{2}\.\d{2}\.\d{4})\s*\((FN|AN)\)/i);
+                const dtMatch = extractDateAndTime(d);
+
+                if (wholeMatch) {
+                    dates.push({ date: wholeMatch[1], session: 'FN' });
+                    dates.push({ date: wholeMatch[1], session: 'AN' });
+                } else if (fnanMatch) {
+                    dates.push({ date: fnanMatch[1], session: fnanMatch[2].toUpperCase() });
+                } else if (dtMatch) {
+                    const split = dtMatch.split(' | ');
+                    dates.push({ date: split[0].trim(), session: timeToSession(split[1]) });
+                }
+
+                dates.forEach(({date, session}) => {
+                    if (!advanceUnavailability[date]) advanceUnavailability[date] = { FN: [], AN: [] };
+                    if (!advanceUnavailability[date][session]) advanceUnavailability[date][session] = [];
+                    if (!advanceUnavailability[date][session].includes(email)) {
+                        advanceUnavailability[date][session].push(email);
+                        recoveredCount++;
+                    }
+                });
+            }
+            else if (a === 'Advance Unavailability Removed') {
+                let dates = [];
+                const wholeMatch = d.match(/Whole Day (\d{2}\.\d{2}\.\d{4})/i);
+                const fnanMatch = d.match(/(\d{2}\.\d{2}\.\d{4})\s*\((FN|AN)\)/i);
+
+                if (wholeMatch) {
+                    dates.push({ date: wholeMatch[1], session: 'FN' });
+                    dates.push({ date: wholeMatch[1], session: 'AN' });
+                } else if (fnanMatch) {
+                    dates.push({ date: fnanMatch[1], session: fnanMatch[2].toUpperCase() });
+                }
+
+                dates.forEach(({date, session}) => {
+                    if (advanceUnavailability[date] && advanceUnavailability[date][session]) {
+                        advanceUnavailability[date][session] = advanceUnavailability[date][session].filter(e => e !== email);
+                    }
+                });
+            }
+        });
+
+        // Save back to local storage
+        localStorage.setItem('invigilationSlots', JSON.stringify(invigilationSlots));
+        localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(advanceUnavailability));
+        
+        // Sync authoritatively to cloud
+        await syncSlotsToCloud("FORCE_OVERWRITE");
+        
+        // Update root doc for advanceUnavailability
+        const collegeRef = doc(db, "colleges", currentCollegeId);
+        await updateDoc(collegeRef, {
+            invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
+        });
+
+        if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+
+        alert(`✅ Recovery Complete!\n\nSuccessfully reconstructed ${recoveredCount} data points from activity logs.\n\nThe page will now reload to apply the recovered data.`);
+        location.reload();
+
+    } catch (error) {
+        console.error("Recovery failed:", error);
+        alert("❌ Recovery Failed: " + error.message);
+        updateSyncStatus("Error", "error");
+    }
 }
 
 window.handleMasterRestore = function (input) {
