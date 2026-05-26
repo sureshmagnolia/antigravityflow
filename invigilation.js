@@ -10351,19 +10351,12 @@ window.downloadVacationCertificates = function() {
         if (staff.status === 'archived') return;
 
         const dutyDates = [];
-        const sessions = [];
 
         Object.keys(invigilationSlots).forEach(key => {
             const slot = invigilationSlots[key];
             const dateObj = parseDate(key);
             
             if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
-                const [dStr, tStr] = key.split(' | ');
-                const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
-                const sessCode = isAN ? "AN" : "FN";
-                
-                sessions.push(`${dStr} (${sessCode})`);
-
                 const dateKey = dateObj.toDateString();
                 if (!dutyDates.some(d => d.toDateString() === dateKey)) {
                     dutyDates.push(dateObj);
@@ -10378,7 +10371,6 @@ window.downloadVacationCertificates = function() {
             name: staff.name,
             desig: staff.designation || "",
             dept: staff.dept || "",
-            count: sessions.length,
             dates: dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ')
         });
     });
@@ -10435,7 +10427,7 @@ window.downloadVacationCertificates = function() {
         doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
         
-        const bodyText = `This is to certify that ${data.name}, ${data.desig} of the Department of ${data.dept} has performed ${data.count} session(s) of vacation duty during the vacation period ${startStr} to ${endStr}.`;
+        const bodyText = `This is to certify that ${data.name}, ${data.desig} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${startStr} to ${endStr}.`;
         const splitText = doc.splitTextToSize(bodyText, 170);
         doc.text(splitText, 20, yOffset + 65, { align: "justify", maxWidth: 170 });
 
