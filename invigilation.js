@@ -10434,21 +10434,16 @@ window.downloadVacationCertificates = function() {
         doc.setLineWidth(0.4);
         doc.line(10, yOffset + 42, 200, yOffset + 42);
 
-        // No: and Date:
-        doc.setFontSize(10);
-        doc.text("No: EXAM/VAC-CERT/", 10, yOffset + 48);
-        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 200, yOffset + 48, { align: "right" });
-
         // Certificate Title
         doc.setFontSize(16);
         doc.setCharSpace(2);
-        doc.text("DUTY CERTIFICATE", 105, yOffset + 60, { align: "center" });
+        doc.text("DUTY CERTIFICATE", 105, yOffset + 55, { align: "center" });
         doc.setCharSpace(0);
 
         // Divider
         doc.setDrawColor(0);
         doc.setLineWidth(0.2);
-        doc.line(80, yOffset + 63, 130, yOffset + 63);
+        doc.line(80, yOffset + 58, 130, yOffset + 58);
 
         // Body Text
         doc.setFont("times", "normal");
@@ -10457,7 +10452,7 @@ window.downloadVacationCertificates = function() {
         
         const bodyText = `This is to certify that ${data.name} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${periodStart} to ${periodEnd}.`;
         const splitText = doc.splitTextToSize(bodyText, 170);
-        doc.text(splitText, 20, yOffset + 75, { align: "justify", maxWidth: 170 });
+        doc.text(splitText, 20, yOffset + 72, { align: "justify", maxWidth: 170 });
 
         // Dates Section
         doc.setFont("times", "bold");
