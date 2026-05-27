@@ -10687,6 +10687,12 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // V89: NEW SAVE STRATEGY
     saveQpCodesButton.addEventListener('click', () => {
+        // 🛡️ [V95]: Safety check for locked state (prevents programmatic bypass)
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            return;
+        }
+
         const sessionKey = sessionSelectQP.value;
         if (!sessionKey) {
             alert("No session selected.");
@@ -12965,6 +12971,32 @@ if (saveScribeBtn) {
 
     // --- NEW: QP Lock Toggle Listener ---
     const toggleQPLockBtn = document.getElementById('toggle-qp-lock-btn');
+    
+    // 🛡️ [V95]: Visual Feedback Helper for Locked State
+    window.flashQPLock = function() {
+        if (!toggleQPLockBtn) return;
+        
+        // 1. Shake Animation
+        toggleQPLockBtn.classList.add('animate-shake', 'ring-2', 'ring-red-500', 'ring-offset-1');
+        
+        // 2. Temporary Floating Tooltip
+        const tip = document.createElement('div');
+        tip.className = "absolute -top-8 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg z-50 whitespace-nowrap animate-bounce";
+        tip.innerHTML = "⚠️ UNLOCK FIRST";
+        
+        // Ensure parent is relative for positioning
+        const parent = toggleQPLockBtn.parentElement;
+        if (parent) {
+            parent.style.position = 'relative';
+            parent.appendChild(tip);
+        }
+
+        setTimeout(() => {
+            toggleQPLockBtn.classList.remove('animate-shake', 'ring-2', 'ring-red-500', 'ring-offset-1');
+            tip.remove();
+        }, 2000);
+    };
+
     if (toggleQPLockBtn) {
         toggleQPLockBtn.addEventListener('click', () => {
             isQPLocked = !isQPLocked;
@@ -23009,6 +23041,13 @@ window.downloadInvigilationListPDF = async function () {
 
     // --- 📋 CLIPBOARD QP CODE IMPORTER (Fuzzy Match & Stream Aware) ---
     window.importQPFromClipboard = async function() {
+        // 🛡️ [V95]: Strictly respect the UI lock
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            console.warn("Clipboard import blocked: QP Codes are locked.");
+            return;
+        }
+
         try {
             const text = await navigator.clipboard.readText();
             if (!text || text.trim().length === 0) {
