@@ -4864,6 +4864,8 @@ if (toggleButton && sidebar) {
 
     // --- SCRIBE ALLOTMENT LOCK TOGGLE ---
     const toggleScribeAllotmentLockBtn = document.getElementById('toggle-scribe-allotment-lock-btn');
+    const clearAllScribesBtn = document.getElementById('clear-all-scribes-btn');
+
     if (toggleScribeAllotmentLockBtn) {
         toggleScribeAllotmentLockBtn.addEventListener('click', () => {
             isScribeAllotmentLocked = !isScribeAllotmentLocked;
@@ -4873,13 +4875,15 @@ if (toggleButton && sidebar) {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                 <span>List Locked</span>
             `;
-                toggleScribeAllotmentLockBtn.className = "text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm";
+                toggleScribeAllotmentLockBtn.className = "text-[10px] md:text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-200 transition shadow-sm font-bold";
+                if (clearAllScribesBtn) clearAllScribesBtn.classList.add('hidden');
             } else {
                 toggleScribeAllotmentLockBtn.innerHTML = `
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 1 1 9 0v3.75M3.75 21.75h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H3.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
                 <span>Unlocked</span>
             `;
-                toggleScribeAllotmentLockBtn.className = "text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded hover:bg-red-100 transition shadow-sm";
+                toggleScribeAllotmentLockBtn.className = "text-[10px] md:text-xs flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 transition shadow-sm font-bold";
+                if (clearAllScribesBtn) clearAllScribesBtn.classList.remove('hidden');
             }
 
             // Refresh the list to apply disabled state
@@ -10687,6 +10691,12 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // V89: NEW SAVE STRATEGY
     saveQpCodesButton.addEventListener('click', () => {
+        // 🛡️ [V95]: Safety check for locked state (prevents programmatic bypass)
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            return;
+        }
+
         const sessionKey = sessionSelectQP.value;
         if (!sessionKey) {
             alert("No session selected.");
@@ -12965,6 +12975,32 @@ if (saveScribeBtn) {
 
     // --- NEW: QP Lock Toggle Listener ---
     const toggleQPLockBtn = document.getElementById('toggle-qp-lock-btn');
+    
+    // 🛡️ [V95]: Visual Feedback Helper for Locked State
+    window.flashQPLock = function() {
+        if (!toggleQPLockBtn) return;
+        
+        // 1. Shake Animation
+        toggleQPLockBtn.classList.add('animate-shake', 'ring-2', 'ring-red-500', 'ring-offset-1');
+        
+        // 2. Temporary Floating Tooltip
+        const tip = document.createElement('div');
+        tip.className = "absolute -top-8 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg z-50 whitespace-nowrap animate-bounce";
+        tip.innerHTML = "⚠️ UNLOCK FIRST";
+        
+        // Ensure parent is relative for positioning
+        const parent = toggleQPLockBtn.parentElement;
+        if (parent) {
+            parent.style.position = 'relative';
+            parent.appendChild(tip);
+        }
+
+        setTimeout(() => {
+            toggleQPLockBtn.classList.remove('animate-shake', 'ring-2', 'ring-red-500', 'ring-offset-1');
+            tip.remove();
+        }, 2000);
+    };
+
     if (toggleQPLockBtn) {
         toggleQPLockBtn.addEventListener('click', () => {
             isQPLocked = !isQPLocked;
@@ -19106,6 +19142,31 @@ window.toggleAllArchiveCheckboxes = function(check) {
         renderScribeAllotmentList(currentSessionKey);
     };
 
+    window.clearAllScribeAllotments = function () {
+        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked. Unlock first to clear."); 
+        
+        const count = Object.keys(currentScribeAllotment).length;
+        if (count === 0) return alert("No allotments to clear.");
+
+        if (!confirm(`Are you sure you want to CLEAR ALL ${count} scribe allotments for this session? This cannot be undone.`)) return;
+
+        // 1. Clear current session mapping
+        currentScribeAllotment = {};
+
+        // 2. Save to Local Storage
+        const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        allAllotments[currentSessionKey] = currentScribeAllotment;
+        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+
+        // 3. Sync & Refresh
+        hasUnsavedScribes = true;
+        if (typeof updateSyncStatus === 'function') {
+            updateSyncStatus("Unsaved Changes", "warning");
+        }
+        renderScribeAllotmentList(currentSessionKey);
+        alert("✅ All scribe allotments for this session have been cleared.");
+    };
+
 
   // ==========================================
     // 👮 INVIGILATOR ASSIGNMENT MODULE (WITH SWAP)
@@ -23009,6 +23070,13 @@ window.downloadInvigilationListPDF = async function () {
 
     // --- 📋 CLIPBOARD QP CODE IMPORTER (Fuzzy Match & Stream Aware) ---
     window.importQPFromClipboard = async function() {
+        // 🛡️ [V95]: Strictly respect the UI lock
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            console.warn("Clipboard import blocked: QP Codes are locked.");
+            return;
+        }
+
         try {
             const text = await navigator.clipboard.readText();
             if (!text || text.trim().length === 0) {

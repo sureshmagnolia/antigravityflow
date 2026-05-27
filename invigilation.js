@@ -9535,9 +9535,10 @@ window.generateVacationReport = function() {
                 });
 
                 // Add to unique date list
-                const dateKey = dateObj.toDateString();
+                const pureDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+                const dateKey = pureDate.toDateString();
                 if (!dutyDates.some(d => d.toDateString() === dateKey)) {
-                    dutyDates.push(dateObj);
+                    dutyDates.push(pureDate);
                 }
             }
         });
@@ -9561,14 +9562,16 @@ window.generateVacationReport = function() {
             const current = dutyDates[i];
             const next = dutyDates[i+1];
 
-            // Get dates between
-            let temp = new Date(current);
+            // Get dates between (Pure Calendar Days)
+            let temp = new Date(current.getFullYear(), current.getMonth(), current.getDate());
             temp.setDate(temp.getDate() + 1);
 
             const gapDates = [];
             let isGapValid = true;
 
-            while (temp < next) {
+            const nextDateOnly = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+
+            while (temp < nextDateOnly) {
                 if (!isHoliday(temp)) {
                     isGapValid = false; // Gap broken by a working day
                     break; 
@@ -10204,9 +10207,10 @@ window.downloadVacationPDF = function() {
                 });
 
                 // Add to Unique Dates
-                const dateKey = dateObj.toDateString();
+                const pureDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+                const dateKey = pureDate.toDateString();
                 if (!dutyDates.some(d => d.toDateString() === dateKey)) {
-                    dutyDates.push(dateObj);
+                    dutyDates.push(pureDate);
                 }
             }
         });
@@ -10226,11 +10230,17 @@ window.downloadVacationPDF = function() {
         for (let i = 0; i < dutyDates.length - 1; i++) {
             const current = dutyDates[i];
             const next = dutyDates[i+1];
-            let temp = new Date(current); temp.setDate(temp.getDate() + 1);
+            
+            // Get dates between (Pure Calendar Days)
+            let temp = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+            temp.setDate(temp.getDate() + 1);
+
             const gapDates = [];
             let isGapValid = true;
 
-            while (temp < next) {
+            const nextDateOnly = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+
+            while (temp < nextDateOnly) {
                 if (!isHoliday(temp)) { isGapValid = false; break; }
                 gapDates.push(new Date(temp));
                 temp.setDate(temp.getDate() + 1);
@@ -10332,6 +10342,155 @@ window.downloadVacationPDF = function() {
     doc.text("Chief Superintendent", 250, finalY);
 
     doc.save(`Vacation_Report_${startStr}_${endStr}.pdf`);
+    window.closeModal('vacation-report-modal');
+};
+
+window.downloadVacationCertificates = function() {
+    const startStr = document.getElementById('vac-start').value;
+    const endStr = document.getElementById('vac-end').value;
+
+    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    
+    const startDate = new Date(startStr);
+    const endDate = new Date(endStr);
+    
+    // Robust college name sourcing
+    let nameFromSettings = "";
+    if (collegeData && collegeData.examCollegeName) {
+        nameFromSettings = collegeData.examCollegeName;
+    } else if (localStorage.getItem('examCollegeName')) {
+        nameFromSettings = localStorage.getItem('examCollegeName');
+    } else if (typeof currentCollegeName !== 'undefined' && currentCollegeName) {
+        nameFromSettings = currentCollegeName;
+    }
+    const collegeName = nameFromSettings || "Government Victoria College, Palakkad";
+
+    // Format period dates for body text (DD/MM/YY)
+    const formatDateShort = (d) => {
+        const date = new Date(d);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = String(date.getFullYear()).slice(-2);
+        return `${day}/${month}/${year}`;
+    };
+    const periodStart = formatDateShort(startDate);
+    const periodEnd = formatDateShort(endDate);
+
+    const certificatesData = [];
+
+    staffData.forEach(staff => {
+        if (staff.status === 'archived') return;
+
+        const dutyDates = [];
+
+        Object.keys(invigilationSlots).forEach(key => {
+            const slot = invigilationSlots[key];
+            const dateObj = parseDate(key);
+            
+            if (dateObj >= startDate && dateObj <= endDate && slot.attendance && slot.attendance.includes(staff.email)) {
+                const dateKey = dateObj.toDateString();
+                if (!dutyDates.some(d => d.toDateString() === dateKey)) {
+                    dutyDates.push(dateObj);
+                }
+            }
+        });
+
+        if (dutyDates.length === 0) return;
+
+        dutyDates.sort((a, b) => a - b);
+        certificatesData.push({
+            name: staff.name,
+            dept: staff.dept || "",
+            dates: dutyDates.map(d => d.toLocaleDateString('en-GB')).join(', ')
+        });
+    });
+
+    if (certificatesData.length === 0) return alert("No duties found in range.");
+
+    // Sort by Dept, then Name
+    certificatesData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    certificatesData.forEach((data, index) => {
+        if (index > 0 && index % 2 === 0) {
+            doc.addPage();
+        }
+
+        const yOffset = (index % 2) * 148.5; // Half A4 height
+        
+        // --- Professional Certificate Layout ---
+        
+        // Border
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
+        doc.rect(5, yOffset + 5, 200, 138.5); // Outer
+
+        // Logo (Professional Size)
+        try {
+            doc.addImage("CollegeLogo.png", "PNG", 96.5, yOffset + 10, 17, 17);
+        } catch (e) { console.warn("Logo failed to load:", e); }
+
+        doc.setFont("times", "bold");
+        doc.setFontSize(15);
+        doc.setTextColor(0, 0, 0);
+        doc.text(collegeName.toUpperCase(), 105, yOffset + 31, { align: "center" });
+        doc.setFontSize(8);
+        doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, yOffset + 35, { align: "center" });
+        doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, yOffset + 39, { align: "center" });
+        
+        doc.setDrawColor(0); 
+        doc.setLineWidth(0.4);
+        doc.line(10, yOffset + 42, 200, yOffset + 42);
+
+        // Certificate Title
+        doc.setFontSize(16);
+        doc.text("DUTY CERTIFICATE", 105, yOffset + 55, { align: "center" });
+
+        // Divider
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.2);
+        doc.line(80, yOffset + 58, 130, yOffset + 58);
+
+        // Body Text
+        doc.setFont("times", "normal");
+        doc.setFontSize(13); 
+        doc.setTextColor(0, 0, 0);
+        
+        const bodyText = `This is to certify that ${data.name} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${periodStart} to ${periodEnd}.`;
+        const splitText = doc.splitTextToSize(bodyText, 170);
+        doc.text(splitText, 20, yOffset + 72, { align: "justify", maxWidth: 170 });
+
+        // Dates Section
+        doc.setFont("times", "bold");
+        doc.setFontSize(11);
+        doc.text("Dates of Duty:", 20, yOffset + 95);
+        
+        doc.setFont("times", "normal");
+        doc.setFontSize(10.5);
+        const datesText = data.dates;
+        const splitDates = doc.splitTextToSize(datesText, 170);
+        doc.text(splitDates, 20, yOffset + 102);
+
+        // Signature Area
+        doc.setFontSize(11);
+        doc.text("Place: Palakkad", 20, yOffset + 130);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 20, yOffset + 136);
+
+        doc.setFont("times", "bold");
+        doc.text("PRINCIPAL", 185, yOffset + 136, { align: "right" });
+        
+        // Horizontal Cut Line (only for top certificate)
+        if (index % 2 === 0 && (index + 1) < certificatesData.length) {
+            doc.setDrawColor(200);
+            doc.setLineDashPattern([2, 2], 0);
+            doc.line(0, 148.5, 210, 148.5);
+            doc.setLineDashPattern([], 0);
+        }
+    });
+
+    doc.save(`Vacation_Certificates_${startStr}_${endStr}.pdf`);
     window.closeModal('vacation-report-modal');
 };
 

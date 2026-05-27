@@ -1053,3 +1053,15 @@ tr.scribe-row-highlight td.signature-col {
         font-size: 1.1rem !important;
     }
 }
+
+/* 🛡️ QP Lock Animations */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-4px); }
+}
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
