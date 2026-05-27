@@ -95,19 +95,27 @@
     <header
         class="bg-white/80 backdrop-blur border-b border-white/20 py-2 px-3 md:p-4 flex justify-between items-center shadow-sm z-50 shrink-0 h-14 md:h-auto transition-all relative md:sticky md:top-0">
         <div class="flex items-center gap-2 md:gap-3 overflow-hidden">
-            <div class="bg-indigo-600 p-2 md:p-3 rounded-md md:rounded-lg shadow-sm shrink-0 flex items-center justify-center">
-                <svg class="w-12 h-12 md:w-14 md:h-14 magnolia-logo-svg cursor-pointer" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-                    <g class="magnolia-logo-petals">
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(0)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(45)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(90)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(135)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(180)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(225)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(270)" />
-                        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="white" transform="rotate(315)" />
+            <div class="bg-indigo-50 p-1.5 md:p-2 rounded-lg shadow-sm shrink-0 flex items-center justify-center">
+                <svg class="h-10 w-10 md:h-12 md:w-12 magnolia-logo-svg drop-shadow-sm cursor-pointer" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="invigLogoCenterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FFDF00" />
+                            <stop offset="100%" style="stop-color:#D4AF37" />
+                        </linearGradient>
+                    </defs>
+                    <g transform="translate(100, 100)">
+                        <g class="magnolia-logo-petals">
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(0)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(45)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(90)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(135)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(180)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(225)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(270)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(315)" />
+                        </g>
+                        <circle cx="0" cy="0" r="12" fill="url(#invigLogoCenterGradient)" />
                     </g>
-                    <circle cx="0" cy="0" r="12" fill="#FFDF00" />
                 </svg>
             </div>
             <div class="flex flex-col justify-center min-w-0">

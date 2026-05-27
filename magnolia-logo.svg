@@ -6,7 +6,7 @@
         </linearGradient>
     </defs>
     <!-- Background circle for better contrast in tabs (optional, but keep it transparent/clean) -->
-    <g transform="translate(50, 50) scale(0.9)">
+    <g transform="translate(50, 50) scale(1.05)">
         <!-- Petals scaled up to fill the 100x100 space -->
         <g>
             <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(0)" />
@@ -19,6 +19,6 @@
             <path d="M 0 0 C 18 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(315)" />
         </g>
         <!-- Larger center for better visibility at 16px -->
-        <circle cx="0" cy="0" r="14" fill="url(#centerGrad)" />
+        <circle cx="0" cy="0" r="16" fill="url(#centerGrad)" />
     </g>
 </svg>
