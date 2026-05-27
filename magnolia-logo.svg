@@ -1,0 +1,19 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="centerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFDF00" />
+            <stop offset="100%" style="stop-color:#D4AF37" />
+        </linearGradient>
+    </defs>
+    <g transform="translate(100, 100)">
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(0)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(45)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(90)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(135)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(180)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(225)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(270)" />
+        <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(315)" />
+        <circle cx="0" cy="0" r="12" fill="url(#centerGrad)" />
+    </g>
+</svg>

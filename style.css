@@ -161,22 +161,32 @@ body {
 }
 
 /* Professional Logo Interaction */
+.magnolia-logo-svg {
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.magnolia-logo-svg:hover {
+    transform: scale(1.15);
+}
+
 .magnolia-logo-petals {
-    transform-origin: 100px 100px;
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Critical fix: Use fill-box and center for stable internal group rotation */
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: none !important;
 }
 
-svg:hover .magnolia-logo-petals {
-    animation: magnolia-rotate 10s linear infinite;
+.magnolia-logo-svg:hover .magnolia-logo-petals {
+    animation: magnolia-rotate 8s linear infinite;
 }
 
-/* Subtle Golden Shimmer for professional touch */
+/* Subtle Golden Shimmer */
 @keyframes magnolia-shimmer {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
+    0%, 100% { opacity: 1; filter: brightness(1); }
+    50% { opacity: 0.8; filter: brightness(1.2); }
 }
 
-svg:hover circle {
+.magnolia-logo-svg:hover circle {
     animation: magnolia-shimmer 2s ease-in-out infinite;
 }
 
