@@ -2739,6 +2739,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
     const clearReportButton = document.getElementById('clear-report-button');
     const roomCsvDownloadContainer = document.getElementById('room-csv-download-container');
     const statusLogDiv = document.getElementById('status-log');
+
     // --- Get references to all Navigation elements ---
     const viewExtractor = document.getElementById('view-extractor');
     const viewSettings = document.getElementById('view-settings');
@@ -2794,6 +2795,28 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
     // Update these two lines to include 'navRemuneration' and 'viewRemuneration'
     const allNavButtons = [navHome, navExtractor, navEditData, navScribeSettings, navRoomAllotment, navQPCodes, navSearch, navReports, navAbsentees, navSettings, navRemuneration, navHelp];
     const allViews = [viewHome, viewExtractor, viewEditData, viewScribeSettings, viewRoomAllotment, viewQPCodes, viewSearch, viewReports, viewAbsentees, viewSettings, viewRemuneration, viewHelp];
+
+    // --- SCROLL TO TOP BUTTON LOGIC ---
+    const scrollToTopBtn = document.getElementById('scroll-to-report-top');
+    if (scrollToTopBtn) {
+        window.addEventListener('scroll', () => {
+            // Only show if viewReports is active and we've scrolled down
+            if (viewReports && !viewReports.classList.contains('hidden') && window.scrollY > 500) {
+                scrollToTopBtn.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+                scrollToTopBtn.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            } else {
+                scrollToTopBtn.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+                scrollToTopBtn.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            }
+        });
+
+        scrollToTopBtn.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+    }
 
     // --- (V26) Get references to NEW Room Settings elements (Now in Settings Tab) ---
     const collegeNameInput = document.getElementById('college-name-input');
