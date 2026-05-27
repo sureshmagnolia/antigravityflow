@@ -23130,7 +23130,7 @@ window.downloadInvigilationListPDF = async function () {
                 if (tabParts.length >= 4 && line.includes('--(')) {
                     qpCode = tabParts[0]; 
                     // FACTOR IN YEAR: Combine Subject Name + Syllabus Year (e.g. "Applied Costing... 2024")
-                    const syllabus = tabParts[3] ? ` \${tabParts[3].replace(/[()]/g, '')}` : '';
+                    const syllabus = tabParts[3] ? ` ${tabParts[3].replace(/[()]/g, '')}` : '';
                     searchString = (tabParts[1] + syllabus).toUpperCase(); 
                 } 
                 // Fallback Generic Manual Parsing (e.g. "Subject [tab] Code")
