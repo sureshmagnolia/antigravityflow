@@ -162,17 +162,16 @@ body {
 
 /* Professional Logo Interaction */
 .magnolia-logo-svg {
-    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: transform 0.3s ease-in-out;
 }
 
 .magnolia-logo-svg:hover {
-    transform: scale(1.15);
+    transform: scale(1.1);
 }
 
 .magnolia-logo-petals {
-    /* Critical fix: Use fill-box and center for stable internal group rotation */
-    transform-box: fill-box;
-    transform-origin: center;
+    /* Set explicit origin to flower center (0,0 in its coordinate system) */
+    transform-origin: 0 0;
     transition: none !important;
 }
 
