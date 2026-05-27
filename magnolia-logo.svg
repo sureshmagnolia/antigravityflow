@@ -1,0 +1,24 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="centerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FFDF00" />
+            <stop offset="100%" style="stop-color:#D4AF37" />
+        </linearGradient>
+    </defs>
+    <!-- Background circle for better contrast in tabs (optional, but keep it transparent/clean) -->
+    <g transform="translate(50, 50) scale(0.9)">
+        <!-- Petals scaled up to fill the 100x100 space -->
+        <g>
+            <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(0)" />
+            <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(45)" />
+            <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(90)" />
+            <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(135)" />
+            <path d="M 0 0 C 15 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(180)" />
+            <path d="M 0 0 C 18 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(225)" />
+            <path d="M 0 0 C 18 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(270)" />
+            <path d="M 0 0 C 18 -12, 18 -45, 0 -50 C -18 -45, -15 -12, 0 0 Z" fill="#6366f1" transform="rotate(315)" />
+        </g>
+        <!-- Larger center for better visibility at 16px -->
+        <circle cx="0" cy="0" r="14" fill="url(#centerGrad)" />
+    </g>
+</svg>

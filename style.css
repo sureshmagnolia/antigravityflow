@@ -144,6 +144,57 @@ body {
 }
 
 /* LOADING_SPINNER_PLACEHOLDER */
+.magnolia-loader {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 2rem;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+    /* Added contain: strict to improve rendering performance and stability */
+    contain: strict;
+}
+.magnolia-main {
+    /* Critical fix: Force rotation around the geometric center of the group */
+    transform-origin: 100px 100px;
+    animation: magnolia-rotate 12s linear infinite;
+    /* Use will-change to hint browser for hardware acceleration */
+    will-change: transform;
+}
+
+/* Professional Logo Interaction */
+.magnolia-logo-svg {
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.magnolia-logo-svg:hover {
+    transform: scale(1.15);
+}
+
+.magnolia-logo-petals {
+    /* Critical fix: Use fill-box and center for stable internal group rotation */
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: none !important;
+}
+
+.magnolia-logo-svg:hover .magnolia-logo-petals {
+    animation: magnolia-rotate 8s linear infinite;
+}
+
+/* Subtle Golden Shimmer */
+@keyframes magnolia-shimmer {
+    0%, 100% { opacity: 1; filter: brightness(1); }
+    50% { opacity: 0.8; filter: brightness(1.2); }
+}
+
+.magnolia-logo-svg:hover circle {
+    animation: magnolia-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes magnolia-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 
 /* --- PRINT STYLES (UNCHANGED) --- */
 /* --- REPLACEMENT CSS FOR PRINT SECTION --- */
