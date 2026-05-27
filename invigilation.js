@@ -10436,9 +10436,7 @@ window.downloadVacationCertificates = function() {
 
         // Certificate Title
         doc.setFontSize(16);
-        doc.setCharSpace(2);
         doc.text("DUTY CERTIFICATE", 105, yOffset + 55, { align: "center" });
-        doc.setCharSpace(0);
 
         // Divider
         doc.setDrawColor(0);
