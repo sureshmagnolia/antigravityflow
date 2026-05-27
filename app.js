@@ -2798,10 +2798,12 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
 
     // --- SCROLL TO TOP BUTTON LOGIC ---
     const scrollToTopBtn = document.getElementById('scroll-to-report-top');
-    if (scrollToTopBtn) {
-        window.addEventListener('scroll', () => {
+    const scrollContainer = document.querySelector('main'); // The actual scrolling element
+    
+    if (scrollToTopBtn && scrollContainer) {
+        scrollContainer.addEventListener('scroll', () => {
             // Only show if viewReports is active and we've scrolled down
-            if (viewReports && !viewReports.classList.contains('hidden') && window.scrollY > 500) {
+            if (viewReports && !viewReports.classList.contains('hidden') && scrollContainer.scrollTop > 500) {
                 scrollToTopBtn.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
                 scrollToTopBtn.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
             } else {
@@ -2811,7 +2813,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         });
 
         scrollToTopBtn.addEventListener('click', () => {
-            window.scrollTo({
+            scrollContainer.scrollTo({
                 top: 0,
                 behavior: 'smooth'
             });
