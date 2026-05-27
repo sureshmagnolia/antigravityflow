@@ -145,35 +145,19 @@ body {
 
 /* LOADING_SPINNER_PLACEHOLDER */
 .magnolia-loader {
-    width: 140px;
-    height: 140px;
+    width: 120px;
+    height: 120px;
     margin-bottom: 2rem;
-    /* Increased shadow for better contrast on white backgrounds */
-    filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.15)) drop-shadow(0 0 5px rgba(99, 102, 241, 0.1));
-    animation: magnolia-breathe 4s ease-in-out infinite;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
 }
 .magnolia-main {
     transform-box: fill-box;
     transform-origin: center;
-    animation: magnolia-rotate 20s linear infinite;
-}
-.inner-petals {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: magnolia-bloom 3s ease-out forwards;
+    animation: magnolia-rotate 12s linear infinite;
 }
 @keyframes magnolia-rotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-}
-@keyframes magnolia-breathe {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-}
-@keyframes magnolia-bloom {
-    0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-    60% { transform: scale(1.1) rotate(10deg); opacity: 1; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 
