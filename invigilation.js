@@ -9535,9 +9535,10 @@ window.generateVacationReport = function() {
                 });
 
                 // Add to unique date list
-                const dateKey = dateObj.toDateString();
+                const pureDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+                const dateKey = pureDate.toDateString();
                 if (!dutyDates.some(d => d.toDateString() === dateKey)) {
-                    dutyDates.push(dateObj);
+                    dutyDates.push(pureDate);
                 }
             }
         });
@@ -9561,14 +9562,16 @@ window.generateVacationReport = function() {
             const current = dutyDates[i];
             const next = dutyDates[i+1];
 
-            // Get dates between
-            let temp = new Date(current);
+            // Get dates between (Pure Calendar Days)
+            let temp = new Date(current.getFullYear(), current.getMonth(), current.getDate());
             temp.setDate(temp.getDate() + 1);
 
             const gapDates = [];
             let isGapValid = true;
 
-            while (temp < next) {
+            const nextDateOnly = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+
+            while (temp < nextDateOnly) {
                 if (!isHoliday(temp)) {
                     isGapValid = false; // Gap broken by a working day
                     break; 
@@ -10204,9 +10207,10 @@ window.downloadVacationPDF = function() {
                 });
 
                 // Add to Unique Dates
-                const dateKey = dateObj.toDateString();
+                const pureDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+                const dateKey = pureDate.toDateString();
                 if (!dutyDates.some(d => d.toDateString() === dateKey)) {
-                    dutyDates.push(dateObj);
+                    dutyDates.push(pureDate);
                 }
             }
         });
@@ -10226,11 +10230,17 @@ window.downloadVacationPDF = function() {
         for (let i = 0; i < dutyDates.length - 1; i++) {
             const current = dutyDates[i];
             const next = dutyDates[i+1];
-            let temp = new Date(current); temp.setDate(temp.getDate() + 1);
+            
+            // Get dates between (Pure Calendar Days)
+            let temp = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+            temp.setDate(temp.getDate() + 1);
+
             const gapDates = [];
             let isGapValid = true;
 
-            while (temp < next) {
+            const nextDateOnly = new Date(next.getFullYear(), next.getMonth(), next.getDate());
+
+            while (temp < nextDateOnly) {
                 if (!isHoliday(temp)) { isGapValid = false; break; }
                 gapDates.push(new Date(temp));
                 temp.setDate(temp.getDate() + 1);
