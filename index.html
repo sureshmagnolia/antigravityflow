@@ -144,8 +144,26 @@
         <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
             
             <div class="mb-5 flex justify-center">
-                <div class="h-16 w-16 bg-indigo-100 rounded-full flex items-center justify-center border-4 border-indigo-50 shadow-inner">
-                    <svg class="w-8 h-8 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C9.243 2 7 4.243 7 7v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7c0-2.757-2.243-5-5-5zM9 7c0-1.654 1.346-3 3-3s3 1.346 3 3v3H9V7zm3 10c-1.103 0-2-.897-2-2s.897-2 2-2 2 .897 2 2-.897 2-2 2z"/></svg>
+                <div class="h-16 w-16 bg-white rounded-full flex items-center justify-center border-4 border-indigo-50 shadow-inner overflow-hidden">
+                    <svg class="h-12 w-12" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="lockLogoCenterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#FFDF00" />
+                                <stop offset="100%" style="stop-color:#D4AF37" />
+                            </linearGradient>
+                        </defs>
+                        <g transform="translate(100, 100)">
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(0)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(45)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(90)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(135)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(180)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(225)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(270)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#6366f1" transform="rotate(315)" />
+                            <circle cx="0" cy="0" r="12" fill="url(#lockLogoCenterGradient)" />
+                        </g>
+                    </svg>
                 </div>
             </div>
 
@@ -175,7 +193,28 @@
             </button>
 
             <div class="flex items-center gap-2">
-                <img src="logo.png" class="h-8 w-auto rounded bg-white p-0.5" alt="Logo">
+                <!-- Golden Magnolia Professional Logo -->
+                <svg class="h-8 w-8 magnolia-logo-svg drop-shadow-sm hover:scale-110 transition-transform duration-300 cursor-pointer" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="logoCenterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FFDF00" />
+                            <stop offset="100%" style="stop-color:#D4AF37" />
+                        </linearGradient>
+                    </defs>
+                    <g transform="translate(100, 100)">
+                        <g class="magnolia-logo-petals">
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(0)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(45)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(90)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(135)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(180)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(225)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(270)" />
+                            <path d="M 0 0 C 18 -15, 22 -45, 0 -55 C -22 -45, -18 -15, 0 0 Z" fill="#818cf8" transform="rotate(315)" />
+                        </g>
+                        <circle cx="0" cy="0" r="12" fill="url(#logoCenterGradient)" />
+                    </g>
+                </svg>
                 <div>
                     <h1 class="text-sm md:text-lg font-bold text-white leading-none">
                         ExamFlow <span class="text-[10px] font-normal text-gray-400 ml-1 hidden sm:inline">v12.8.5</span>

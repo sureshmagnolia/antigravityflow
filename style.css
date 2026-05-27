@@ -159,6 +159,27 @@ body {
     /* Use will-change to hint browser for hardware acceleration */
     will-change: transform;
 }
+
+/* Professional Logo Interaction */
+.magnolia-logo-petals {
+    transform-origin: 100px 100px;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+svg:hover .magnolia-logo-petals {
+    animation: magnolia-rotate 10s linear infinite;
+}
+
+/* Subtle Golden Shimmer for professional touch */
+@keyframes magnolia-shimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+svg:hover circle {
+    animation: magnolia-shimmer 2s ease-in-out infinite;
+}
+
 @keyframes magnolia-rotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
