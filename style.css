@@ -149,11 +149,15 @@ body {
     height: 120px;
     margin-bottom: 2rem;
     filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+    /* Added contain: strict to improve rendering performance and stability */
+    contain: strict;
 }
 .magnolia-main {
-    transform-box: fill-box;
-    transform-origin: center;
+    /* Critical fix: Force rotation around the geometric center of the group */
+    transform-origin: 100px 100px;
     animation: magnolia-rotate 12s linear infinite;
+    /* Use will-change to hint browser for hardware acceleration */
+    will-change: transform;
 }
 @keyframes magnolia-rotate {
     from { transform: rotate(0deg); }
