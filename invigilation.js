@@ -10413,67 +10413,74 @@ window.downloadVacationCertificates = function() {
         // --- Professional Certificate Layout ---
         
         // Border
-        doc.setDrawColor(30, 41, 59);
-        doc.setLineWidth(0.8);
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.5);
         doc.rect(5, yOffset + 5, 200, 138.5); // Outer
-        doc.setLineWidth(0.2);
-        doc.rect(7, yOffset + 7, 196, 134.5); // Inner
 
-        // Logo
+        // Logo (Professional Size)
         try {
-            doc.addImage("CollegeLogo.png", "PNG", 95, yOffset + 12, 20, 20);
-        } catch (e) {
-            console.warn("Logo failed to load for certificate:", e);
-        }
+            doc.addImage("CollegeLogo.png", "PNG", 96.5, yOffset + 10, 17, 17);
+        } catch (e) { console.warn("Logo failed to load:", e); }
 
-        // College Name
         doc.setFont("times", "bold");
-        doc.setFontSize(16);
-        doc.setTextColor(30, 41, 59);
-        doc.text(collegeName.toUpperCase(), 105, yOffset + 40, { align: "center" });
+        doc.setFontSize(15);
+        doc.setTextColor(0, 0, 0);
+        doc.text(collegeName.toUpperCase(), 105, yOffset + 31, { align: "center" });
+        doc.setFontSize(8);
+        doc.text("Kerala, India, PIN 678001 | Affiliation: University of Calicut", 105, yOffset + 35, { align: "center" });
+        doc.text("Phone: 0491 2576773 | Email: victoriapkd@gmail.com", 105, yOffset + 39, { align: "center" });
+        
+        doc.setDrawColor(0); 
+        doc.setLineWidth(0.4);
+        doc.line(10, yOffset + 42, 200, yOffset + 42);
+
+        // No: and Date:
+        doc.setFontSize(10);
+        doc.text("No: EXAM/VAC-CERT/", 10, yOffset + 48);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 200, yOffset + 48, { align: "right" });
 
         // Certificate Title
         doc.setFontSize(16);
         doc.setCharSpace(2);
-        // Using align center at 105 (absolute center of A4 210mm)
-        doc.text("DUTY CERTIFICATE", 105, yOffset + 50, { align: "center" });
+        doc.text("DUTY CERTIFICATE", 105, yOffset + 60, { align: "center" });
         doc.setCharSpace(0);
 
         // Divider
-        doc.setDrawColor(200);
-        doc.line(80, yOffset + 53, 130, yOffset + 53);
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.2);
+        doc.line(80, yOffset + 63, 130, yOffset + 63);
 
         // Body Text
         doc.setFont("times", "normal");
-        doc.setFontSize(15); // Increased font size
+        doc.setFontSize(13); 
         doc.setTextColor(0, 0, 0);
         
         const bodyText = `This is to certify that ${data.name} of the Department of ${data.dept} has performed vacation duty on the following dates during the vacation period ${periodStart} to ${periodEnd}.`;
         const splitText = doc.splitTextToSize(bodyText, 170);
-        doc.text(splitText, 20, yOffset + 68, { align: "justify", maxWidth: 170 });
+        doc.text(splitText, 20, yOffset + 75, { align: "justify", maxWidth: 170 });
 
         // Dates Section
         doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Dates of Duty:", 20, yOffset + 90);
+        doc.setFontSize(11);
+        doc.text("Dates of Duty:", 20, yOffset + 95);
         
         doc.setFont("times", "normal");
-        doc.setFontSize(13); // Increased font size for dates
+        doc.setFontSize(10.5);
         const datesText = data.dates;
         const splitDates = doc.splitTextToSize(datesText, 170);
-        doc.text(splitDates, 20, yOffset + 98);
+        doc.text(splitDates, 20, yOffset + 102);
 
         // Signature Area
-        doc.setFontSize(12);
-        doc.text("Place: Palakkad", 20, yOffset + 125);
-        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 20, yOffset + 131);
+        doc.setFontSize(11);
+        doc.text("Place: Palakkad", 20, yOffset + 130);
+        doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, 20, yOffset + 136);
 
         doc.setFont("times", "bold");
-        doc.text("PRINCIPAL", 185, yOffset + 131, { align: "right" });
+        doc.text("PRINCIPAL", 185, yOffset + 136, { align: "right" });
         
         // Horizontal Cut Line (only for top certificate)
         if (index % 2 === 0 && (index + 1) < certificatesData.length) {
-            doc.setDrawColor(230);
+            doc.setDrawColor(200);
             doc.setLineDashPattern([2, 2], 0);
             doc.line(0, 148.5, 210, 148.5);
             doc.setLineDashPattern([], 0);
