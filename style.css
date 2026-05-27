@@ -144,6 +144,27 @@ body {
 }
 
 /* LOADING_SPINNER_PLACEHOLDER */
+.magnolia-loader {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 2rem;
+    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.2));
+    animation: magnolia-breathe 4s ease-in-out infinite;
+}
+.magnolia-main {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: magnolia-rotate 20s linear infinite;
+}
+@keyframes magnolia-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+@keyframes magnolia-breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+}
+
 
 /* --- PRINT STYLES (UNCHANGED) --- */
 /* --- REPLACEMENT CSS FOR PRINT SECTION --- */
