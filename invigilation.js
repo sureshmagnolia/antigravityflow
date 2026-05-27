@@ -10343,7 +10343,17 @@ window.downloadVacationCertificates = function() {
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
-    const collegeName = (collegeData ? collegeData.examCollegeName : "") || "Government Victoria College, Palakkad";
+    
+    // Robust college name sourcing
+    let nameFromSettings = "";
+    if (collegeData && collegeData.examCollegeName) {
+        nameFromSettings = collegeData.examCollegeName;
+    } else if (localStorage.getItem('examCollegeName')) {
+        nameFromSettings = localStorage.getItem('examCollegeName');
+    } else if (typeof currentCollegeName !== 'undefined' && currentCollegeName) {
+        nameFromSettings = currentCollegeName;
+    }
+    const collegeName = nameFromSettings || "Government Victoria College, Palakkad";
 
     // Format period dates for body text (DD/MM/YY)
     const formatDateShort = (d) => {
@@ -10425,9 +10435,8 @@ window.downloadVacationCertificates = function() {
         // Certificate Title
         doc.setFontSize(16);
         doc.setCharSpace(2);
-        const titleStr = "DUTY CERTIFICATE";
-        const titleWidth = doc.getTextWidth(titleStr);
-        doc.text(titleStr, 105 - (titleWidth / 2), yOffset + 50);
+        // Using align center at 105 (absolute center of A4 210mm)
+        doc.text("DUTY CERTIFICATE", 105, yOffset + 50, { align: "center" });
         doc.setCharSpace(0);
 
         // Divider
