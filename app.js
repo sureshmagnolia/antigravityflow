@@ -19646,8 +19646,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         // Sync (Added Slots and Session Mapping Sync)
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping changes stick
-            // FIX: Ensure this specific session is authoritative without risking other sessions
-            await syncDataToCloud('slots', sessionKey); 
+            
+            // 🛡️ [AUDIT FIX]: Removed redundant 'slots' sync here. 
+            // Room allotment mapping is already handled by 'staff' and 'session' syncs.
+            // Touching 'slots' here triggers unnecessary Admin Confirmation warnings.
             
             // Sync the specific room-to-person mapping (Crucial for other PCs)
             if (typeof syncSessionToCloud === 'function') {
