@@ -2198,14 +2198,20 @@ window.openDayDetail = function (dateStr, email) {
                 const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
                 cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
 
+                const meta = slot.assignmentMeta?.[email] || {};
+                const isAdminPosted = (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+
                 if (isPostedByMe) {
                     cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
                 } else if (isAdminLocked) {
                     cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
-                } else if (isLocked) {
+                } else if (isAdminPosted && !isAdmin) {
+                    // ADMIN POSTED: No Withdraw, Only Exchange (even if unlocked)
+                    cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
+                } else if (isLocked && !isAdmin) {
                     cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
                 } else {
-                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
+                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', ${isLocked})" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
                 }
             } else if (isUnavailable) {            cardBg = "bg-red-50/30";
             borderColor = "border-red-100";
@@ -2971,7 +2977,16 @@ window.changeSlotReq = async function (key, delta) {
 
 
 window.cancelDuty = async function (key, email, isLocked) {
-    if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
+    if (isLocked && !isAdmin) return alert("🚫 Slot Locked! Contact Admin.");
+
+    // Check if it's Admin Posted
+    const slot = invigilationSlots[key];
+    const meta = slot && slot.assignmentMeta ? slot.assignmentMeta[email] : {};
+    const isAdminPosted = meta && (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+    if (isAdminPosted && !isAdmin) {
+        return alert("🚫 Action Denied.\n\nThis duty was assigned by the Admin and cannot be cancelled. Please use the 'Exchange' option.");
+    }
+
     if (confirm("Cancel duty?")) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         // 🛡️ [CLEANUP FIX]: Remove from exchange market immediately if cancelled
@@ -4520,6 +4535,7 @@ async function volunteer(key, email) {
 
             // Add New (You)
             slot.assigned.push(email);
+            updateAssignmentMeta(slot, email, 'EXCHANGE');
             const me = staffData.find(s => s.email === email);
             if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
@@ -4649,8 +4665,13 @@ window.postForExchange = async function (key, email) {
     }
 
     if (!slot.isLocked) {
-        alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
-        return;
+        const meta = slot.assignmentMeta?.[email] || {};
+        const isAdminPosted = (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+        
+        if (!isAdminPosted) {
+            alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
+            return;
+        }
     }
 
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
@@ -12184,6 +12205,12 @@ window.saveManualAllocation = async function () {
     const oldAssigned = invigilationSlots[key].assigned || [];
     const removedEmails = oldAssigned.filter(e => !newAssigned.includes(e));
 
+    // --- NEW: Tag newly added staff as ADMIN ---
+    const addedEmails = newAssigned.filter(e => !oldAssigned.includes(e));
+    addedEmails.forEach(email => {
+        updateAssignmentMeta(invigilationSlots[key], email, 'ADMIN');
+    });
+
     if (removedEmails.length > 0 && invigilationSlots[key].exchangeRequests) {
         invigilationSlots[key].exchangeRequests = invigilationSlots[key].exchangeRequests
             .filter(e => !removedEmails.includes(e));
@@ -12366,11 +12393,7 @@ window.confirmDirectAdd = async function() {
     slot.assigned.push(staff.email);
     
     // Core Objective > Tag them securely 
-    if (!slot.assignmentMeta) slot.assignmentMeta = {};
-    slot.assignmentMeta[staff.email] = {
-        source: 'Admin',
-        timestamp: new Date().toISOString()
-    };
+    updateAssignmentMeta(slot, staff.email, 'ADMIN');
     
     if (typeof logActivity === 'function') {
         logActivity("Admin Override Add", `Admin explicitly assigned ${staff.name} to ${key}.`);
