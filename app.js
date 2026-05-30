@@ -5,6 +5,16 @@
 const BASE_DATA_KEY = 'examBaseData';
 let syncQueue = { active: false, sections: new Set() }; // New Sync Manager
 
+// 🛡️ [V12.8 FIX]: Universal Helper to extract Register Number regardless of header format (Register Number, RegisterNo, regNo, etc.)
+function getRegNo(s) {
+    if (!s) return "";
+    if (typeof s === 'string') return s.trim();
+    // 🛡️ [AUDIT FIX]: Exhaustive check for all known register number variations
+    const reg = s['Register Number'] || s.RegisterNo || s.regNo || s['Reg No'] || s['RegNo'] || s.RegisterNo_ || s.reg_no || "";
+    return reg.toString().trim();
+}
+window.getRegNo = getRegNo;
+
 // 🚫 DELETED: HYBRID_GAS_URL (Returning to Pure Firebase Architecture)
 
 
@@ -1095,7 +1105,7 @@ async function updateLocalSlotsFromStudents() {
             sessionStats[key].totalStudents++;
             const strm = s.Stream || "Regular";
 
-            if (scribeRegNos.has(s['Register Number'])) {
+            if (scribeRegNos.has(getRegNo(s))) {
                 if (!sessionStats[key].scribeStreams[strm]) sessionStats[key].scribeStreams[strm] = 0;
                 sessionStats[key].scribeStreams[strm]++;
                 sessionStats[key].totalScribes++;
@@ -2089,12 +2099,12 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 normalCount: students.filter(s => {
                     const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
                     const scribeRegNos = new Set(scribeListRaw.map(x => x.regNo));
-                    return !scribeRegNos.has(s['Register Number']);
+                    return !scribeRegNos.has(getRegNo(s));
                 }).length,
                 scribeCount: students.filter(s => {
                     const scribeListRaw = JSON.parse(localStorage.getItem('examScribeList') || '[]');
                     const scribeRegNos = new Set(scribeListRaw.map(x => x.regNo));
-                    return scribeRegNos.has(s['Register Number']);
+                    return scribeRegNos.has(getRegNo(s));
                 }).length,
                 lastUpdated: new Date().toISOString(),
                 examTimestamp: new Date(cleanDate.split('.').reverse().join('-')).getTime()
@@ -9431,6 +9441,11 @@ async function syncToPrintManager() {
         if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); 
         if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData(); 
         if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); 
+        
+        // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI when returning to this tab
+        if (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) {
+            if (typeof loadScribeAllotment === 'function') loadScribeAllotment(allotmentSessionSelect.value);
+        }
     });
     navQPCodes.addEventListener('click', () => { 
         showView(viewQPCodes, navQPCodes);
@@ -11634,10 +11649,20 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 // Update display (Auto-Save Version + Button Disable Logic)
     function updateAllotmentDisplay() {
-        const [date, time] = currentSessionKey.split(' | ');
-        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+        if (!currentSessionKey) return;
+        const [rawDate, rawTime] = currentSessionKey.split(' | ');
+        const date = rawDate ? rawDate.trim() : "";
+        const time = rawTime ? rawTime.trim() : "";
+
+        // 🛡️ [V12.8 FIX]: Robust filtering with trimming to prevent "Ghost" wipes due to trailing spaces
+        const sessionStudentRecords = allStudentData.filter(s => {
+            const sDate = (s.Date || "").toString().trim();
+            const sTime = (s.Time || "").toString().trim();
+            return sDate === date && sTime === time;
+        });
 
         const container = document.getElementById('allotment-student-count-section');
+        if (!container) return;
         container.innerHTML = '';
         container.className = "mb-6 grid grid-cols-1 md:grid-cols-2 gap-4";
         container.classList.remove('hidden');
@@ -11647,9 +11672,18 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
 // 🛡️ [AUDIT FIX] System Integrity: Unique Totals, Ghost Pruning, and Duplicate Removal
-          const masterRegNos = new Set(sessionStudentRecords.map(s => s['Register Number']));
+          // Support multiple header formats for Register Number
+          const masterRegNos = new Set(sessionStudentRecords.map(s => getRegNo(s)).filter(Boolean));
           const seenInAllotment = new Set(); // 🕵️ To detect and prune duplicate room assignments
           let hasIntegrityCleanup = false;
+
+          // 🛡️ [V12.8 FIX]: Guard against asynchronous data loading race condition
+          // If allStudentData is empty (still loading from IDB), we MUST skip the pruning 
+          // or we'll permanently wipe the user's saved work from localStorage.
+          // ALSO: If sessionStudentRecords is empty but the session exists, skip pruning to be safe.
+          const isSystemLoading = (allStudentData.length === 0);
+          const noDataFoundForSession = (sessionStudentRecords.length === 0);
+          const shouldSkipPruning = isSystemLoading || noDataFoundForSession;
 
           const streamStats = {};
           currentStreamConfig.forEach(stream => {
@@ -11665,42 +11699,54 @@ window.real_populate_qp_code_session_dropdown = function () {
           });
 
           // 2. Audit Allotments: PRUNE GHOSTS (deleted students) and DUPLICATES (students in 2+ rooms)
-          currentSessionAllotment.forEach(room => {
-              const roomStream = room.stream || "Regular";
-              if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
+          if (!shouldSkipPruning) {
+            currentSessionAllotment.forEach(room => {
+                const roomStream = room.stream || "Regular";
+                if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
 
-              const originalCount = room.students.length;
-              room.students = room.students.filter(s => {
-                  const reg = (typeof s === 'object') ? s['Register Number'] : s;
+                const originalCount = room.students.length;
+                room.students = room.students.filter(s => {
+                    const reg = getRegNo(s);
 
-                  // Keep ONLY if: 1. Exists in Master List AND 2. Hasn't already been seen in another room
-                  const isValid = masterRegNos.has(reg);
-                  const isDuplicate = seenInAllotment.has(reg);
+                    // Keep ONLY if: 1. Exists in Master List AND 2. Hasn't already been seen in another room
+                    const isValid = masterRegNos.has(reg);
+                    const isDuplicate = seenInAllotment.has(reg);
 
-                  if (isValid && !isDuplicate) {
-                      seenInAllotment.add(reg);
-                      return true;
-                  }
-                  return false;
-              });
+                    if (isValid && !isDuplicate) {
+                        seenInAllotment.add(reg);
+                        return true;
+                    }
+                    return false;
+                });
 
-              if (room.students.length !== originalCount) hasIntegrityCleanup = true;
+                if (room.students.length !== originalCount) hasIntegrityCleanup = true;
 
-              streamStats[roomStream].allotted += room.students.length;
-              streamStats[roomStream].roomsUsed++;
-          });
+                streamStats[roomStream].allotted += room.students.length;
+                streamStats[roomStream].roomsUsed++;
+            });
+          } else {
+            // Render basic stats even if loading, without pruning
+             currentSessionAllotment.forEach(room => {
+                const roomStream = room.stream || "Regular";
+                if (!streamStats[roomStream]) streamStats[roomStream] = { total: 0, allotted: 0, roomsUsed: 0 };
+                streamStats[roomStream].allotted += room.students.length;
+                streamStats[roomStream].roomsUsed++;
+             });
+          }
 
           // 3. Audit Scribe Allotments: Prune students no longer in this session
           let hasScribePruning = false;
-          Object.keys(currentScribeAllotment).forEach(reg => {
-              if (!masterRegNos.has(reg)) {
-                  delete currentScribeAllotment[reg];
-                  hasScribePruning = true;
-              }
-          });
+          if (!shouldSkipPruning) {
+            Object.keys(currentScribeAllotment).forEach(reg => {
+                if (!masterRegNos.has(reg.toString().trim())) {
+                    delete currentScribeAllotment[reg];
+                    hasScribePruning = true;
+                }
+            });
+          }
 
           // 4. Save cleaned data immediately if any ghosts, duplicates, or scribes were pruned
-          if (hasIntegrityCleanup || hasScribePruning) {
+          if (!shouldSkipPruning && (hasIntegrityCleanup || hasScribePruning)) {
               console.log("🧹 [Audit Cleanup] Pruned ghost students or duplicate assignments.");
               saveRoomAllotment(); // Updates localStorage for rooms
 
@@ -12922,14 +12968,30 @@ window.real_populate_qp_code_session_dropdown = function () {
 const saveScribeBtn = document.getElementById('save-scribe-allotment-button');
 if (saveScribeBtn) {
     saveScribeBtn.addEventListener('click', async () => {
-        if (!currentSessionKey) return;
-        
+        // 🛡️ [PERSISTENCE FIX]: Ensure we have a valid session key
+        const sessionKey = currentSessionKey || (typeof allotmentSessionSelect !== 'undefined' ? allotmentSessionSelect.value : "");
+        if (!sessionKey) {
+            alert("⚠️ Please select a session first.");
+            return;
+        }
+
         saveScribeBtn.disabled = true;
         saveScribeBtn.textContent = "Saving...";
 
+        // 🛡️ [PERSISTENCE FIX]: Explicitly save to localStorage for Basic Users
+        if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
+            const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            allScribeAllots[sessionKey] = currentScribeAllotment;
+            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
+        }
+
         // Force Sync
         if (typeof syncSessionToCloud === 'function') {
-            await syncSessionToCloud(currentSessionKey);
+            try {
+                await syncSessionToCloud(sessionKey);
+            } catch (e) {
+                console.warn("Cloud sync failed, data kept locally:", e);
+            }
         }
 
         hasUnsavedScribes = false;
@@ -12938,11 +13000,14 @@ if (saveScribeBtn) {
         const status = document.getElementById('scribe-save-status');
         if(status) {
             status.textContent = "✅ Scribe allotment saved!";
-            setTimeout(() => status.textContent = "", 3000);
+            setTimeout(() => { if(status) status.textContent = ""; }, 3000);
         }
         
+        saveScribeBtn.disabled = false;
+        saveScribeBtn.textContent = "Save Scribe Allotment";
+
         // Refresh to update button state
-        renderScribeAllotmentList(currentSessionKey);
+        renderScribeAllotmentList(sessionKey);
     });
 }
 
@@ -13380,9 +13445,19 @@ if (saveScribeBtn) {
         // **********************************************************************
 
         if (sessionKey && globalScribeList.length > 0) {
-            // Load the allotments for this session
-            const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            // Load the allotments for this session (🛡️ [V12.8 FIX]: Prioritize V1 Manual Saves over V2 Historical context)
+            const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+            
+            // Unify keys: Manual Save (v1) should always win over historical data (v2)
+            const allAllotments = { ...v2, ...v1 }; 
             currentScribeAllotment = allAllotments[sessionKey] || {};
+
+            // 🛡️ [V12.8]: If we found data in V2 that isn't in V1, migrate it back to V1 for persistence
+            if (v2[sessionKey] && !v1[sessionKey]) {
+                v1[sessionKey] = v2[sessionKey];
+                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(v1));
+            }
 
             scribeAllotmentListSection.classList.remove('hidden');
             renderScribeAllotmentList(sessionKey);
@@ -15304,7 +15379,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     if(globalView) globalView.classList.add('hidden');
 
     const [date, time] = sessionKey.split(' | ');
-    const student = allStudentData.find(s => s.Date === date && s.Time === time && s['Register Number'] === regNo);
+    const student = allStudentData.find(s => s.Date === date && s.Time === time && getRegNo(s) === regNo);
 
     if (!student) {
         alert("Student not found in this session.");
@@ -15317,10 +15392,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     
     let allocatedStudent = null;
     sessionAllotment.forEach(room => {
-        const found = (room.students || []).find(s => {
-            const sReg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
-            return sReg === regNo;
-        });
+        const found = (room.students || []).find(s => getRegNo(s) === regNo);
         if (found) {
             allocatedStudent = { 
                 ...found, 
@@ -15349,7 +15421,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
 
     // 4. Update Basic UI
     document.getElementById('search-result-name').textContent = student.Name;
-    document.getElementById('search-result-regno').textContent = student['Register Number'];
+    document.getElementById('search-result-regno').textContent = getRegNo(student);
     document.getElementById('search-result-stream').textContent = streamName;
     document.getElementById('search-result-course').textContent = student.Course;
     document.getElementById('search-result-qpcode').textContent = qpCode;
@@ -15454,7 +15526,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
         document.getElementById('search-result-single-view').classList.add('hidden');
         document.getElementById('search-result-global-view').classList.remove('hidden');
 
-        const exams = allStudentData.filter(s => s['Register Number'] === regNo);
+        const exams = allStudentData.filter(s => getRegNo(s) === regNo);
         if (exams.length === 0) return;
 
         exams.sort((a, b) => {
