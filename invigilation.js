@@ -422,7 +422,9 @@ function setupLiveSync(collegeId, mode) {
       // A. Listen to Shards (Aggregated)
       slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
           let newSlots = {};
+          let shardCount = 0;
           querySnap.forEach(shardDoc => {
+              shardCount++;
               try {
                   const shardMap = JSON.parse(shardDoc.data().data || '{}');
                   
@@ -444,10 +446,23 @@ function setupLiveSync(collegeId, mode) {
               } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
           });
 
-          if (Object.keys(newSlots).length > 0) {
+          const newKeyCount = Object.keys(newSlots).length;
+          const currentKeyCount = Object.keys(invigilationSlots).length;
+
+          // 🛡️ [LISTENER SHIELD]: Protect against partial data streams
+          // If we already have data, and the incoming update is suspiciously small (e.g. < 30% of current),
+          // we block the update to prevent a local wipe that might sync back to the cloud.
+          if (currentKeyCount > 10 && newKeyCount < (currentKeyCount * 0.3)) {
+              console.warn(`🛡️ Listener Shield: Blocked incoming partial slot update. (Local: ${currentKeyCount}, Incoming: ${newKeyCount})`);
+              return;
+          }
+
+          if (newKeyCount > 0) {
               invigilationSlots = newSlots;
               localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
               refreshSlotsUI();
+          } else if (shardCount === 0 && currentKeyCount > 0) {
+              console.warn("🛡️ Listener Shield: Received 0 shards. Preserving local state to prevent accidental wipe.");
           }
       });
 
@@ -2368,63 +2383,58 @@ async function syncSlotsToCloud(affectedKey = null) {
         }
 
         if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
-            // --- OPTIMIZED SINGLE SHARD UPDATE ---
+            // --- OPTIMIZED SURGICAL SHARD UPDATE ---
             const shardId = getShardId(affectedKey);
             const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", shardId);
             
-            // We still need to merge with cloud data for THIS shard to prevent overwriting others' changes in the same month
+            // 🛡️ [SURGICAL PROTECTION]: Fetch the current cloud state for this shard.
+            // We only want to update the 'affectedKey' and leave everything else UNTOUCHED.
             const cloudSnap = await getDoc(shardRef);
             const shardData = cloudSnap.exists() ? JSON.parse(cloudSnap.data().data || '{}') : {};
 
-            // Merge local changes for this shard
-            Object.keys(localSlots).forEach(k => {
-                if (getShardId(k) === shardId) {
-                    if (shardData[k] && k !== affectedKey) {
-                         // Preserve cloud state for other keys in the same shard
-                         const cloudAssigned = shardData[k].assigned || [];
-                         localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
-                         
-                         const cloudUnavail = shardData[k].unavailable || [];
-                         const combinedUnavail = [...(localSlots[k].unavailable || []), ...cloudUnavail];
-                         const uniqueUnavail = [];
-                         const seenUnavail = new Set();
-                         combinedUnavail.forEach(u => {
-                             const email = (typeof u === 'string') ? u : u.email;
-                             if (email && !seenUnavail.has(email)) {
-                                 uniqueUnavail.push(u);
-                                 seenUnavail.add(email);
-                             }
-                         });
-                         localSlots[k].unavailable = uniqueUnavail;
-                         if (shardData[k].allocationLog && !localSlots[k].allocationLog) {
-                             localSlots[k].allocationLog = shardData[k].allocationLog;
-                         }
-                    }
-                }
-            });
+            // Update ONLY the affected key in the cloud's copy
+            if (localSlots[affectedKey]) {
+                shardData[affectedKey] = localSlots[affectedKey];
+            } else {
+                // If the key is missing from localSlots, it means we intend to DELETE it
+                delete shardData[affectedKey];
+            }
 
-            // Filter localSlots to only include keys for this shard
-            const finalShardMap = {};
-            Object.keys(localSlots).forEach(k => {
-                if (getShardId(k) === shardId) finalShardMap[k] = localSlots[k];
-            });
-
-            batch.set(shardRef, { data: JSON.stringify(finalShardMap), lastUpdated: serverTimestamp() });
+            // Write back the merged shard data
+            if (Object.keys(shardData).length > 0) {
+                batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
+            } else {
+                batch.delete(shardRef);
+            }
         } else {
             // --- FULL SYNC OR BATCH UPDATE ---
             
-            // 1. Fetch existing shards to ensure we clear ones that no longer have data
+            // 1. Fetch existing shards to analyze current database size
             const shardsColRef = collection(db, "colleges", currentCollegeId, "slots_daily");
             const existingShardsSnap = await getDocs(shardsColRef);
             const existingShardIds = new Set();
             existingShardsSnap.forEach(s => existingShardIds.add(s.id));
 
-            // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
-            // If local storage is completely empty, do NOT delete cloud shards unless explicitly requested.
-            // This prevents a fresh localhost connection from destroying the live database.
-            if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
-                console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe.");
-                return; 
+            // 🛡️ [ENHANCED SMART SHIELD]: Prevent catastrophic wipes due to partial data loads.
+            const localKeyCount = Object.keys(localSlots).length;
+            const cloudShardCount = existingShardIds.size;
+
+            if (affectedKey !== "FORCE_OVERWRITE") {
+                // Rule A: Never wipe if local is completely empty.
+                if (localKeyCount === 0 && cloudShardCount > 0) {
+                    console.error("🛑 CRITICAL: Local slots are empty but cloud has data. Sync Blocked to prevent wipe.");
+                    updateSyncStatus("Sync Blocked", "error");
+                    return;
+                }
+
+                // Rule B: Safety Check for significant data loss (Local has < 50% of existing shards)
+                // This protects against cases where only one month of data loaded into memory.
+                if (cloudShardCount > 5 && localKeyCount < (cloudShardCount / 2)) {
+                    console.error(`🛑 CRITICAL: Partial Data Detected! Local has ${localKeyCount} keys, but Cloud has ${cloudShardCount} shards. Sync Blocked.`);
+                    updateSyncStatus("Partial Load Blocked", "error");
+                    alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
+                    return;
+                }
             }
 
             const shards = {};
@@ -2440,11 +2450,18 @@ async function syncSlotsToCloud(affectedKey = null) {
             allShardIds.forEach(sid => {
                 const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
+                
                 if (Object.keys(shardData).length > 0) {
                     batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
-                    // Delete shard if it has no data
-                    batch.delete(shardRef);
+                    // 🛡️ [PROTECTED DELETE]: Only delete future shards if FORCE_OVERWRITE is set.
+                    // This prevents accidental pruning of upcoming slots.
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE") {
+                        batch.delete(shardRef);
+                    } else {
+                        console.warn(`🛡️ Protected Shard: Skipping deletion of future empty shard: ${sid}`);
+                    }
                 }
             });
         }

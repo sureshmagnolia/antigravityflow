@@ -251,8 +251,9 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
          if (typeof syncDataToCloud === 'function') {
-            // FIX: Authoritative cleanup of old records
-            await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+            // 🛡️ [AUDIT FIX]: Disabled in app.js to prevent unintended cloud wipes. 
+            // Invigilation management is now authoritative within invigilation.js
+            // await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
     } else {
@@ -2391,74 +2392,68 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 }
             }
 
-// 5. SLOTS — 🛡️ SMART MERGE (Audit Fixed): Prevents Divya/Sindhu overwrites
-                          else if (targetSection === 'slots') {
-                  const localRaw = localStorage.getItem('examInvigilationSlots');
-                  if (localRaw) {
-                      const { getDoc: _getDoc } = window.firebase;
-                      const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "slots"));
-                      const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
-                      const localSlots = JSON.parse(localRaw);
+            // 5. SLOTS (🛡️ ADMIN CONFIRMED WRITE)
+            // app.js is allowed to create/update slots but ONLY with explicit Admin approval.
+            else if (targetSection === 'slots') {
+                const localRaw = localStorage.getItem('examInvigilationSlots');
+                if (!localRaw) return;
 
-                      // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
-                      if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
-                          console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe in app.js.");
-                          isSyncing = false;
-                          updateSyncStatus("Sync Protected", "neutral");
-                          return; 
-                      }
+                const { getDoc: _getDoc } = window.firebase;
+                const cloudSnap = await _getDoc(doc(db, "colleges", cid, "system_data", "slots"));
+                const cloudSlots = cloudSnap.exists() ? JSON.parse(cloudSnap.data().examInvigilationSlots || '{}') : {};
+                const localSlots = JSON.parse(localRaw);
 
-                      // 1. SMART MERGE (Conditional)
-                      if (affectedKey !== "FORCE_OVERWRITE") {
-                          Object.keys(cloudSlots).forEach(k => {
-                              if (localSlots[k]) {
-                                  if (k === affectedKey) return; 
-                                  const cloudAssigned = cloudSlots[k].assigned || [];
-                                  const localAssigned = localSlots[k].assigned || [];
-                                  localSlots[k].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
+                // --- 🛡️ DIFF ANALYSIS ---
+                const newKeys = Object.keys(localSlots).filter(k => !cloudSlots[k]);
+                const changedKeys = Object.keys(localSlots).filter(k => cloudSlots[k] && JSON.stringify(localSlots[k]) !== JSON.stringify(cloudSlots[k]));
+                const deletedKeys = Object.keys(cloudSlots).filter(k => !localSlots[k]);
 
-                                  const cloudUnavail = cloudSlots[k].unavailable || [];
-                                  const localUnavail = localSlots[k].unavailable || [];
-                                  localSlots[k].unavailable = [...new Set([...localUnavail.map(u => typeof u === 'string' ? u : u.email), ...cloudUnavail.map(u => typeof u === 'string' ? u : u.email)])];
+                if (newKeys.length > 0 || changedKeys.length > 0 || deletedKeys.length > 0) {
+                    let message = `⚠️ [INVIGILATION PROTECTION] app.js is trying to sync changes:\n\n`;
+                    if (newKeys.length > 0) message += `➕ ADDING: ${newKeys.length} new sessions.\n`;
+                    if (changedKeys.length > 0) message += `📝 UPDATING: ${changedKeys.length} existing sessions.\n`;
+                    if (deletedKeys.length > 0 && affectedKey !== "FORCE_OVERWRITE") {
+                         message += `🗑️ REMOVING: ${deletedKeys.length} sessions (NOT RECOMMENDED).\n`;
+                    }
+                    
+                    message += `\nDo you want to proceed with this update to the Invigilation Database?`;
+                    
+                    if (!confirm(message)) {
+                        console.warn("🛡️ Sync Cancelled by Admin to protect slots.");
+                        updateSyncStatus("Sync Cancelled", "neutral");
+                        isSyncing = false;
+                        return;
+                    }
+                } else {
+                    // No functional changes, just a pulse or metadata update
+                    console.log("📥 app.js: No functional changes in slots. Skipping redundant write.");
+                    isSyncing = false;
+                    return;
+                }
 
-                                  if (cloudSlots[k].allocationLog && !localSlots[k].allocationLog) {
-                                      localSlots[k].allocationLog = cloudSlots[k].allocationLog;
-                                  }
-                              } else {
-                                  localSlots[k] = cloudSlots[k];
-                              }
-                          });
-                      } // <--- CRITICAL: Close the merge block here!
+                // --- PROCEED WITH SECURE WRITE ---
+                const payload = { 
+                    examInvigilationSlots: JSON.stringify(localSlots),
+                    lastUpdated: serverTimestamp()
+                };
 
-                      // 2. AUTHORITATIVE SAVE (Always runs)
-                      localStorage.setItem('examInvigilationSlots', JSON.stringify(localSlots));
-                      const payload = { examInvigilationSlots: JSON.stringify(localSlots) };
-                      
-                      // 🛡️ SMART MERGE: Protect Advance Unavailability
-                      const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
-                      if (localUnavRaw) {
-                          const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
-                          const localUnav = JSON.parse(localUnavRaw);
-                          
-                          if (affectedKey !== "FORCE_OVERWRITE") {
-                              Object.keys(cloudUnav).forEach(date => {
-                                  if (!localUnav[date]) localUnav[date] = cloudUnav[date];
-                                  else {
-                                      ['FN', 'AN'].forEach(sess => {
-                                          const cList = cloudUnav[date][sess] || [];
-                                          const lList = localUnav[date][sess] || [];
-                                          // Deduplicate by combining stringified objects
-                                          localUnav[date][sess] = [...new Set([...lList.map(u => JSON.stringify(u)), ...cList.map(u => JSON.stringify(u))])].map(s => JSON.parse(s));
-                                      });
-                                  }
-                              });
-                          }
-                          payload.invigAdvanceUnavailability = JSON.stringify(localUnav);
-                      }
-                      
-                      await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
-                  }
-              }
+                // Merge Advance Unavailability safely
+                const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
+                if (localUnavRaw) {
+                    const cloudUnav = cloudSnap.exists() ? JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}') : {};
+                    const localUnav = JSON.parse(localUnavRaw);
+                    
+                    // Simple merge: keep local but don't lose cloud data not in local
+                    Object.keys(cloudUnav).forEach(date => {
+                        if (!localUnav[date]) localUnav[date] = cloudUnav[date];
+                    });
+                    payload.invigAdvanceUnavailability = JSON.stringify(localUnav);
+                }
+
+                await setDoc(doc(db, "colleges", cid, "system_data", "slots"), payload, { merge: true });
+                console.log("✅ app.js: Invigilation data updated (Admin Confirmed).");
+                updateSyncStatus("Slots Updated", "success");
+            }
 
                  // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
