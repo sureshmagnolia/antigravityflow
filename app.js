@@ -2431,6 +2431,44 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     return;
                 }
 
+                // --- 🛡️ [PEOPLE PRESERVATION MERGE] ---
+                // Before saving, ensure that we re-attach all volunteer/unavailability data from the cloud.
+                // This prevents app.js from ever "wiping" people data during a bulk update or recalculation.
+                Object.keys(cloudSlots).forEach(key => {
+                    const cSlot = cloudSlots[key];
+                    if (localSlots[key]) {
+                        // A. Existing Slot: Preserve people data
+                        // We merge them to ensure that if app.js had a partial load, we don't lose the cloud's truth.
+                        const localAssigned = localSlots[key].assigned || [];
+                        const cloudAssigned = cSlot.assigned || [];
+                        localSlots[key].assigned = [...new Set([...localAssigned, ...cloudAssigned])];
+
+                        const localUnavail = (localSlots[key].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                        const cloudUnavail = (cSlot.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                        const uniqueUnavail = [...new Set([...localUnavail, ...cloudUnavail])];
+                        
+                        // Re-map to objects if they were objects in the cloud (preserves reasons/timestamps)
+                        localSlots[key].unavailable = uniqueUnavail.map(email => {
+                            const cloudObj = (cSlot.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                            const localObj = (localSlots[key].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                            return cloudObj || localObj || email;
+                        });
+
+                        localSlots[key].exchangeRequests = [...new Set([...(localSlots[key].exchangeRequests || []), ...(cSlot.exchangeRequests || [])])];
+                        if (cSlot.allocationLog && !localSlots[key].allocationLog) localSlots[key].allocationLog = cSlot.allocationLog;
+                    } else {
+                        // B. Missing Slot (Ghost Preservation): 
+                        // If a session was deleted from the students list but has people, preserve the record.
+                        const hasPeople = (cSlot.assigned && cSlot.assigned.length > 0) || 
+                                          (cSlot.unavailable && cSlot.unavailable.length > 0) ||
+                                          (cSlot.exchangeRequests && cSlot.exchangeRequests.length > 0);
+                        
+                        if (hasPeople) {
+                            localSlots[key] = { ...cSlot, required: 0, studentCount: 0, isGhost: true }; 
+                        }
+                    }
+                });
+
                 // --- PROCEED WITH SECURE WRITE ---
                 const payload = { 
                     examInvigilationSlots: JSON.stringify(localSlots),

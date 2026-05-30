@@ -2444,6 +2444,10 @@ async function syncSlotsToCloud(affectedKey = null) {
                 shards[sid][k] = localSlots[k];
             });
 
+            // 🛡️ [PEOPLE PRESERVATION]: Map existing cloud data for merging
+            const existingShardsMap = {};
+            existingShardsSnap.forEach(s => existingShardsMap[s.id] = s.data().data);
+
             // 2. Update or Clear all shards
             const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
             
@@ -2451,6 +2455,42 @@ async function syncSlotsToCloud(affectedKey = null) {
                 const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
                 
+                // 🛡️ [PEOPLE PRESERVATION MERGE]
+                const rawCloud = existingShardsMap[sid];
+                if (rawCloud && affectedKey !== "SYSTEM_WIPE") {
+                    const cloudMap = JSON.parse(rawCloud);
+                    Object.keys(cloudMap).forEach(key => {
+                        const cSlot = cloudMap[key];
+                        if (shardData[key]) {
+                            // A. Existing Slot: Preserve assignments, unavailability, and requests
+                            const lAssigned = shardData[key].assigned || [];
+                            const cAssigned = cSlot.assigned || [];
+                            shardData[key].assigned = [...new Set([...lAssigned, ...cAssigned])];
+
+                            const lUnav = (shardData[key].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                            const cUnav = (cSlot.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                            const uniqueUnav = [...new Set([...lUnav, ...cUnav])];
+                            shardData[key].unavailable = uniqueUnav.map(email => {
+                                const cObj = (cSlot.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                const lObj = (shardData[key].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                return cObj || lObj || email;
+                            });
+
+                            shardData[key].exchangeRequests = [...new Set([...(shardData[key].exchangeRequests || []), ...(cSlot.exchangeRequests || [])])];
+                            if (cSlot.allocationLog && !shardData[key].allocationLog) shardData[key].allocationLog = cSlot.allocationLog;
+                        } else {
+                            // B. Missing Slot: Resurrect if it contains people data (Ghosting)
+                            const hasPeople = (cSlot.assigned && cSlot.assigned.length > 0) || 
+                                              (cSlot.unavailable && cSlot.unavailable.length > 0) ||
+                                              (cSlot.exchangeRequests && cSlot.exchangeRequests.length > 0);
+                            
+                            if (hasPeople) {
+                                shardData[key] = { ...cSlot, required: 0, studentCount: 0, isGhost: true };
+                            }
+                        }
+                    });
+                }
+
                 if (Object.keys(shardData).length > 0) {
                     batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
