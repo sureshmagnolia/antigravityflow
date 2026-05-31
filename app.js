@@ -11768,11 +11768,11 @@ window.real_populate_qp_code_session_dropdown = function () {
               hasUnsavedAllotment = true;
               // 🛡️ [V3 FIX]: Trigger reliable Session-Specific sync.
               if (typeof syncSessionToCloud === 'function') {
-                  syncSessionToCloud(currentSessionKey).catch(e => console.warn("Background sync failed", e));
+                  syncSessionToCloud(currentSessionKey, true).catch(e => console.warn("Background sync failed", e));
               }
-          }
-       
-        // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
+              }
+
+              // --- MIXING STRATEGY LOCK: Disable strategy selection if allotments exist ---
         const totalAllottedOverall = Object.values(streamStats).reduce((sum, s) => sum + s.allotted, 0);
         const mixingRadios = document.querySelectorAll('input[name="mixing-strategy"]');
         if (totalAllottedOverall > 0) {
@@ -12381,17 +12381,26 @@ window.real_populate_qp_code_session_dropdown = function () {
         // Process sequentially to respect Paper Mixing Engine internally
         for (const stream of currentStreamConfig) {
             let remainingForStream = true;
+            const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+
             while (remainingForStream && roomIndex < selectedRooms.length) {
                 const r = selectedRooms[roomIndex];
                 
                 const [date, time] = currentSessionKey.split(' | ');
-                const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-                const allottedRegNos = new Set();
-                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.addgetRegNo(s)));
+                const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
                 
-                const candidates = sessionStudentRecords.filter(s => 
-                    !allottedRegNos.has(getRegNo(s)) && (s.Stream || "Regular") === stream
-                );
+                if (sessionStudentRecords.length === 0) {
+                    alert("No students found for this session in the master database.");
+                    return;
+                }
+
+                const allottedRegNos = new Set();
+                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                
+                const candidates = sessionStudentRecords.filter(s => {
+                    const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                    return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower;
+                });
                 
                 if (candidates.length === 0) {
                     remainingForStream = false;
@@ -12418,9 +12427,9 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Invisible equivalent to your existing selectRoomForAllotment that respects Mixing Engine fully
     async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none') {
         const [date, time] = currentSessionKey.split(' | ');
-        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
         const allottedRegNos = new Set();
-        currentSessionAllotment.forEach(room => room.students.forEach(s => allottedRegNos.addgetRegNo(s)));
+        currentSessionAllotment.forEach(room => room.students.forEach(s => allottedRegNos.add(getRegNo(s))));
 
         const candidates = [];
         sessionStudentRecords.sort((a, b) => {
@@ -13066,7 +13075,7 @@ if (saveScribeBtn) {
 
                 // 3. Sync to Cloud
                 if (currentCollegeId && typeof syncDataToCloud === 'function') {
-                    await syncSessionToCloud(currentSessionKey);
+                    await syncSessionToCloud(currentSessionKey, true);
                 }
 
                 // 3b. 🚀 Publish Seating to Public Portal
