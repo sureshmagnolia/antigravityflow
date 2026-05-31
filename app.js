@@ -662,7 +662,13 @@ async function pruneOldDataForBasicUsers() {
         await saveExamDataIDB(keptStudents, true); // true = skip cloud sync loop
 
         // 6. Prune LocalStorage Allotments (Frees the 5MB Quota)
-        const lsKeys = ['examRoomAllotment', 'examScribeAllotment', 'examInvigilatorMapping', 'examAbsenteeList', 'examQPCodes'];
+        const lsKeys = [
+          'examRoomAllotment', 'examAllotmentData', 
+          'examScribeAllotment', 'examScribeAllotmentV2', 
+          'examInvigilatorMapping', 'examAbsenteeList', 
+          'examQPCodes', 'examAllKnownSessions',
+          'examInvigilationSlots', 'invigAdvanceUnavailability'
+        ];
         lsKeys.forEach(key => {
             const lsStr = localStorage.getItem(key);
             if (!lsStr) return;
@@ -1851,7 +1857,7 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
 
             const uniqueMap = new Map();
             [...allStudentData, ...freshStudents].forEach(s => {
-                const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || "").toString().trim();
+                const regNo = getRegNo(s);
                 const uKey = `${regNo}_${getSmartSessionKey(s.Date, s.Time)}`;
                 
                 if (regNo && !uniqueMap.has(uKey)) {
@@ -2198,7 +2204,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 const roomString = serial ? `Hall #${serial}${loc}` : `${room.roomName}${loc}`;
 
                 (room.students || []).forEach((s) => {
-                    const reg = (typeof s === 'object' ? (s['Register Number'] || s.RegisterNo) : s);
+                    const reg = getRegNo(s).toUpperCase();
                     if (reg) {
                         studentMap[reg] = {
                             room: roomString,
@@ -2208,18 +2214,19 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                         };
                     }
                 });
-            });
+                });
 
-            // Add scribe allotments
-            Object.entries(scribeAllotment || {}).forEach(([reg, scribeRoom]) => {
+                // Add scribe allotments
+                Object.entries(scribeAllotment || {}).forEach(([rawReg, scribeRoom]) => {
+                const reg = rawReg.toUpperCase();
                 const sSerial = roomSerialMap[scribeRoom] || '-';
                 const sInfo = roomConfig[scribeRoom] || {};
                 const sLoc = (sInfo.location && sInfo.location.trim()) ? ` (${sInfo.location})` : '';
                 const sRoomString = sSerial ? `Hall #${sSerial}${sLoc}` : `${scribeRoom}${sLoc}`;
-                
+
                 if (studentMap[reg]) studentMap[reg].room = sRoomString;
                 else studentMap[reg] = { room: sRoomString, seat: 'Scribe', name: '', course: '' };
-            });
+                });
 
 
             const docId = `${cid}_${generateSessionId(sessionKey)}`;
@@ -3442,7 +3449,7 @@ function generateDayWisePDF() {
         const studentToRoomMap = {};
         sessionAllotment.forEach(room => {
             (room.students || []).forEach(s => {
-                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                const reg = getRegNo(s);
                 studentToRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
             });
         });
@@ -3451,7 +3458,7 @@ function generateDayWisePDF() {
         const sessionQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[reportsSessionSelect.value] || {};
         
         const dataWithRooms = rawData.map(s => {
-            const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
+            const assignment = studentToRoomMap[getRegNo(s)] || { room: 'Unallotted', seat: '?' };
             const courseKey = window.getQpKey(s.Course, s.Stream || 'Regular');
             return { 
                 ...s, 
@@ -3471,7 +3478,7 @@ function generateDayWisePDF() {
             if (!sessionsMap[stream]) sessionsMap[stream] = {};
             if (!sessionsMap[stream][key]) sessionsMap[stream][key] = { date: row.Date, time: row.Time, students: [], scribes: [] };
             sessionsMap[stream][key].students.push(row);
-            if(scribeRegNos.has(row['Register Number'])) sessionsMap[stream][key].scribes.push(row);
+            if(scribeRegNos.has(getRegNo(row))) sessionsMap[stream][key].scribes.push(row);
         });
 
         // --- 5. RENDER LOOP ---
@@ -3490,7 +3497,7 @@ function generateDayWisePDF() {
                 
                 sData.students.sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    return a['Register Number'].localeCompare(b['Register Number']);
+                    return getRegNo(a).localeCompare(getRegNo(b));
                 });
 
                 const printRows = [];
@@ -3503,11 +3510,11 @@ function generateDayWisePDF() {
                     }
                     
                     let roomName = s['Room No'];
-                    const isScribe = scribeRegNos.has(s['Register Number']);
+                    const isScribe = scribeRegNos.has(getRegNo(s));
                     
                     if (isScribe) {
                         const sessionKeyPipe = `${sData.date} | ${sData.time}`;
-                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[s['Register Number']];
+                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[getRegNo(s)];
                         if (scribeRoom) roomName = scribeRoom;
                     }
 
@@ -3517,7 +3524,7 @@ function generateDayWisePDF() {
                     printRows.push({
                         type: 'data',
                         loc: locText,
-                        reg: s['Register Number'],
+                        reg: getRegNo(s),
                         name: s.Name,
                         seat: isScribe ? "SCR" : s.seatNumber,
                         isScribe: isScribe
@@ -3574,9 +3581,9 @@ function generateDayWisePDF() {
                     const currentSessionScribes = allScribeAllotments[sessionKeyPipe] || {};
 
                     sData.scribes.forEach(s => {
-                        const r = currentSessionScribes[s['Register Number']] || s['Room No'];
+                        const r = currentSessionScribes[getRegNo(s)] || s['Room No'];
                         if(!map[r]) map[r] = [];
-                        map[r].push(`${s.Name} (${s['Register Number']})`);
+                        map[r].push(`${s.Name} (${getRegNo(s)})`);
                     });
 
                     const sRows = Object.keys(map).sort();
@@ -4473,7 +4480,7 @@ function generateQuestionPaperReportPDF() {
         const studentToRoomMap = {};
         sessionAllotment.forEach(room => {
             (room.students || []).forEach(s => {
-                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                const reg = (typeof s === 'object') ? getRegNo(s) : s;
                 studentToRoomMap[reg] = { room: room.roomName, seat: s.seat || '?' };
             });
         });
@@ -4482,7 +4489,7 @@ function generateQuestionPaperReportPDF() {
         const sessionQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}')[reportsSessionSelect.value] || {};
         
         const dataWithRooms = rawData.map(s => {
-            const assignment = studentToRoomMap[s['Register Number']] || { room: 'Unallotted', seat: '?' };
+            const assignment = studentToRoomMap[getRegNo(s)] || { room: 'Unallotted', seat: '?' };
             const courseKey = window.getQpKey(s.Course, s.Stream || 'Regular');
             return { 
                 ...s, 
@@ -5462,7 +5469,7 @@ if (toggleButton && sidebar) {
 
         data.forEach(row => {
             const sessionKeyPipe = `${row.Date} | ${row.Time}`;
-            const isScribe = scribeRegNos.has(row['Register Number']);
+            const isScribe = scribeRegNos.has(getRegNo(row));
 
             let assignedRoomName = "Unallotted";
             let seatNumber = "N/A";
@@ -5473,8 +5480,8 @@ if (toggleButton && sidebar) {
                 for (const room of manualAllotment) {
                     // FIX: Handle both Object array (New) and String array (Legacy)
                     const studentIndex = room.students.findIndex(s => {
-                        const r = (typeof s === 'object') ? s['Register Number'] : s;
-                        return r === row['Register Number'];
+                        const r = (typeof s === 'object') ? getRegNo(s) : s;
+                        return r === getRegNo(row);
                     });
 
                     if (studentIndex !== -1) {
@@ -6024,7 +6031,7 @@ if (toggleButton && sidebar) {
                     }
                     stats.students++;
 
-                    if (scribeRegNos.has(s['Register Number'])) {
+                    if (scribeRegNos.has(getRegNo(s))) {
 
                         stats.scribeCount++;
                     } else {
@@ -6266,7 +6273,7 @@ if (toggleButton && sidebar) {
 
             // 1. Count & Segregate
             students.forEach(s => {
-                if (scribeRegNos.has(s['Register Number'])) {
+                if (scribeRegNos.has(getRegNo(s))) {
                     scribeCount++;
                 } else {
                     const strm = s.Stream || "Regular";
@@ -6414,7 +6421,7 @@ if (toggleButton && sidebar) {
         // 1. Get total unique students for the session
         const [date, time] = sessionKey.split(' | ');
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const totalUniqueStudents = new Set(sessionStudentRecords.map(s => s['Register Number'])).size;
+        const totalUniqueStudents = new Set(sessionStudentRecords.map(s => getRegNo(s))).size;
 
         if (totalUniqueStudents === 0) {
             alert('No students found for this session.');
@@ -6435,7 +6442,7 @@ if (toggleButton && sidebar) {
         // Add Regular Allotments (FIXED: Handles Objects vs Strings)
         manualAllotment.forEach(room => {
             room.students.forEach(s => {
-                const regNo = (typeof s === 'object') ? s['Register Number'] : s;
+                const regNo = (typeof s === 'object') ? getRegNo(s) : s;
                 allottedRegNos.add(regNo);
             });
         });
@@ -6511,7 +6518,7 @@ if (toggleButton && sidebar) {
                 const sessionAllotment = allAllotments[sk] || [];
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
-                        const isOfficialScribe = scribeRegNos.has(s['Register Number']);
+                        const isOfficialScribe = scribeRegNos.has(getRegNo(s));
                         final_student_list_for_report.push({
                             ...s,                      // Original Student Keys
                             'Room No': room.roomName, // Physical Room
@@ -6758,7 +6765,7 @@ if (toggleButton && sidebar) {
                         const seatNumber = student.seatNumber;
                         const asterisk = student.isPlaceholder ? '*' : '';
 
-                        const regNo = student['Register Number'];
+                        const regNo = getRegNo(student);
                         let displayRegNo = regNo;
                         const match = regNo.match(regNoRegex);
                         if (match) {
@@ -7059,7 +7066,7 @@ if (toggleButton && sidebar) {
 
                     if (student.isScribe) {
                         const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[student['Register Number']];
+                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[getRegNo(student)];
                         if (scribeRoom) roomName = scribeRoom;
                         seatNo = 'SCR';
                         rowStyle = 'font-weight: bold; color: #c2410c;';
@@ -7140,7 +7147,7 @@ if (toggleButton && sidebar) {
                         }
                     // TIGHT PADDING: Guaranteed Register Numbers won't word-wrap and bloat the rows
                     rowsHtml += `
-                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${row.student['Register Number']}</td>                    
+                        <td style="padding: 1px 4px; font-weight: 700; font-size: 8.5pt; border: 1px solid #000; white-space: nowrap; overflow: hidden;">${getRegNo(row.student)}</td>                    
                         <td style="padding: 1px 4px; font-size: 7.5pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #000;">
                             ${row.student.Name}
                         </td>
@@ -7173,7 +7180,7 @@ if (toggleButton && sidebar) {
             for (const streamName of sortedStreamNames) {
                 // Use the already prepared stream data
                 const processed_rows = (dataByStream[streamName] || []).map(s => {
-                    const reg = s['Register Number'] || s.RegisterNo || '';
+                    const reg = getRegNo(s);
                     return {
                         ...s,
                         isScribe: scribeRegSet.has(reg)
@@ -7200,7 +7207,7 @@ if (toggleButton && sidebar) {
 
                     session.students.sort((a, b) => {
                         if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                        return a['Register Number'].localeCompare(b['Register Number']);
+                        return getRegNo(a).localeCompare(getRegNo(b));
                     });
 
                     for (let i = 0; i < session.students.length; i += STUDENTS_PER_PAGE) {
@@ -7280,7 +7287,7 @@ if (toggleButton && sidebar) {
         const scribesByRoom = {};
         scribes.forEach(s => {
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-            const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+            const newRoom = allotments[sessionKeyPipe]?.[getRegNo(s)] || "Unallotted";
             if (!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
             scribesByRoom[newRoom].push(s);
         });
@@ -7289,7 +7296,7 @@ if (toggleButton && sidebar) {
         <h3 style="margin:0 0 5px 0; font-size:11pt; text-decoration:underline;">Scribe Assistance Summary</h3>`;
 
         Object.keys(scribesByRoom).sort().forEach(room => {
-            const names = scribesByRoom[room].map(s => `${s.Name} (${s['Register Number']})`).join(', ');
+            const names = scribesByRoom[room].map(s => `${s.Name} (${getRegNo(s)})`).join(', ');
             html += `<div style="font-size:9pt; margin-bottom:4px;"><strong>${room}:</strong> ${names}</div>`;
         });
         html += `</div>`;
@@ -7675,7 +7682,7 @@ if (toggleButton && sidebar) {
         const scribesByRoom = {};
         scribes.forEach(s => {
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-            const newRoom = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+            const newRoom = allotments[sessionKeyPipe]?.[getRegNo(s)] || "Unallotted";
             if (!scribesByRoom[newRoom]) scribesByRoom[newRoom] = [];
             scribesByRoom[newRoom].push(s);
         });
@@ -7684,7 +7691,7 @@ if (toggleButton && sidebar) {
         Object.keys(scribesByRoom).sort().forEach(roomName => {
             const students = scribesByRoom[roomName];
             // Create a comma-separated string
-            const studentList = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+            const studentList = students.map(s => `<b>${s.Name}</b> (${getRegNo(s)})`).join(', ');
 
             const roomInfo = currentRoomConfig[roomName] || {};
             const location = roomInfo.location ? `(${roomInfo.location})` : "";
@@ -8087,7 +8094,7 @@ if (toggleButton && sidebar) {
         const scribesByRoom = {};
         scribes.forEach(s => {
             const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-            let roomName = allotments[sessionKeyPipe]?.[s['Register Number']] || "Unallotted";
+            let roomName = allotments[sessionKeyPipe]?.[getRegNo(s)] || "Unallotted";
 
             // Get clean location/room name for grouping
             const roomInfo = currentRoomConfig[roomName] || {};
@@ -8115,7 +8122,7 @@ if (toggleButton && sidebar) {
         let rowsHtml = '';
         Object.keys(scribesByRoom).sort().forEach(roomDisplay => {
             const students = scribesByRoom[roomDisplay];
-            const studentNames = students.map(s => `<b>${s.Name}</b> (${s['Register Number']})`).join(', ');
+            const studentNames = students.map(s => `<b>${s.Name}</b> (${getRegNo(s)})`).join(', ');
 
             rowsHtml += `
             <tr>
@@ -8656,11 +8663,11 @@ if (toggleButton && sidebar) {
                         group.courses[student.Course] = { name: student.Course, present: [], absent: [] };
                     }
 
-                    if (absenteeRegNos.has(student['Register Number'])) {
-                        group.courses[student.Course].absent.push(student['Register Number']);
+                    if (absenteeRegNos.has(getRegNo(student))) {
+                        group.courses[student.Course].absent.push(getRegNo(student));
                         group.grandAbsent++;
                     } else {
-                        group.courses[student.Course].present.push(student['Register Number']);
+                        group.courses[student.Course].present.push(getRegNo(student));
                         group.grandPresent++;
                     }
                     group.grandTotal++;
@@ -8884,7 +8891,7 @@ if (toggleButton && sidebar) {
                 const sessionAllotment = allAllotments[sk] || [];
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
-                        const reg = s['Register Number'] || s.RegisterNo;
+                        const reg = getRegNo(s);
                         if (reg) {
                             const lookupKey = `${s.Date}|${s.Time}|${reg}`;
                             originalRoomMap[lookupKey] = { 
@@ -8916,12 +8923,12 @@ if (toggleButton && sidebar) {
                 const sessionScribeRooms = allScribeAllotments[sKey] || {};
                 const sessionQPCodes = qpCodeMap[sKey] || {};
                 const courseKey = getQpKey(s.Course, s.Stream);
-                const lookupKey = `${s.Date}|${s.Time}|${s['Register Number']}`;
+                const lookupKey = `${s.Date}|${s.Time}|${getRegNo(s)}`;
                 const originalRoomData = originalRoomMap[lookupKey] || { room: 'N/A', seat: 'N/A' };
                 const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sKey) : {};
                 const orgSerial = roomSerialMap[originalRoomData.room] || '-';
                 const originalRoomDisplay = `${orgSerial} - ${originalRoomData.room} (Seat: ${originalRoomData.seat})`;
-                const rawScribeRoom = sessionScribeRooms[s['Register Number']];
+                const rawScribeRoom = sessionScribeRooms[getRegNo(s)];
                 let scribeRoomDisplay = 'Not Allotted';
 
                 if (rawScribeRoom) {
@@ -8932,7 +8939,7 @@ if (toggleButton && sidebar) {
                 }
 
                 reportRows.push({
-                    Date: s.Date, Time: s.Time, RegisterNumber: s['Register Number'],
+                    Date: s.Date, Time: s.Time, RegisterNumber: getRegNo(s),
                     Name: s.Name, Course: s.Course, OriginalRoom: originalRoomDisplay,
                     ScribeRoom: scribeRoomDisplay, QPCode: sessionQPCodes[courseKey] || 'N/A',
                     Stream: s.Stream || "Regular"
@@ -9074,7 +9081,7 @@ if (toggleButton && sidebar) {
                 const sessionAllotment = allAllotments[sk] || [];
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
-                        const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                        const reg = getRegNo(s);
                         if (reg) {
                             const lookupKey = `${s.Date}|${s.Time}|${reg}`;
                             originalRoomMap[lookupKey] = { 
@@ -9119,8 +9126,9 @@ if (toggleButton && sidebar) {
 
                 // *** FIX: Use getBase64CourseKey (No cleanCourseKey) ***
                 const courseKey = getQpKey(s.Course, s.Stream);
+                const regNo = getRegNo(s);
 
-                const originalRoomData = originalRoomMap[`${s.Date}|${s.Time}|${s['Register Number']}`] || { room: 'N/A', seat: 'N/A' };
+                const originalRoomData = originalRoomMap[`${s.Date}|${s.Time}|${regNo}`] || { room: 'N/A', seat: 'N/A' };
                 const roomSerialMap = (typeof getRoomSerialMap === 'function') ? getRoomSerialMap(sessionKey) : {};
 
                 // --- Format Original Room (Fixed) ---
@@ -9128,7 +9136,7 @@ if (toggleButton && sidebar) {
                 const originalRoomDisplay = `Hall #${orgSerial} (Seat: ${originalRoomData.seat})`;
 
                 // --- Format Scribe Room (Fixed) ---
-                const rawScribeRoom = sessionScribeRooms[s['Register Number']];
+                const rawScribeRoom = sessionScribeRooms[regNo];
                 let scribeRoomDisplay = '<span style="color:red;">Not Allotted</span>';
 
                 if (rawScribeRoom) {
@@ -9146,7 +9154,7 @@ if (toggleButton && sidebar) {
                 reportRows.push({
                     Date: s.Date,
                     Time: s.Time,
-                    RegisterNumber: s['Register Number'],
+                    RegisterNumber: regNo,
                     Name: s.Name,
                     Course: s.Course,
                     OriginalRoom: originalRoomDisplay,
@@ -9898,17 +9906,17 @@ async function parseCsvAndLoadData(csvText) {
 
         // --- 3. CALCULATE DIFF ---
         // Create Sets of Register Numbers for fast lookup
-        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
-        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+        const newRegNos = new Set(newJsonData.map(s => getRegNo(s)));
+        const oldRegNos = new Set(relevantOldData.map(s => getRegNo(s)));
 
         // A. Students to UPDATE (Present in both) - We automatically take the NEW version (to fix times/names)
-        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
+        const commonStudents = newJsonData.filter(s => oldRegNos.has(getRegNo(s)));
 
         // B. Students to ADD (In File, not in DB)
-        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
+        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(getRegNo(s)));
 
         // C. Students to DELETE (In DB, missing from File)
-        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(getRegNo(s)));
 
 
         // --- 4. INTERACTIVE PROMPTS ---
@@ -10004,7 +10012,7 @@ window.real_populate_session_dropdown = function () {
             const uniqueStudentEntries = [];
             
             allStudentData.forEach(row => {
-                const key = `${row.Date}|${row.Time}|${row['Register Number']}`;
+                const key = `${row.Date}|${row.Time}|${getRegNo(row)}`;
                 if (!seenKeys.has(key)) {
                     seenKeys.add(key);
                     uniqueStudentEntries.push(row);
@@ -10179,7 +10187,7 @@ window.real_populate_session_dropdown = function () {
         const sessionStudents = window.getStudentsForSession(allStudentData, date, time);
 
         // Filter by search query
-        const matches = sessionStudents.filter(s => s['Register Number'].toUpperCase().includes(query)).slice(0, 10);
+        const matches = sessionStudents.filter(s => getRegNo(s).toUpperCase().includes(query)).slice(0, 10);
 
         if (matches.length > 0) {
             autocompleteResults.innerHTML = '';
@@ -10189,7 +10197,7 @@ window.real_populate_session_dropdown = function () {
                 const strm = student.Stream || "Regular";
                 item.innerHTML = `
                 <div class="flex justify-between items-center">
-                    <span>${student['Register Number'].replace(new RegExp(query, 'gi'), '<strong>$&</strong>')} (${student.Name})</span>
+                    <span>${getRegNo(student).replace(new RegExp(query, 'gi'), '<strong>$&</strong>')} (${student.Name})</span>
                     <span class="text-xs font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded ml-2">${strm}</span>
                 </div>
             `;
@@ -10204,7 +10212,7 @@ window.real_populate_session_dropdown = function () {
 
     function selectStudent(student) {
         selectedStudent = student;
-        absenteeSearchInput.value = student['Register Number'];
+        absenteeSearchInput.value = getRegNo(student);
         autocompleteResults.classList.add('hidden');
 
         // V87 FIX: Allocate rooms for the *entire* session to find the correct room
@@ -10218,7 +10226,7 @@ window.real_populate_session_dropdown = function () {
         
         let allocatedStudent = null;
         sessionAllotment.forEach(room => {
-            const found = (room.students || []).find(s => (s['Register Number'] || s.RegisterNo) === student['Register Number']);
+            const found = (room.students || []).find(s => getRegNo(s) === getRegNo(student));
             if (found) allocatedStudent = { ...found, 'Room No': room.roomName };
         });
 
@@ -10254,11 +10262,12 @@ window.real_populate_session_dropdown = function () {
             return;
         }
         for (const student of allStudentData) {
-            if (!seenRegNos.has(student['Register Number'])) {
-                seenRegNos.add(student['Register Number']);
+            const reg = getRegNo(student);
+            if (reg && !seenRegNos.has(reg)) {
+                seenRegNos.add(reg);
                 // Store just what's needed, NOW INCLUDING STREAM
                 allUniqueStudentsForScribeSearch.push({
-                    regNo: student['Register Number'],
+                    regNo: reg,
                     name: student.Name,
                     stream: student.Stream || "Regular" // <--- Added Stream
                 });
@@ -10303,7 +10312,7 @@ window.real_populate_session_dropdown = function () {
         if (!selectedStudent) return;
 
         const sessionKey = sessionSelect.value;
-        const regNo = selectedStudent['Register Number'];
+        const regNo = getRegNo(selectedStudent);
 
         if (currentAbsenteeList.includes(regNo)) {
             alert(`${regNo} is already on the absentee list.`);
@@ -10402,7 +10411,7 @@ window.real_populate_session_dropdown = function () {
         const allocatedMap = {};
         sessionAllotment.forEach(room => {
             (room.students || []).forEach(s => {
-                const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                const reg = (typeof s === 'object') ? getRegNo(s) : s;
                 allocatedMap[reg] = {
                     room: room.roomName,
                     isScribe: s.isScribe,
@@ -10978,7 +10987,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                                 const importedStudents = restoredData[key];
                                 if (isMerge) {
                                     const existingData = await loadExamDataIDB() || [];
-                                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
                                     const existingKeys = new Set(existingData.map(getRowKey));
                                     
                                     const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
@@ -11371,7 +11380,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
                     for (const s of allocatedStudents) {
                         // A. Basic Info
-                        const regNo = s['Register Number'];
+                        const regNo = getRegNo(s);
                         const stream = s.Stream || "Regular";
                         const course = s.Course;
 
@@ -11450,7 +11459,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const d2 = b.Date.split('.').reverse().join('');
                     if (d1 !== d2) return d1.localeCompare(d2);
                     if (a.Time !== b.Time) return a.Time.localeCompare(b.Time);
-                    return a["Register Number"].localeCompare(b["Register Number"]);
+                    return getRegNo(a).localeCompare(getRegNo(b));
                 });
 
                 // 5. Generate CSV Content
@@ -11606,8 +11615,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                 .filter(s => (s.Stream || 'Regular') === stream)
                 .sort((a, b) => {
                     if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    const rA = (a['Register Number'] || '').toString().trim();
-                    const rB = (b['Register Number'] || '').toString().trim();
+                    const rA = (getRegNo(a) || '').toString().trim();
+                    const rB = (getRegNo(b) || '').toString().trim();
                     return rA.localeCompare(rB);
                 });
 
@@ -12378,10 +12387,10 @@ window.real_populate_qp_code_session_dropdown = function () {
                 const [date, time] = currentSessionKey.split(' | ');
                 const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
                 const allottedRegNos = new Set();
-                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(s['Register Number'] || s.RegisterNo)));
+                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.addgetRegNo(s)));
                 
                 const candidates = sessionStudentRecords.filter(s => 
-                    !allottedRegNos.has(s['Register Number']) && (s.Stream || "Regular") === stream
+                    !allottedRegNos.has(getRegNo(s)) && (s.Stream || "Regular") === stream
                 );
                 
                 if (candidates.length === 0) {
@@ -12411,15 +12420,15 @@ window.real_populate_qp_code_session_dropdown = function () {
         const [date, time] = currentSessionKey.split(' | ');
         const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
         const allottedRegNos = new Set();
-        currentSessionAllotment.forEach(room => room.students.forEach(s => allottedRegNos.add(s['Register Number'] || s.RegisterNo)));
+        currentSessionAllotment.forEach(room => room.students.forEach(s => allottedRegNos.addgetRegNo(s)));
 
         const candidates = [];
         sessionStudentRecords.sort((a, b) => {
             // Primary: Course alphabetically
             if (a.Course !== b.Course) return (a.Course || '').localeCompare(b.Course || '');
             // Secondary: Register prefix DESC, number ASC
-            const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
-            const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
+            const regA = getRegNo(a) ? getRegNo(a).toString().trim() : "";
+            const regB = getRegNo(b) ? getRegNo(b).toString().trim() : "";
             const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             if (matchA && matchB) {
@@ -12431,7 +12440,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             return regA.localeCompare(regB);
         });
         for (const student of sessionStudentRecords) {
-            if (!allottedRegNos.has(student['Register Number']) && (student.Stream || "Regular") === targetStream) {
+            if (!allottedRegNos.has(getRegNo(student)) && (student.Stream || "Regular") === targetStream) {
                 candidates.push(student);
             }
         }
@@ -12485,7 +12494,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         // 1. Cleanup Scribes (Existing)
         if (roomData && roomData.students) {
             roomData.students.forEach(s => {
-                const reg = (typeof s === 'object') ? s['Register Number'] : s;
+                const reg = (typeof s === 'object') ? getRegNo(s) : s;
                 if (currentScribeAllotment[reg]) {
                     delete currentScribeAllotment[reg];
                 }
@@ -12773,7 +12782,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         const allottedRegNos = new Set();
         currentSessionAllotment.forEach(room => {
             room.students.forEach(s => {
-                const reg = (typeof s === 'object') ? s['Register Number'] : s;
+                const reg = (typeof s === 'object') ? getRegNo(s) : s;
                 allottedRegNos.add(reg);
             });
         });
@@ -12786,8 +12795,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             // Primary: Course alphabetically
             if (a.Course !== b.Course) return (a.Course || '').localeCompare(b.Course || '');
             // Secondary: Register prefix DESC, number ASC
-            const regA = a['Register Number'] ? a['Register Number'].toString().trim() : "";
-            const regB = b['Register Number'] ? b['Register Number'].toString().trim() : "";
+            const regA = getRegNo(a) ? getRegNo(a).toString().trim() : "";
+            const regB = getRegNo(b) ? getRegNo(b).toString().trim() : "";
             const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
             if (matchA && matchB) {
@@ -12799,7 +12808,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             return regA.localeCompare(regB);
         });
         for (const student of sessionStudentRecords) {
-            const regNo = student['Register Number'];
+            const regNo = getRegNo(student);
             const studentStream = student.Stream || "Regular";
             if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
                 candidates.push(student);
@@ -13391,13 +13400,13 @@ if (saveScribeBtn) {
     let selectedScribeStudent = null;
     function selectScribeStudent(student) {
         selectedScribeStudent = student;
-        scribeSearchInput.value = student['Register Number'];
+        scribeSearchInput.value = getRegNo(student);
         scribeAutocompleteResults.classList.add('hidden');
 
         const strm = student.Stream || "Regular";
         scribeSelectedStudentName.textContent = student.Name;
         // Show Stream in the selected details
-        scribeSelectedStudentRegno.innerHTML = `${student['Register Number']} <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${strm}</span>`;
+        scribeSelectedStudentRegno.innerHTML = `${getRegNo(student)} <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">${strm}</span>`;
         scribeSelectedStudentDetails.classList.remove('hidden');
     }
 
@@ -13405,7 +13414,7 @@ if (saveScribeBtn) {
     addScribeStudentButton.addEventListener('click', () => {
         if (!selectedScribeStudent) return;
 
-        const regNo = selectedScribeStudent['Register Number'];
+        const regNo = getRegNo(selectedScribeStudent);
 
         // Check if already on list
         if (globalScribeList.some(s => s.regNo === regNo)) {
@@ -13475,7 +13484,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Filter to get only scribe students *in this session*
     const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
-    const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(s['Register Number']));
+    const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(getRegNo(s)));
 
     const scribeAllotmentList = document.getElementById('scribe-allotment-list');
     if (!scribeAllotmentList) return;
@@ -13493,13 +13502,14 @@ function renderScribeAllotmentList(sessionKey) {
     const uniqueSessionScribeStudents = [];
     const seenRegNos = new Set();
     for (const student of sessionScribeStudents) {
-        if (!seenRegNos.has(student['Register Number'])) {
-            seenRegNos.add(student['Register Number']);
+        const reg = getRegNo(student);
+        if (!seenRegNos.has(reg)) {
+            seenRegNos.add(reg);
             uniqueSessionScribeStudents.push(student);
         }
     }
 
-    uniqueSessionScribeStudents.sort((a, b) => a['Register Number'].localeCompare(b['Register Number']));
+    uniqueSessionScribeStudents.sort((a, b) => getRegNo(a).localeCompare(getRegNo(b)));
 
     // Update Count Header with Badge
     const headerEl = document.getElementById('scribe-session-header');
@@ -13510,7 +13520,7 @@ function renderScribeAllotmentList(sessionKey) {
     const roomSerialMap = getRoomSerialMap(sessionKey);
 
     uniqueSessionScribeStudents.forEach(student => {
-        const regNo = student['Register Number'];
+        const regNo = getRegNo(student);
         const allottedRoom = currentScribeAllotment[regNo];
 
         const item = document.createElement('div');
@@ -13590,7 +13600,7 @@ function renderScribeAllotmentList(sessionKey) {
     // --- NEW: AUTO-SAVE WHEN ALL SCRIBES COMPLETED ---
     // Check if every student in the list has an assigned room
     const allScribesAllotted = uniqueSessionScribeStudents.every(student => 
-        currentScribeAllotment[student['Register Number']]
+        currentScribeAllotment[getRegNo(student)]
     );
 
     if (allScribesAllotted && hasUnsavedScribes) {
@@ -14033,7 +14043,7 @@ window.real_disable_all_report_buttons = function (disabled) {
                 <div class="text-xs text-gray-500">${student.Time}</div>
             </td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
-                ${student['Register Number']}
+                ${getRegNo(student)}
             </td>
             <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 ${student.Name}
@@ -14068,7 +14078,7 @@ window.real_disable_all_report_buttons = function (disabled) {
                             </span>
                         </div>
                         <div class="text-xs text-gray-500 font-mono mt-1 font-semibold tracking-wide break-all">
-                            ${student['Register Number']}
+                            ${getRegNo(student)}
                         </div>
                     </div>
                 </div>
@@ -14233,7 +14243,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             }
     
             modalExamName.value = existingExam;
-            modalRegNo.value = student['Register Number'];
+            modalRegNo.value = getRegNo(student);
             modalName.value = student.Name;
             streamSelect.value = student.Stream || currentStreamConfig[0];
             }
@@ -14292,7 +14302,7 @@ window.real_disable_all_report_buttons = function (disabled) {
                 Date: finalDate,
                 Time: finalTime,
                 Course: newCourse || original.Course,
-                'Register Number': newRegNo || original['Register Number'],
+                'Register Number': newRegNo || getRegNo(original),
                 Name: newName || original.Name,
                 Stream: newStream || original.Stream || "Regular",
                 'Exam Name': newExamName || original['Exam Name'] // NEW
@@ -14745,7 +14755,7 @@ Are you sure you want to update these records?
                   }
                   sessionStats[sessionKey].streams[strm]++;
 
-                  const isScribe = scribeRegNos.has(student['Register Number']);
+                  const isScribe = scribeRegNos.has(getRegNo(student));
                   if (isScribe) {
                       // Scribes also counted separately to trigger the 1:5 staff requirement
                       sessionStats[sessionKey].scribeCount++;
@@ -15011,7 +15021,7 @@ Are you sure you want to update these records?
                     let isScribe = false;
                     if (student.isScribe) {
                         const sessionKeyPipe = `${student.Date} | ${student.Time}`;
-                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[student['Register Number']];
+                        const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[getRegNo(student)];
                         if (scribeRoom) {
                             roomName = scribeRoom;
                             isScribe = true;
@@ -15110,7 +15120,7 @@ Are you sure you want to update these records?
                             studentGridHtml += `
                             <div style="display: grid; grid-template-columns: 25px max-content 1fr; align-items: center; border-bottom: 1px dotted #ccc; padding: ${rowPadding} 0; font-size: ${regFontSize};">
                                 <div style="text-align: center; font-weight: bold; border-right: 1px solid #ddd;">${seatDisplay}</div>
-                                <div style="text-align: left; font-weight: bold; padding-left: 5px; padding-right: 5px; border-right: 1px solid #ddd; white-space:nowrap;">${s['Register Number']}</div>
+                                <div style="text-align: left; font-weight: bold; padding-left: 5px; padding-right: 5px; border-right: 1px solid #ddd; white-space:nowrap;">${getRegNo(s)}</div>
                                 <div style="padding-left: 5px; font-size: ${nameFontSize}; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #333;">
                                     ${displayName} ${scribeBadge}
                                 </div>
@@ -15323,7 +15333,7 @@ Are you sure you want to update these records?
 
             // Filter
             const matches = sourceArray.filter(s => {
-                const r = s['Register Number'] || s.regNo;
+                const r = getRegNo(s) || s.regNo;
                 const n = s.Name || s.name;
                 return (r && r.toUpperCase().includes(query)) || (n && n.toUpperCase().includes(query));
             }).slice(0, 15);
@@ -15331,7 +15341,7 @@ Are you sure you want to update these records?
             if (matches.length > 0) {
                 studentSearchAutocomplete.innerHTML = '';
                 matches.forEach(student => {
-                    const regNo = student['Register Number'] || student.regNo;
+                    const regNo = getRegNo(student) || student.regNo;
                     const name = student.Name || student.name;
 
                     // *** FIX: DEFINE STREAM HERE ***
@@ -15565,7 +15575,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
 
             sessionAllotment.forEach(room => {
                 const match = (room.students || []).find(s => {
-                    const r = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                    const r = (typeof s === 'object') ? getRegNo(s) : s;
                     return r === regNo;
                 });
                 if (match) {
@@ -15680,17 +15690,17 @@ Are you sure?
                 if (!confirm("Are you absolutely sure?")) return;
 
                 // --- 🛡️ ABSOLUTE SYNC (V14): Cascading Delete ---
-                const deletedRegNos = new Set(studentsToDelete.map(d => d['Register Number']));
+                const deletedRegNos = new Set(studentsToDelete.map(d => getRegNo(d)));
                 
                 // 1. Purge from Master List
-                allStudentData = allStudentData.filter(s => !deletedRegNos.has(s['Register Number'] || s.RegisterNo));
+                allStudentData = allStudentData.filter(s => !deletedRegNos.hasgetRegNo(s));
                 
                 // 2. Purge from Sticky Allotments (Reports)
                 let roomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 if (roomAllots[sessionVal]) {
                     roomAllots[sessionVal].forEach(room => {
                         room.students = (room.students || []).filter(s => {
-                            const reg = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                            const reg = (typeof s === 'object') ? getRegNo(s) : s;
                             return !deletedRegNos.has(reg);
                         });
                     });
@@ -16002,7 +16012,7 @@ Are you sure?
     function getRecordKey(row) {
         const d = row.Date ? row.Date.toString().trim().toUpperCase() : "";
         const t = row.Time ? row.Time.toString().trim().toUpperCase() : "";
-        const r = row['Register Number'] ? row['Register Number'].toString().trim().toUpperCase() : "";
+        const r = getRegNo(row).toUpperCase();
         // If existing data doesn't have a stream, assume 'Regular' (legacy support)
         const s = row.Stream ? row.Stream.toString().trim().toUpperCase() : "REGULAR";
         return `${d}|${t}|${r}|${s}`;
@@ -16158,7 +16168,14 @@ function parseCsvRaw(csvText, streamName = "Regular") {
     const dateIndex = headers.indexOf('Date');
     const timeIndex = headers.indexOf('Time');
     const courseIndex = headers.indexOf('Course');
-    const regNumIndex = headers.indexOf('Register Number');
+    
+    // 🛡️ [AUDIT FIX]: Dynamically find Register Number column
+    let regNumIndex = headers.indexOf('Register Number');
+    if (regNumIndex === -1) regNumIndex = headers.indexOf('RegisterNo');
+    if (regNumIndex === -1) regNumIndex = headers.indexOf('regNo');
+    if (regNumIndex === -1) regNumIndex = headers.indexOf('Reg No');
+    if (regNumIndex === -1) regNumIndex = headers.indexOf('RegNo');
+
     const nameIndex = headers.indexOf('Name');
     const streamIndex = headers.indexOf('Stream');
     const sourceIndex = headers.indexOf('Source File'); // <--- NEW Check
@@ -16242,7 +16259,7 @@ function parseCsvRaw(csvText, streamName = "Regular") {
             const date = array[i].Date || "";
             const time = array[i].Time || "";
             const course = (array[i].Course || "").replace(/"/g, '""');
-            const reg = array[i]['Register Number'] || "";
+            const reg = getRegNo(array[i]);
             const name = (array[i].Name || "").replace(/"/g, '""');
             const stream = array[i].Stream || "Regular";
             const source = (array[i]['Source File'] || "Unknown").replace(/"/g, '""'); // <--- NEW
@@ -16401,13 +16418,13 @@ window.handlePythonExtraction = async function (jsonString) {
             return scopesToUpdate.has(`${s.Course}|${s.Date}|${sStream}`);
         });
 
-        const newRegNos = new Set(newJsonData.map(s => s['Register Number']));
-        const oldRegNos = new Set(relevantOldData.map(s => s['Register Number']));
+        const newRegNos = new Set(newJsonData.map(s => getRegNo(s)));
+        const oldRegNos = new Set(relevantOldData.map(s => getRegNo(s)));
 
         // C. Calculate Diff
-        const commonStudents = newJsonData.filter(s => oldRegNos.has(s['Register Number']));
-        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(s['Register Number']));
-        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(s['Register Number']));
+        const commonStudents = newJsonData.filter(s => oldRegNos.has(getRegNo(s)));
+        const potentialAdds = newJsonData.filter(s => !oldRegNos.has(getRegNo(s)));
+        const potentialDeletes = relevantOldData.filter(s => !newRegNos.has(getRegNo(s)));
 
         let finalBatch = [...commonStudents];
 
@@ -16859,7 +16876,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 if (students.length === 0) { students = await loadExamDataIDB() || []; }
 
                 students.forEach(s => {
-                    const regNo = (s['Register Number'] || s['Reg No'] || s['RegNo'] || s.RegisterNo || s.regNo || "").toString().trim();
+                    const regNo = getRegNo(s);
                     if (regNo && scribeRegNos.has(regNo)) {
                         const eName = s['Exam Name'] || s.ExamName || "Unspecified Exam";
                         if (!examMap[eName]) examMap[eName] = new Map();
@@ -17530,7 +17547,7 @@ async function loadInitialData() {
                 }
 
                 // Increment counts precisely for the matched students
-                if (scribeRegNos.has(s['Register Number'])) {
+                if (scribeRegNos.has(getRegNo(s))) {
                     billGroups[groupKey][sessionKey].scribeCount++;
                 } else {
                     billGroups[groupKey][sessionKey].normalCount++;
@@ -18538,7 +18555,7 @@ window.generateBatchArchive = async function() {
         
                 if (roomObj.students && Array.isArray(roomObj.students)) {
                     roomObj.students.forEach((s, idx) => {
-                        const regNo = (typeof s === 'object') ? (s['Register Number'] || s.RegisterNo) : s;
+                        const regNo = (typeof s === 'object') ? getRegNo(s) : s;
                         studentMap[regNo] = { 
                             room: roomDisplay, 
                             seat: s.seat || (idx + 1), // Use sticky seat
@@ -18552,7 +18569,7 @@ window.generateBatchArchive = async function() {
 
 
         students.forEach(s => {
-            const regNo = s['Register Number'] || s.RegisterNo;
+            const regNo = getRegNo(s);
             allArchiveData.push({
                 sessionKey: sessionKey,
                 regNo: regNo,
@@ -19949,11 +19966,11 @@ window.toggleAllArchiveCheckboxes = function(check) {
             const regStreamMap = {};
             sessionStudents.forEach(s => {
                 const sStream = s.Stream || "Regular";
-                regStreamMap[s['Register Number']] = sStream;
+                regStreamMap[getRegNo(s)] = sStream;
 
                 if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
 
-                if (scribeRegNos.has(s['Register Number'])) {
+                if (scribeRegNos.has(getRegNo(s))) {
                     streamCounts[sStream].scribes++;
                 } else {
                     streamCounts[sStream].candidates++;
@@ -20803,7 +20820,7 @@ if (displayLoc) {
                             const importedStudents = data[key];
                             if (isMerge) {
                                 const existingData = await loadExamDataIDB() || [];
-                                const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                                const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
                                 const existingKeys = new Set(existingData.map(getRowKey));
                                 
                                 const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
@@ -22200,7 +22217,7 @@ async function runSystemHealthCheck() {
 
                     // CHECK 2: SCRIBES
                     const sessionScribes = scribesList.filter(scribeReg => 
-                        targetStudents.find(s => s.RegNo === scribeReg)
+                        targetStudents.find(s => getRegNo(s) === scribeReg)
                     );
                     
                     if (sessionScribes.length > 0) {
@@ -22209,7 +22226,7 @@ async function runSystemHealthCheck() {
                              Object.values(allotments[sessionKey]).forEach(room => {
                                  if (room.students) {
                                      room.students.forEach(s => { 
-                                         if (sessionScribes.includes(s.RegNo)) allottedScribesCount++; 
+                                         if (sessionScribes.includes(getRegNo(s))) allottedScribesCount++; 
                                      });
                                  }
                              });
@@ -22543,7 +22560,7 @@ window.executeBulkDelete = async function() {
         // --- 1b. SURGICAL SNAPSHOT CLEAN (Crucial for report consistency) ---
         // If surgical delete, we must clean allotments/absentees to avoid "ghost" records in reports.
         if (targetExamName) {
-            const validRegNos = new Set(allStudentData.map(s => (s['Register Number'] || s.RegisterNo || '').toString().trim()));
+            const validRegNos = new Set(allStudentData.map(s => (getRegNo(s)).toString().trim()));
 
             // A. Clean Room Allotments
             const allotRaw = localStorage.getItem('examRoomAllotment');
@@ -22556,7 +22573,7 @@ window.executeBulkDelete = async function() {
                         allAllotments[sk] = allAllotments[sk].filter(room => {
                             if (room.students && Array.isArray(room.students)) {
                                 room.students = room.students.filter(st => {
-                                    const regNo = (typeof st === 'object') ? (st['Register Number'] || st.RegisterNo) : st;
+                                    const regNo = (typeof st === 'object') ? getRegNo(st) : st;
                                     return validRegNos.has((regNo || '').toString().trim());
                                 });
                                 // Keep the room ONLY if it still has students
@@ -22844,7 +22861,7 @@ window.downloadInvigilationListPDF = async function () {
     sessionStudents.forEach(s => {
         const sStream = s.Stream || "Regular";
         if (!streamCounts[sStream]) streamCounts[sStream] = { candidates: 0, scribes: 0 };
-        scribeRegNos.has(s['Register Number']) ? streamCounts[sStream].scribes++ : streamCounts[sStream].candidates++;
+        scribeRegNos.has(getRegNo(s)) ? streamCounts[sStream].scribes++ : streamCounts[sStream].candidates++;
     });
 
     const streams = {};

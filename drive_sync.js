@@ -59,6 +59,15 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
     });
 }
 
+// 🛡️ [V12.8 FIX]: Universal Helper to extract Register Number
+function getRegNo(s) {
+    if (!s) return "";
+    if (typeof s === 'string') return s.trim();
+    const reg = s['Register Number'] || s.RegisterNo || s.regNo || s['Reg No'] || s['RegNo'] || s.RegisterNo_ || s.reg_no || "";
+    return reg.toString().trim();
+}
+window.getRegNo = getRegNo;
+
 
 
 // --- INITIALIZATION ---
@@ -951,7 +960,7 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     if (!Array.isArray(val)) continue; // Safety check
                     if (isMerge) {
                         const existingData = await loadExamDataIDB() || [];
-                        const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${r['Register Number'] || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                        const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r)} | ${r.Stream || "REGULAR"}`.toUpperCase();
                         const existingKeys = new Set(existingData.map(getRowKey));
                         const newUniqueData = val.filter(student => !existingKeys.has(getRowKey(student)));
                         await saveExamDataIDB([...existingData, ...newUniqueData]);
@@ -1083,7 +1092,7 @@ window.ExamCloudCache = {
             // Merge only the student records into IDB (allotments stay in memory only)
             // Historical records are tagged with a TTL so they can be evicted after 7 days
             const existingCache = await loadExamDataIDB();
-            const getKey = r => `${r.Date||''}|${r.Time||''}|${r['Register Number']||''}`.toUpperCase();
+            const getKey = r => `${r.Date||''}|${r.Time||''}|${getRegNo(r)}`.toUpperCase();
             const existingKeys = new Set(existingCache.map(getKey));
             const thawedAt = new Date().toISOString();
             const newOnly = students.filter(r => !existingKeys.has(getKey(r))).map(r => ({
@@ -1218,7 +1227,7 @@ window.startHistoricalMigration = async function() {
                         const { getDownloadURL } = window.firebase;
                         const url = await getDownloadURL(fileRef);
                         const existing = await fetch(url).then(r => r.json());
-                        const getKey = r => `${r.Date || ''}|${r.Time || ''}|${r['Register Number'] || ''}`.toUpperCase();
+                        const getKey = r => `${r.Date || ''}|${r.Time || ''}|${getRegNo(r)}`.toUpperCase();
                         const existingKeys = new Set(existing.map(getKey));
                         const incoming = groupedByDate[dateKey];
                         const newOnly = incoming.filter(r => !existingKeys.has(getKey(r)));
