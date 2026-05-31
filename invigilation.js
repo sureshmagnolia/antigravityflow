@@ -988,11 +988,13 @@ function initStaffDashboard(me) {
     showView('staff');
 
     document.getElementById('cal-prev').onclick = () => {
+        currentCalDate.setDate(1);
         currentCalDate.setMonth(currentCalDate.getMonth() - 1);
         renderStaffCalendar(me.email);
         if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
     };
     document.getElementById('cal-next').onclick = () => {
+        currentCalDate.setDate(1);
         currentCalDate.setMonth(currentCalDate.getMonth() + 1);
         renderStaffCalendar(me.email);
         if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
@@ -2131,8 +2133,10 @@ window.openDayDetail = function (dateStr, email) {
     today.setHours(0, 0, 0, 0); 
     
     const maxDate = new Date(today);
+    maxDate.setDate(1); 
     maxDate.setMonth(today.getMonth() + 3); 
-
+    // Set to end of month for better boundary
+    maxDate.setMonth(maxDate.getMonth() + 1, 0);
     const isPast = currentD < today;
     const isTooFar = currentD > maxDate;
     const isRestricted = isPast || isTooFar;
@@ -2356,6 +2360,7 @@ function updateHeaderButtons(currentView) {
 
 // --- HELPER: Change Month ---
 window.changeAdminMonth = function (delta) {
+    currentAdminDate.setDate(1);
     currentAdminDate.setMonth(currentAdminDate.getMonth() + delta);
     renderSlotsGridAdmin();
 }
@@ -9403,7 +9408,10 @@ function isActionAllowed(dateInput) {
     checkDate.setHours(0, 0, 0, 0);
 
     const maxDate = new Date(today);
+    maxDate.setDate(1);
     maxDate.setMonth(today.getMonth() + 3);
+    // Set to end of month
+    maxDate.setMonth(maxDate.getMonth() + 1, 0);
 
     // 1. Block Past Dates
     if (checkDate < today) {
