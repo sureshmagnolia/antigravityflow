@@ -12997,7 +12997,7 @@ if (saveScribeBtn) {
         // Force Sync
         if (typeof syncSessionToCloud === 'function') {
             try {
-                await syncSessionToCloud(sessionKey);
+                await syncSessionToCloud(sessionKey, true); // 🛡️ [STABILITY FIX]: Scribe allotment doesn't change student count
             } catch (e) {
                 console.warn("Cloud sync failed, data kept locally:", e);
             }
@@ -15693,7 +15693,7 @@ Are you sure?
                 const deletedRegNos = new Set(studentsToDelete.map(d => getRegNo(d)));
                 
                 // 1. Purge from Master List
-                allStudentData = allStudentData.filter(s => !deletedRegNos.hasgetRegNo(s));
+                allStudentData = allStudentData.filter(s => !deletedRegNos.has(getRegNo(s)));
                 
                 // 2. Purge from Sticky Allotments (Reports)
                 let roomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
