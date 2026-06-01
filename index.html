@@ -684,6 +684,29 @@
                     
                     
                     <div class="border-t border-gray-200 pt-6">
+                        <!-- 🔄 [V5.4 ADDED]: Manual Slot Sync for Data Loader -->
+                        <div id="invig-slot-sync-wrapper-loader" class="hidden mb-8 p-5 border-2 border-indigo-100 bg-indigo-50 rounded-xl shadow-sm transition-all duration-300 hover:shadow-md">
+                            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                                <div class="flex items-center gap-4">
+                                    <div class="bg-indigo-600 text-white p-3 rounded-lg shadow-inner">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-indigo-900 text-sm">Invigilation Slot Sync</h3>
+                                        <p class="text-[11px] text-indigo-700 opacity-80 leading-tight mt-0.5">
+                                            Recalculate staffing requirements based on newly loaded data.<br>
+                                            <span class="font-semibold underline">Note:</span> Affects Future Exams Only.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button id="recalc-invig-slots-btn-loader" onclick="window.recalcInvigSlots()" 
+                                        class="whitespace-nowrap inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition transform active:scale-95 group">
+                                    <span>🔄 Recalculate & Push Slots</span>
+                                    <svg class="w-3.5 h-3.5 ml-2 transition-transform group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="bg-green-50 border border-green-200 p-5 rounded-lg mb-8">
                             <div class="flex justify-between items-start mb-4">
                                 <div>
@@ -1011,6 +1034,28 @@
     <p class="text-[10px] text-rose-600 mt-2 font-medium">
         ⚠️ Warning: This will permanently delete ALL data for the selected sessions range.
     </p>
+
+    <!-- 🔄 [V5.4 ADDED]: Manual Slot Sync for Data Editor -->
+    <div id="invig-slot-sync-wrapper-editor" class="hidden mt-6 p-4 border border-rose-200 bg-rose-50/50 rounded-xl transition-all duration-300">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-rose-600 text-white p-2 rounded-lg shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </div>
+                <div>
+                    <h3 class="font-bold text-rose-900 text-xs uppercase tracking-tight">Sync Staffing Requirements</h3>
+                    <p class="text-[10px] text-rose-700 opacity-80 leading-tight mt-0.5">
+                        Update slots after bulk deletions.<br>
+                        Affects Future Exams Only.
+                    </p>
+                </div>
+            </div>
+            <button id="recalc-invig-slots-btn-editor" onclick="window.recalcInvigSlots()" 
+                    class="whitespace-nowrap inline-flex items-center px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-lg shadow-sm transition transform active:scale-95 group">
+                <span>🔄 Recalculate & Push Slots</span>
+            </button>
+        </div>
+    </div>
 </div>
 
                         <div class="mb-4">

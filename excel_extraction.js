@@ -102,14 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     // We pass the data as a JSON string just like the Python script does
                     await window.handlePythonExtraction(JSON.stringify(allStudents));
                     
-                    // NEW: Force Invigilation Slot update
-                    if (typeof window.updateLocalSlotsFromStudents === 'function') {
-                        log(`🛡️ Updating Invigilation Slots...`);
-                        await window.updateLocalSlotsFromStudents();
-                    }
-
                     log(`🎉 Successfully integrated with ExamFlow!`, 'success');
-                    alert(`✅ SUCCESS!\n\n${allStudents.length} students loaded.\nInvigilation slots updated.`);
+                    alert(`✅ SUCCESS!\n\n${allStudents.length} students loaded.`);
                 } else {
                     log(`❌ Error: 'handlePythonExtraction' not found in app.js.`, 'error');
                     // Fallback to basic load if the receiver is missing
