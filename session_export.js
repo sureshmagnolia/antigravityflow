@@ -6,6 +6,14 @@
 const SESSION_EXPORT_JS = {
     LOGO_SVG: `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIyIiB5PSIzIiB3aWR0aD0iMjAiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxsaW5lIHgxPSI4IiB5MT0iMjEiIHgyPSIxNiIgeTI9IjIxIj48L2xpbmU+PGxpbmUgeDE9IjEyIiB5MT0iMTciIHgyPSIxMiIgeTI9IjIxIj48L2xpbmU+PC9zdmc+`,
 
+    // 🛡️ [V12.8 FIX]: Universal Helper to extract Register Number
+    getRegNo: function(s) {
+        if (!s) return "";
+        if (typeof s === 'string') return s.trim();
+        const reg = s['Register Number'] || s.RegisterNo || s.regNo || s['Reg No'] || s['RegNo'] || s.RegisterNo_ || s.reg_no || "";
+        return reg.toString().trim();
+    },
+
     exportSession: function(sessionKey) {
         if (!sessionKey) return alert("Please select a session first.");
 
@@ -77,7 +85,7 @@ const SESSION_EXPORT_JS = {
             absentees: sessionAbsentees,
             scribes: Object.entries(sessionScribes).map(([regNo, room]) => {
                 const scribeInfo = scribeList.find(s => s.regNo === regNo) || {};
-                const studentInfo = sessionStudents.find(s => (s['Register Number'] || s.regNo) === regNo) || {};
+                const studentInfo = sessionStudents.find(s => this.getRegNo(s) === regNo) || {};
                 return { 
                     regNo, 
                     room, 
@@ -222,6 +230,15 @@ const SESSION_EXPORT_JS = {
     <script>
         // 🛡️ TEMPLATE SHIELD: Prevents special characters in data from crashing the HTML script block
         const D = ${JSON.stringify(data).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')};
+        
+        // 🛡️ [V12.8 FIX]: Universal Helper inside exported document
+        function getRegNo(s) {
+            if (!s) return "";
+            if (typeof s === 'string') return s.trim();
+            const reg = s['Register Number'] || s.RegisterNo || s.regNo || s['Reg No'] || s['RegNo'] || s.RegisterNo_ || s.reg_no || "";
+            return reg.toString().trim();
+        }
+
         function init() {
             const b = document.getElementById('qb');
             const courses = [...new Set(D.students.map(s => s.Course + '|' + (s.Stream || 'Regular')))];
@@ -450,8 +467,8 @@ const SESSION_EXPORT_JS = {
                 const map = {};
                 D.allotment.forEach(room => {
                     room.students.forEach(s => {
-                        const regNo = s.RegisterNo || s['Register Number'] || s.regNo;
-                        const fs = D.students.find(x => (x['Register Number'] || x.regNo) === regNo);
+                        const regNo = getRegNo(s);
+                        const fs = D.students.find(x => getRegNo(x) === regNo);
                         const stream = room.stream || 'Regular';
                         const paperKey = btoa(unescape(encodeURIComponent(fs.Course + '|' + stream)));
                         if(!map[paperKey]) map[paperKey] = { title: fs.Course, stream: stream, qp: getActualQPValue(fs.Course, stream), rooms: {} };
@@ -544,11 +561,11 @@ const SESSION_EXPORT_JS = {
                     const st = room.students.sort((a,b) => (a.seat || 0) - (b.seat || 0));
                     const stats = {};
                     st.forEach(s => {
-                        const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                        const fs = D.students.find(x => getRegNo(x) === getRegNo(s));
                         const key = fs.Course + '|' + (room.stream || 'Regular');
                         if(!stats[key]) stats[key] = { total: 0, scribe: 0 };
                         stats[key].total++;
-                        if(D.scribes.some(sc => sc.regNo === (s.RegisterNo || s['Register Number']))) stats[key].scribe++;
+                        if(D.scribes.some(sc => sc.regNo === getRegNo(s))) stats[key].scribe++;
                     });
 
                     let summ = ''; let gTot = 0;
@@ -589,8 +606,8 @@ const SESSION_EXPORT_JS = {
                         let rows = '';
                         let prevC = '';
                         list.forEach(s => {
-                            const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
-                            const reg = s.RegisterNo || s['Register Number'];
+                            const fs = D.students.find(x => getRegNo(x) === getRegNo(s));
+                            const reg = getRegNo(s);
                             const isScr = D.scribes.some(sc => sc.regNo === reg);
                             const qp = getActualQPValue(fs.Course, room.stream);
                             
@@ -645,12 +662,12 @@ const SESSION_EXPORT_JS = {
                 const streamScribes = {}; // To track scribes per stream for the summary
 
                 D.students.forEach(s => {
-                    const room = D.allotment.find(x => x.students.some(st => (st.RegisterNo || st['Register Number'] || st.regNo) === (s['Register Number'] || s.regNo)));
+                    const room = D.allotment.find(x => x.students.some(st => getRegNo(st) === getRegNo(s)));
                     if (!room) return;
 
-                    const stInfo = room.students.find(x => (x.RegisterNo || x['Register Number'] || x.regNo) === (s['Register Number'] || s.regNo));
+                    const stInfo = room.students.find(x => getRegNo(x) === getRegNo(s));
                     const stream = room.stream || 'Regular';
-                    const isScribe = D.scribes.some(sc => sc.regNo === (s['Register Number'] || s.regNo));
+                    const isScribe = D.scribes.some(sc => sc.regNo === getRegNo(s));
                     
                     const enriched = { 
                         ...s, 
@@ -683,7 +700,7 @@ const SESSION_EXPORT_JS = {
                     streamData.sort((a,b) => {
                         if(a.Course !== b.Course) return a.Course.localeCompare(b.Course);
                         if(a.rSerial !== b.rSerial) return a.rSerial - b.rSerial;
-                        return (a['Register Number'] || a.regNo).localeCompare(b['Register Number'] || b.regNo);
+                        return getRegNo(a).localeCompare(getRegNo(b));
                     });
 
                     // --- PART A: SEATING DETAILS (2-COL) ---
@@ -738,7 +755,7 @@ const SESSION_EXPORT_JS = {
                                     : 'text-align:center; padding:1px; white-space:normal; word-wrap:break-word; line-height:1.1; margin:auto;';
                                  
                                  const rowStyle = r.isScribe ? 'font-weight:bold; color:#c2410c;' : '';
-                                 const regNo = r['Register Number'] || r.regNo || '-';
+                                 const regNo = getRegNo(r) || '-';
 
                                  rowsHtml += '<tr style="' + rowStyle + '">' + 
                                      (r.skip ? '' : '<td rowspan="' + r.span + '" style="vertical-align:middle; padding:0; background:#fff; border:1px solid #000; overflow:hidden; width:45px;"><div style="' + tdStyles + ' font-weight:bold; font-size:' + dynFontSize + 'pt;">' + r.loc + '</div></td>') +
@@ -767,7 +784,7 @@ const SESSION_EXPORT_JS = {
                         const roomMap = {};
                         streamScribes[stream].forEach(s => {
                             if (!roomMap[s.roomName]) roomMap[s.roomName] = [];
-                            roomMap[s.roomName].push(s.Name + ' (' + (s['Register Number'] || s.regNo) + ')');
+                            roomMap[s.roomName].push(s.Name + ' (' + getRegNo(s) + ')');
                         });
 
                         let summaryRows = '';
@@ -806,11 +823,11 @@ const SESSION_EXPORT_JS = {
                         // Group students by Course
                         const byCourse = {};
                         r.students.forEach(s => {
-                            const fs = D.students.find(x => x['Register Number'] === (s.RegisterNo || s['Register Number']));
+                            const fs = D.students.find(x => getRegNo(x) === getRegNo(s));
                             const cName = fs ? fs.Course : 'Unknown';
                             if(!byCourse[cName]) byCourse[cName] = [];
                             // Check Scribe Status
-                            const isScr = D.scribes.some(sc => sc.regNo === (s.RegisterNo || s['Register Number']));
+                            const isScr = D.scribes.some(sc => sc.regNo === getRegNo(s));
                             byCourse[cName].push({ ...s, fullName: fs?.Name || '', isScribe: isScr });
                         });
 
@@ -832,7 +849,7 @@ const SESSION_EXPORT_JS = {
                                 gridHtml += 
                                     '<div style="display:grid; grid-template-columns:25px max-content 1fr; align-items:center; border-bottom:1px dotted #ccc; padding:' + rowPad + ' 0; font-size:' + fReg + ';">' +
                                         '<div style="text-align:center; font-weight:bold; border-right:1px solid #ddd;">' + (st.seat || '-') + '</div>' +
-                                        '<div style="text-align:left; font-weight:bold; padding:0 5px; border-right:1px solid #ddd; white-space:nowrap;">' + (st.RegisterNo || st['Register Number']) + '</div>' +
+                                        '<div style="text-align:left; font-weight:bold; padding:0 5px; border-right:1px solid #ddd; white-space:nowrap;">' + getRegNo(st) + '</div>' +
                                         '<div style="padding-left:5px; font-size:' + fName + '; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#333;">' + getTruncName(st.fullName) + sBadge + '</div>' +
                                     '</div>';
                             });
@@ -887,15 +904,15 @@ const SESSION_EXPORT_JS = {
                     const label = scrLabelMap[s.room] || 'SCR?';
                     
                     // Dig out Core Student Information
-                    const fs = D.students.find(x => x['Register Number'] === s.regNo) || {};
+                    const fs = D.students.find(x => getRegNo(x) === s.regNo) || {};
                     const courseDisplay = fs.Course || 'Unknown Course';
                     
                     // Trace back to original allotment
                     let origRoomDisplay = 'N/A';
                     let streamName = 'Regular';
-                    const origRoom = D.allotment.find(rm => rm.students.some(st => (st.RegisterNo || st['Register Number']) === s.regNo));
+                    const origRoom = D.allotment.find(rm => rm.students.some(st => getRegNo(st) === s.regNo));
                     if (origRoom) {
-                        const stDat = origRoom.students.find(st => (st.RegisterNo || st['Register Number']) === s.regNo);
+                        const stDat = origRoom.students.find(st => getRegNo(st) === s.regNo);
                         streamName = origRoom.stream || 'Regular';
                         const orgSerial = D.roomConfig[origRoom.roomName]?.serial || '-';
                         origRoomDisplay = 'Hall #' + orgSerial + ' (Seat: ' + stDat.seat + ')';
@@ -935,7 +952,7 @@ const SESSION_EXPORT_JS = {
                 let rowsHtml = '';
                 D.scribes.forEach((s, idx) => {
                     // Try to dig out the exact Course (QP) data
-                    const fs = D.students.find(x => x['Register Number'] === s.regNo);
+                    const fs = D.students.find(x => getRegNo(x) === s.regNo);
                     const courseDisplay = fs ? getSmartName(fs.Course) : '';
                     
                     rowsHtml += '<tr style="line-height:1.4">' +

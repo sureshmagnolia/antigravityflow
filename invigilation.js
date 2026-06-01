@@ -422,7 +422,9 @@ function setupLiveSync(collegeId, mode) {
       // A. Listen to Shards (Aggregated)
       slotsUnsubscribe = onSnapshot(shardsRef, (querySnap) => {
           let newSlots = {};
+          let shardCount = 0;
           querySnap.forEach(shardDoc => {
+              shardCount++;
               try {
                   const shardMap = JSON.parse(shardDoc.data().data || '{}');
                   
@@ -444,10 +446,23 @@ function setupLiveSync(collegeId, mode) {
               } catch (e) { console.error("Error parsing shard:", shardDoc.id, e); }
           });
 
-          if (Object.keys(newSlots).length > 0) {
+          const newKeyCount = Object.keys(newSlots).length;
+          const currentKeyCount = Object.keys(invigilationSlots).length;
+
+          // 🛡️ [LISTENER SHIELD]: Protect against partial data streams
+          // If we already have data, and the incoming update is suspiciously small (e.g. < 30% of current),
+          // we block the update to prevent a local wipe that might sync back to the cloud.
+          if (currentKeyCount > 10 && newKeyCount < (currentKeyCount * 0.3)) {
+              console.warn(`🛡️ Listener Shield: Blocked incoming partial slot update. (Local: ${currentKeyCount}, Incoming: ${newKeyCount})`);
+              return;
+          }
+
+          if (newKeyCount > 0) {
               invigilationSlots = newSlots;
               localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
               refreshSlotsUI();
+          } else if (shardCount === 0 && currentKeyCount > 0) {
+              console.warn("🛡️ Listener Shield: Received 0 shards. Preserving local state to prevent accidental wipe.");
           }
       });
 
@@ -973,11 +988,13 @@ function initStaffDashboard(me) {
     showView('staff');
 
     document.getElementById('cal-prev').onclick = () => {
+        currentCalDate.setDate(1);
         currentCalDate.setMonth(currentCalDate.getMonth() - 1);
         renderStaffCalendar(me.email);
         if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
     };
     document.getElementById('cal-next').onclick = () => {
+        currentCalDate.setDate(1);
         currentCalDate.setMonth(currentCalDate.getMonth() + 1);
         renderStaffCalendar(me.email);
         if (typeof renderExchangeMarket === "function") renderExchangeMarket(me.email);
@@ -2116,8 +2133,10 @@ window.openDayDetail = function (dateStr, email) {
     today.setHours(0, 0, 0, 0); 
     
     const maxDate = new Date(today);
+    maxDate.setDate(1); 
     maxDate.setMonth(today.getMonth() + 3); 
-
+    // Set to end of month for better boundary
+    maxDate.setMonth(maxDate.getMonth() + 1, 0);
     const isPast = currentD < today;
     const isTooFar = currentD > maxDate;
     const isRestricted = isPast || isTooFar;
@@ -2183,14 +2202,20 @@ window.openDayDetail = function (dateStr, email) {
                 const statusColor = isPostedByMe ? "text-orange-700 bg-orange-100" : "text-green-700 bg-green-100";
                 cardStatus = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${statusLabel}</span>`;
 
+                const meta = slot.assignmentMeta?.[email] || {};
+                const isAdminPosted = (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+
                 if (isPostedByMe) {
                     cardActions = `<button onclick="withdrawExchange('${key}', '${email}')" class="w-full mt-2 bg-white text-orange-700 border border-orange-200 py-2 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1">↩️ Withdraw Request</button>`;
                 } else if (isAdminLocked) {
                     cardActions = `<div class="mt-2 text-center text-[10px] text-amber-600 font-bold bg-amber-50 py-1.5 rounded-lg border border-amber-100">🛡️ Admin is finalizing roster</div>`;
-                } else if (isLocked) {
+                } else if (isAdminPosted && !isAdmin) {
+                    // ADMIN POSTED: No Withdraw, Only Exchange (even if unlocked)
+                    cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
+                } else if (isLocked && !isAdmin) {
                     cardActions = `<button onclick="postForExchange('${key}', '${email}')" class="w-full mt-2 bg-purple-600 text-white py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-1">♻️ Post for Exchange</button>`;
                 } else {
-                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', false)" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
+                    cardActions = `<button onclick="cancelDuty('${key}', '${email}', ${isLocked})" class="w-full mt-2 bg-red-50 text-red-600 border border-red-100 py-2 rounded-lg text-xs font-bold active:scale-95 transition-all">Cancel Duty</button>`;
                 }
             } else if (isUnavailable) {            cardBg = "bg-red-50/30";
             borderColor = "border-red-100";
@@ -2335,6 +2360,7 @@ function updateHeaderButtons(currentView) {
 
 // --- HELPER: Change Month ---
 window.changeAdminMonth = function (delta) {
+    currentAdminDate.setDate(1);
     currentAdminDate.setMonth(currentAdminDate.getMonth() + delta);
     renderSlotsGridAdmin();
 }
@@ -2368,63 +2394,58 @@ async function syncSlotsToCloud(affectedKey = null) {
         }
 
         if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
-            // --- OPTIMIZED SINGLE SHARD UPDATE ---
+            // --- OPTIMIZED SURGICAL SHARD UPDATE ---
             const shardId = getShardId(affectedKey);
             const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", shardId);
             
-            // We still need to merge with cloud data for THIS shard to prevent overwriting others' changes in the same month
+            // 🛡️ [SURGICAL PROTECTION]: Fetch the current cloud state for this shard.
+            // We only want to update the 'affectedKey' and leave everything else UNTOUCHED.
             const cloudSnap = await getDoc(shardRef);
             const shardData = cloudSnap.exists() ? JSON.parse(cloudSnap.data().data || '{}') : {};
 
-            // Merge local changes for this shard
-            Object.keys(localSlots).forEach(k => {
-                if (getShardId(k) === shardId) {
-                    if (shardData[k] && k !== affectedKey) {
-                         // Preserve cloud state for other keys in the same shard
-                         const cloudAssigned = shardData[k].assigned || [];
-                         localSlots[k].assigned = [...new Set([...(localSlots[k].assigned || []), ...cloudAssigned])];
-                         
-                         const cloudUnavail = shardData[k].unavailable || [];
-                         const combinedUnavail = [...(localSlots[k].unavailable || []), ...cloudUnavail];
-                         const uniqueUnavail = [];
-                         const seenUnavail = new Set();
-                         combinedUnavail.forEach(u => {
-                             const email = (typeof u === 'string') ? u : u.email;
-                             if (email && !seenUnavail.has(email)) {
-                                 uniqueUnavail.push(u);
-                                 seenUnavail.add(email);
-                             }
-                         });
-                         localSlots[k].unavailable = uniqueUnavail;
-                         if (shardData[k].allocationLog && !localSlots[k].allocationLog) {
-                             localSlots[k].allocationLog = shardData[k].allocationLog;
-                         }
-                    }
-                }
-            });
+            // Update ONLY the affected key in the cloud's copy
+            if (localSlots[affectedKey]) {
+                shardData[affectedKey] = localSlots[affectedKey];
+            } else {
+                // If the key is missing from localSlots, it means we intend to DELETE it
+                delete shardData[affectedKey];
+            }
 
-            // Filter localSlots to only include keys for this shard
-            const finalShardMap = {};
-            Object.keys(localSlots).forEach(k => {
-                if (getShardId(k) === shardId) finalShardMap[k] = localSlots[k];
-            });
-
-            batch.set(shardRef, { data: JSON.stringify(finalShardMap), lastUpdated: serverTimestamp() });
+            // Write back the merged shard data
+            if (Object.keys(shardData).length > 0) {
+                batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
+            } else {
+                batch.delete(shardRef);
+            }
         } else {
             // --- FULL SYNC OR BATCH UPDATE ---
             
-            // 1. Fetch existing shards to ensure we clear ones that no longer have data
+            // 1. Fetch existing shards to analyze current database size
             const shardsColRef = collection(db, "colleges", currentCollegeId, "slots_daily");
             const existingShardsSnap = await getDocs(shardsColRef);
             const existingShardIds = new Set();
             existingShardsSnap.forEach(s => existingShardIds.add(s.id));
 
-            // 🛡️ [SMART SHIELD]: Prevent accidental global wipes!
-            // If local storage is completely empty, do NOT delete cloud shards unless explicitly requested.
-            // This prevents a fresh localhost connection from destroying the live database.
-            if (Object.keys(localSlots).length === 0 && affectedKey !== "FORCE_OVERWRITE") {
-                console.warn("🛡️ Smart Shield active: Local slots are empty. Preventing global cloud wipe.");
-                return; 
+            // 🛡️ [ENHANCED SMART SHIELD]: Prevent catastrophic wipes due to partial data loads.
+            const localKeyCount = Object.keys(localSlots).length;
+            const cloudShardCount = existingShardIds.size;
+
+            if (affectedKey !== "FORCE_OVERWRITE") {
+                // Rule A: Never wipe if local is completely empty.
+                if (localKeyCount === 0 && cloudShardCount > 0) {
+                    console.error("🛑 CRITICAL: Local slots are empty but cloud has data. Sync Blocked to prevent wipe.");
+                    updateSyncStatus("Sync Blocked", "error");
+                    return;
+                }
+
+                // Rule B: Safety Check for significant data loss (Local has < 50% of existing shards)
+                // This protects against cases where only one month of data loaded into memory.
+                if (cloudShardCount > 5 && localKeyCount < (cloudShardCount / 2)) {
+                    console.error(`🛑 CRITICAL: Partial Data Detected! Local has ${localKeyCount} keys, but Cloud has ${cloudShardCount} shards. Sync Blocked.`);
+                    updateSyncStatus("Partial Load Blocked", "error");
+                    alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
+                    return;
+                }
             }
 
             const shards = {};
@@ -2434,17 +2455,64 @@ async function syncSlotsToCloud(affectedKey = null) {
                 shards[sid][k] = localSlots[k];
             });
 
+            // 🛡️ [PEOPLE PRESERVATION]: Map existing cloud data for merging
+            const existingShardsMap = {};
+            existingShardsSnap.forEach(s => existingShardsMap[s.id] = s.data().data);
+
             // 2. Update or Clear all shards
             const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
             
             allShardIds.forEach(sid => {
                 const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
+                
+                // 🛡️ [PEOPLE PRESERVATION MERGE]
+                const rawCloud = existingShardsMap[sid];
+                if (rawCloud && affectedKey !== "SYSTEM_WIPE") {
+                    const cloudMap = JSON.parse(rawCloud);
+                    Object.keys(cloudMap).forEach(key => {
+                        const cSlot = cloudMap[key];
+                        if (shardData[key]) {
+                            // A. Existing Slot: Preserve assignments, unavailability, and requests
+                            const lAssigned = shardData[key].assigned || [];
+                            const cAssigned = cSlot.assigned || [];
+                            shardData[key].assigned = [...new Set([...lAssigned, ...cAssigned])];
+
+                            const lUnav = (shardData[key].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                            const cUnav = (cSlot.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                            const uniqueUnav = [...new Set([...lUnav, ...cUnav])];
+                            shardData[key].unavailable = uniqueUnav.map(email => {
+                                const cObj = (cSlot.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                const lObj = (shardData[key].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                return cObj || lObj || email;
+                            });
+
+                            shardData[key].exchangeRequests = [...new Set([...(shardData[key].exchangeRequests || []), ...(cSlot.exchangeRequests || [])])];
+                            if (cSlot.allocationLog && !shardData[key].allocationLog) shardData[key].allocationLog = cSlot.allocationLog;
+                        } else {
+                            // B. Missing Slot: Resurrect if it contains people data (Ghosting)
+                            const hasPeople = (cSlot.assigned && cSlot.assigned.length > 0) || 
+                                              (cSlot.unavailable && cSlot.unavailable.length > 0) ||
+                                              (cSlot.exchangeRequests && cSlot.exchangeRequests.length > 0);
+                            
+                            if (hasPeople) {
+                                shardData[key] = { ...cSlot, required: 0, studentCount: 0, isGhost: true };
+                            }
+                        }
+                    });
+                }
+
                 if (Object.keys(shardData).length > 0) {
                     batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
-                    // Delete shard if it has no data
-                    batch.delete(shardRef);
+                    // 🛡️ [PROTECTED DELETE]: Only delete future shards if FORCE_OVERWRITE is set.
+                    // This prevents accidental pruning of upcoming slots.
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE") {
+                        batch.delete(shardRef);
+                    } else {
+                        console.warn(`🛡️ Protected Shard: Skipping deletion of future empty shard: ${sid}`);
+                    }
                 }
             });
         }
@@ -2914,7 +2982,16 @@ window.changeSlotReq = async function (key, delta) {
 
 
 window.cancelDuty = async function (key, email, isLocked) {
-    if (isLocked) return alert("🚫 Slot Locked! Contact Admin.");
+    if (isLocked && !isAdmin) return alert("🚫 Slot Locked! Contact Admin.");
+
+    // Check if it's Admin Posted
+    const slot = invigilationSlots[key];
+    const meta = slot && slot.assignmentMeta ? slot.assignmentMeta[email] : {};
+    const isAdminPosted = meta && (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+    if (isAdminPosted && !isAdmin) {
+        return alert("🚫 Action Denied.\n\nThis duty was assigned by the Admin and cannot be cancelled. Please use the 'Exchange' option.");
+    }
+
     if (confirm("Cancel duty?")) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         // 🛡️ [CLEANUP FIX]: Remove from exchange market immediately if cancelled
@@ -4463,6 +4540,7 @@ async function volunteer(key, email) {
 
             // Add New (You)
             slot.assigned.push(email);
+            updateAssignmentMeta(slot, email, 'EXCHANGE');
             const me = staffData.find(s => s.email === email);
             if (me) me.dutiesAssigned = (me.dutiesAssigned || 0) + 1;
 
@@ -4592,8 +4670,13 @@ window.postForExchange = async function (key, email) {
     }
 
     if (!slot.isLocked) {
-        alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
-        return;
+        const meta = slot.assignmentMeta?.[email] || {};
+        const isAdminPosted = (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
+        
+        if (!isAdminPosted) {
+            alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
+            return;
+        }
     }
 
     if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
@@ -9325,7 +9408,10 @@ function isActionAllowed(dateInput) {
     checkDate.setHours(0, 0, 0, 0);
 
     const maxDate = new Date(today);
+    maxDate.setDate(1);
     maxDate.setMonth(today.getMonth() + 3);
+    // Set to end of month
+    maxDate.setMonth(maxDate.getMonth() + 1, 0);
 
     // 1. Block Past Dates
     if (checkDate < today) {
@@ -12127,6 +12213,12 @@ window.saveManualAllocation = async function () {
     const oldAssigned = invigilationSlots[key].assigned || [];
     const removedEmails = oldAssigned.filter(e => !newAssigned.includes(e));
 
+    // --- NEW: Tag newly added staff as ADMIN ---
+    const addedEmails = newAssigned.filter(e => !oldAssigned.includes(e));
+    addedEmails.forEach(email => {
+        updateAssignmentMeta(invigilationSlots[key], email, 'ADMIN');
+    });
+
     if (removedEmails.length > 0 && invigilationSlots[key].exchangeRequests) {
         invigilationSlots[key].exchangeRequests = invigilationSlots[key].exchangeRequests
             .filter(e => !removedEmails.includes(e));
@@ -12309,11 +12401,7 @@ window.confirmDirectAdd = async function() {
     slot.assigned.push(staff.email);
     
     // Core Objective > Tag them securely 
-    if (!slot.assignmentMeta) slot.assignmentMeta = {};
-    slot.assignmentMeta[staff.email] = {
-        source: 'Admin',
-        timestamp: new Date().toISOString()
-    };
+    updateAssignmentMeta(slot, staff.email, 'ADMIN');
     
     if (typeof logActivity === 'function') {
         logActivity("Admin Override Add", `Admin explicitly assigned ${staff.name} to ${key}.`);
