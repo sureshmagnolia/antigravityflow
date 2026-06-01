@@ -7263,7 +7263,7 @@ if (toggleButton && sidebar) {
             reportOutputArea.style.display = 'block';
             reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
             reportControls.classList.remove('hidden');
-            lastGeneratedReportType = "Question_Paper_Summary";
+            lastGeneratedReportType = "Daywise_Seating_Details";
 
             // --- ADDED: JSON Export Button for Smart Print Manager ---
             roomCsvDownloadContainer.innerHTML = `
