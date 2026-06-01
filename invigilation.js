@@ -598,8 +598,12 @@ function setupLiveSync(collegeId, mode) {
                   // 🛡️ [SYNC] Update Scribe Allotments for Staffing Ratios
                   const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
                   if (data.scribeAllotment) {
-                      allScribes[sKey] = data.scribeAllotment;
-                      localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                      // DIRTY STATE SHIELD: Don't overwrite if there are active local changes
+                      const isLocalDirty = localStorage.getItem('hasUnsavedScribes_' + sKey) === 'true';
+                      if (!isLocalDirty) {
+                          allScribes[sKey] = data.scribeAllotment;
+                          localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                      }
                   }
             });
 

@@ -1730,7 +1730,8 @@ window.recalcInvigSlots = async function () {
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
                             
                             // 🚀 GLOBAL REFRESH: Signal that data is ready
-                            hasUnsavedScribes = false; 
+                            hasUnsavedScribes = false;
+        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save 
 
 
 
@@ -1748,6 +1749,7 @@ window.recalcInvigSlots = async function () {
                         
                         // ✅ SYNC COMPLETE: Reset unsaved flag
                         hasUnsavedScribes = false;
+        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save
 
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
@@ -2110,9 +2112,15 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         const allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
         const sessionAbsentees = allAbsentees[sessionKey] || [];
 
-        // Scribes
-        const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-        const sessionScribes = allScribes[sessionKey] || {};
+        // Scribes (Prioritize Vault)
+        const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+        let sessionScribes;
+        if (localStorage.getItem(vaultKey)) {
+            sessionScribes = JSON.parse(localStorage.getItem(vaultKey));
+        } else {
+            const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+            sessionScribes = allScribes[sessionKey] || {};
+        }
                // Invigilator Mapping (The Missing Part!)
         const allInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
         const sessionInvigMap = allInvigMapping[sessionKey] || {};
@@ -12277,8 +12285,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             
             const allottedRoomNames = currentSessionAllotment.map(r => r.roomName);
-            const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-            const scribeRoomNames = Object.values(allScribeAllotments[currentSessionKey] || {});
+            const scribeRoomNames = Object.values(currentScribeAllotment || {});
             
             const freqs = getRoomFrequencies();
             const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
@@ -12702,10 +12709,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             .map(r => r.roomName);
 
         // B. Scribe Allotted Rooms (NEW CHECK)
-        // We fetch the scribe data to ensure we don't double-book a room used by a scribe
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeMap = allScribeAllotments[currentSessionKey] || {};
-        const scribeRoomNames = Object.values(sessionScribeMap); // Array of rooms used by scribes
+        // We use the in-memory currentScribeAllotment map to ensure we see unsaved local changes
+        const scribeRoomNames = Object.values(currentScribeAllotment || {}); // Array of rooms used by scribes
 
         const freqs = getRoomFrequencies();
         const sortedRoomNames = Object.keys(currentRoomConfig).sort((a, b) => {
@@ -12945,7 +12950,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             // 1. Reset Dirty Flag (New session loaded fresh)
             hasUnsavedAllotment = false;
-            hasUnsavedScribes = false;   // ADD THIS
+            hasUnsavedScribes = false;
+        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save   // ADD THIS
             // 2. Pre-compute mixing parts for the new session
             const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
             precomputeSessionParts(sessionKey, activeStrategy);
@@ -13008,6 +13014,11 @@ if (saveScribeBtn) {
 
         // 🛡️ [PERSISTENCE FIX]: Explicitly save to localStorage for Basic Users
         if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
+            // 🛡️ [VAULT UPGRADE]: Save to isolated vault
+            const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+            localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+
+            // Legacy fallback
             const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
             allScribeAllots[sessionKey] = currentScribeAllotment;
             localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
@@ -13023,6 +13034,7 @@ if (saveScribeBtn) {
         }
 
         hasUnsavedScribes = false;
+        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save
         
         // UI Feedback
         const status = document.getElementById('scribe-save-status');
@@ -13076,12 +13088,8 @@ if (saveScribeBtn) {
                 const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
                 allAllotments[currentSessionKey] = currentSessionAllotment;
 
-                const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                allScribeAllotments[currentSessionKey] = currentScribeAllotment;
-
                 // 2. Save to Local Storage
                 localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
-                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
 
                 // 3. Sync to Cloud
                 if (currentCollegeId && typeof syncDataToCloud === 'function') {
@@ -13473,18 +13481,18 @@ if (saveScribeBtn) {
         // **********************************************************************
 
         if (sessionKey && globalScribeList.length > 0) {
-            // Load the allotments for this session (🛡️ [V12.8 FIX]: Prioritize V1 Manual Saves over V2 Historical context)
-            const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
-            
-            // Unify keys: Manual Save (v1) should always win over historical data (v2)
-            const allAllotments = { ...v2, ...v1 }; 
-            currentScribeAllotment = allAllotments[sessionKey] || {};
+            // 🛡️ [VAULT UPGRADE]: Try session-specific key first (Isolation)
+            const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+            const vaultedData = localStorage.getItem(vaultKey);
 
-            // 🛡️ [V12.8]: If we found data in V2 that isn't in V1, migrate it back to V1 for persistence
-            if (v2[sessionKey] && !v1[sessionKey]) {
-                v1[sessionKey] = v2[sessionKey];
-                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(v1));
+            if (vaultedData) {
+                currentScribeAllotment = JSON.parse(vaultedData);
+            } else {
+                // FALLBACK: Load legacy global key (Compatibility)
+                const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+                const allAllotments = { ...v2, ...v1 };
+                currentScribeAllotment = allAllotments[sessionKey] || {};
             }
 
             scribeAllotmentListSection.classList.remove('hidden');
@@ -13679,6 +13687,11 @@ function renderScribeAllotmentList(sessionKey) {
             masterRoomNames.delete(room.roomName);
         });
 
+        // -> ADD CHECK: Remove rooms that are in-memory (unsaved) for regular allotment
+        currentSessionAllotment.forEach(room => {
+            masterRoomNames.delete(room.roomName);
+        });
+
         // 4. Return the remaining list, sorted numerically
         return Array.from(masterRoomNames).sort((a, b) => {
             const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
@@ -13752,7 +13765,11 @@ function renderScribeAllotmentList(sessionKey) {
         // Add to this session's allotment
         currentScribeAllotment[studentToAllotScribeRoom] = roomName;
 
-        // Save back to localStorage
+        // 🛡️ [VAULT UPGRADE]: Save to session-specific vault for isolation
+        const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+        localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+
+        // LEGACY COMPATIBILITY: Keep global key updated for older versions until they fully migrate
         const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
         allAllotments[sessionKey] = currentScribeAllotment;
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
@@ -13761,8 +13778,13 @@ function renderScribeAllotmentList(sessionKey) {
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
-        hasUnsavedScribes = true; // Stay in "Dirty" status until session is complete or manually saved
+        hasUnsavedScribes = true;
+        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag // Stay in "Dirty" status until session is complete or manually saved
+        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Required for cross-script background sync protection
         updateSyncStatus("Local Changes Unsaved", "warning");
+
+        // Force Drive Sync for Basic Users
+        if (typeof window.triggerDriveAutoSync === 'function') window.triggerDriveAutoSync(true);
 
     }
 
@@ -19294,16 +19316,24 @@ window.toggleAllArchiveCheckboxes = function(check) {
         // 1. Remove from current session mapping
         delete currentScribeAllotment[regNo];
 
-        // 2. Save to Local Storage
+        // 🛡️ [VAULT UPGRADE]: Save to session-specific vault for isolation
+        const sessionKey = currentSessionKey || allotmentSessionSelect.value;
+        const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+        localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+
+        // 2. Save back to legacy Local Storage for compatibility
         const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        allAllotments[currentSessionKey] = currentScribeAllotment;
+        allAllotments[sessionKey] = currentScribeAllotment;
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
-        if (typeof syncDataToCloud === 'function') 
-            hasUnsavedScribes = true; // ADD THIS FLAG
-            updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
-        renderScribeAllotmentList(currentSessionKey);
+        hasUnsavedScribes = true;
+        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag 
+        updateSyncStatus("Unsaved Changes", "warning"); 
+        renderScribeAllotmentList(sessionKey);
+
+        // Force Drive Sync for Basic Users
+        if (typeof window.triggerDriveAutoSync === 'function') window.triggerDriveAutoSync(true);
     };
 
     window.clearAllScribeAllotments = function () {
@@ -19317,17 +19347,27 @@ window.toggleAllArchiveCheckboxes = function(check) {
         // 1. Clear current session mapping
         currentScribeAllotment = {};
 
-        // 2. Save to Local Storage
+        // 🛡️ [VAULT UPGRADE]: Save to session-specific vault
+        const sessionKey = currentSessionKey || allotmentSessionSelect.value;
+        const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+        localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+
+        // 2. Save back to legacy Local Storage for compatibility
         const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        allAllotments[currentSessionKey] = currentScribeAllotment;
+        allAllotments[sessionKey] = currentScribeAllotment;
         localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
 
         // 3. Sync & Refresh
         hasUnsavedScribes = true;
+        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag
         if (typeof updateSyncStatus === 'function') {
             updateSyncStatus("Unsaved Changes", "warning");
         }
-        renderScribeAllotmentList(currentSessionKey);
+        renderScribeAllotmentList(sessionKey);
+
+        // Force Drive Sync for Basic Users
+        if (typeof window.triggerDriveAutoSync === 'function') window.triggerDriveAutoSync(true);
+
         alert("✅ All scribe allotments for this session have been cleared.");
     };
 
