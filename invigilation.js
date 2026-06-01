@@ -599,7 +599,7 @@ function setupLiveSync(collegeId, mode) {
                   const allScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
                   if (data.scribeAllotment) {
                       // DIRTY STATE SHIELD: Don't overwrite if there are active local changes
-                      const isLocalDirty = localStorage.getItem('hasUnsavedScribes_' + sKey) === 'true';
+                      const isLocalDirty = localStorage.getItem('hasUnsavedScribes_' + sKey.replace(/\s/g, '_')) === 'true';
                       if (!isLocalDirty) {
                           allScribes[sKey] = data.scribeAllotment;
                           localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
