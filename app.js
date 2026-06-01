@@ -13785,7 +13785,6 @@ function renderScribeAllotmentList(sessionKey) {
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
         hasUnsavedScribes = true;
-        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag // Stay in "Dirty" status until session is complete or manually saved
         localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Required for cross-script background sync protection
         updateSyncStatus("Local Changes Unsaved", "warning");
 
