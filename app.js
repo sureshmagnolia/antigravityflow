@@ -1730,8 +1730,7 @@ window.recalcInvigSlots = async function () {
                             safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
                             
                             // 🚀 GLOBAL REFRESH: Signal that data is ready
-                            hasUnsavedScribes = false;
-        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save 
+                            hasUnsavedScribes = false; 
 
 
 
@@ -1749,7 +1748,6 @@ window.recalcInvigSlots = async function () {
                         
                         // ✅ SYNC COMPLETE: Reset unsaved flag
                         hasUnsavedScribes = false;
-        localStorage.removeItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')); // Clear dirty flag on save
 
                         if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
@@ -10901,6 +10899,14 @@ window.real_populate_qp_code_session_dropdown = function () {
                     SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY
                 ];
                 keysToRemove.forEach(k => localStorage.removeItem(k));
+                
+                // Clear dynamic Scribe Vaults and Dirty Flags
+                const keysToScrub = Object.keys(localStorage);
+                keysToScrub.forEach(key => {
+                    if (key.startsWith('scrAllot_') || key.startsWith('hasUnsavedScribes_')) {
+                        localStorage.removeItem(key);
+                    }
+                });
 
                 // 2. Wipe Cloud Data (The Fix)
                 if (currentCollegeId) {
@@ -22745,6 +22751,13 @@ window.executeBulkDelete = async function() {
                     });
                     if(changed) localStorage.setItem(key, JSON.stringify(data));
                 }
+            });
+            
+            // Clean up Scribe Vaults and Dirty Flags
+            sessionsToDelete.forEach(s => {
+                const safeKey = s.replace(/\s/g, '_');
+                localStorage.removeItem('scrAllot_' + safeKey);
+                localStorage.removeItem('hasUnsavedScribes_' + safeKey);
             });
         }
 
