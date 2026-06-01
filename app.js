@@ -19743,11 +19743,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
                     
-                    // Force Sync 'slots'
-                    if (typeof syncDataToCloud === 'function') {
-                        // FIX: Ensure intentional removals from pool stick
-                        syncDataToCloud('slots', sessionKey); 
-                    }
+                    // 🛡️ [REDUNDANT REMOVAL]: Removed syncDataToCloud('slots') here.
+                    // Swapping/Replacing an invigilator updates the 'replaced' log, but we don't
+                    // want to trigger the "Update Invigilation Database" confirmation modal
+                    // for every surgical swap. This is already synced via 'staff' and 'session' calls below.
                 }
             }
         }
@@ -19784,7 +19783,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
             
             // Sync the specific room-to-person mapping (Crucial for other PCs)
             if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
+                // ⚡ [SPEED FIX]: Skip heavy staff/slot sync during this surgical mapping update
+                await syncSessionToCloud(sessionKey, true); // true = skipStaffSync
             }
         }
 
