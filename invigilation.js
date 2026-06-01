@@ -3375,15 +3375,15 @@ window.runAutoAllocation = async function () {
             // 1. Adjacent Day Rule (Applies to ALL, logic: Skip if adjacent)
             if (adjacentAssigned.has(s.email)) return null;
 
-            // 2. Dept Saturation (Skip if > 50%, UNLESS Single Faculty)
+            // 2. Dept Saturation (Skip if > 60%, UNLESS Single Faculty)
             const dTotal = deptCounts[s.dept] || 0;
             if (!isSingleFaculty && dTotal > 1) {
                 const dAssigned = slotDeptCounts[s.dept] || 0;
-                if (dAssigned >= Math.ceil(dTotal * 0.5)) return null;
+                if (dAssigned >= Math.ceil(dTotal * 0.6)) return null;
             }
 
             const dynamicPending = getPendingCountForSession(s.email, key);
-            let score = dynamicPending * 100;
+            let score = dynamicPending * 1000;
             let warnings = [];
 
             // Weekly Soft Limit
@@ -5415,10 +5415,10 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
                     
                     // OR, using the target boundary math (Standard Way):
                     const vacPending = Math.max(0, vacTarget - vacDone);
-                    score = vacPending * 100;
+                    score = vacPending * 1000;
                 } else {
 
-                    score = dynamicPending * 100;
+                    score = dynamicPending * 1000;
                 }
                 let warnings = [];
 
@@ -8087,14 +8087,14 @@ window.openManualAllocationModal = function (key) {
                 done = doneVacation + volunteeredVacation; // Factor in what they already volunteered for!
                 target = vacationDutyTarget || 0;
                 pending = target - done;
-                score = pending * 1000; // High multiplier to strictly sort by deficit
+                score = pending * 1000; // EQUAL JUSTICE: Normalizing vacation debt weight
             } else {
                 // Standard Logic
                 // 🛡️ [REMISSION FIX]: Pass targetDate to ensure target is only for the session month
                 done = getDutiesDoneCount(s.email, targetDate);
                 target = calculateStaffTarget(s, targetDate);
                 pending = Math.max(0, target - done);
-                score = pending * 100;
+                score = pending * 1000; // EQUAL JUSTICE: Increased multiplier for regular pending
             }
 
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
@@ -8102,7 +8102,7 @@ window.openManualAllocationModal = function (key) {
 // 🛡️ Volunteer Bonus for THIS slot
             const hasVolunteered = slot.volunteers && slot.volunteers.includes(s.email);
             if (hasVolunteered) {
-                score += 10000;
+                score += 500; // EQUAL JUSTICE: Reduced volunteer bonus (Pending Debt > Volunteering)
                 badges.push("Volunteer");
             }
 
@@ -8122,14 +8122,18 @@ window.openManualAllocationModal = function (key) {
 
             // Spread Rules & Fatigue Penalties
             if (ctx.weekCount >= 3) { score -= 5000; badges.push("Max 3/wk"); }
-            if (ctx.hasSameDay) { score -= 2000; badges.push("Same Day"); }
-            if (ctx.hasAdjacent) { score -= 1000; badges.push("Adjacent"); }
+            if (ctx.hasSameDay) { score -= 5000; badges.push("Same Day"); }
+            if (ctx.hasAdjacent) { score -= 2000; badges.push("Adjacent"); }
 
             // Department Saturation (Skip during Vacation)
             if (!isCurrentSlotVacation) {
-                const deptStaff = (slot.assigned || []).filter(e => staffData.find(st => st.email === e)?.dept === s.dept).length;
-                if (staffData.filter(st => st.dept === s.dept).length > 1 && ((deptStaff + 1) / ((slot.assigned || []).length + 1) > 0.5)) {
-                    score -= 500; badges.push("Dept Sat");
+                const dTotal = staffData.filter(st => st.dept === s.dept).length;
+                if (dTotal > 1) {
+                    const dAssigned = (slot.assigned || []).filter(e => staffData.find(st => st.email === e)?.dept === s.dept).length;
+                    // Logic: If 2 faculty, max 1 (50%). If >2, 60% is ok.
+                    if (dAssigned >= Math.ceil(dTotal * 0.6)) {
+                        score -= 4000; badges.push("Dept Sat");
+                    }
                 }
             }
 
@@ -11984,10 +11988,10 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     // --- V2.0 ENGINE CONFIGURATION ---
     const AUTO_ASSIGN_WEIGHTS = {
         WEEKLY_LIMIT: 5000,
-        SAME_DAY: 2000,
-        ADJACENT_DAY: 1000,
+        SAME_DAY: 5000,
+        ADJACENT_DAY: 2000,
         DEPT_SATURATION: 4000,
-        BASE_MULTIPLIER: 100
+        BASE_MULTIPLIER: 1000
     };
 
     // --- 1. CREATE SIMULATION SANDBOX ---
