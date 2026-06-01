@@ -7265,13 +7265,8 @@ if (toggleButton && sidebar) {
             reportControls.classList.remove('hidden');
             lastGeneratedReportType = "Daywise_Seating_Details";
 
-            // --- ADDED: JSON Export Button for Smart Print Manager ---
-            roomCsvDownloadContainer.innerHTML = `
-                <button id="download-qp-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
-                    📥 Download QP Summary for Print Manager (.json)
-                </button>
-            `;
-            document.getElementById('download-qp-json-button').addEventListener('click', downloadQpSummaryJson);
+            // Clean up JSON export container for this report type
+            roomCsvDownloadContainer.innerHTML = "";
 
         } catch (e) {
             console.error("Error:", e);
