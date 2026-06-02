@@ -601,16 +601,21 @@ function setupLiveSync(collegeId, mode) {
                       // DIRTY STATE SHIELD: Don't overwrite if there are active local changes
                       const isLocalDirty = localStorage.getItem('hasUnsavedScribes_' + sKey.replace(/\s/g, '_')) === 'true';
                       if (!isLocalDirty) {
-                          allScribes[sKey] = data.scribeAllotment;
-                          localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                          try {
+                              allScribes[sKey] = data.scribeAllotment;
+                              localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                              
+                              // Keep local fast-cache updated
+                              const vaultKey = `scrAllot_${sKey.replace(/\s/g, '_')}`;
+                              localStorage.setItem(vaultKey, JSON.stringify(data.scribeAllotment));
+                          } catch (e) {
+                              console.warn("⚠️ Live Sync: LocalStorage full. IDB update only.");
+                          }
                           
                           // 🛡️ [V3 IDB UPGRADE]: Sync incoming cloud data to the IDB Vault too
                           if (typeof window.saveScribeAllotmentIDB === 'function') {
                               window.saveScribeAllotmentIDB(sKey, data.scribeAllotment).catch(e => console.error("IDB Sync Error", e));
                           }
-                          // Keep local fast-cache updated
-                          const vaultKey = `scrAllot_${sKey.replace(/\s/g, '_')}`;
-                          localStorage.setItem(vaultKey, JSON.stringify(data.scribeAllotment));
                       }
                   }
             });

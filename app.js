@@ -13046,23 +13046,28 @@ if (saveScribeBtn) {
 
         // 🛡️ [PERSISTENCE FIX]: Explicitly save to localStorage for Basic Users
         if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
-            // 🛡️ [VAULT UPGRADE]: Save to isolated vault
-            const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
-            localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+            // 1. Try LocalStorage (Cache & Bridge) - Fail-safe
+            try {
+                // 🛡️ [VAULT UPGRADE]: Save to isolated vault
+                const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
+                localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
 
-            // Legacy fallback
-            const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            allScribeAllots[sessionKey] = currentScribeAllotment;
-            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
+                // Legacy fallback
+                const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                allScribeAllots[sessionKey] = currentScribeAllotment;
+                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
+            } catch (e) {
+                console.warn("⚠️ LocalStorage full. Bridge data not updated, but proceeding to IDB...", e);
+            }
 
-            // 🛡️ [V3 IDB UPGRADE]: Save to IndexedDB Vault
+            // 2. Primary Save (IndexedDB) - AUTHORITATIVE
             try {
                 await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
-                console.warn("⚠️ Failed to save to IDB, but LocalStorage is updated.", e);
+                console.error("❌ CRITICAL: IndexedDB save failed!", e);
+                alert("❌ Error: Could not save to Database. Your changes may be lost.");
             }
         }
-
         // Force Sync
         if (typeof syncSessionToCloud === 'function') {
             try {
@@ -13523,9 +13528,10 @@ if (saveScribeBtn) {
             const isDirty = localStorage.getItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')) === 'true';
 
             // 🛡️ [V3 IDB UPGRADE]: Multi-Tiered Load (Bidirectional Sync)
-            // 1. Get from Legacy (The shared mirror)
+            // 1. Get from Legacy (The shared mirrors)
             const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            const legacyData = v1[sessionKey] || null;
+            const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
+            const legacyData = v1[sessionKey] || v2[sessionKey] || null;
 
             // 2. Get from Private IDB (The Source of Truth)
             const dbData = await getScribeAllotmentIDB(sessionKey);
@@ -13542,7 +13548,7 @@ if (saveScribeBtn) {
             }
 
             // Sync Local Cache (Vault) for UI speed
-            localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+            try { localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment)); } catch(e) {}
 
             scribeAllotmentListSection.classList.remove('hidden');
             renderScribeAllotmentList(sessionKey);
