@@ -603,6 +603,14 @@ function setupLiveSync(collegeId, mode) {
                       if (!isLocalDirty) {
                           allScribes[sKey] = data.scribeAllotment;
                           localStorage.setItem('examScribeAllotment', JSON.stringify(allScribes));
+                          
+                          // 🛡️ [V3 IDB UPGRADE]: Sync incoming cloud data to the IDB Vault too
+                          if (typeof window.saveScribeAllotmentIDB === 'function') {
+                              window.saveScribeAllotmentIDB(sKey, data.scribeAllotment).catch(e => console.error("IDB Sync Error", e));
+                          }
+                          // Keep local fast-cache updated
+                          const vaultKey = `scrAllot_${sKey.replace(/\s/g, '_')}`;
+                          localStorage.setItem(vaultKey, JSON.stringify(data.scribeAllotment));
                       }
                   }
             });
