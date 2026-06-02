@@ -566,7 +566,7 @@ function openExamDB() {
 }
 
 // 🛡️ [V3 IDB UPGRADE]: Helpers for Scribe Isolation
-function saveScribeAllotmentIDB(sessionKey, allotment) {
+window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
             const tx = db.transaction('scribeVault', 'readwrite');
@@ -577,7 +577,7 @@ function saveScribeAllotmentIDB(sessionKey, allotment) {
     });
 }
 
-function getScribeAllotmentIDB(sessionKey) {
+window.getScribeAllotmentIDB = function(sessionKey) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
             const tx = db.transaction('scribeVault', 'readonly');
@@ -13822,24 +13822,27 @@ function renderScribeAllotmentList(sessionKey) {
 
         // 🛡️ [VAULT UPGRADE]: Save to session-specific vault for isolation
         const vaultKey = `scrAllot_${sessionKey.replace(/\s/g, '_')}`;
-        localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+        try {
+            localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
 
-        // LEGACY COMPATIBILITY: Keep global key updated for older versions until they fully migrate
-        const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        allAllotments[sessionKey] = currentScribeAllotment;
-        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+            // LEGACY COMPATIBILITY: Keep global key updated for older versions until they fully migrate
+            const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+            allAllotments[sessionKey] = currentScribeAllotment;
+            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        } catch (e) {
+            console.warn("⚠️ LocalStorage full during scribe room selection.", e);
+        }
 
         // Close modal and re-render list
         scribeRoomModal.classList.add('hidden');
         renderScribeAllotmentList(sessionKey);
         studentToAllotScribeRoom = null;
         hasUnsavedScribes = true;
-        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Required for cross-script background sync protection
+        try { localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); } catch(e) {}
         updateSyncStatus("Local Changes Unsaved", "warning");
 
         // Force Drive Sync for Basic Users
         if (typeof window.triggerDriveAutoSync === 'function') window.triggerDriveAutoSync(true);
-
     }
 
 
@@ -22822,10 +22825,17 @@ window.executeBulkDelete = async function() {
             });
             
             // Clean up Scribe Vaults and Dirty Flags
-            sessionsToDelete.forEach(s => {
+            sessionsToDelete.forEach(async (s) => {
                 const safeKey = s.replace(/\s/g, '_');
                 localStorage.removeItem('scrAllot_' + safeKey);
                 localStorage.removeItem('hasUnsavedScribes_' + safeKey);
+                
+                // 🛡️ [V3 IDB UPGRADE]: Clean IDB Vault
+                try {
+                    const db = await openExamDB();
+                    const tx = db.transaction('scribeVault', 'readwrite');
+                    tx.objectStore('scribeVault').delete(s);
+                } catch(e) { console.error("Bulk IDB cleanup failed", e); }
             });
         }
 
