@@ -225,6 +225,7 @@ async function autoCleanPastGhostData() {
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
     let deletedCount = 0;
     let hasChanges = false;
+    let deletedSlotIds = [];
 
     // 1. Scan Slots
     Object.keys(slots).forEach(slotId => {
@@ -234,10 +235,11 @@ async function autoCleanPastGhostData() {
 
         slotDate.setHours(0, 0, 0, 0);
 
-        // ONLY delete if the exam is strictly older than 30 days
+        // ONLY delete if the exam is strictly older than 365 days
         if (slotDate < cutoffDate) {
             console.log(`🗑️ Auto-Deleting Old Record: ${slotId}`);
             delete slots[slotId];
+            deletedSlotIds.push(slotId);
             deletedCount++;
             hasChanges = true;
         }
@@ -262,10 +264,10 @@ async function autoCleanPastGhostData() {
         
         // 🛡️ [AUDIT FIX]: Use the authoritative sharded sync instead of the deprecated legacy sync
         // to permanently delete expired slots from the cloud shards.
-        if (typeof window.syncSlotsToCloud === 'function') {
-            window.syncSlotsToCloud("FORCE_OVERWRITE").catch(e => console.warn("Failed to sync cleaned slots:", e));
+        if (deletedSlotIds.length > 0 && typeof window.deleteSlotsFromCloud === 'function') {
+            window.deleteSlotsFromCloud(deletedSlotIds).catch(e => console.warn("Failed to sync cleaned slots:", e));
         }
-        console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
+        console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 365 days.`);
     } else {
         console.log("✅ [System] Local Data is clean.");
     }
@@ -22931,8 +22933,8 @@ window.executeBulkDelete = async function() {
         
         // 🛡️ [SHARD SYNC FIX]: Push bulk-deleted slot requirements to the daily shards immediately
         // so that the next reload doesn't resurrect old slot requirements.
-        if (typeof window.syncSlotsToCloud === 'function') {
-            await window.syncSlotsToCloud("FORCE_OVERWRITE");
+        if (typeof window.deleteSlotsFromCloud === 'function') {
+            await window.deleteSlotsFromCloud(sessionsToDelete);
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
