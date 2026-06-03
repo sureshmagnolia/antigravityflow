@@ -2402,6 +2402,7 @@ function switchToStaffView() {
     }
 }
 
+window.syncSlotsToCloud = syncSlotsToCloud;
 async function syncSlotsToCloud(affectedKey = null) {
     updateSyncStatus("Saving...", "neutral");
     try {

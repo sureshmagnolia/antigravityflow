@@ -260,10 +260,10 @@ async function autoCleanPastGhostData() {
         localStorage.setItem('examInvigilationSlots', JSON.stringify(slots));
         localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(availability));
         
-         if (typeof syncDataToCloud === 'function') {
-            // 🛡️ [AUDIT FIX]: Disabled in app.js to prevent unintended cloud wipes. 
-            // Invigilation management is now authoritative within invigilation.js
-            // await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+        // 🛡️ [AUDIT FIX]: Use the authoritative sharded sync instead of the deprecated legacy sync
+        // to permanently delete expired slots from the cloud shards.
+        if (typeof window.syncSlotsToCloud === 'function') {
+            window.syncSlotsToCloud("FORCE_OVERWRITE").catch(e => console.warn("Failed to sync cleaned slots:", e));
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
     } else {
@@ -22927,6 +22927,12 @@ window.executeBulkDelete = async function() {
             // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
             // This prevents stale data from re-poisoning the local database on refresh.
             await syncDataToCloud('baseData');
+        }
+        
+        // 🛡️ [SHARD SYNC FIX]: Push bulk-deleted slot requirements to the daily shards immediately
+        // so that the next reload doesn't resurrect old slot requirements.
+        if (typeof window.syncSlotsToCloud === 'function') {
+            await window.syncSlotsToCloud("FORCE_OVERWRITE");
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
