@@ -1346,9 +1346,7 @@ window.recalcInvigSlots = async function () {
     try {
         // 🛡️ CRITICAL: Force fetch latest slots from cloud BEFORE recalculating
         // to prevent erasing existing teacher willingness data if local memory is empty.
-        if (typeof window.fetchSlotsData === 'function') {
-            await window.fetchSlotsData();
-        }
+
 
         // 🛡️ V2 ARCHITECTURE SHIELD: 
         // app.js doesn't natively fetch daily shards. If local memory is empty, abort to prevent a wipe.
@@ -1430,7 +1428,7 @@ window.recalcInvigSlots = async function () {
                 if (now - lastLocalSave < 10000) return;
 
                 // --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
-                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
+                  if (key === 'examInvigilationSlots' || key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
                       // 🚫 [SCR5 MIGRATION FIX] Block legacy cloud documents from poisoning local state!
                       // These keys are now strictly managed by the V2 Modular Sessions listener.
                       return;
@@ -1503,9 +1501,10 @@ window.recalcInvigSlots = async function () {
         };
 
         window.fetchSlotsData = async () => {
-            const { getDoc, doc } = window.firebase;
-            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "slots"));
-            if (snap.exists()) syncLocal(snap.data());
+            // 🛡️ [AUDIT FIX]: fetchSlotsData is decommissioned. 
+            // Authority is now moved to the Sharded Listener in invigilation.js.
+            // This prevents legacy root document fetches from overwriting active sharded state.
+            console.log("ℹ️ fetchSlotsData bypassed: Sharded Authority Active.");
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -1652,7 +1651,7 @@ window.recalcInvigSlots = async function () {
                             // Prevent invigilators from disappearing if they are actively being edited
                             // We don't have a specific global hasUnsavedInvigilators, but using isAllotmentDirty is a safe proxy 
                             // because invigilators are tied to the room allotment panel.
-                            if (s.invigilatorMapping && !isAllotmentDirty) {
+                            if (s.invigilatorMapping && !isAllotmentDirty && !window._isClearingInvigilators) {
                                 allInvigMapping[sessionKey] = s.invigilatorMapping;
                             }
                             
@@ -2161,7 +2160,6 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             absentees: sessionAbsentees,
             scribeAllotment: sessionScribes,
             invigilatorMapping: sessionInvigMap,
-            replaced: (JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}')[sessionKey] || {}).replaced || [],
         meta: { 
                 studentCount: students.length,
                 normalCount: students.filter(s => {
@@ -20008,25 +20006,32 @@ window.toggleAllArchiveCheckboxes = function(check) {
         if (currentCount === 0) return alert("No invigilators assigned to clear.");
 
         if (confirm(`Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
-            // Clear current session mapping
-            currentInvigMapping = {};
+            // 🛡️ [AUDIT FIX]: Set a global flag to prevent sync overwrites during clearing
+            window._isClearingInvigilators = true;
 
-            // Update Global Storage
-            const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
-            allMappings[sessionKey] = currentInvigMapping;
-            localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+            try {
+                // Clear current session mapping
+                currentInvigMapping = {};
 
-            // Sync to Cloud
-            if (typeof syncDataToCloud === 'function') {
-                await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping clear sticks
-                if (typeof syncSessionToCloud === 'function') {
-                    await syncSessionToCloud(sessionKey);
+                // Update Global Storage
+                const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
+                allMappings[sessionKey] = currentInvigMapping;
+                localStorage.setItem(INVIG_MAPPING_KEY, JSON.stringify(allMappings));
+
+                // Sync to Cloud
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping clear sticks
+                    if (typeof syncSessionToCloud === 'function') {
+                        await syncSessionToCloud(sessionKey);
+                    }
                 }
-            }
 
-            // Refresh UI
-            renderInvigilationPanel();
-            alert("All invigilator assignments cleared for this session.");
+                // Refresh UI
+                renderInvigilationPanel();
+                alert("All invigilator assignments cleared for this session.");
+            } finally {
+                window._isClearingInvigilators = false;
+            }
         }
     };
 
@@ -23716,7 +23721,7 @@ document.addEventListener("visibilitychange", () => {
         }
         else if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden')) {
             if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData();
-            if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData();
+
         }
         else if (typeof viewEditData !== 'undefined' && !viewEditData.classList.contains('hidden')) {
             if (typeof window.fetchStaffData === 'function') window.fetchStaffData();

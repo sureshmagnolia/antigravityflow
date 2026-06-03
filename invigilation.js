@@ -449,9 +449,14 @@ function setupLiveSync(collegeId, mode) {
           const newKeyCount = Object.keys(newSlots).length;
           const currentKeyCount = Object.keys(invigilationSlots).length;
 
-          // 🛡️ [LISTENER SHIELD]: Protect against partial data streams
-          // If we already have data, and the incoming update is suspiciously small (e.g. < 30% of current),
-          // we block the update to prevent a local wipe that might sync back to the cloud.
+          // 🛡️ [LISTENER SHIELD]: Protect against partial data streams or race conditions
+          // 1. Block if we are currently clearing assignments locally (to prevent race condition)
+          if (window._isClearingInvigilators) {
+              console.log("🛡️ Listener Shield: Blocked incoming update during local clear.");
+              return;
+          }
+
+          // 2. Suspiciously small update check
           if (currentKeyCount > 10 && newKeyCount < (currentKeyCount * 0.3)) {
               console.warn(`🛡️ Listener Shield: Blocked incoming partial slot update. (Local: ${currentKeyCount}, Incoming: ${newKeyCount})`);
               return;
@@ -460,6 +465,10 @@ function setupLiveSync(collegeId, mode) {
           if (newKeyCount > 0) {
               invigilationSlots = newSlots;
               localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+              
+              // 🔄 [AUDIT SYNC]: Notify app.js if it's open in another tab or same window
+              if (typeof window.renderInvigilationPanel === 'function') window.renderInvigilationPanel();
+              
               refreshSlotsUI();
           } else if (shardCount === 0 && currentKeyCount > 0) {
               console.warn("🛡️ Listener Shield: Received 0 shards. Preserving local state to prevent accidental wipe.");
@@ -2577,11 +2586,15 @@ async function migrateOldSlotsData(collegeId, oldData, fromMonthlyShards = false
             const legacyShardsRef = collection(db, "colleges", collegeId, "slots_data");
             const legacySnap = await getDocs(legacyShardsRef);
             legacySnap.forEach(s => batch.delete(s.ref));
-        } else {
+
+            // 🛡️ [AUDIT FIX]: Also clear the old root field if we're migrating from monthly shards
+            const oldRootRef = doc(db, "colleges", collegeId, "system_data", "slots");
+            batch.update(oldRootRef, { examInvigilationSlots: deleteField() });
+            } else {
             // 🛡️ Remove the old bloated field after sharding
             const oldRef = doc(db, "colleges", collegeId, "system_data", "slots");
             batch.update(oldRef, { examInvigilationSlots: deleteField() });
-        }
+            }
 
         await batch.commit();
         console.log("✅ Daily Slot Migration Complete. Legacy data cleared.");
