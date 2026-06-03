@@ -1004,12 +1004,6 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                 await window.syncDataToCloud('ops');
                 await window.syncDataToCloud('allocation');
 
-                // Recalculate staffauthoritatively
-                if (typeof window.updateLocalSlotsFromStudents === 'function') {
-                    await window.updateLocalSlotsFromStudents();
-                    await window.syncDataToCloud('slots', "FORCE_OVERWRITE");
-                }
-
                 // Authoritative Queue Drain
                 while (window.isSyncing || (typeof syncQueue !== 'undefined' && syncQueue.sections && syncQueue.sections.size > 0)) {
                     await new Promise(r => setTimeout(r, 500));

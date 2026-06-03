@@ -1206,6 +1206,12 @@ async function updateLocalSlotsFromStudents() {
                 isPastSession = false; // Default to Future (Locked) if date is weird
             }
 
+            // 🛡️ [FUTURE-ONLY GUARD]: Strictly touch Future Slots only.
+            // This preserves historical staffing records exactly as they were.
+            if (isPastSession) {
+                return;
+            }
+
             // Calculate Required Invigilators
             let baseRequirement = 0;
             Object.values(stats.normalStreams).forEach(count => baseRequirement += Math.ceil(count / 30));
@@ -1295,11 +1301,23 @@ async function updateLocalSlotsFromStudents() {
 window.recalcInvigSlots = async function () {
     if (!currentUser) return alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
 
-    const btn = document.getElementById('recalc-invig-slots-btn');
-    const origText = btn ? btn.innerHTML : '';
-    if (btn) { btn.innerHTML = '⏳ Recalculating...'; btn.disabled = true; }
+    // 🛡️ [USER CONFIRMATION]: Explicitly state the Future-Only scope
+    const confirmMsg = `🔄 RECALCULATE FUTURE SLOTS?\n\nThis will re-scan all student data to update staffing requirements for all UPCOMING exams.\n\n✅ Existing teacher assignments will be PRESERVED.\n✅ Past session data will NOT be modified.\n\nContinue?`;
+    if (!confirm(confirmMsg)) return;
 
-       try {
+    const btns = ['recalc-invig-slots-btn', 'recalc-invig-slots-btn-loader', 'recalc-invig-slots-btn-editor'];
+    const originalStates = [];
+
+    btns.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            originalStates.push({ id, html: btn.innerHTML });
+            btn.innerHTML = '⏳ Recalculating...';
+            btn.disabled = true;
+        }
+    });
+
+    try {
         // 🛡️ CRITICAL: Force fetch latest slots from cloud BEFORE recalculating
         // to prevent erasing existing teacher willingness data if local memory is empty.
         if (typeof window.fetchSlotsData === 'function') {
@@ -1329,7 +1347,13 @@ window.recalcInvigSlots = async function () {
         console.error('Slot Recalc Error:', e);
         alert('❌ Recalculation failed. Check console for details.');
     } finally {
-        if (btn) { btn.innerHTML = origText; btn.disabled = false; }
+        originalStates.forEach(state => {
+            const btn = document.getElementById(state.id);
+            if (btn) {
+                btn.innerHTML = state.html;
+                btn.disabled = false;
+            }
+        });
     }
 };
     // ==========================================
@@ -1410,11 +1434,17 @@ window.recalcInvigSlots = async function () {
                 const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
                 const portalSection = document.getElementById('student-portal-section');
                 const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+                const loaderRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-loader');
+                const editorRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-editor');
 
                 if (syncStatusDisplay) syncStatusDisplay.classList.remove('hidden');
                 if (forceSyncAllotmentButton) forceSyncAllotmentButton.classList.remove('hidden');
                 if (portalSection) portalSection.classList.remove('hidden');
-                if (invigSlotWrapper) invigSlotWrapper.classList.remove('hidden');
+
+                // Show Slot Recalc only if Admin
+                if (invigSlotWrapper) invigSlotWrapper.classList.toggle('hidden', !isAdminUser);
+                if (loaderRecalcWrapper) loaderRecalcWrapper.classList.toggle('hidden', !isAdminUser);
+                if (editorRecalcWrapper) editorRecalcWrapper.classList.toggle('hidden', !isAdminUser);
 
                 updateHeaderCollegeName();
                 if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
@@ -2160,21 +2190,6 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                      // 🚫 DELETED: Shadow Mirror to GAS
 
 
-
-            updateSyncStatus("All Data Synced!", "success"); 
-
-
-            
-            // --- ⚡ [SPEED FIX]: Skip heavy staff sync during bulk operations ---
-            if (!skipStaffSync) {
-                // Recalculate Invigilation Slots
-                if (typeof updateLocalSlotsFromStudents === 'function') {
-                    await updateLocalSlotsFromStudents();
-                }
-
-                // FIX: Global recalculation must be authoritative
-                await syncDataToCloud('slots', "FORCE_OVERWRITE");
-            }
 
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
             // that used to be here, which were causing the 1MB limit error.
@@ -7263,15 +7278,10 @@ if (toggleButton && sidebar) {
             reportOutputArea.style.display = 'block';
             reportStatus.textContent = `Generated ${totalPagesGenerated} pages.`;
             reportControls.classList.remove('hidden');
-            lastGeneratedReportType = "Question_Paper_Summary";
+            lastGeneratedReportType = "Daywise_Seating_Details";
 
-            // --- ADDED: JSON Export Button for Smart Print Manager ---
-            roomCsvDownloadContainer.innerHTML = `
-                <button id="download-qp-json-button" class="w-full inline-flex justify-center items-center rounded-md border border-indigo-300 bg-indigo-50 py-3 px-4 text-sm font-bold text-indigo-700 shadow-sm hover:bg-indigo-100 transition">
-                    📥 Download QP Summary for Print Manager (.json)
-                </button>
-            `;
-            document.getElementById('download-qp-json-button').addEventListener('click', downloadQpSummaryJson);
+            // Clean up JSON export container for this report type
+            roomCsvDownloadContainer.innerHTML = "";
 
         } catch (e) {
             console.error("Error:", e);
@@ -16341,8 +16351,6 @@ window.loadStudentData = function(dataArray, sessionsToSync = null) {
                     // Small delay to prevent network congestion
                     await new Promise(r => setTimeout(r, 200));
                 }
-                // FIX: CSV Upload must correctly reflect new slot requirements
-                if (typeof syncDataToCloud === 'function') await syncDataToCloud('slots', "FORCE_OVERWRITE");
                 
                 updateSyncStatus("Smart Sync Complete", "success");
             })();
@@ -19748,11 +19756,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
                     localStorage.setItem('examInvigilationSlots', JSON.stringify(allSlots));
                     
-                    // Force Sync 'slots'
-                    if (typeof syncDataToCloud === 'function') {
-                        // FIX: Ensure intentional removals from pool stick
-                        syncDataToCloud('slots', sessionKey); 
-                    }
+                    // 🛡️ [REDUNDANT REMOVAL]: Removed syncDataToCloud('slots') here.
+                    // Swapping/Replacing an invigilator updates the 'replaced' log, but we don't
+                    // want to trigger the "Update Invigilation Database" confirmation modal
+                    // for every surgical swap. This is already synced via 'staff' and 'session' calls below.
                 }
             }
         }
@@ -19789,7 +19796,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
             
             // Sync the specific room-to-person mapping (Crucial for other PCs)
             if (typeof syncSessionToCloud === 'function') {
-                await syncSessionToCloud(sessionKey);
+                // ⚡ [SPEED FIX]: Skip heavy staff/slot sync during this surgical mapping update
+                await syncSessionToCloud(sessionKey, true); // true = skipStaffSync
             }
         }
 
@@ -19894,7 +19902,6 @@ window.toggleAllArchiveCheckboxes = function(check) {
             // Sync to Cloud
             if (typeof syncDataToCloud === 'function') {
                 await syncDataToCloud('staff', sessionKey); // FIX: Ensure mapping clear sticks
-                // 🚫 REMOVED syncDataToCloud('slots', sessionKey) to prevent data loss of volunteers
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionKey);
                 }
@@ -20520,7 +20527,7 @@ if (displayLoc) {
                 fixStorageKeys('examAbsenteeList', 'array');       // Absentee Lists
                 fixStorageKeys('examScribeAllotment', 'object');   // Scribe Allocations
                 fixStorageKeys('examInvigilatorMapping', 'object');// Invig Room Assignments
-                fixStorageKeys('examInvigilationSlots', 'slot');   // Invigilation Duty Slots
+                // fixStorageKeys('examInvigilationSlots', 'slot');   // Invigilation Duty Slots
 
                 // 4. Sync & Reload
                 // MODULAR SYNC (V2) - ITERATIVE UPDATE
@@ -20534,11 +20541,9 @@ if (displayLoc) {
                         await syncSessionToCloud(sessionKey);
                     }
                     
-                    // 3. Sync Settings/Staff/Slots (Global Data)
+                    // 3. Sync Settings/Staff (Global Data)
                     await syncDataToCloud('settings');
                     await syncDataToCloud('staff');
-                        // FIX: Restoring from backup MUST overwrite cloud
-                    await syncDataToCloud('slots', "FORCE_OVERWRITE");
                 }
 
                 alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
@@ -20855,7 +20860,6 @@ if (displayLoc) {
                         await syncDataToCloud('ops');
                         await syncDataToCloud('allocation');
                         await syncDataToCloud('staff');
-                        await syncDataToCloud('slots', "FORCE_OVERWRITE");
                         await syncDataToCloud('baseData'); // ☁️ SYNC STUDENT DATABASE
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
@@ -22779,7 +22783,7 @@ window.executeBulkDelete = async function() {
             });
             console.log("🚀 [Portal Sync]: Authoritative Index Flush Complete.");
         }
-        // 4. Final Cloud Sync & Staff Recalculation
+        // 4. Final Cloud Sync
         if (typeof syncDataToCloud === 'function') {
             await syncDataToCloud('ops');
             await syncDataToCloud('allocation');
@@ -22787,15 +22791,6 @@ window.executeBulkDelete = async function() {
             // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
             // This prevents stale data from re-poisoning the local database on refresh.
             await syncDataToCloud('baseData');
-
-            // --- 🛡️ [AUDIT FIX]: Recalculate Staff Needs ---
-            // If we deleted students, we may need fewer invigilators.
-            if (typeof updateLocalSlotsFromStudents === 'function') {
-                await updateLocalSlotsFromStudents();
-                // 🛡️ [PURGE FIX]: Use "FORCE_OVERWRITE" to ensure the cloud matches our cleaned local state.
-                // This prevents deleted sessions from being "merged back" from the cloud.
-                await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
-            }
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
@@ -23182,7 +23177,7 @@ window.downloadInvigilationListPDF = async function () {
                     await syncDataToCloud('allocation');
                     await syncDataToCloud('staff');
                     // FIX: Force Sync should trust the local data 100%
-                    await syncDataToCloud('slots', "FORCE_OVERWRITE");
+                    // REMOVED: await syncDataToCloud('slots', "FORCE_OVERWRITE");
                     await syncDataToCloud('baseData'); // ☁️ FORCE MASTER SYNC
                     // REMOVED: await syncDataToCloud('heavy'); <--- GONE
 
