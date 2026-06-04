@@ -2185,10 +2185,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             } else {
                 await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
             }
-
-
-                     // 🚫 DELETED: Shadow Mirror to GAS
-
+            updateSyncStatus("Synced", "success");
 
 
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
