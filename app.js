@@ -23326,7 +23326,7 @@ window.downloadInvigilationListPDF = async function () {
 
                 // Pass 2: Deep Word-Tokenizing Fuzzy Match (e.g., handles "Research Meth" vs "RESEARCH METHODOLOGY--(BCM6B16)")
                 if (!bestMatch) {
-                    const words = uiCourseName.split(/[\s,.-]+/).filter(w => w.length > 2); // Ignore 'of', 'in'
+                    const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2); // Ignore 'of', 'in', and strip brackets/parens
                     if (words.length > 0) {
                         let bestScore = 0;
                         validPairs.forEach(p => {
