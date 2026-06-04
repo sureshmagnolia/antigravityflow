@@ -98,6 +98,12 @@ let collegeName = 'Loading College...';
 let collegeSettings = {};
 let designationsConfig = {};
 let rolesConfig = {};
+
+// Helper to get local ISO date (YYYY-MM-DD) to avoid timezone-related date mismatches
+const getIsoDateLocal = (date = new Date()) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
 let currentCalDate = new Date();
 let isAdmin = false;
 let cloudUnsubscribe = null;
@@ -794,7 +800,7 @@ function getVacationDutiesDoneCount(email, referenceDate = null) {
         if (dateObj < acYear.start || dateObj > acYear.end) return;
 
         // Clean format conversion to catch manually added extra dates
-        const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        const isoDate = getIsoDateLocal(dateObj);
         const isExtraDutyDate = window.vacationDutyDates && window.vacationDutyDates.includes(isoDate);
 
         if (isDateInVacation(dateObj) || isExtraDutyDate) {
@@ -1075,7 +1081,7 @@ function isUserUnavailable(slot, email, key) {
     // 4. FIX: Block Administrative Roles (CS, SAS, Principal, etc.) from being available everywhere
     if (key) {
         const dateObj = parseDate(key);
-        const slotTargetDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        const slotTargetDateStr = getIsoDateLocal(dateObj);
         const staff = staffData.find(s => s.email === email);
         if (staff && staff.roleHistory && Array.isArray(staff.roleHistory)) {
              const exemptRoles = ['EXCL', 'Principal', 'Chief Superintendent', 'Chief Supt', 'CS', 'Senior Asst. Superintendent', 'Senior Assistant Superintendent', 'Senior Assistant Supt', 'SAS', 'Exam Chief'];
@@ -2582,7 +2588,7 @@ async function syncSlotsToCloud(affectedKey = null) {
                 } else {
                     // 🛡️ [PROTECTED DELETE]: Only delete future shards if FORCE_OVERWRITE is set.
                     // This prevents accidental pruning of upcoming slots.
-                    const todayStr = new Date().toISOString().split('T')[0];
+                    const todayStr = getIsoDateLocal();
                     if (sid < todayStr || affectedKey === "FORCE_OVERWRITE") {
                         batch.delete(shardRef);
                     } else {
@@ -6009,7 +6015,7 @@ window.downloadFullActivityLogs = async function(btnElement) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Full_Activity_Logs_${currentCollegeId}_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `Full_Activity_Logs_${currentCollegeId}_${getIsoDateLocal()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -6712,13 +6718,13 @@ function processStaffCSV(csvText) {
 
     // --- FIXED DATE HELPER (Handles DD-MM-YY & DD-MM-YYYY) ---
     const formatDate = (dateStr) => {
-        if (!dateStr) return new Date().toISOString().split('T')[0];
+        if (!dateStr) return getIsoDateLocal();
         try {
             let cleanStr = dateStr.replace(/[./]/g, '-').trim();
             let parts = cleanStr.split('-');
 
             let y, m, d;
-            if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+            if (parts.length !== 3) return getIsoDateLocal();
 
             // Case 1: YYYY-MM-DD
             if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
@@ -6726,7 +6732,7 @@ function processStaffCSV(csvText) {
             else if (parts[2].length === 4) { y = parts[2]; m = parts[1]; d = parts[0]; }
             // Case 3: DD-MM-YY (Auto-add "20")
             else if (parts[2].length === 2) { y = "20" + parts[2]; m = parts[1]; d = parts[0]; }
-            else { return new Date().toISOString().split('T')[0]; }
+            else { return getIsoDateLocal(); }
 
             // Pad single digits (6 -> 06)
             m = m.padStart(2, '0');
@@ -6734,7 +6740,7 @@ function processStaffCSV(csvText) {
 
             return `${y}-${m}-${d}`; // HTML5 Input Standard
         } catch (e) {
-            return new Date().toISOString().split('T')[0];
+            return getIsoDateLocal();
         }
     };
 
@@ -6756,7 +6762,7 @@ function processStaffCSV(csvText) {
                 phone: phoneIdx !== -1 ? row[phoneIdx] : "",
                 dept: deptIdx !== -1 ? row[deptIdx] : "",
                 designation: desigIdx !== -1 ? row[desigIdx] : "Assistant Professor",
-                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : new Date().toISOString().split('T')[0],
+                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : getIsoDateLocal(),
                 // Defaults
                 dutiesDone: 0,
                 roleHistory: [],
@@ -9192,10 +9198,10 @@ window.openHodMonitorModal = function () {
         const schedule = {};
 
         const getDayEntry = (dateObj, dateStr) => {
-            // Safety Check: Ensure dateObj is valid before calling toISOString
+            // Safety Check: Ensure dateObj is valid before extracting local ISO date
             if (isNaN(dateObj.getTime())) return null;
 
-            const key = dateObj.toISOString().split('T')[0];
+            const key = getIsoDateLocal(dateObj);
             if (!schedule[key]) {
                 schedule[key] = {
                     dateObj: dateObj,
