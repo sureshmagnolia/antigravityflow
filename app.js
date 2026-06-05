@@ -575,6 +575,7 @@ window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
             tx.objectStore('scribeVault').put(allotment, sessionKey);
             tx.oncomplete = () => { db.close(); resolve(); };
             tx.onerror = e => { db.close(); reject(e.target.error); };
+            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
         });
     });
 }
@@ -586,6 +587,7 @@ window.getScribeAllotmentIDB = function(sessionKey) {
             const req = tx.objectStore('scribeVault').get(sessionKey);
             req.onsuccess = e => { db.close(); resolve(e.target.result); };
             req.onerror = e => { db.close(); reject(e.target.error); };
+            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
         });
     });
 }
@@ -620,6 +622,10 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
                 db.close();
                 reject(e.target.error);
             };
+            tx.onabort = e => {
+                db.close();
+                reject(new Error("IndexedDB transaction aborted"));
+            };
         }).catch(err => {
             console.error('IDB Write Error:', err);
             reject(err);
@@ -637,6 +643,7 @@ function loadExamDataIDB() {
                 const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
                 req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
                 req.onerror = e => { db.close(); reject(e.target.error); };
+                tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
             } catch (err) {
                 db.close();
                 console.warn("IDB Store not found, returning empty array.");
@@ -797,7 +804,10 @@ async function migrateFromLocalStorage() {
           'invigAdvanceUnavailability',
           'invigDesignations',
           'examHistoricalMeta',
-          'examAllKnownSessions'
+          'examAllKnownSessions',
+          'examSessionNames',
+          'examRemunerationConfig',
+          'lastUpdated'
       ];
     // **********************************
 
@@ -11093,7 +11103,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     
                             } else if (key !== 'examData_v2') {
                                 // Restore everything else normally (except stale v2 backups)
-                                localStorage.setItem(key, restoredData[key]);
+                                const valToStore = typeof restoredData[key] === 'object' && restoredData[key] !== null ? JSON.stringify(restoredData[key]) : restoredData[key];
+                                localStorage.setItem(key, valToStore);
                             }
                         }
                     }
@@ -21029,7 +21040,8 @@ if (displayLoc) {
                         } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
                             // Skip stale v2 backups, restore everything else
                             if (key !== 'examData_v2') {
-                                localStorage.setItem(key, data[key]);
+                                const valToStore = typeof data[key] === 'object' && data[key] !== null ? JSON.stringify(data[key]) : data[key];
+                                localStorage.setItem(key, valToStore);
                             }
                             count++;
                         }
@@ -23511,7 +23523,7 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             let matched = 0;
-            const claimedPairs = new Set(); // 🛡️ [V95]: Prevent duplicate assignments for missing papers
+            const claimedPairs = new Map(); // 🛡️ [V96]: Prevent duplicate assignments for missing papers, while allowing exact identical UI courses to share
             const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
             // PASS 1: Truly Exact Matches (Equality - Sharing allowed for identical courses)
@@ -23526,7 +23538,7 @@ window.downloadInvigilationListPDF = async function () {
                 const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
-                    claimedPairs.add(perfectMatch);
+                    claimedPairs.set(perfectMatch, uiCourseName);
                     matched++;
                 }
             });
@@ -23539,14 +23551,14 @@ window.downloadInvigilationListPDF = async function () {
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // Only consider pairs NOT claimed by Pass 1
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && !claimedPairs.has(p));
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => !claimedPairs.has(p));
+                // Only consider pairs NOT claimed yet, UNLESS it's the exact same UI course sharing a code
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
 
                 const subMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
                 if (subMatch) {
                     input.value = subMatch.code;
-                    claimedPairs.add(subMatch);
+                    claimedPairs.set(subMatch, uiCourseName);
                     matched++;
                 }
             });
@@ -23559,19 +23571,29 @@ window.downloadInvigilationListPDF = async function () {
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // Only consider pairs NOT claimed yet
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && !claimedPairs.has(p));
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => !claimedPairs.has(p));
+                // Only consider pairs NOT claimed yet, UNLESS it's the exact same UI course sharing a code
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
 
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                
+                // 🛡️ ELABORATE FUZZY MATCH: Core Word Extraction
+                const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
+
                 if (words.length > 0) {
                     let bestScore = 0;
                     let bestMatch = null;
 
                     validPairs.forEach(p => {
                         let score = 0;
+                        let coreScore = 0;
                         words.forEach(w => { if (p.searchText.includes(w)) score++; });
-                        if (score > bestScore) {
+                        coreWords.forEach(w => { if (p.searchText.includes(w)) coreScore++; });
+                        
+                        // We strictly require at least 1 Core Word to match to prevent false positives
+                        // If coreWords is empty (rare edge case of pure numbers/generics), fallback to raw score
+                        if ((coreScore >= 1 || coreWords.length === 0) && score > bestScore) {
                             bestScore = score;
                             bestMatch = p;
                         }
@@ -23580,7 +23602,7 @@ window.downloadInvigilationListPDF = async function () {
                     // Requires at least 1 solid keyword overlap to prevent false positives
                     if (bestMatch && bestScore >= 1) {
                         input.value = bestMatch.code;
-                        claimedPairs.add(bestMatch);
+                        claimedPairs.set(bestMatch, uiCourseName);
                         matched++;
                     }
                 }

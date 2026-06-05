@@ -20,7 +20,8 @@ const DATA_KEYS = [
       'invigDepartments', 'invigRoles', 'invigGlobalTarget',
       'invigGuestTarget', 'invigVacationTarget', 'invigVacationConfig',
       'invigDesignations', 'invigGoogleScriptUrl',
-      'examHistoricalMeta', 'lastUpdated'
+      'examHistoricalMeta', 'lastUpdated',
+      'invigVacationDutyDates', 'examAllKnownSessions'
   ];
 window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
@@ -45,6 +46,7 @@ function loadExamDataIDB() {
             const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
             req.onsuccess = e => { db.close(); resolve(e.target.result || []); };
             req.onerror = e => { db.close(); reject(e.target.error); };
+            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
         });
     });
 }
@@ -55,6 +57,7 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
             tx.objectStore(IDB_STORE).put(dataArray, IDB_KEY);
             tx.oncomplete = () => { db.close(); resolve(); };
             tx.onerror = e => { db.close(); reject(e.target.error); };
+            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
         });
     });
 }
@@ -715,7 +718,9 @@ async function checkForNewerDataOnDrive(isManual = false) {
         }
 
         const latestCloudFile = res.result.files[0];
-        const cloudTime = new Date(latestCloudFile.createdTime).getTime();
+        
+        // 🛡️ ELABORATE FIX: Extract authoritative Google Time
+        const googleServerTime = new Date(latestCloudFile.createdTime).getTime();
 
         const localUpdateVal = localStorage.getItem('lastUpdated');        
         let localTime = 0;
@@ -723,6 +728,19 @@ async function checkForNewerDataOnDrive(isManual = false) {
             // Handle both ISO strings and timestamps
             localTime = isNaN(localUpdateVal) ? new Date(localUpdateVal).getTime() : parseInt(localUpdateVal);
         }
+
+        // 🛡️ [V96] MATHEMATICAL DRIFT PROTECTION
+        if (localTime > 0 && Math.abs(localTime - googleServerTime) > 24 * 60 * 60 * 1000) {
+            isReadyToPush = false; // Lock Sync
+            console.error("CRITICAL CLOCK DRIFT: Local time is skewed by >24 hours vs Google Server.");
+            if (isManual && log) {
+                log.textContent = "Error: System Clock Drift Detected";
+                alert("CRITICAL ERROR:\n\nYour computer's date/time is incorrect by more than 24 hours. Cloud sync has been blocked to prevent catastrophic data overwrites.\n\nPlease fix your computer's clock and reload the page.");
+            }
+            return;
+        }
+
+        const cloudTime = googleServerTime;
 
 // 🛡️ NEW: Check if IndexedDB is actually empty (Total Students)
         const localStudents = await loadExamDataIDB();
