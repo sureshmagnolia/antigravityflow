@@ -10804,6 +10804,9 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         qpCodeContainer.innerHTML = htmlChunks.join('');
 
+        // 🛡️ [V95]: Trigger duplicate validation
+        validateQPDuplicates();
+
         // Disable Save button if locked
         saveQpCodesButton.disabled = isQPLocked;
         if (isQPLocked) {
@@ -10812,6 +10815,48 @@ window.real_populate_qp_code_session_dropdown = function () {
             saveQpCodesButton.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
+
+    // 🛡️ [V95]: VALIDATE DUPLICATE QP CODES (Bright Yellow Highlight)
+    function validateQPDuplicates() {
+        const inputs = Array.from(document.querySelectorAll('#qp-code-container .qp-code-input'));
+        const codeMap = new Map(); 
+        
+        // Reset highlights
+        inputs.forEach(input => input.classList.remove('bg-yellow-300', 'ring-2', 'ring-yellow-500'));
+        
+        // Group by code
+        inputs.forEach(input => {
+            const code = input.value.trim().toUpperCase();
+            if (code.length > 0) {
+                if (!codeMap.has(code)) codeMap.set(code, []);
+                codeMap.get(code).push(input);
+            }
+        });
+        
+        let hasDuplicates = false;
+        codeMap.forEach((matchedInputs) => {
+            if (matchedInputs.length > 1) {
+                hasDuplicates = true;
+                matchedInputs.forEach(input => {
+                    input.classList.add('bg-yellow-300', 'ring-2', 'ring-yellow-500');
+                });
+            }
+        });
+
+        const statusEl = document.getElementById('qp-code-status');
+        if (hasDuplicates) {
+            statusEl.innerHTML = `<span class="text-amber-600 font-bold">⚠️ WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.</span>`;
+        } else if (statusEl.textContent.includes("WARNING")) {
+            statusEl.textContent = ""; // Clear warning if resolved
+        }
+    }
+
+    // ⚡ [V95]: Live validation on manual typing
+    qpCodeContainer.addEventListener('input', (e) => {
+        if (e.target.classList.contains('qp-code-input')) {
+            validateQPDuplicates();
+        }
+    });
 
     // V89: NEW SAVE STRATEGY
     saveQpCodesButton.addEventListener('click', () => {
@@ -14776,8 +14821,7 @@ Are you sure you want to update these records?
                 });
 
                 // 7. Save to IDB & Sync
-                
-
+                await saveExamDataIDB(allStudentData);
                 
                 alert(`✅ Updated ${updateCount} students! Syncing changes...`);
                 
@@ -15790,9 +15834,14 @@ Are you sure?
                 // --- 🛡️ ABSOLUTE SYNC (V14): Cascading Delete ---
                 const deletedRegNos = new Set(studentsToDelete.map(d => getRegNo(d)));
                 
-                // 1. Purge from Master List
-                allStudentData = allStudentData.filter(s => !deletedRegNos.has(getRegNo(s)));
-                
+                // 1. Purge from Master List (🛡️ [V95] FIX: Session-Aware to prevent cross-session deletion)
+                allStudentData = allStudentData.filter(s => {
+                    const isTargetSession = (s.Date === date && s.Time === time);
+                    const isDeletedReg = deletedRegNos.has(getRegNo(s));
+                    // Keep the student if they are in a different session OR not part of the deleted set
+                    return !(isTargetSession && isDeletedReg);
+                });
+
                 // 2. Purge from Sticky Allotments (Reports)
                 let roomAllots = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 if (roomAllots[sessionVal]) {
@@ -15818,6 +15867,9 @@ Are you sure?
                     allAbsentees[sessionVal] = allAbsentees[sessionVal].filter(r => !deletedRegNos.has(r));
                     localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
                 }
+
+                // 5. 🛡️ [V95] CRITICAL FIX: Save to IndexedDB (Prevents "Zombie Students" for Basic Users)
+                await saveExamDataIDB(allStudentData);
 
                 alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
 
@@ -18364,6 +18416,9 @@ if (btnSessionReschedule) {
                     moveKeyInStorage('examQPCodes', 'object');
                 }
 
+                // 🛡️ [V95] CRITICAL FIX: Save to IndexedDB (Prevents "Zombie Students" for Basic Users)
+                await saveExamDataIDB(allStudentData);
+
                 alert(`✅ Successfully Updated ${studentCount} records.\nSyncing to Cloud...`);
 
                 // 3. Cloud Sync
@@ -20670,6 +20725,9 @@ if (displayLoc) {
                     await syncDataToCloud('staff');
                 }
 
+                // 🛡️ [V95] CRITICAL FIX: Save to IndexedDB (Prevents "Zombie Students" for Basic Users)
+                await saveExamDataIDB(allStudentData);
+
                 alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
                 window.location.reload();
 
@@ -22938,6 +22996,9 @@ window.executeBulkDelete = async function() {
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
+        // 🛡️ [V95] CRITICAL FIX: Save to IndexedDB (Prevents "Zombie Students" for Basic Users)
+        await saveExamDataIDB(allStudentData);
+
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
@@ -23450,50 +23511,86 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             let matched = 0;
+            const claimedPairs = new Set(); // 🛡️ [V95]: Prevent duplicate assignments for missing papers
+            const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
-            // ⚡ FUZZY ASSIGNMENT LAYER
-              document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                  // Sanitize mojibake from PDF before comparing
+            // PASS 1: Truly Exact Matches (Equality - Sharing allowed for identical courses)
+            inputs.forEach(input => {
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // 1. Hard Filter by Stream (Only match 'A' suffix to EDE, non-'A' to Regular)
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                // Fallback if no specific stream match is found
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                let bestMatch = null;
-
-                // Pass 1: Exact Substring Included
-                bestMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
-
-                // Pass 2: Deep Word-Tokenizing Fuzzy Match (e.g., handles "Research Meth" vs "RESEARCH METHODOLOGY--(BCM6B16)")
-                if (!bestMatch) {
-                    const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2); // Ignore 'of', 'in', and strip brackets/parens
-                    if (words.length > 0) {
-                        let bestScore = 0;
-                        validPairs.forEach(p => {
-                            let score = 0;
-                            words.forEach(w => { if (p.searchText.includes(w)) score++; });
-                            if (score > bestScore) {
-                                bestScore = score;
-                                bestMatch = p;
-                            }
-                        });
-                        // Requires at least 1 solid keyword overlap to prevent false positives
-                        if (bestScore < 1) bestMatch = null; 
-                    }
-                }
-
-                if (bestMatch) {
-                    input.value = bestMatch.code;
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
+                if (perfectMatch) {
+                    input.value = perfectMatch.code;
+                    claimedPairs.add(perfectMatch);
                     matched++;
                 }
             });
 
+            // PASS 2: Substring Matches (Moderate Confidence - Strictly Unique)
+            inputs.forEach(input => {
+                if (input.value) return; // Already matched in Pass 1
+
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const streamName = (input.dataset.stream || "").toUpperCase();
+                const isEdeStream = streamName.includes("EDE");
+                
+                // Only consider pairs NOT claimed by Pass 1
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && !claimedPairs.has(p));
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => !claimedPairs.has(p));
+
+                const subMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
+                if (subMatch) {
+                    input.value = subMatch.code;
+                    claimedPairs.add(subMatch);
+                    matched++;
+                }
+            });
+
+            // PASS 3: Deep Word-Tokenizing Fuzzy Match (Low Confidence - Strictly Unique)
+            inputs.forEach(input => {
+                if (input.value) return; // Already matched in Pass 1 or 2
+
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const streamName = (input.dataset.stream || "").toUpperCase();
+                const isEdeStream = streamName.includes("EDE");
+                
+                // Only consider pairs NOT claimed yet
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && !claimedPairs.has(p));
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => !claimedPairs.has(p));
+
+                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                if (words.length > 0) {
+                    let bestScore = 0;
+                    let bestMatch = null;
+
+                    validPairs.forEach(p => {
+                        let score = 0;
+                        words.forEach(w => { if (p.searchText.includes(w)) score++; });
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMatch = p;
+                        }
+                    });
+
+                    // Requires at least 1 solid keyword overlap to prevent false positives
+                    if (bestMatch && bestScore >= 1) {
+                        input.value = bestMatch.code;
+                        claimedPairs.add(bestMatch);
+                        matched++;
+                    }
+                }
+            });
+
             if (matched > 0) {
-                document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully (Fuzzy Match). Click Save QP Codes below to confirm.`;
+                // 🛡️ [V95]: Trigger live highlight validation after bulk import
+                validateQPDuplicates();
+                
+                document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully. Click Save QP Codes below to confirm.`;
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
                 alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
