@@ -571,24 +571,34 @@ function openExamDB() {
 window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
-            const tx = db.transaction('scribeVault', 'readwrite');
-            tx.objectStore('scribeVault').put(allotment, sessionKey);
-            tx.oncomplete = () => { db.close(); resolve(); };
-            tx.onerror = e => { db.close(); reject(e.target.error); };
-            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
-        });
+            try {
+                const tx = db.transaction('scribeVault', 'readwrite');
+                tx.objectStore('scribeVault').put(allotment, sessionKey);
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = e => { db.close(); reject(e.target.error); };
+                tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
+            } catch (e) {
+                db.close();
+                reject(e);
+            }
+        }).catch(reject);
     });
 }
 
 window.getScribeAllotmentIDB = function(sessionKey) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
-            const tx = db.transaction('scribeVault', 'readonly');
-            const req = tx.objectStore('scribeVault').get(sessionKey);
-            req.onsuccess = e => { db.close(); resolve(e.target.result); };
-            req.onerror = e => { db.close(); reject(e.target.error); };
-            tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
-        });
+            try {
+                const tx = db.transaction('scribeVault', 'readonly');
+                const req = tx.objectStore('scribeVault').get(sessionKey);
+                req.onsuccess = e => { db.close(); resolve(e.target.result); };
+                req.onerror = e => { db.close(); reject(e.target.error); };
+                tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
+            } catch (e) {
+                db.close();
+                reject(e);
+            }
+        }).catch(reject);
     });
 }
 
@@ -596,9 +606,10 @@ window.getScribeAllotmentIDB = function(sessionKey) {
 function saveExamDataIDB(dataArray, skipCloudSync = false) {
     return new Promise((resolve, reject) => {
         openExamDB().then(db => {
-            const tx = db.transaction(IDB_STORE, 'readwrite');
-            const store = tx.objectStore(IDB_STORE);
-            store.put(dataArray, IDB_KEY);
+            try {
+                const tx = db.transaction(IDB_STORE, 'readwrite');
+                const store = tx.objectStore(IDB_STORE);
+                store.put(dataArray, IDB_KEY);
                 tx.oncomplete = () => {
                   db.close();
                   // --- Auto-sync to Cloud (if online user) ---
@@ -611,25 +622,19 @@ function saveExamDataIDB(dataArray, skipCloudSync = false) {
                       localStorage.setItem('lastUpdated', new Date().toISOString());
                       window.triggerDriveAutoSync();
                   }
-                // --- NEW: Trigger Basic User Pruning silently in background ---
-                if (!skipCloudSync) {
-                    setTimeout(pruneOldDataForBasicUsers, 1500);
-                }
-                resolve();
-            };
-
-            tx.onerror = e => {
+                  // --- NEW: Trigger Basic User Pruning silently in background ---
+                  if (!skipCloudSync) {
+                      setTimeout(pruneOldDataForBasicUsers, 1500);
+                  }
+                  resolve();
+                };
+                tx.onerror = e => { db.close(); reject(e.target.error); };
+                tx.onabort = e => { db.close(); reject(new Error("IndexedDB transaction aborted")); };
+            } catch (e) {
                 db.close();
-                reject(e.target.error);
-            };
-            tx.onabort = e => {
-                db.close();
-                reject(new Error("IndexedDB transaction aborted"));
-            };
-        }).catch(err => {
-            console.error('IDB Write Error:', err);
-            reject(err);
-        });
+                reject(e);
+            }
+        }).catch(reject);
     });
 }
 
@@ -17240,11 +17245,10 @@ window.handlePythonExtraction = async function (jsonString) {
                     const cid = currentCollegeId;
 
                     // 1. Delete Sub-Collections based on Mode
-                    const collectionsToDelete = ['operations', 'allocation', 'slots']; // Always wipe these
+                    const collectionsToDelete = ['operations', 'allocation']; // Invigilation (slots, staff) is shielded from app.js wipes
                     
                     if (mode === 'FULL') {
                         collectionsToDelete.push('settings'); // Wipe settings too
-                        collectionsToDelete.push('staff');    // Wipe staff too (optional, usually kept safe, but FULL implies deep clean)
                     }
 
                     collectionsToDelete.forEach(type => {
@@ -18422,8 +18426,6 @@ if (btnSessionReschedule) {
                     moveKeyInStorage('examRoomAllotment', 'array');
                     moveKeyInStorage('examScribeAllotment', 'object');
                     moveKeyInStorage('examAbsenteeList', 'array');
-                    moveKeyInStorage('examInvigilatorMapping', 'object');
-                    moveKeyInStorage('examInvigilationSlots', 'object');
                     moveKeyInStorage('examQPCodes', 'object');
                 }
 
@@ -18507,8 +18509,6 @@ if (btnSessionReschedule) {
                 await deleteKeyInStorage('examRoomAllotment');
                 await deleteKeyInStorage('examScribeAllotment');
                 await deleteKeyInStorage('examAbsenteeList');
-                await deleteKeyInStorage('examInvigilatorMapping');
-                await deleteKeyInStorage('examInvigilationSlots');
                 await deleteKeyInStorage('examQPCodes');
 
                 alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
