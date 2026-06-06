@@ -23549,10 +23549,12 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             let matched = 0;
-            const claimedPairs = new Map(); // 🛡️ [V96]: Prevent duplicate assignments for missing papers, while allowing exact identical UI courses to share
             const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
-            // PASS 1: Truly Exact Matches (Equality - Sharing allowed for identical courses)
+            // Track used pairs to find missing in examflow
+            const usedPairs = new Set();
+
+            // PASS 1: Truly Exact Matches
             inputs.forEach(input => {
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
@@ -23564,46 +23566,53 @@ window.downloadInvigilationListPDF = async function () {
                 const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
-                    claimedPairs.set(perfectMatch, uiCourseName);
+                    usedPairs.add(perfectMatch);
                     matched++;
                 }
             });
 
-            // PASS 2: Substring Matches (Moderate Confidence - Strictly Unique)
+            // PASS 2: Substring Matches (Length Weighted)
             inputs.forEach(input => {
-                if (input.value) return; // Already matched in Pass 1
+                if (input.value) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // Only consider pairs NOT claimed yet, UNLESS it's the exact same UI course sharing a code
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
 
-                const subMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
-                if (subMatch) {
-                    input.value = subMatch.code;
-                    claimedPairs.set(subMatch, uiCourseName);
+                let bestMatch = null;
+                let maxLength = 0;
+
+                validPairs.forEach(p => {
+                    if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
+                        if (p.searchText.length > maxLength) {
+                            maxLength = p.searchText.length;
+                            bestMatch = p;
+                        }
+                    }
+                });
+
+                if (bestMatch) {
+                    input.value = bestMatch.code;
+                    usedPairs.add(bestMatch);
                     matched++;
                 }
             });
 
-            // PASS 3: Deep Word-Tokenizing Fuzzy Match (Low Confidence - Strictly Unique)
+            // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
             inputs.forEach(input => {
-                if (input.value) return; // Already matched in Pass 1 or 2
+                if (input.value) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // Only consider pairs NOT claimed yet, UNLESS it's the exact same UI course sharing a code
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream && (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs.filter(p => (!claimedPairs.has(p) || claimedPairs.get(p) === uiCourseName));
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
 
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
-                
-                // 🛡️ ELABORATE FUZZY MATCH: Core Word Extraction
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
                 const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
 
@@ -23614,25 +23623,67 @@ window.downloadInvigilationListPDF = async function () {
                     validPairs.forEach(p => {
                         let score = 0;
                         let coreScore = 0;
-                        words.forEach(w => { if (p.searchText.includes(w)) score++; });
-                        coreWords.forEach(w => { if (p.searchText.includes(w)) coreScore++; });
+                        let consecutiveMatches = 0;
+                        let prevMatchedIndex = -1;
+
+                        const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
                         
-                        // We strictly require at least 1 Core Word to match to prevent false positives
-                        // If coreWords is empty (rare edge case of pure numbers/generics), fallback to raw score
-                        if ((coreScore >= 1 || coreWords.length === 0) && score > bestScore) {
-                            bestScore = score;
+                        words.forEach(w => {
+                            const pIdx = portalWords.indexOf(w);
+                            if (pIdx !== -1) {
+                                score++;
+                                if (coreWords.includes(w)) coreScore++;
+                                
+                                if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
+                                    consecutiveMatches++;
+                                }
+                                prevMatchedIndex = pIdx;
+                            }
+                        });
+                        
+                        const totalScore = coreScore + (consecutiveMatches * 2);
+
+                        // Threshold: Must have at least 1 consecutive match or > 70% core words matched
+                        const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
+                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > bestScore) {
+                            bestScore = totalScore;
                             bestMatch = p;
                         }
                     });
 
-                    // Requires at least 1 solid keyword overlap to prevent false positives
-                    if (bestMatch && bestScore >= 1) {
+                    if (bestMatch && bestScore > 0) {
                         input.value = bestMatch.code;
-                        claimedPairs.set(bestMatch, uiCourseName);
+                        usedPairs.add(bestMatch);
                         matched++;
                     }
                 }
             });
+
+            // ERROR REPORTING (Missing Courses Alert)
+            const missingInPortal = [];
+            inputs.forEach(input => {
+                if (!input.value) {
+                    missingInPortal.push(input.dataset.course);
+                }
+            });
+
+            const missingInExamflow = [];
+            parsedPairs.forEach(p => {
+                if (!usedPairs.has(p)) {
+                    missingInExamflow.push(p.searchText);
+                }
+            });
+
+            if (missingInPortal.length > 0 || missingInExamflow.length > 0) {
+                let alertMsg = "⚠️ MATCHING REPORT ⚠️\n\n";
+                if (missingInPortal.length > 0) {
+                    alertMsg += "❌ MISSING IN PORTAL (These courses need manual mapping):\n" + missingInPortal.join("\n") + "\n\n";
+                }
+                if (missingInExamflow.length > 0) {
+                    alertMsg += "❌ MISSING IN EXAMFLOW (These portal codes weren't used):\n" + [...new Set(missingInExamflow)].join("\n") + "\n";
+                }
+                setTimeout(() => alert(alertMsg), 500);
+            }
 
             if (matched > 0) {
                 // 🛡️ [V95]: Trigger live highlight validation after bulk import
@@ -23642,6 +23693,7 @@ window.downloadInvigilationListPDF = async function () {
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
                 alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
+            }
             }
 
         } catch (e) {
