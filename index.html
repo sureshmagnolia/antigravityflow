@@ -32,7 +32,8 @@
         initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
         addDoc, updateDoc, arrayUnion, arrayRemove,
-        onSnapshot, writeBatch, persistentLocalCache, persistentMultipleTabManager
+        onSnapshot, writeBatch, persistentLocalCache, persistentMultipleTabManager,
+        deleteField, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 
@@ -64,7 +65,7 @@
         doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
         addDoc, updateDoc, arrayUnion, arrayRemove,
-        onSnapshot, writeBatch,
+        onSnapshot, writeBatch, deleteField, serverTimestamp,
         // --- EXPOSE STORAGE METHODS ---
         ref, uploadString, getDownloadURL, deleteObject, listAll
     };

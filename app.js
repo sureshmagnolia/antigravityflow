@@ -1598,251 +1598,252 @@ window.recalcInvigSlots = async function () {
             
   
             try {
+                const manifestRef = doc(db, "colleges", currentCollegeId, "system_data", "sessions_manifest");
 
-                // A. TRY V2 (Modular Sessions) FIRST
-                                // A. TRY V2 (Modular Sessions) - REAL-TIME LISTENER
-                const sessionsRef = collection(db, "colleges", collegeId, "sessions");
-                
-                      // [NEW] Use onSnapshot for live global synchronization
-                if (sessionsUnsub) { sessionsUnsub(); sessionsUnsub = null; } 
-                
-            // Get timestamp for Today's Midnight
-                const todayMidnight = new Date();
-                todayMidnight.setHours(0, 0, 0, 0);
-                const midnightObj = todayMidnight.getTime();
+                if (window.manifestUnsub) window.manifestUnsub();
+                window.fetchingTimes = window.fetchingTimes || {}; 
 
-                // 🛡️ [SYNC GUARD]: Definitive block for all cloud fetches during a Restore.
-                if (localStorage.getItem('pendingDriveRestoreSync') === 'true') {
-                    console.log("⏳ Live Sync Blocked: Restoration Integrity Bridge is active...");
-                    return;
-                }
-
-                // --- 📡 COST SAVER: Modular Session Fetch (One-Time Execution) ---
-                    // 🛡️ [CACHE SHIELD]: If a restore just happened, force fetch from SERVER to bypass stale local cache.
-                    const isRestoring = localStorage.getItem('pendingDriveRestoreSync') === 'true';
-                    const fetchOptions = isRestoring ? { source: 'server' } : {};
+                window.manifestUnsub = onSnapshot(manifestRef, async (manifestSnap) => {
                     
-                    if (isRestoring) console.log("🛡️ [Cache Shield]: Bypassing Firestore Cache for integrity...");
-                    const sessionSnap = await getDocs(sessionsRef, fetchOptions);
+                    if (localStorage.getItem('pendingDriveRestoreSync') === 'true') return;
+                    if (manifestSnap.metadata.hasPendingWrites) return;
 
-                    let cloudMetaFound = false;
-                    
-                    let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-                    let allQPCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
-                    let allAbsentees = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
-                    let allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-                    let allInvigMapping = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
-                    let allStudents = [];
-
-                    if (!sessionSnap.empty) {
-                        cloudMetaFound = true;
-                        console.log(`📡 LIVE SYNC: Processing ${sessionSnap.size} session updates...`);
+                    let cloudManifest = {};
+                    if (!manifestSnap.exists()) {
+                        console.log("🛠️ Building missing manifest for existing college...");
+                        const sessionSnapCheck = await getDocs(collection(db, "colleges", currentCollegeId, "sessions"));
                         
-                        const { getDoc } = window.firebase;
-                        let missingStudentsPromises = [];
-                        const localDB = await loadExamDataIDB() || [];
-
-                        sessionSnap.forEach(docSnap => {
-                            const s = docSnap.data();
-                            const sessionKey = `${s.date} | ${s.time}`;
-                            const examTimestamp = (s.meta && s.meta.timestamp) ? s.meta.timestamp : new Date(s.date.split('.').reverse().join('-')).getTime();
-                            const isTodayOrFuture = examTimestamp >= midnightObj;
-
-                            // 1. Load Metadata (Lightweight Icons/Calendar)
-                            // 🛡️ [V3 SMART SHIELD]: Do NOT overwrite local data if we have unsaved manual changes.
-                            // This prevents "Ghosting" where cloud (empty/old) wipes out manual (new) work.
-                            
-                            const isAllotmentDirty = (sessionKey === currentSessionKey && hasUnsavedAllotment);
-                            const isScribeDirty = (sessionKey === currentSessionKey && hasUnsavedScribes);
-
-                            if (s.roomAllotment && !isAllotmentDirty) {
-                                allAllotments[sessionKey] = s.roomAllotment;
-                            }
-                            if (s.qpCodes) allQPCodes[sessionKey] = s.qpCodes;
-                            if (s.absentees) allAbsentees[sessionKey] = s.absentees;
-                            
-                            if (s.scribeAllotment && !isScribeDirty) {
-                                allScribeAllotments[sessionKey] = s.scribeAllotment;
-                            }
-                            
-                            // Prevent invigilators from disappearing if they are actively being edited
-                            // We don't have a specific global hasUnsavedInvigilators, but using isAllotmentDirty is a safe proxy 
-                            // because invigilators are tied to the room allotment panel.
-                            if (s.invigilatorMapping && !isAllotmentDirty && !window._isClearingInvigilators) {
-                                allInvigMapping[sessionKey] = s.invigilatorMapping;
-                            }
-                            
-                            // 2. Auto-fetch Heavy Students (SCR5 Hybrid Strategy)
-                            if (s.meta && s.meta.studentCount > 0 && isTodayOrFuture) {
-                                const localCount = localDB.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
-                                if (localCount !== s.meta.studentCount) {
-                                    const fetchPromise = getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', docSnap.id))
-                                        .then(async studentDoc => {
-                                            if (studentDoc.exists()) {
-                                                const data = studentDoc.data();
-                                                if (data.isChunked) {
-                                                    let fullPayload = "";
-                                                    for (let i = 0; i < data.totalChunks; i++) {
-                                                        const chunkSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${docSnap.id}_chunk_${i}`));
-                                                        if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
-                                                    }
-                                                    const combined = JSON.parse(fullPayload);
-                                                    if (combined.students) allStudents.push(...combined.students);
-                                                } else if (data.students) { allStudents.push(...data.students); }
-                                            }
-                                        });
-                                    missingStudentsPromises.push(fetchPromise);
-                                }
-                            }
-                        });
-
-                        const allKnownKeys = Array.from(sessionSnap.docs.map(d => {
-                            const sd = d.data(); return `${sd.date} | ${sd.time}`;
-                        }));
-                        localStorage.setItem('examAllKnownSessions', JSON.stringify(allKnownKeys));
-
-                        // --- HISTORICAL META STORE (Enables past date dropdown) ---
-                        const allHistoricalMeta = {};
-                        sessionSnap.forEach(docSnap => {
-                            const sd = docSnap.data();
-                            const sk = `${sd.date} | ${sd.time}`;
-                            if (sd.meta) allHistoricalMeta[sk] = {
-                                studentCount: sd.meta.studentCount || 0,
-                                normalCount: sd.meta.normalCount || 0,
-                                scribeCount: sd.meta.scribeCount || 0,
-                                examTimestamp: sd.meta.examTimestamp || 0
-                            };
-                        });
-                        localStorage.setItem('examHistoricalMeta', JSON.stringify(allHistoricalMeta));
-                        // ----------------------------------------------------------
-
-                        if (missingStudentsPromises.length > 0) await Promise.all(missingStudentsPromises);
-
-                        
-                        // 🛡️ [RESURRECTION FIX]: Session-Aware Merge
-                        if (allStudents.length > 0) {
-                            // 1. Identify which sessions are actually being updated from the cloud
-                            const updatedSessions = new Set(allStudents.map(s => `${s.Date} | ${s.Time}`));
-
-                            // 2. Filter localDB: Keep everything EXCEPT the sessions we are about to refresh
-                            // This ensures that deleted students STAY deleted because they aren't in the cloud update.
-                            const keptLocal = localDB.filter(s => {
-                                const sessionKey = `${s.Date} | ${s.Time}`;
-                                return !updatedSessions.has(sessionKey);
+                        if (sessionSnapCheck.empty) {
+                            // B. FALLBACK TO V1 (Legacy Chunks)
+                            console.log("⚠️ V2 EMPTY. Falling back to V1 Chunks...");
+                            const dataColRef = collection(db, "colleges", collegeId, "data");
+                            const q = query(dataColRef, orderBy("index"));
+                            const querySnapshot = await getDocs(q);
+                            let fullPayload = "";
+                            querySnapshot.forEach((doc) => {
+                                if (doc.id.startsWith("chunk_")) fullPayload += doc.data().payload;
                             });
 
-                            // 3. Merge the fresh session data into the clean local database
-                            const merged = [...keptLocal, ...allStudents];
-                            allStudentData = merged;
-                            await saveExamDataIDB(merged, true); 
-                            console.log(`🛡️ [Live Sync]: Session-Aware Merge Complete. Cleansed and synced ${allStudents.length} records.`);
+                            if (fullPayload) {
+                                const bulkData = JSON.parse(fullPayload);
+                                if (bulkData['examRoomAllotment']) localStorage.setItem('examRoomAllotment', bulkData['examRoomAllotment']);
+                                if (bulkData['examBaseData']) {
+                                    const parsedStudents = JSON.parse(bulkData['examBaseData']);
+                                    allStudentData = parsedStudents; // <-- Hydrate Memory
+                                    await saveExamDataIDB(parsedStudents, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce                            
+                                    const sessions = new Set(parsedStudents.map(s => `${s.Date} | ${s.Time}`));
+                                    localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                                }
+                                updateSyncStatus("Synced (V1)", "success");
+                            } else {
+                                updateSyncStatus("Synced (Empty)", "success");
+                            }
+                            if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                            return; // Exit V1 Fallback
+                        } else {
+                            sessionSnapCheck.forEach(docSnap => {
+                                const s = docSnap.data();
+                                cloudManifest[`${s.date} | ${s.time}`] = s.meta?.timestamp || Date.now();
+                            });
+                            await window.firebase.setDoc(manifestRef, cloudManifest, { merge: true });
                         }
                     } else {
-                        console.log("⚠️ Cloud sessions clean. Checking for local metadata fallback...");
+                        cloudManifest = manifestSnap.data();
                     }
 
-                    // --- 🏠 UI REFRESH (Works even if cloud is empty) ---
-                    const hasMetadata = cloudMetaFound || Object.keys(allAllotments).length > 0 || (allStudentData && allStudentData.length > 0);
-                    
-                    if (hasMetadata) {
-                        // 1. Unlock Tabs
-                        if (typeof disable_edit_data_tab === 'function') disable_edit_data_tab(false);
-                        if (typeof disable_room_allotment_tab === 'function') disable_room_allotment_tab(false);
-                        if (typeof disable_all_report_buttons === 'function') disable_all_report_buttons(false);
+                    const localManifest = JSON.parse(localStorage.getItem('localSessionsManifest') || '{}');
+                    let missingKeys = [];
+                    let stateChanged = false;
 
-                        // 2. Store Metadata (Safe Sets)
-                        if (cloudMetaFound) {
-                            safeSetItem('examRoomAllotment', JSON.stringify(allAllotments));
-                            safeSetItem('examQPCodes', JSON.stringify(allQPCodes));
-                            safeSetItem('examAbsenteeList', JSON.stringify(allAbsentees));
-                            
-                            // FIX: Persistent Protection Logic (Merged across Refreshes)
-                            // 🧬 SCR5-ACCURATE MERGE: Final data protection
-                            // We already initialized allScribeAllotments with local data (Line 1383), 
-                            // and the loop updated it with cloud data. No extra wipe-logic needed!
-                            
-                            // 🧬 SCR5-STABLE: Unlocked Modular Persistence
-                            // Standardize storage using the SCRIBE_ALLOTMENT_KEY constant
-                            if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
-                                safeSetItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllotments));
-                            } else {
-                                safeSetItem('examScribeAllotment', JSON.stringify(allScribeAllotments));
+                    // 1. UPDATE SYNC
+                    for (const [key, timestamp] of Object.entries(cloudManifest)) {
+                        let cloudTime = 0;
+                        if (timestamp) cloudTime = typeof timestamp.toMillis === 'function' ? timestamp.toMillis() : timestamp;
+                        
+                        if (!localManifest[key] || localManifest[key] < cloudTime) {
+                            if (!window.fetchingTimes[key] || window.fetchingTimes[key] < cloudTime) {
+                                missingKeys.push({ key, cloudTime });
+                                window.fetchingTimes[key] = cloudTime; 
                             }
-                            // Also unify Invigilator mapping to prevent similar conflicts
-                            safeSetItem('examInvigilatorMapping', JSON.stringify(allInvigMapping));
-                            
-                            // 🚀 GLOBAL REFRESH: Signal that data is ready
-                            hasUnsavedScribes = false; 
+                        }
+                    }
 
+                    // 2. DELETION SYNC
+                    const deletedKeys = Object.keys(localManifest).filter(k => !cloudManifest[k]);
+                    let idbStudents = null;
+                    let idbChanged = false;
 
+                    if (deletedKeys.length > 0) {
+                        stateChanged = true;
+                        const cacheKeys = ['examHistoricalMeta', 'examRoomAllotment', 'examQPCodes', 'examAbsenteeList', 'examScribeAllotment', 'examInvigilatorMapping'];
+                        const caches = {};
+                        cacheKeys.forEach(k => caches[k] = JSON.parse(localStorage.getItem(k) || '{}'));
 
-                        } else {
-                            // Local Fallback: Identify sessions from allStudentData if cloud is empty
-                            const sessions = new Set(allStudentData.map(s => `${s.Date} | ${s.Time}`));
-                            if (sessions.size > 0 && !localStorage.getItem('examAllKnownSessions')) {
-                                localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
+                        for (const localKey of deletedKeys) {
+                            delete localManifest[localKey];
+                            delete window.fetchingTimes[localKey]; 
+                            cacheKeys.forEach(k => { if (caches[k][localKey]) delete caches[k][localKey]; });
+
+                            if (typeof loadExamDataIDB === 'function') {
+                                if (idbStudents === null) idbStudents = await loadExamDataIDB() || [];
+                                const [delDate, delTime] = localKey.split(' | ').map(s => s.trim());
+                                const originalLength = idbStudents.length;
+                                idbStudents = idbStudents.filter(s => !(s.Date === delDate && s.Time === delTime));
+                                if (idbStudents.length !== originalLength) idbChanged = true;
+                            }
+                        }
+                        cacheKeys.forEach(k => localStorage.setItem(k, JSON.stringify(caches[k])));
+                    }
+
+                    // 3. TARGETED FETCH
+                    if (missingKeys.length > 0) {
+                        stateChanged = true;
+                        let missingStudentsPromises = [];
+                        const todayMidnight = new Date();
+                        todayMidnight.setHours(0, 0, 0, 0);
+                        const midnightObj = todayMidnight.getTime();
+
+                        for (const target of missingKeys) {
+                            const key = target.key;
+                            try {
+                                const sessionId = generateSessionId(key);
+                                const sessionSnap = await window.firebase.getDoc(doc(db, "colleges", currentCollegeId, "sessions", sessionId));
+                                
+                                if (sessionSnap.exists()) {
+                                    const s = sessionSnap.data();
+                                    const isAllotmentDirty = (key === window.currentSessionKey && typeof hasUnsavedAllotment !== 'undefined' && hasUnsavedAllotment);
+                                    const isScribeDirty = (key === window.currentSessionKey && typeof hasUnsavedScribes !== 'undefined' && hasUnsavedScribes) || (localStorage.getItem('hasUnsavedScribes_' + key.replace(/\s/g, '_')) === 'true');
+                                    const isStudentDirty = (typeof hasUnsavedEdits !== 'undefined' && hasUnsavedEdits);
+                                    
+                                    let fullySynced = true;
+                                    let studentFetchNeeded = false;
+
+                                    if (s.meta) {
+                                        const tempMeta = JSON.parse(localStorage.getItem('examHistoricalMeta') || '{}');
+                                        tempMeta[key] = { studentCount: s.meta.studentCount || 0, normalCount: s.meta.normalCount || 0, scribeCount: s.meta.scribeCount || 0, examTimestamp: s.meta.examTimestamp || 0 };
+                                        localStorage.setItem('examHistoricalMeta', JSON.stringify(tempMeta));
+                                    }
+                                    if (s.roomAllotment) {
+                                        if (!isAllotmentDirty) {
+                                            const tempAllot = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                                            tempAllot[key] = s.roomAllotment; localStorage.setItem('examRoomAllotment', JSON.stringify(tempAllot));
+                                        } else { fullySynced = false; }
+                                    }
+                                    if (s.qpCodes) {
+                                        const tempQP = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
+                                        tempQP[key] = s.qpCodes; localStorage.setItem('examQPCodes', JSON.stringify(tempQP));
+                                    }
+                                    if (s.absentees) {
+                                        const tempAbs = JSON.parse(localStorage.getItem('examAbsenteeList') || '{}');
+                                        tempAbs[key] = s.absentees; localStorage.setItem('examAbsenteeList', JSON.stringify(tempAbs));
+                                    }
+                                    if (s.scribeAllotment) {
+                                        if (!isScribeDirty) {
+                                            const tempScribes = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+                                            tempScribes[key] = s.scribeAllotment; localStorage.setItem('examScribeAllotment', JSON.stringify(tempScribes));
+                                        } else { fullySynced = false; }
+                                    }
+                                    if (s.invigilatorMapping) {
+                                        if (!isAllotmentDirty && !window._isClearingInvigilators) {
+                                            const tempInvig = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+                                            tempInvig[key] = s.invigilatorMapping; localStorage.setItem('examInvigilatorMapping', JSON.stringify(tempInvig));
+                                        } else { fullySynced = false; }
+                                    }
+
+                                    const examTimestamp = (s.meta && s.meta.examTimestamp) ? s.meta.examTimestamp : new Date(key.split(' | ')[0].split('.').reverse().join('-')).getTime();
+                                    if (s.meta && s.meta.studentCount > 0 && examTimestamp >= midnightObj) {
+                                        if (idbStudents === null) idbStudents = await loadExamDataIDB() || [];
+                                        const localCount = idbStudents.filter(stu => stu.Date === s.date && stu.Time === s.time).length;
+                                        
+                                        if (localCount !== s.meta.studentCount) {
+                                            if (isStudentDirty) {
+                                                fullySynced = false;
+                                            } else {
+                                                studentFetchNeeded = true;
+                                                const fetchPromise = window.firebase.getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId))
+                                                    .then(async studentDoc => {
+                                                        if (studentDoc.exists()) {
+                                                            const data = studentDoc.data();
+                                                            let newStudents = [];
+                                                            if (data.isChunked) {
+                                                                let fullPayload = "";
+                                                                for (let i = 0; i < data.totalChunks; i++) {
+                                                                    const chunkSnap = await window.firebase.getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', `${sessionId}_chunk_${i}`));
+                                                                    if (chunkSnap.exists()) fullPayload += chunkSnap.data().payload;
+                                                                }
+                                                                const combined = JSON.parse(fullPayload);
+                                                                if (combined.students) newStudents = combined.students;
+                                                            } else if (data.students) { 
+                                                                newStudents = data.students; 
+                                                            }
+                                                            return { key, students: newStudents, cloudTime: target.cloudTime };
+                                                        }
+                                                        return null;
+                                                    }).catch(e => {
+                                                        console.error("Student Fetch Failed", e);
+                                                        return { key, error: true };
+                                                    });
+                                                missingStudentsPromises.push(fetchPromise);
+                                            }
+                                        }
+                                    }
+
+                                    if (fullySynced && !studentFetchNeeded && (!localManifest[key] || localManifest[key] < target.cloudTime)) {
+                                        localManifest[key] = target.cloudTime;
+                                    } else if (!fullySynced) {
+                                        delete window.fetchingTimes[key]; 
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Sync Error for", key, e);
+                                delete window.fetchingTimes[key]; 
                             }
                         }
 
-                        // 3. Refresh Components
-                        if (typeof populateAllExamDropdowns === 'function') populateAllExamDropdowns();
-                        if (typeof updateDashboard === 'function') updateDashboard();
-                        
-                        // ✅ SYNC COMPLETE: Reset unsaved flag
-                        hasUnsavedScribes = false;
+                        if (missingStudentsPromises.length > 0) {
+                            const results = await Promise.all(missingStudentsPromises);
+                            for (const result of results) {
+                                if (result) {
+                                    if (result.error) {
+                                        delete window.fetchingTimes[result.key]; 
+                                    } else if (result.students) {
+                                        const [sDate, sTime] = result.key.split(' | ').map(x => x.trim());
+                                        idbStudents = idbStudents.filter(stu => !(stu.Date === sDate && stu.Time === sTime));
+                                        idbStudents.push(...result.students);
+                                        idbChanged = true;
+                                        
+                                        if (!localManifest[result.key] || localManifest[result.key] < result.cloudTime) {
+                                            localManifest[result.key] = result.cloudTime;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                        if (typeof updateAllotmentDisplay === 'function') updateAllotmentDisplay();
+                    if (idbChanged && idbStudents !== null) await saveExamDataIDB(idbStudents);
+
+                    if (stateChanged) {
+                        localStorage.setItem('localSessionsManifest', JSON.stringify(localManifest));
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(Object.keys(cloudManifest))); 
+                        
+                        if (typeof updateDashboard === 'function') updateDashboard();
                         if (typeof renderInvigilationPanel === 'function') renderInvigilationPanel();
                         
-                        // ✅ ROBUST UI WAKE-UP: Force visibility for Scribes and Invigilators
-                        if (typeof loadScribeAllotment === 'function') {
-                            const activeSession = (typeof allotmentSessionSelect !== 'undefined') ? allotmentSessionSelect.value : null;
-                            if (activeSession) {
-                                loadScribeAllotment(activeSession);
-                            } else {
-                                // Fallback: load based on current session global if dropdown isn't ready
-                                if (window.currentSessionKey) loadScribeAllotment(window.currentSessionKey);
-                            }
+                        if (typeof window.currentSessionKey !== 'undefined' && window.currentSessionKey) {
+                            if (typeof hasUnsavedAllotment !== 'undefined' && !hasUnsavedAllotment && typeof renderAllottedRooms === 'function') renderAllottedRooms();
+                            if (typeof renderAbsenteeList === 'function') renderAbsenteeList();
+                            if (typeof hasUnsavedScribes !== 'undefined' && !hasUnsavedScribes && typeof renderScribeAllotmentList === 'function') renderScribeAllotmentList(window.currentSessionKey);
+                            if (typeof render_qp_code_list === 'function') render_qp_code_list(window.currentSessionKey);
+                            if (typeof hasUnsavedEdits !== 'undefined' && !hasUnsavedEdits && typeof renderStudentEditTable === 'function') renderStudentEditTable();
                         }
-
                     }
 
                     updateSyncStatus("Synced (Live)", "success");
-                    
-                    // 🚀 LOADER DISMISSAL: Ensure the app finishes loading even on the first sync
                     if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
 
-                // Check for V1 Fallback if sessions collection doesn't exist
-                const sessionSnapCheck = await getDocs(sessionsRef);
-                if (sessionSnapCheck.empty) {
-                    // B. FALLBACK TO V1 (Legacy Chunks)
-                    console.log("⚠️ V2 EMPTY. Falling back to V1 Chunks...");
+                });
 
-                    const dataColRef = collection(db, "colleges", collegeId, "data");
-                    const q = query(dataColRef, orderBy("index"));
-                    const querySnapshot = await getDocs(q);
-                    let fullPayload = "";
-                    querySnapshot.forEach((doc) => {
-                        if (doc.id.startsWith("chunk_")) fullPayload += doc.data().payload;
-                    });
-
-                    if (fullPayload) {
-                        const bulkData = JSON.parse(fullPayload);
-                        if (bulkData['examRoomAllotment']) localStorage.setItem('examRoomAllotment', bulkData['examRoomAllotment']);
-                        if (bulkData['examBaseData']) {
-                            const parsedStudents = JSON.parse(bulkData['examBaseData']);
-                            allStudentData = parsedStudents; // <-- Hydrate Memory
-                            await saveExamDataIDB(parsedStudents, true); // ⚡ BUG FIX: Stop Infinite Cloud Bounce                            
-                            // <-- 
-                            const sessions = new Set(parsedStudents.map(s => `${s.Date} | ${s.Time}`));
-                            localStorage.setItem('examAllKnownSessions', JSON.stringify(Array.from(sessions)));
-                        }
-
-                        updateSyncStatus("Synced (V1)", "success");
-                    } else {
-                        updateSyncStatus("Synced (Empty)", "success");
-                    }
-                }
             } catch (err) {
                 console.error("Hybrid fetch error:", err);
                 updateSyncStatus("Error", "error");
@@ -2045,8 +2046,19 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
     const sessionId = generateSessionId(sessionKey);
     
     try {
-        // 1. Delete main session from private admin area
-        await deleteDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId));
+        // 1. Delete main session from private admin area AND manifest
+        const { writeBatch, deleteField } = window.firebase;
+        const batch = writeBatch(db);
+
+        const sessionRef = doc(db, 'colleges', currentCollegeId, 'sessions', sessionId);
+        batch.delete(sessionRef);
+
+        const manifestRef = doc(db, "colleges", currentCollegeId, "system_data", "sessions_manifest");
+        batch.set(manifestRef, {
+            [sessionKey]: deleteField()
+        }, { merge: true });
+
+        await batch.commit();
 
         // --- 1b. [AUDIT FIX]: Delete associated student data (including chunks) ---
         const studentDocRef = doc(db, 'colleges', currentCollegeId, 'session_students', sessionId);
@@ -2206,8 +2218,22 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         try {
             updateSyncStatus("Generating Session File...", "neutral"); 
             
-     // --- NEW WEB APP HYBRID SYNC ---
-            await setDoc(doc(db, 'colleges', currentCollegeId, 'sessions', sessionId), sessionDoc);
+     // --- NEW WEB APP HYBRID SYNC (Batch) ---
+            const { writeBatch, serverTimestamp } = window.firebase;
+            const batch = writeBatch(db);
+
+            // 1. Queue the main session document update
+            const sessionRef = doc(db, 'colleges', currentCollegeId, 'sessions', sessionId);
+            batch.set(sessionRef, sessionDoc, { merge: true });
+
+            // 2. Queue the Manifest atomic timestamp update
+            const manifestRef = doc(db, "colleges", currentCollegeId, "system_data", "sessions_manifest");
+            batch.set(manifestRef, {
+                [sessionKey]: serverTimestamp()
+            }, { merge: true });
+
+            // Execute the atomic batch
+            await batch.commit();
             
     // --- 🛡️ [GHOST CHUNK GUARD]: Clean up any existing chunks before writing new ones ---
         const oldStudentSnap = await getDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId));
