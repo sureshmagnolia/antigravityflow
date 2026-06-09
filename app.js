@@ -2185,7 +2185,10 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             } else {
                 await setDoc(doc(db, 'colleges', currentCollegeId, 'session_students', sessionId), sessionStudentsDoc);
             }
-            updateSyncStatus("Synced", "success");
+
+
+                     // 🚫 DELETED: Shadow Mirror to GAS
+
 
 
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
@@ -11750,27 +11753,10 @@ window.real_populate_qp_code_session_dropdown = function () {
              });
           }
 
-          // 3. Audit Scribe Allotments: Prune students no longer in this session
-          let hasScribePruning = false;
-          if (!shouldSkipPruning) {
-            Object.keys(currentScribeAllotment).forEach(reg => {
-                if (!masterRegNos.has(reg.toString().trim())) {
-                    delete currentScribeAllotment[reg];
-                    hasScribePruning = true;
-                }
-            });
-          }
-
-          // 4. Save cleaned data immediately if any ghosts, duplicates, or scribes were pruned
-          if (!shouldSkipPruning && (hasIntegrityCleanup || hasScribePruning)) {
+          // 4. Save cleaned data immediately if any ghosts or duplicate room assignments were pruned
+          if (!shouldSkipPruning && hasIntegrityCleanup) {
               console.log("🧹 [Audit Cleanup] Pruned ghost students or duplicate assignments.");
               saveRoomAllotment(); // Updates localStorage for rooms
-
-              if (hasScribePruning) {
-                  const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-                  allScribes[currentSessionKey] = currentScribeAllotment;
-                  localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
-              }
 
               hasUnsavedAllotment = true;
               // 🛡️ [V3 FIX]: Trigger reliable Session-Specific sync.
@@ -13501,6 +13487,30 @@ function renderScribeAllotmentList(sessionKey) {
     // Filter to get only scribe students *in this session*
     const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
     const sessionScribeStudents = sessionStudents.filter(s => scribeRegNos.has(getRegNo(s)));
+
+    // --- NEW: Audit Scribe Allotments safely (Moved from updateAllotmentDisplay) ---
+    // We prune against sessionScribeStudents, so if a student is removed from the global scribe list, they lose their room.
+    const masterScribeRegNos = new Set(sessionScribeStudents.map(s => getRegNo(s).trim()));
+    let hasScribePruning = false;
+    
+    Object.keys(currentScribeAllotment).forEach(reg => {
+        if (!masterScribeRegNos.has(reg.toString().trim())) {
+            delete currentScribeAllotment[reg];
+            hasScribePruning = true;
+        }
+    });
+
+    if (hasScribePruning) {
+        console.log("🧹 [Scribe Audit] Pruned ghost students from scribe allotment.");
+        const allScribes = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        allScribes[sessionKey] = currentScribeAllotment;
+        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribes));
+        
+        if (typeof syncSessionToCloud === 'function') {
+            syncSessionToCloud(sessionKey, true).catch(e => console.warn("Background sync failed", e));
+        }
+    }
+    // -------------------------------------------------------------------------------
 
     const scribeAllotmentList = document.getElementById('scribe-allotment-list');
     if (!scribeAllotmentList) return;
@@ -23323,7 +23333,7 @@ window.downloadInvigilationListPDF = async function () {
 
                 // Pass 2: Deep Word-Tokenizing Fuzzy Match (e.g., handles "Research Meth" vs "RESEARCH METHODOLOGY--(BCM6B16)")
                 if (!bestMatch) {
-                    const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2); // Ignore 'of', 'in', and strip brackets/parens
+                    const words = uiCourseName.split(/[\s,.-]+/).filter(w => w.length > 2); // Ignore 'of', 'in'
                     if (words.length > 0) {
                         let bestScore = 0;
                         validPairs.forEach(p => {
