@@ -23464,7 +23464,20 @@ window.downloadInvigilationListPDF = async function () {
     window.syncSessionToCloud = syncSessionToCloud;
     window.syncDataToCloud = syncDataToCloud;
 
-    // --- 📋 CLIPBOARD QP CODE IMPORTER (Fuzzy Match & Stream Aware) ---
+    window.showQPImportPrefixUI = function() {
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            console.warn("Clipboard import blocked: QP Codes are locked.");
+            return;
+        }
+        document.getElementById('qp-import-inline-ui').classList.remove('hidden');
+        document.getElementById('qp-import-alert-container').classList.add('hidden');
+        document.getElementById('qp-import-alert-container').innerHTML = '';
+        const input = document.getElementById('qp-import-prefix-input');
+        input.value = '';
+        input.focus();
+    };
+
     window.importQPFromClipboard = async function() {
         // 🛡️ [V95]: Strictly respect the UI lock
         if (isQPLocked) {
@@ -23473,16 +23486,20 @@ window.downloadInvigilationListPDF = async function () {
             return;
         }
 
+        const alertContainer = document.getElementById('qp-import-alert-container');
+        alertContainer.classList.add('hidden');
+        alertContainer.innerHTML = '';
+
         try {
             const text = await navigator.clipboard.readText();
             if (!text || text.trim().length === 0) {
-                alert("Clipboard is empty. Please copy QP code data from the university portal first.");
+                alertContainer.innerHTML = "<span class='text-red-600'>Clipboard is empty. Please copy QP code data from the university portal first.</span>";
+                alertContainer.classList.remove('hidden');
                 return;
             }
 
             // ⚡ PREFIX INTERCEPTOR
-            const rawPrefix = prompt("Enter alphabetical prefix for these QP Codes (e.g. K, Z) to auto-prepend, or leave empty to skip:", "");
-            if (rawPrefix === null) return; 
+            const rawPrefix = document.getElementById('qp-import-prefix-input').value;
             const prefix = rawPrefix.trim().toUpperCase();
 
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -23553,6 +23570,7 @@ window.downloadInvigilationListPDF = async function () {
 
             // Track used pairs to find missing in examflow
             const usedPairs = new Set();
+            const matchedInputs = new Set();
 
             // PASS 1: Truly Exact Matches
             inputs.forEach(input => {
@@ -23563,29 +23581,31 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName && !usedPairs.has(p));
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
                     usedPairs.add(perfectMatch);
+                    matchedInputs.add(input);
                     matched++;
                 }
             });
 
             // PASS 2: Substring Matches (Length Weighted)
             inputs.forEach(input => {
-                if (input.value) return;
+                if (matchedInputs.has(input)) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+                if (validPairs.length === 0) validPairs = parsedPairs;
 
                 let bestMatch = null;
                 let maxLength = 0;
 
                 validPairs.forEach(p => {
+                    if (usedPairs.has(p)) return;
                     if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
                         if (p.searchText.length > maxLength) {
                             maxLength = p.searchText.length;
@@ -23597,30 +23617,40 @@ window.downloadInvigilationListPDF = async function () {
                 if (bestMatch) {
                     input.value = bestMatch.code;
                     usedPairs.add(bestMatch);
+                    matchedInputs.add(input);
                     matched++;
                 }
             });
 
             // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
             inputs.forEach(input => {
-                if (input.value) return;
+                if (matchedInputs.has(input)) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+                if (validPairs.length === 0) validPairs = parsedPairs;
 
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
-                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && (isNaN(w) || w.match(/^20\d{2}$/)));
+
+                const uiYearMatch = uiCourseName.match(/20\d{2}/);
+                const uiYear = uiYearMatch ? uiYearMatch[0] : null;
 
                 if (words.length > 0) {
                     let bestScore = 0;
                     let bestMatch = null;
 
                     validPairs.forEach(p => {
+                        if (usedPairs.has(p)) return;
+
+                        const pYearMatch = p.searchText.match(/20\d{2}/);
+                        const pYear = pYearMatch ? pYearMatch[0] : null;
+                        if (uiYear && pYear && uiYear !== pYear) return;
+
                         let score = 0;
                         let coreScore = 0;
                         let consecutiveMatches = 0;
@@ -23641,7 +23671,7 @@ window.downloadInvigilationListPDF = async function () {
                             }
                         });
                         
-                        const totalScore = coreScore + (consecutiveMatches * 2);
+                        const totalScore = coreScore + (consecutiveMatches * 2) + (uiYear && uiYear === pYear ? 5 : 0);
 
                         // Threshold: Must have at least 1 consecutive match or > 70% core words matched
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
@@ -23654,6 +23684,7 @@ window.downloadInvigilationListPDF = async function () {
                     if (bestMatch && bestScore > 0) {
                         input.value = bestMatch.code;
                         usedPairs.add(bestMatch);
+                        matchedInputs.add(input);
                         matched++;
                     }
                 }
@@ -23675,14 +23706,18 @@ window.downloadInvigilationListPDF = async function () {
             });
 
             if (missingInPortal.length > 0 || missingInExamflow.length > 0) {
-                let alertMsg = "⚠️ MATCHING REPORT ⚠️\n\n";
+                let alertMsg = "⚠️ <b>MATCHING REPORT</b> ⚠️<br><br>";
                 if (missingInPortal.length > 0) {
-                    alertMsg += "❌ MISSING IN PORTAL (These courses need manual mapping):\n" + missingInPortal.join("\n") + "\n\n";
+                    alertMsg += "<span class='text-red-600'>❌ MISSING IN PORTAL (These courses need manual mapping):</span><br>" + missingInPortal.join("<br>") + "<br><br>";
                 }
                 if (missingInExamflow.length > 0) {
-                    alertMsg += "❌ MISSING IN EXAMFLOW (These portal codes weren't used):\n" + [...new Set(missingInExamflow)].join("\n") + "\n";
+                    alertMsg += "<span class='text-orange-600'>⚠️ UNUSED PORTAL CODES (These portal codes weren't assigned):</span><br>" + [...new Set(missingInExamflow)].join("<br>") + "<br>";
                 }
-                setTimeout(() => alert(alertMsg), 500);
+                
+                // Show inline instead of alert
+                alertContainer.innerHTML = alertMsg;
+                alertContainer.classList.remove('hidden');
+                document.getElementById('qp-import-inline-ui').classList.remove('hidden');
             }
 
             if (matched > 0) {
@@ -23692,12 +23727,15 @@ window.downloadInvigilationListPDF = async function () {
                 document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully. Click Save QP Codes below to confirm.`;
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
-                alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
+                alertContainer.innerHTML = `<span class='text-red-600'>Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.</span>`;
+                alertContainer.classList.remove('hidden');
+                document.getElementById('qp-import-inline-ui').classList.remove('hidden');
             }
 
         } catch (e) {
             console.error("Clipboard access failed:", e);
-            alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
+            alertContainer.innerHTML = "<span class='text-red-600'>Clipboard access blocked. Please allow clipboard permissions or input manually.</span>";
+            alertContainer.classList.remove('hidden');
         }
     };
 
