@@ -8728,7 +8728,7 @@ function downloadVectorPDF() {
         doc.text("Date: ${new Date().toLocaleDateString('en-GB')}", 200, 47, { align: "right" });
 
         doc.setFont("times", "normal");
-        const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute from the same department and inform the office accordingly.";
+        const letterText = "The following teachers have been assigned invigilation duty for the upcoming Calicut University examinations. Invigilators are requested to report to the Chief Superintendent's office 30 minutes before the commencement of the exam. In case of any inconvenience, invigilators must arrange for a substitute and inform the office accordingly.";
         const splitText = doc.splitTextToSize(letterText, 190);
         doc.text(splitText, 10, 53, { maxWidth: 190, align: "justify" });
 
