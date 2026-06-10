@@ -2194,6 +2194,8 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
             // that used to be here, which were causing the 1MB limit error.
             
+            updateSyncStatus("Saved to Web", "success");
+
         } catch (e) {
             console.error("Session Sync Error:", e);
             updateSyncStatus("Save Failed", "error");
