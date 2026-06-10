@@ -23694,7 +23694,6 @@ window.downloadInvigilationListPDF = async function () {
             } else {
                 alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
             }
-            }
 
         } catch (e) {
             console.error("Clipboard access failed:", e);
