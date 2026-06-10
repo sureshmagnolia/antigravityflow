@@ -23380,6 +23380,7 @@ window.downloadInvigilationListPDF = async function () {
 
             // Track used pairs to find missing in examflow
             const usedPairs = new Set();
+            const matchedInputs = new Set();
 
             // PASS 1: Truly Exact Matches
             inputs.forEach(input => {
@@ -23394,13 +23395,14 @@ window.downloadInvigilationListPDF = async function () {
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
                     usedPairs.add(perfectMatch);
+                    matchedInputs.add(input);
                     matched++;
                 }
             });
 
             // PASS 2: Substring Matches (Length Weighted)
             inputs.forEach(input => {
-                if (input.value) return;
+                if (matchedInputs.has(input)) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
@@ -23425,13 +23427,14 @@ window.downloadInvigilationListPDF = async function () {
                 if (bestMatch) {
                     input.value = bestMatch.code;
                     usedPairs.add(bestMatch);
+                    matchedInputs.add(input);
                     matched++;
                 }
             });
 
             // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
             inputs.forEach(input => {
-                if (input.value) return;
+                if (matchedInputs.has(input)) return;
 
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
@@ -23491,6 +23494,7 @@ window.downloadInvigilationListPDF = async function () {
                     if (bestMatch && bestScore > 0) {
                         input.value = bestMatch.code;
                         usedPairs.add(bestMatch);
+                        matchedInputs.add(input);
                         matched++;
                     }
                 }
