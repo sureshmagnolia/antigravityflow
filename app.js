@@ -23391,7 +23391,7 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName && !usedPairs.has(p));
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
                     usedPairs.add(perfectMatch);
@@ -23415,7 +23415,7 @@ window.downloadInvigilationListPDF = async function () {
                 let maxLength = 0;
 
                 validPairs.forEach(p => {
-                    if (usedPairs.has(p)) return;
+                    // Allowed multiple mapping by not filtering out usedPairs in Phase 2
                     if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
                         if (p.searchText.length > maxLength) {
                             maxLength = p.searchText.length;
@@ -23451,15 +23451,11 @@ window.downloadInvigilationListPDF = async function () {
                 const uiYear = uiYearMatch ? uiYearMatch[0] : null;
 
                 if (words.length > 0) {
-                    let bestScore = 0;
-                    let bestMatch = null;
+                    let candidates = [];
 
                     validPairs.forEach(p => {
-                        if (usedPairs.has(p)) return;
-
                         const pYearMatch = p.searchText.match(/20\d{2}/);
                         const pYear = pYearMatch ? pYearMatch[0] : null;
-                        if (uiYear && pYear && uiYear !== pYear) return;
 
                         let score = 0;
                         let coreScore = 0;
@@ -23481,17 +23477,30 @@ window.downloadInvigilationListPDF = async function () {
                             }
                         });
                         
-                        const totalScore = coreScore + (consecutiveMatches * 2) + (uiYear && uiYear === pYear ? 5 : 0);
+                        const totalScore = coreScore + (consecutiveMatches * 2);
 
                         // Threshold: Must have at least 1 consecutive match or > 70% core words matched
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
-                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > bestScore) {
-                            bestScore = totalScore;
-                            bestMatch = p;
+                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > 0) {
+                            candidates.push({ p, totalScore, pYear });
                         }
                     });
 
-                    if (bestMatch && bestScore > 0) {
+                    let bestMatch = null;
+
+                    if (candidates.length === 1) {
+                        // Scenario 1: Only 1 portal entry matches this subject. Map it regardless of year mismatch.
+                        bestMatch = candidates[0].p;
+                    } else if (candidates.length > 1) {
+                        // Scenario 2: Multiple entries. Enforce strict year matching.
+                        const yearMatched = candidates.filter(c => !uiYear || !c.pYear || c.pYear === uiYear);
+                        if (yearMatched.length > 0) {
+                            yearMatched.sort((a, b) => b.totalScore - a.totalScore);
+                            bestMatch = yearMatched[0].p;
+                        }
+                    }
+
+                    if (bestMatch) {
                         input.value = bestMatch.code;
                         usedPairs.add(bestMatch);
                         matchedInputs.add(input);
