@@ -23633,9 +23633,10 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                // Strip years from the fuzzy text search array so they don't corrupt the coreRatio
+                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
-                const coreWords = words.filter(w => !ignoreWords.includes(w) && (isNaN(w) || w.match(/^20\d{2}$/)));
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
 
                 const uiYearMatch = uiCourseName.match(/20\d{2}/);
                 const uiYear = uiYearMatch ? uiYearMatch[0] : null;
