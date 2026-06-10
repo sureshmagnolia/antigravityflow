@@ -23461,11 +23461,14 @@ window.downloadInvigilationListPDF = async function () {
                         let coreScore = 0;
                         let consecutiveMatches = 0;
                         let prevMatchedIndex = -1;
+                        let lastFoundIndex = -1;
 
                         const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
                         
                         words.forEach(w => {
-                            const pIdx = portalWords.indexOf(w);
+                            const startIndex = lastFoundIndex === -1 ? 0 : lastFoundIndex + 1;
+                            const pIdx = portalWords.indexOf(w, startIndex);
+                            
                             if (pIdx !== -1) {
                                 score++;
                                 if (coreWords.includes(w)) coreScore++;
@@ -23473,15 +23476,16 @@ window.downloadInvigilationListPDF = async function () {
                                 if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
                                     consecutiveMatches++;
                                 }
+                                lastFoundIndex = pIdx;
                                 prevMatchedIndex = pIdx;
                             }
                         });
                         
                         const totalScore = coreScore + (consecutiveMatches * 2);
 
-                        // Threshold: Must have at least 1 consecutive match or > 70% core words matched
+                        // Threshold: Must have > 60% core words matched STRICTLY IN SEQUENCE
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
-                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > 0) {
+                        if ((coreRatio > 0.6 || coreWords.length === 0) && totalScore > 0) {
                             candidates.push({ p, totalScore, pYear });
                         }
                     });
