@@ -10772,6 +10772,9 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         qpCodeContainer.innerHTML = htmlChunks.join('');
 
+        // 🛡️ [V95]: Trigger duplicate validation
+        validateQPDuplicates();
+
         // Disable Save button if locked
         saveQpCodesButton.disabled = isQPLocked;
         if (isQPLocked) {
@@ -10780,6 +10783,48 @@ window.real_populate_qp_code_session_dropdown = function () {
             saveQpCodesButton.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
+
+    // 🛡️ [V95]: VALIDATE DUPLICATE QP CODES (Bright Yellow Highlight)
+    function validateQPDuplicates() {
+        const inputs = Array.from(document.querySelectorAll('#qp-code-container .qp-code-input'));
+        const codeMap = new Map(); 
+        
+        // Reset highlights
+        inputs.forEach(input => input.classList.remove('bg-yellow-300', 'ring-2', 'ring-yellow-500'));
+        
+        // Group by code
+        inputs.forEach(input => {
+            const code = input.value.trim().toUpperCase();
+            if (code.length > 0) {
+                if (!codeMap.has(code)) codeMap.set(code, []);
+                codeMap.get(code).push(input);
+            }
+        });
+        
+        let hasDuplicates = false;
+        codeMap.forEach((matchedInputs) => {
+            if (matchedInputs.length > 1) {
+                hasDuplicates = true;
+                matchedInputs.forEach(input => {
+                    input.classList.add('bg-yellow-300', 'ring-2', 'ring-yellow-500');
+                });
+            }
+        });
+
+        const statusEl = document.getElementById('qp-code-status');
+        if (hasDuplicates) {
+            statusEl.innerHTML = `<span class="text-amber-600 font-bold">⚠️ WARNING: Duplicate QP codes detected (Highlighted in Yellow). Please verify papers.</span>`;
+        } else if (statusEl.textContent.includes("WARNING")) {
+            statusEl.textContent = ""; // Clear warning if resolved
+        }
+    }
+
+    // ⚡ [V95]: Live validation on manual typing
+    qpCodeContainer.addEventListener('input', (e) => {
+        if (e.target.classList.contains('qp-code-input')) {
+            validateQPDuplicates();
+        }
+    });
 
     // V89: NEW SAVE STRATEGY
     saveQpCodesButton.addEventListener('click', () => {
@@ -23313,50 +23358,147 @@ window.downloadInvigilationListPDF = async function () {
             }
 
             let matched = 0;
+            const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
-            // ⚡ FUZZY ASSIGNMENT LAYER
-              document.querySelectorAll('#qp-code-container input[data-course]').forEach(input => {
-                  // Sanitize mojibake from PDF before comparing
+            // Track used pairs to find missing in examflow
+            const usedPairs = new Set();
+
+            // PASS 1: Truly Exact Matches
+            inputs.forEach(input => {
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
                 const streamName = (input.dataset.stream || "").toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
                 
-                // 1. Hard Filter by Stream (Only match 'A' suffix to EDE, non-'A' to Regular)
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                // Fallback if no specific stream match is found
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                let bestMatch = null;
-
-                // Pass 1: Exact Substring Included
-                bestMatch = validPairs.find(p => p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText));
-
-                // Pass 2: Deep Word-Tokenizing Fuzzy Match (e.g., handles "Research Meth" vs "RESEARCH METHODOLOGY--(BCM6B16)")
-                if (!bestMatch) {
-                    const words = uiCourseName.split(/[\s,.-]+/).filter(w => w.length > 2); // Ignore 'of', 'in'
-                    if (words.length > 0) {
-                        let bestScore = 0;
-                        validPairs.forEach(p => {
-                            let score = 0;
-                            words.forEach(w => { if (p.searchText.includes(w)) score++; });
-                            if (score > bestScore) {
-                                bestScore = score;
-                                bestMatch = p;
-                            }
-                        });
-                        // Requires at least 1 solid keyword overlap to prevent false positives
-                        if (bestScore < 1) bestMatch = null; 
-                    }
-                }
-
-                if (bestMatch) {
-                    input.value = bestMatch.code;
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
+                if (perfectMatch) {
+                    input.value = perfectMatch.code;
+                    usedPairs.add(perfectMatch);
                     matched++;
                 }
             });
 
+            // PASS 2: Substring Matches (Length Weighted)
+            inputs.forEach(input => {
+                if (input.value) return;
+
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const streamName = (input.dataset.stream || "").toUpperCase();
+                const isEdeStream = streamName.includes("EDE");
+                
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+
+                let bestMatch = null;
+                let maxLength = 0;
+
+                validPairs.forEach(p => {
+                    if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
+                        if (p.searchText.length > maxLength) {
+                            maxLength = p.searchText.length;
+                            bestMatch = p;
+                        }
+                    }
+                });
+
+                if (bestMatch) {
+                    input.value = bestMatch.code;
+                    usedPairs.add(bestMatch);
+                    matched++;
+                }
+            });
+
+            // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
+            inputs.forEach(input => {
+                if (input.value) return;
+
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const streamName = (input.dataset.stream || "").toUpperCase();
+                const isEdeStream = streamName.includes("EDE");
+                
+                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
+                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+
+                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
+
+                if (words.length > 0) {
+                    let bestScore = 0;
+                    let bestMatch = null;
+
+                    validPairs.forEach(p => {
+                        let score = 0;
+                        let coreScore = 0;
+                        let consecutiveMatches = 0;
+                        let prevMatchedIndex = -1;
+
+                        const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                        
+                        words.forEach(w => {
+                            const pIdx = portalWords.indexOf(w);
+                            if (pIdx !== -1) {
+                                score++;
+                                if (coreWords.includes(w)) coreScore++;
+                                
+                                if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
+                                    consecutiveMatches++;
+                                }
+                                prevMatchedIndex = pIdx;
+                            }
+                        });
+                        
+                        const totalScore = coreScore + (consecutiveMatches * 2);
+
+                        // Threshold: Must have at least 1 consecutive match or > 70% core words matched
+                        const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
+                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > bestScore) {
+                            bestScore = totalScore;
+                            bestMatch = p;
+                        }
+                    });
+
+                    if (bestMatch && bestScore > 0) {
+                        input.value = bestMatch.code;
+                        usedPairs.add(bestMatch);
+                        matched++;
+                    }
+                }
+            });
+
+            // ERROR REPORTING (Missing Courses Alert)
+            const missingInPortal = [];
+            inputs.forEach(input => {
+                if (!input.value) {
+                    missingInPortal.push(input.dataset.course);
+                }
+            });
+
+            const missingInExamflow = [];
+            parsedPairs.forEach(p => {
+                if (!usedPairs.has(p)) {
+                    missingInExamflow.push(p.searchText);
+                }
+            });
+
+            if (missingInPortal.length > 0 || missingInExamflow.length > 0) {
+                let alertMsg = "⚠️ MATCHING REPORT ⚠️\n\n";
+                if (missingInPortal.length > 0) {
+                    alertMsg += "❌ MISSING IN PORTAL (These courses need manual mapping):\n" + missingInPortal.join("\n") + "\n\n";
+                }
+                if (missingInExamflow.length > 0) {
+                    alertMsg += "❌ MISSING IN EXAMFLOW (These portal codes weren't used):\n" + [...new Set(missingInExamflow)].join("\n") + "\n";
+                }
+                setTimeout(() => alert(alertMsg), 500);
+            }
+
             if (matched > 0) {
-                document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully (Fuzzy Match). Click Save QP Codes below to confirm.`;
+                // 🛡️ [V95]: Trigger live highlight validation after bulk import
+                validateQPDuplicates();
+                
+                document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully. Click Save QP Codes below to confirm.`;
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
                 alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
