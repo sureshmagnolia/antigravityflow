@@ -23274,6 +23274,20 @@ window.downloadInvigilationListPDF = async function () {
     window.syncDataToCloud = syncDataToCloud;
 
     // --- 📋 CLIPBOARD QP CODE IMPORTER (Fuzzy Match & Stream Aware) ---
+    window.showQPImportPrefixUI = function() {
+        if (isQPLocked) {
+            if (typeof flashQPLock === 'function') flashQPLock();
+            console.warn("Clipboard import blocked: QP Codes are locked.");
+            return;
+        }
+        document.getElementById('qp-import-inline-ui').classList.remove('hidden');
+        document.getElementById('qp-import-alert-container').classList.add('hidden');
+        document.getElementById('qp-import-alert-container').innerHTML = '';
+        const input = document.getElementById('qp-import-prefix-input');
+        input.value = '';
+        input.focus();
+    };
+
     window.importQPFromClipboard = async function() {
         // 🛡️ [V95]: Strictly respect the UI lock
         if (isQPLocked) {
@@ -23282,16 +23296,20 @@ window.downloadInvigilationListPDF = async function () {
             return;
         }
 
+        const alertContainer = document.getElementById('qp-import-alert-container');
+        alertContainer.classList.add('hidden');
+        alertContainer.innerHTML = '';
+
         try {
             const text = await navigator.clipboard.readText();
             if (!text || text.trim().length === 0) {
-                alert("Clipboard is empty. Please copy QP code data from the university portal first.");
+                alertContainer.innerHTML = "<span class='text-red-600'>Clipboard is empty. Please copy QP code data from the university portal first.</span>";
+                alertContainer.classList.remove('hidden');
                 return;
             }
 
             // ⚡ PREFIX INTERCEPTOR
-            const rawPrefix = prompt("Enter alphabetical prefix for these QP Codes (e.g. K, Z) to auto-prepend, or leave empty to skip:", "");
-            if (rawPrefix === null) return; 
+            const rawPrefix = document.getElementById('qp-import-prefix-input').value;
             const prefix = rawPrefix.trim().toUpperCase();
 
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -23494,14 +23512,21 @@ window.downloadInvigilationListPDF = async function () {
             });
 
             if (missingInPortal.length > 0 || missingInExamflow.length > 0) {
-                let alertMsg = "⚠️ MATCHING REPORT ⚠️\n\n";
+                let alertHtml = "<div class='text-red-700 font-bold mb-2'>⚠️ MATCHING REPORT ⚠️</div>";
                 if (missingInPortal.length > 0) {
-                    alertMsg += "❌ MISSING IN PORTAL (These courses need manual mapping):\n" + missingInPortal.join("\n") + "\n\n";
+                    alertHtml += "<div class='text-red-600 mb-2'><span class='font-semibold'>❌ MISSING IN PORTAL (These courses need manual mapping):</span><br>" + missingInPortal.map(c => `• ${c}`).join("<br>") + "</div>";
                 }
                 if (missingInExamflow.length > 0) {
-                    alertMsg += "❌ MISSING IN EXAMFLOW (These portal codes weren't used):\n" + [...new Set(missingInExamflow)].join("\n") + "\n";
+                    alertHtml += "<div class='text-orange-600'><span class='font-semibold'>❌ MISSING IN EXAMFLOW (These portal codes weren't used):</span><br>" + [...new Set(missingInExamflow)].map(c => `• ${c}`).join("<br>") + "</div>";
                 }
-                setTimeout(() => alert(alertMsg), 500);
+                alertContainer.innerHTML = alertHtml;
+                alertContainer.classList.remove('hidden');
+            } else {
+                if (matched > 0) {
+                    setTimeout(() => {
+                        document.getElementById('qp-import-inline-ui').classList.add('hidden');
+                    }, 3000);
+                }
             }
 
             if (matched > 0) {
@@ -23511,12 +23536,19 @@ window.downloadInvigilationListPDF = async function () {
                 document.getElementById('qp-code-status').textContent = `✅ ${matched} mapping pairs imported successfully. Click Save QP Codes below to confirm.`;
                 document.getElementById('save-qp-codes-button')?.click(); // Auto-clicks save if valid
             } else {
-                alert(`Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.`);
+                alertContainer.innerHTML = `<span class='text-red-600 font-semibold'>Found ${parsedPairs.length} codes on Clipboard, but zero matched your registered Course Names.</span>`;
+                alertContainer.classList.remove('hidden');
             }
 
         } catch (e) {
             console.error("Clipboard access failed:", e);
-            alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
+            const alertContainer = document.getElementById('qp-import-alert-container');
+            if (alertContainer) {
+                alertContainer.innerHTML = "<span class='text-red-600'>Clipboard access blocked. Please allow clipboard permissions or input manually.</span>";
+                alertContainer.classList.remove('hidden');
+            } else {
+                alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
+            }
         }
     };
 
