@@ -1590,23 +1590,38 @@
                 <p class="text-gray-600 text-sm flex-1">
                     Assign a Question Paper (QP) Code to each course. Codes are saved locally.
                 </p>
-                <button id="import-qp-clipboard-btn"
-                    onclick="window.importQPFromClipboard()"
-                    class="text-xs flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-300 px-3 py-1 rounded hover:bg-blue-100 transition shadow-sm shrink-0 ml-2"
-                    title="Copy QP codes from university portal and click this to auto-fill">
-                    📋 Import from Clipboard
-                </button>
+                <div class="flex flex-col items-end">
+                    <div class="flex">
+                        <button id="import-qp-clipboard-btn"
+                            onclick="window.showQPImportPrefixUI()"
+                            class="text-xs flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-300 px-3 py-1 rounded hover:bg-blue-100 transition shadow-sm shrink-0 ml-2"
+                            title="Copy QP codes from university portal and click this to auto-fill">
+                            📋 Import from Clipboard
+                        </button>
 
-                                <button id="toggle-qp-lock-btn"
-                                    class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                        stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-                                    </svg>
-                                    <span>Codes Locked</span>
-                                </button>
-                            </div>
+                        <button id="toggle-qp-lock-btn"
+                            class="text-xs flex items-center gap-1 bg-gray-100 text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-200 transition shadow-sm shrink-0 ml-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            </svg>
+                            <span>Codes Locked</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Inline UI for QP Import Prefix and Alerts -->
+            <div id="qp-import-inline-ui" class="hidden mb-4 p-3 bg-blue-50 border border-blue-200 rounded shadow-sm text-sm">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="font-medium text-blue-800">📋 QP Import:</span>
+                    <input type="text" id="qp-import-prefix-input" placeholder="Prefix (e.g. K) - Optional" class="px-2 py-1 border border-gray-300 rounded shadow-sm flex-1 text-xs">
+                    <button onclick="window.importQPFromClipboard()" class="bg-blue-600 text-white px-3 py-1 rounded shadow-sm hover:bg-blue-700 transition text-xs">Start Import</button>
+                    <button onclick="document.getElementById('qp-import-inline-ui').classList.add('hidden')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded shadow-sm hover:bg-gray-300 transition text-xs">Cancel</button>
+                </div>
+                <div id="qp-import-alert-container" class="hidden text-xs mt-2 whitespace-pre-wrap font-mono"></div>
+            </div>
 
                             <div class="space-y-4">
                                 <div class="flex items-center gap-3 px-2">
