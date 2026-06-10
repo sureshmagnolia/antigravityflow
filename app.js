@@ -23372,7 +23372,7 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName && !usedPairs.has(p));
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
                     usedPairs.add(perfectMatch);
@@ -23389,12 +23389,13 @@ window.downloadInvigilationListPDF = async function () {
                 const isEdeStream = streamName.includes("EDE");
                 
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+                if (validPairs.length === 0) validPairs = parsedPairs;
 
                 let bestMatch = null;
                 let maxLength = 0;
 
                 validPairs.forEach(p => {
+                    if (usedPairs.has(p)) return;
                     if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
                         if (p.searchText.length > maxLength) {
                             maxLength = p.searchText.length;
@@ -23419,17 +23420,26 @@ window.downloadInvigilationListPDF = async function () {
                 const isEdeStream = streamName.includes("EDE");
                 
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0 && isEdeStream) validPairs = parsedPairs;
+                if (validPairs.length === 0) validPairs = parsedPairs;
 
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
-                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && (isNaN(w) || w.match(/^20\d{2}$/)));
+
+                const uiYearMatch = uiCourseName.match(/20\d{2}/);
+                const uiYear = uiYearMatch ? uiYearMatch[0] : null;
 
                 if (words.length > 0) {
                     let bestScore = 0;
                     let bestMatch = null;
 
                     validPairs.forEach(p => {
+                        if (usedPairs.has(p)) return;
+
+                        const pYearMatch = p.searchText.match(/20\d{2}/);
+                        const pYear = pYearMatch ? pYearMatch[0] : null;
+                        if (uiYear && pYear && uiYear !== pYear) return;
+
                         let score = 0;
                         let coreScore = 0;
                         let consecutiveMatches = 0;
@@ -23450,7 +23460,7 @@ window.downloadInvigilationListPDF = async function () {
                             }
                         });
                         
-                        const totalScore = coreScore + (consecutiveMatches * 2);
+                        const totalScore = coreScore + (consecutiveMatches * 2) + (uiYear && uiYear === pYear ? 5 : 0);
 
                         // Threshold: Must have at least 1 consecutive match or > 70% core words matched
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
