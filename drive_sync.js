@@ -463,7 +463,7 @@ async function syncData(source = "AUTO") {
         
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        const fileName = `${source}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `${source}_Backup_${window.getIsoDateLocal ? window.getIsoDateLocal(now) : now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
@@ -632,7 +632,7 @@ async function syncDataSilent() {
         // 🛡️ [AUDIT FIX]: Include prefix for silent backups
         const isInvig = window.location.pathname.includes('invigilation');
         const prefix = isInvig ? 'INVIG_AUTO' : 'ADMIN_AUTO';
-        const fileName = `${prefix}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `${prefix}_Backup_${window.getIsoDateLocal ? window.getIsoDateLocal(now) : now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },

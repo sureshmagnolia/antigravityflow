@@ -24,6 +24,29 @@ window.getRegNo = getRegNo;
 if (typeof IDB_NAME === 'undefined') {
     window.IDB_NAME = 'AntigravityDB';
     window.IDB_STORE = 'examStore';
+
+// [V3 IDB UPGRADE]: Helpers for Scribe Isolation
+window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            const tx = db.transaction('scribeVault', 'readwrite');
+            tx.objectStore('scribeVault').put(allotment, sessionKey);
+            tx.oncomplete = () => { db.close(); resolve(true); };
+            tx.onerror = () => { db.close(); resolve(false); };
+        });
+    });
+};
+
+window.getScribeAllotmentIDB = function(sessionKey) {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            const tx = db.transaction('scribeVault', 'readonly');
+            const req = tx.objectStore('scribeVault').get(sessionKey);
+            req.onsuccess = () => { db.close(); resolve(req.result || null); };
+            req.onerror = () => { db.close(); resolve(null); };
+        }).catch(() => resolve(null));
+    });
+};
     window.IDB_KEY = 'examBaseData';
 }
 
@@ -225,6 +248,7 @@ async function autoCleanPastGhostData() {
     let availability = JSON.parse(localStorage.getItem('invigAdvanceUnavailability') || '{}');
     let deletedCount = 0;
     let hasChanges = false;
+    let deletedSlotIds = [];
 
     // 1. Scan Slots
     Object.keys(slots).forEach(slotId => {
@@ -240,6 +264,7 @@ async function autoCleanPastGhostData() {
             delete slots[slotId];
             deletedCount++;
             hasChanges = true;
+            deletedSlotIds.push(slotId);
         }
     });
 
@@ -264,6 +289,16 @@ async function autoCleanPastGhostData() {
             // 🛡️ [AUDIT FIX]: Disabled in app.js to prevent unintended cloud wipes. 
             // Invigilation management is now authoritative within invigilation.js
             // await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
+        }
+        
+        // [AUDIT FIX]: Use the authoritative sharded sync instead of the deprecated legacy sync
+        // to permanently delete expired slots from the cloud shards.
+        if (deletedCount > 0 && typeof window.deleteSlotsFromCloud === 'function') {
+            // We need the keys of the deleted slots.
+            // Wait, the original code used deletedSlotIds, let me make sure it exists!
+            if (typeof deletedSlotIds !== 'undefined' && deletedSlotIds.length > 0) {
+                window.deleteSlotsFromCloud(deletedSlotIds).catch(e => console.warn(`Failed to sync cleaned slots:`, e));
+            }
         }
         console.log(`🧹 Maintenance: Cleaned up ${deletedCount} local records older than 30 days.`);
     } else {
@@ -549,12 +584,15 @@ document.addEventListener('DOMContentLoaded', () => {
 /* Bumping to version 2 to force the missing store creation */
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 2); // BUMPED TO 2
+        const req = indexedDB.open(IDB_NAME, 3); // BUMPED TO 2
         req.onupgradeneeded = e => {
             const db = e.target.result;
             // Safe check: create the store if it doesn't exist
             if (!db.objectStoreNames.contains(IDB_STORE)) {
                 db.createObjectStore(IDB_STORE);
+                    }
+                    if (!db.objectStoreNames.contains('scribeVault')) {
+                        db.createObjectStore('scribeVault');
             }
         };
         req.onsuccess = e => resolve(e.target.result);
@@ -1320,9 +1358,6 @@ window.recalcInvigSlots = async function () {
     try {
         // 🛡️ CRITICAL: Force fetch latest slots from cloud BEFORE recalculating
         // to prevent erasing existing teacher willingness data if local memory is empty.
-        if (typeof window.fetchSlotsData === 'function') {
-            await window.fetchSlotsData();
-        }
 
         // 🛡️ V2 ARCHITECTURE SHIELD: 
         // app.js doesn't natively fetch daily shards. If local memory is empty, abort to prevent a wipe.
@@ -1404,7 +1439,7 @@ window.recalcInvigSlots = async function () {
                 if (now - lastLocalSave < 10000) return;
 
                 // --- SMART MERGE LOGIC for Mapping Data (🛡️ AUDIT FIX: Latest Wins) ---
-                  if (key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
+                  if (key === 'examInvigilationSlots' || key === 'examInvigilatorMapping' || key === 'examRoomAllotment' || key === 'examAbsenteeList' || key === 'examScribeAllotment' || key === 'examQPCodes') {
                       // 🚫 [SCR5 MIGRATION FIX] Block legacy cloud documents from poisoning local state!
                       // These keys are now strictly managed by the V2 Modular Sessions listener.
                       return;
@@ -1477,9 +1512,10 @@ window.recalcInvigSlots = async function () {
         };
 
         window.fetchSlotsData = async () => {
-            const { getDoc, doc } = window.firebase;
-            const snap = await getDoc(doc(db, "colleges", collegeId, "system_data", "slots"));
-            if (snap.exists()) syncLocal(snap.data());
+            // 🛡️ [AUDIT FIX]: fetchSlotsData is decommissioned. 
+            // Authority is now moved to the Sharded Listener in invigilation.js.
+            // This prevents legacy root document fetches from overwriting active sharded state.
+            console.log("ℹ️ fetchSlotsData bypassed: Sharded Authority Active.");
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -1507,7 +1543,6 @@ window.recalcInvigSlots = async function () {
           // This ensures PC 2 picks up PC 1's changes immediately upon login.
           fetchSettingsData();
           if (typeof fetchAllocationData === 'function') fetchAllocationData();
-          if (typeof fetchSlotsData === 'function') fetchSlotsData();
           if (typeof fetchStaffData === 'function') fetchStaffData();
           if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
@@ -5910,7 +5945,7 @@ if (toggleButton && sidebar) {
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement("a");
                     link.setAttribute("href", url);
-                    link.setAttribute("download", `ExamFlow_Full_Data_${new Date().toISOString().slice(0, 10)}.csv`);
+                    link.setAttribute("download", `ExamFlow_Full_Data_${new Date()getIsoDateLocal()}.csv`);
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
@@ -9459,7 +9494,6 @@ async function syncToPrintManager() {
     navRoomAllotment.addEventListener('click', () => { 
         showView(viewRoomAllotment, navRoomAllotment); 
         if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData(); 
-        if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData(); 
         if (typeof window.fetchAllocationData === 'function') window.fetchAllocationData(); 
         
         // 🛡️ [PERSISTENCE FIX]: Force refresh of Scribe UI when returning to this tab
@@ -11304,7 +11338,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         backupData['lastUpdated'] = now;
 
         const jsonString = JSON.stringify(backupData, null, 2);
-        const dateStr = new Date().toISOString().split('T')[0];
+        const dateStr = new Date()getIsoDateLocal();
         const fileName = `ExamFlow_Backup_${dateStr}.json`;
 
         const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
@@ -11548,7 +11582,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
-                link.setAttribute("download", `Master_Exam_Data_${new Date().toISOString().slice(0, 10)}.csv`);
+                link.setAttribute("download", `Master_Exam_Data_${new Date()getIsoDateLocal()}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -13038,9 +13072,27 @@ if (saveScribeBtn) {
 
         // 🛡️ [PERSISTENCE FIX]: Explicitly save to localStorage for Basic Users
         if (typeof SCRIBE_ALLOTMENT_KEY !== 'undefined') {
-            const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-            allScribeAllots[sessionKey] = currentScribeAllotment;
-            localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
+            // 1. Try LocalStorage (Cache & Bridge) - Fail-safe
+            try {
+                // [VAULT UPGRADE]: Save to isolated vault
+                const vaultKey = `scrAllot_` + sessionKey.replace(/\s/g, '_');
+                localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
+
+                // Legacy fallback
+                const allScribeAllots = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+                allScribeAllots[sessionKey] = currentScribeAllotment;
+                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allScribeAllots));
+            } catch (e) {
+                console.warn("⚠️ LocalStorage full. Bridge data not updated, but proceeding to IDB...", e);
+            }
+
+            // 2. Primary Save (IndexedDB) - AUTHORITATIVE
+            try {
+                await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+            } catch (e) {
+                console.error("❌ CRITICAL: IndexedDB save failed!", e);
+                alert("❌ Error: Could not save to Database. Your changes may be lost.");
+            }
         }
 
         // Force Sync
@@ -13495,7 +13547,7 @@ if (saveScribeBtn) {
     // --- Scribe Allotment Page Logic (MOVED) ---
 
     // NEW FUNCTION: This loads the scribe allotment data for the session
-    function loadScribeAllotment(sessionKey) {
+    async function loadScribeAllotment(sessionKey) {
         // *** FIX: Ensure global scribe list is loaded before checking length ***
         if (globalScribeList.length === 0) {
             globalScribeList = JSON.parse(localStorage.getItem(SCRIBE_LIST_KEY) || '[]');
@@ -13503,25 +13555,37 @@ if (saveScribeBtn) {
         // **********************************************************************
 
         if (sessionKey && globalScribeList.length > 0) {
-            // Load the allotments for this session (🛡️ [V12.8 FIX]: Prioritize V1 Manual Saves over V2 Historical context)
+            const vaultKey = `scrAllot_` + sessionKey.replace(/\s/g, '_');
+            const isDirty = localStorage.getItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_')) === 'true';
+
+            // 🛡️ [V3 IDB UPGRADE]: Multi-Tiered Load (Bidirectional Sync)
+            // 1. Get from Legacy (The shared mirrors)
             const v1 = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
             const v2 = JSON.parse(localStorage.getItem('examScribeAllotmentV2') || '{}');
-            
-            // Unify keys: Manual Save (v1) should always win over historical data (v2)
-            const allAllotments = { ...v2, ...v1 }; 
-            currentScribeAllotment = allAllotments[sessionKey] || {};
+            const legacyData = v1[sessionKey] || v2[sessionKey] || null;
 
-            // 🛡️ [V12.8]: If we found data in V2 that isn't in V1, migrate it back to V1 for persistence
-            if (v2[sessionKey] && !v1[sessionKey]) {
-                v1[sessionKey] = v2[sessionKey];
-                localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(v1));
+            // 2. Get from Private IDB (The Source of Truth)
+            const dbData = await getScribeAllotmentIDB(sessionKey);
+
+            // 3. Comparison Logic
+            if (!isDirty && legacyData && JSON.stringify(legacyData) !== JSON.stringify(dbData)) {
+                // External change detected (from V2 PC or Cloud Sync) -> Adoption
+                console.log("🔄 V3: Adoption triggered. Syncing IDB from Legacy changes...");
+                await saveScribeAllotmentIDB(sessionKey, legacyData);
+                currentScribeAllotment = legacyData;
+            } else {
+                // Use DB if available, fallback to Legacy
+                currentScribeAllotment = dbData || legacyData || {};
             }
+
+            // Sync Local Cache (Vault) for UI speed
+            try { localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment)); } catch(e) {}
 
             scribeAllotmentListSection.classList.remove('hidden');
             renderScribeAllotmentList(sessionKey);
         } else {
             scribeAllotmentListSection.classList.add('hidden');
-            scribeAllotmentList.innerHTML = "";
+            if(scribeAllotmentList) scribeAllotmentList.innerHTML = "";
         }
     }
 
@@ -17236,7 +17300,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = `ExamFlow_Settings_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+            link.download = `ExamFlow_Settings_Backup_${new Date()getIsoDateLocal()}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -18387,7 +18451,7 @@ if (btnSessionReschedule) {
 
 
                 // 2. Helper to Delete Key
-                const deleteKeyInStorage = (storageKey) => {
+                const deleteKeyInStorage = async (storageKey) => {
                     const raw = localStorage.getItem(storageKey);
                     if (!raw) return;
                     const data = JSON.parse(raw);
@@ -18395,11 +18459,26 @@ if (btnSessionReschedule) {
                         delete data[currentSession];
                         localStorage.setItem(storageKey, JSON.stringify(data));
                     }
+
+                    // [V3 IDB UPGRADE]: Clean up isolated vaults & IDB
+                    if (storageKey === 'examScribeAllotment') {
+                        const vaultKey = `scrAllot_` + currentSession.replace(/\s/g, '_');
+                        const dirtyKey = `hasUnsavedScribes_` + currentSession.replace(/\s/g, '_');
+                        localStorage.removeItem(vaultKey);
+                        localStorage.removeItem(dirtyKey);
+                        
+                        // IDB Deletion
+                        try {
+                            const db = await openExamDB();
+                            const tx = db.transaction('scribeVault', 'readwrite');
+                            tx.objectStore('scribeVault').delete(currentSession);
+                        } catch(e) { console.error("IDB Cleanup failed", e); }
+                    }
                 };
 
                 // 3. Delete Associated Data
-                deleteKeyInStorage('examRoomAllotment');
-                deleteKeyInStorage('examScribeAllotment');
+                await deleteKeyInStorage('examRoomAllotment');
+                await deleteKeyInStorage('examScribeAllotment');
                 deleteKeyInStorage('examAbsenteeList');
                 deleteKeyInStorage('examInvigilatorMapping');
                 deleteKeyInStorage('examInvigilationSlots');
@@ -19371,13 +19450,22 @@ window.toggleAllArchiveCheckboxes = function(check) {
         // 1. Clear current session mapping
         currentScribeAllotment = {};
 
-        // 2. Save to Local Storage
-        const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        allAllotments[currentSessionKey] = currentScribeAllotment;
-        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        // [VAULT UPGRADE]: Save to session-specific vault
+        const sessionKey = window.currentSessionKey || (typeof allotmentSessionSelect !== 'undefined' ? allotmentSessionSelect.value : '');
+        const vaultKey = `scrAllot_` + sessionKey.replace(/\s/g, '_');
+        localStorage.setItem(vaultKey, JSON.stringify(currentScribeAllotment));
 
-        // 3. Sync & Refresh
+        // 2. Save back to legacy Local Storage for compatibility
+        const allAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
+        allAllotments[sessionKey] = currentScribeAllotment;
+        localStorage.setItem(SCRIBE_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        
+        // [V3 IDB UPGRADE]: Clear IDB Vault
+        try {
+            saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+        } catch(e) { console.error("IDB clear failed", e); }
         hasUnsavedScribes = true;
+        localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag
         if (typeof updateSyncStatus === 'function') {
             updateSyncStatus("Unsaved Changes", "warning");
         }
@@ -20844,7 +20932,7 @@ if (displayLoc) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `ExamFlow_Full_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = `ExamFlow_Full_Backup_${new Date()getIsoDateLocal()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -21758,7 +21846,7 @@ function generateAcquittancePDF() {
     doc.text("Verified by,", 20, finalY);
     doc.text("Chief Superintendent / Principal", 140, finalY);
 
-    doc.save(`Acquittance_${data.stream}_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Acquittance_${data.stream}_${new Date()getIsoDateLocal()}.pdf`);
 }
 
 function generateAcquittanceCSV() {
@@ -22760,6 +22848,20 @@ window.executeBulkDelete = async function() {
                     if(changed) localStorage.setItem(key, JSON.stringify(data));
                 }
             });
+
+            // Clean up Scribe Vaults and Dirty Flags
+            sessionsToDelete.forEach(async (s) => {
+                const safeKey = s.replace(/\s/g, '_');
+                localStorage.removeItem('scrAllot_' + safeKey);
+                localStorage.removeItem('hasUnsavedScribes_' + safeKey);
+                
+                // [V3 IDB UPGRADE]: Clean IDB Vault
+                try {
+                    const db = await openExamDB();
+                    const tx = db.transaction('scribeVault', 'readwrite');
+                    tx.objectStore('scribeVault').delete(s);
+                } catch(e) { console.error("Bulk IDB cleanup failed", e); }
+            });
         }
 
         // 3. Sync to Cloud (Smart Handling)
@@ -22845,6 +22947,12 @@ window.executeBulkDelete = async function() {
             // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
             // This prevents stale data from re-poisoning the local database on refresh.
             await syncDataToCloud('baseData');
+        }
+
+        // 🛡️ [SHARD SYNC FIX]: Push bulk-deleted slot requirements to the daily shards immediately
+        // so that the next reload doesn't resurrect old slot requirements.
+        if (typeof window.deleteSlotsFromCloud === 'function') {
+            await window.deleteSlotsFromCloud(sessionsToDelete);
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
@@ -23796,7 +23904,6 @@ document.addEventListener("visibilitychange", () => {
         }
         else if (typeof viewRoomAllotment !== 'undefined' && !viewRoomAllotment.classList.contains('hidden')) {
             if (typeof window.fetchSettingsData === 'function') window.fetchSettingsData();
-            if (typeof window.fetchSlotsData === 'function') window.fetchSlotsData();
         }
         else if (typeof viewEditData !== 'undefined' && !viewEditData.classList.contains('hidden')) {
             if (typeof window.fetchStaffData === 'function') window.fetchStaffData();
