@@ -2194,6 +2194,8 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             // 🛡️ [V3 REMOVAL]: Removed redundant syncDataToCloud('allocation') and ('ops') 
             // that used to be here, which were causing the 1MB limit error.
             
+            updateSyncStatus("Saved to Web", "success");
+
         } catch (e) {
             console.error("Session Sync Error:", e);
             updateSyncStatus("Save Failed", "error");
@@ -23391,7 +23393,7 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName && !usedPairs.has(p));
+                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
                 if (perfectMatch) {
                     input.value = perfectMatch.code;
                     usedPairs.add(perfectMatch);
@@ -23415,7 +23417,7 @@ window.downloadInvigilationListPDF = async function () {
                 let maxLength = 0;
 
                 validPairs.forEach(p => {
-                    if (usedPairs.has(p)) return;
+                    // Allowed multiple mapping by not filtering out usedPairs in Phase 2
                     if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
                         if (p.searchText.length > maxLength) {
                             maxLength = p.searchText.length;
@@ -23443,33 +23445,33 @@ window.downloadInvigilationListPDF = async function () {
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
 
-                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+                // Strip years from the fuzzy text search array so they don't corrupt the coreRatio
+                const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
-                const coreWords = words.filter(w => !ignoreWords.includes(w) && (isNaN(w) || w.match(/^20\d{2}$/)));
+                const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
 
                 const uiYearMatch = uiCourseName.match(/20\d{2}/);
                 const uiYear = uiYearMatch ? uiYearMatch[0] : null;
 
                 if (words.length > 0) {
-                    let bestScore = 0;
-                    let bestMatch = null;
+                    let candidates = [];
 
                     validPairs.forEach(p => {
-                        if (usedPairs.has(p)) return;
-
                         const pYearMatch = p.searchText.match(/20\d{2}/);
                         const pYear = pYearMatch ? pYearMatch[0] : null;
-                        if (uiYear && pYear && uiYear !== pYear) return;
 
                         let score = 0;
                         let coreScore = 0;
                         let consecutiveMatches = 0;
                         let prevMatchedIndex = -1;
+                        let lastFoundIndex = -1;
 
                         const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
                         
                         words.forEach(w => {
-                            const pIdx = portalWords.indexOf(w);
+                            const startIndex = lastFoundIndex === -1 ? 0 : lastFoundIndex + 1;
+                            const pIdx = portalWords.indexOf(w, startIndex);
+                            
                             if (pIdx !== -1) {
                                 score++;
                                 if (coreWords.includes(w)) coreScore++;
@@ -23477,21 +23479,35 @@ window.downloadInvigilationListPDF = async function () {
                                 if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
                                     consecutiveMatches++;
                                 }
+                                lastFoundIndex = pIdx;
                                 prevMatchedIndex = pIdx;
                             }
                         });
                         
-                        const totalScore = coreScore + (consecutiveMatches * 2) + (uiYear && uiYear === pYear ? 5 : 0);
+                        const totalScore = coreScore + (consecutiveMatches * 2);
 
-                        // Threshold: Must have at least 1 consecutive match or > 70% core words matched
+                        // Threshold: Must have > 60% core words matched STRICTLY IN SEQUENCE
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
-                        if ((consecutiveMatches >= 1 || coreRatio > 0.7 || coreWords.length === 0) && totalScore > bestScore) {
-                            bestScore = totalScore;
-                            bestMatch = p;
+                        if ((coreRatio > 0.6 || coreWords.length === 0) && totalScore > 0) {
+                            candidates.push({ p, totalScore, pYear });
                         }
                     });
 
-                    if (bestMatch && bestScore > 0) {
+                    let bestMatch = null;
+
+                    if (candidates.length === 1) {
+                        // Scenario 1: Only 1 portal entry matches this subject. Map it regardless of year mismatch.
+                        bestMatch = candidates[0].p;
+                    } else if (candidates.length > 1) {
+                        // Scenario 2: Multiple entries. Enforce strict year matching.
+                        const yearMatched = candidates.filter(c => !uiYear || !c.pYear || c.pYear === uiYear);
+                        if (yearMatched.length > 0) {
+                            yearMatched.sort((a, b) => b.totalScore - a.totalScore);
+                            bestMatch = yearMatched[0].p;
+                        }
+                    }
+
+                    if (bestMatch) {
                         input.value = bestMatch.code;
                         usedPairs.add(bestMatch);
                         matchedInputs.add(input);
