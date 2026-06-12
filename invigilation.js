@@ -2383,7 +2383,6 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
     updateSyncStatus("Saving...", "neutral");
     try {
         const localSlots = invigilationSlots;
-        const batch = writeBatch(db);
 
         function getShardId(key) {
             try {
@@ -2396,8 +2395,9 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
             } catch (e) { return "unknown"; }
         }
 
-        if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
+        if (affectedKey && affectedKey !== "FORCE_OVERWRITE" && affectedKey !== "SYSTEM_WIPE") {
             // --- OPTIMIZED SURGICAL SHARD UPDATE ---
+            const batch = writeBatch(db);
             const shardId = getShardId(affectedKey);
             const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", shardId);
             
@@ -2420,6 +2420,7 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
             } else {
                 batch.delete(shardRef);
             }
+            await batch.commit();
         } else {
             // --- FULL SYNC OR BATCH UPDATE ---
             
@@ -2433,12 +2434,12 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
             const localKeyCount = Object.keys(localSlots).length;
             const cloudShardCount = existingShardIds.size;
 
-            if (affectedKey !== "FORCE_OVERWRITE") {
+            if (affectedKey !== "FORCE_OVERWRITE" && affectedKey !== "SYSTEM_WIPE") {
                 // Rule A: Never wipe if local is completely empty.
                 if (localKeyCount === 0 && cloudShardCount > 0) {
                     console.error("🛑 CRITICAL: Local slots are empty but cloud has data. Sync Blocked to prevent wipe.");
                     updateSyncStatus("Sync Blocked", "error");
-                    return;
+                    return false;
                 }
 
                 // Rule B: Safety Check for significant data loss (Local has < 50% of existing shards)
@@ -2447,7 +2448,7 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
                     console.error(`🛑 CRITICAL: Partial Data Detected! Local has ${localKeyCount} keys, but Cloud has ${cloudShardCount} shards. Sync Blocked.`);
                     updateSyncStatus("Partial Load Blocked", "error");
                     alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
-                    return;
+                    return false;
                 }
             }
 
@@ -2463,9 +2464,15 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
             existingShardsSnap.forEach(s => existingShardsMap[s.id] = s.data().data);
 
             // 2. Update or Clear all shards
-            const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
+            const allShardIdsSet = new Set([...existingShardIds, ...Object.keys(shards)]);
+            const allShardIdsArray = Array.from(allShardIdsSet);
+            const CHUNK_SIZE = 450;
             
-            allShardIds.forEach(sid => {
+            for (let i = 0; i < allShardIdsArray.length; i += CHUNK_SIZE) {
+                const chunkBatch = writeBatch(db);
+                const chunk = allShardIdsArray.slice(i, i + CHUNK_SIZE);
+                
+                chunk.forEach(sid => {
                 const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
                 
@@ -2506,26 +2513,29 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
                 }
 
                 if (Object.keys(shardData).length > 0) {
-                    batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
+                    chunkBatch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
                     // 🛡️ [PROTECTED DELETE]: Only delete future shards if FORCE_OVERWRITE is set.
                     // This prevents accidental pruning of upcoming slots.
                     const todayStr = getIsoDateLocal();
-                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE") {
-                        batch.delete(shardRef);
+                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE" || affectedKey === "SYSTEM_WIPE") {
+                        chunkBatch.delete(shardRef);
                     } else {
                         console.warn(`🛡️ Protected Shard: Skipping deletion of future empty shard: ${sid}`);
                     }
                 }
-            });
+                });
+                
+                await chunkBatch.commit();
+            }
         }
-
-        await batch.commit();
         updateSyncStatus("Synced", "success");
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+        return true;
     } catch (e) {
         console.error("Slot Sync Failed:", e);
         updateSyncStatus("Save Failed", "error");
+        return false;
     }
 }
 
@@ -6755,39 +6765,107 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
     }
 });
 
-// --- MAINTENANCE: CLEAR OLD DATA ---
-window.clearOldData = async function () {
-    const acYear = getCurrentAcademicYear();
-    const cutoffDate = acYear.start; // June 1st of Current AY
+// --- MAINTENANCE: MANAGE HISTORICAL DATA ---
 
-    if (!confirm(`⚠️ MAINTENANCE: Clear Previous Year Data? ⚠️\n\nThis will DELETE all attendance slots and duty records BEFORE ${cutoffDate.toDateString()}.\n\n1. Please DOWNLOAD the Attendance Register (.csv) first as a backup.\n2. This action cannot be undone.`)) return;
+window.openManageHistoricalDataModal = function() {
+    const currentAY = getCurrentAcademicYear();
+    const historicalAYs = {}; // label -> { acYear, recordCount }
 
-    if (!confirm("Are you absolutely sure you have a backup?")) return;
+    // Aggregate records by Academic Year
+    Object.keys(invigilationSlots).forEach(key => {
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
+        
+        // Skip current Academic Year (Protection)
+        if (acYear.label === currentAY.label) return;
+
+        if (!historicalAYs[acYear.label]) {
+            historicalAYs[acYear.label] = { acYear, recordCount: 0 };
+        }
+        historicalAYs[acYear.label].recordCount++;
+    });
+
+    const labels = Object.keys(historicalAYs).sort(); // Sort chronological
+
+    if (labels.length === 0) {
+        return alert("No past Academic Year data is available for deletion.\n(The Current Academic Year is protected).");
+    }
+
+    const selectEl = document.getElementById('historical-ay-select');
+    if (selectEl) {
+        selectEl.innerHTML = '';
+        labels.forEach(label => {
+            const count = historicalAYs[label].recordCount;
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = `${label} (${count} records)`;
+            selectEl.appendChild(option);
+        });
+    }
+
+    window.openModal('historical-data-modal');
+};
+
+window.confirmDeleteHistoricalData = async function() {
+    const selectEl = document.getElementById('historical-ay-select');
+    if (!selectEl) return;
+    
+    const targetLabel = selectEl.value;
+    if (!targetLabel) return;
+
+    const currentAY = getCurrentAcademicYear();
+    if (targetLabel === currentAY.label) {
+        alert("SECURITY ERROR: Cannot delete the Current Academic Year.");
+        return;
+    }
+
+    if (!confirm(`⚠️ CRITICAL WARNING: You are about to PERMANENTLY DELETE all data for Academic Year ${targetLabel}.\n\nHave you downloaded all necessary reports and certificates for this year?\n\nClick OK to permanently delete.`)) {
+        return;
+    }
+
+    if (!confirm(`FINAL CONFIRMATION:\nAre you absolutely sure you want to delete ${targetLabel}? This cannot be undone.`)) {
+        return;
+    }
 
     const newSlots = {};
     let removedCount = 0;
 
     Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
 
-        // Keep slots that are ON or AFTER the cutoff
-        if (date >= cutoffDate) {
+        // Keep slots that DO NOT match the target academic year
+        if (acYear.label !== targetLabel) {
             newSlots[key] = invigilationSlots[key];
         } else {
             removedCount++;
         }
     });
 
+    const previousSlots = { ...invigilationSlots };
+
     if (removedCount > 0) {
-        logActivity("Data Cleanup", `Admin cleared ${removedCount} old session records from previous AY.`);
         invigilationSlots = newSlots;
-        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative cleanup
-        renderSlotsGridAdmin();
-        alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
+        
+        // Use authoritative sync to permanently wipe the historical data
+        const success = await syncSlotsToCloud("SYSTEM_WIPE"); 
+        
+        if (success !== false) {
+            logActivity("Data Cleanup", `Admin surgically deleted ${removedCount} records for AY ${targetLabel}.`);
+            window.closeModal('historical-data-modal');
+            renderSlotsGridAdmin();
+            alert(`✅ Surgical Cleanup Complete.\n\nPermanently removed ${removedCount} records for Academic Year ${targetLabel}.`);
+        } else {
+            // Rollback local memory if cloud sync fails
+            invigilationSlots = previousSlots;
+            alert("❌ Failed to delete historical data from the cloud. Please check your connection and try again. Your local view has been restored.");
+        }
     } else {
-        alert("No old data found to clear.");
+        alert("No records found for that academic year.");
+        window.closeModal('historical-data-modal');
     }
-}
+};
+
 
 
 // --- STAFF MANAGEMENT: ADD & EDIT ---
