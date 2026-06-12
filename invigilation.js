@@ -6507,9 +6507,41 @@ window.sendSessionSMS = function (key) {
 
 // --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
 window.downloadAttendanceCSV = function () {
-    if (!confirm("Download the full attendance register for the current Academic Year?")) return;
+    // Collect all available academic years from invigilationSlots that have attendance
+    const availableYearsMap = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        if (!slot.attendance || slot.attendance.length === 0) return;
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
+        availableYearsMap[acYear.label] = acYear;
+    });
 
-    const acYear = getCurrentAcademicYear();
+    const availableYearLabels = Object.keys(availableYearsMap).sort().reverse();
+
+    if (availableYearLabels.length === 0) {
+        return alert("No attendance records found.");
+    }
+
+    let selectedAcYear = null;
+
+    if (availableYearLabels.length === 1) {
+        if (!confirm(`Download the full attendance register for the Academic Year ${availableYearLabels[0]}?`)) return;
+        selectedAcYear = availableYearsMap[availableYearLabels[0]];
+    } else {
+        const promptText = `Multiple Academic Years found with attendance records.\nPlease enter the number of the Academic Year you want to download:\n\n` +
+                           availableYearLabels.map((label, i) => `${i + 1}. ${label}`).join("\n");
+        const choice = prompt(promptText, "1");
+        if (choice === null) return; // User cancelled
+
+        const choiceIndex = parseInt(choice) - 1;
+        if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= availableYearLabels.length) {
+            return alert("Invalid selection.");
+        }
+        selectedAcYear = availableYearsMap[availableYearLabels[choiceIndex]];
+    }
+
+    const acYear = selectedAcYear;
     const rows = [];
 
     // Header Row
