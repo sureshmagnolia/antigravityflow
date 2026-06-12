@@ -706,7 +706,7 @@ async function migrateFromLocalStorage() {
             const dataArray = JSON.parse(oldData);
             // Save to IDB
             await new Promise(resolve => {
-                const req = indexedDB.open(IDB_NAME, 1);
+                const req = indexedDB.open(IDB_NAME, 3);
                 req.onsuccess = e => {
                     const db = e.target.result;
                     const tx = db.transaction(IDB_STORE, 'readwrite');
