@@ -12982,8 +12982,9 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             if (sessionKey) {
                 loadRoomAllotment(sessionKey);
-                loadScribeAllotment(sessionKey);
-                renderInvigilationPanel(); // <--- ADD THIS LINE
+                loadScribeAllotment(sessionKey).then(() => {
+                    renderInvigilationPanel(); // <--- ADD THIS LINE
+                });
             } else {
                 // Hide all sections
                 allotmentStudentCountSection.classList.add('hidden');
@@ -13051,7 +13052,7 @@ if (saveScribeBtn) {
 
             // 2. Primary Save (IndexedDB) - AUTHORITATIVE
             try {
-                await await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+                await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
                 console.error("❌ CRITICAL: IndexedDB save failed!", e);
                 alert("❌ Error: Could not save to Database. Your changes may be lost.");
@@ -19465,8 +19466,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
                 roomDataMap[room.roomName].streams.add(room.stream || "Regular");
             });
         }
-        const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+        const sessionScribeMap = typeof currentScribeAllotment !== 'undefined' ? currentScribeAllotment : {};
         Object.values(sessionScribeMap).forEach(roomName => {
             if (!roomDataMap[roomName]) roomDataMap[roomName] = { name: roomName, count: 0, streams: new Set(), isScribe: true };
             roomDataMap[roomName].count += 1;
