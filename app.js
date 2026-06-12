@@ -22901,6 +22901,12 @@ window.executeBulkDelete = async function() {
         // 🛡️ [AUDIT FIX]: Disabled Invigilation slot syncing in app.js.
         // Invigilation deletes happen exclusively from the Invigilation portal.
         // 4. Update Master Registry (ONLY if full session delete)
+        if (!targetExamName) {
+            let knownRegistry = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+            knownRegistry = knownRegistry.filter(s => !sessionSet.has(s));
+            localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
+        }
+
         alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
