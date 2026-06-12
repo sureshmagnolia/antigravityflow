@@ -13052,7 +13052,7 @@ if (saveScribeBtn) {
 
             // 2. Primary Save (IndexedDB) - AUTHORITATIVE
             try {
-                await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+                await window.saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
                 console.error("❌ CRITICAL: IndexedDB save failed!", e);
                 alert("❌ Error: Could not save to Database. Your changes may be lost.");
@@ -13529,13 +13529,13 @@ if (saveScribeBtn) {
             const legacyData = v1[sessionKey] || v2[sessionKey] || null;
 
             // 2. Get from Private IDB (The Source of Truth)
-            const dbData = await getScribeAllotmentIDB(sessionKey);
+            const dbData = await window.getScribeAllotmentIDB(sessionKey);
 
             // 3. Comparison Logic
             if (!isDirty && legacyData && JSON.stringify(legacyData) !== JSON.stringify(dbData)) {
                 // External change detected (from V2 PC or Cloud Sync) -> Adoption
                 console.log("🔄 V3: Adoption triggered. Syncing IDB from Legacy changes...");
-                await saveScribeAllotmentIDB(sessionKey, legacyData);
+                await window.saveScribeAllotmentIDB(sessionKey, legacyData);
                 currentScribeAllotment = legacyData;
             } else {
                 // Use DB if available, fallback to Legacy
@@ -19427,7 +19427,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         
         // [V3 IDB UPGRADE]: Clear IDB Vault
         try {
-            await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+            await window.saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
         } catch(e) { console.error("IDB clear failed", e); }
         hasUnsavedScribes = true;
         localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag
@@ -23729,7 +23729,10 @@ document.addEventListener("visibilitychange", () => {
 
 window.closeBatchArchiveModal = function() {
     const modal = document.getElementById('batch-archive-modal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.setProperty('display', 'none', 'important');
+    }
 };
 
 window.toggleAllArchiveCheckboxes = function(check) {
