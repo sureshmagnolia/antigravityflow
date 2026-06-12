@@ -5945,7 +5945,7 @@ if (toggleButton && sidebar) {
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement("a");
                     link.setAttribute("href", url);
-                    link.setAttribute("download", `ExamFlow_Full_Data_${new Date()getIsoDateLocal()}.csv`);
+                    link.setAttribute("download", `ExamFlow_Full_Data_${window.getIsoDateLocal(new Date())}.csv`);
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
@@ -11338,7 +11338,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         backupData['lastUpdated'] = now;
 
         const jsonString = JSON.stringify(backupData, null, 2);
-        const dateStr = new Date()getIsoDateLocal();
+        const dateStr = window.getIsoDateLocal(new Date());
         const fileName = `ExamFlow_Backup_${dateStr}.json`;
 
         const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
@@ -11582,7 +11582,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
-                link.setAttribute("download", `Master_Exam_Data_${new Date()getIsoDateLocal()}.csv`);
+                link.setAttribute("download", `Master_Exam_Data_${window.getIsoDateLocal(new Date())}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -13088,7 +13088,7 @@ if (saveScribeBtn) {
 
             // 2. Primary Save (IndexedDB) - AUTHORITATIVE
             try {
-                await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+                await await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
                 console.error("❌ CRITICAL: IndexedDB save failed!", e);
                 alert("❌ Error: Could not save to Database. Your changes may be lost.");
@@ -17300,7 +17300,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = `ExamFlow_Settings_Backup_${new Date()getIsoDateLocal()}.json`;
+            link.download = `ExamFlow_Settings_Backup_${window.getIsoDateLocal(new Date())}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -18479,10 +18479,10 @@ if (btnSessionReschedule) {
                 // 3. Delete Associated Data
                 await deleteKeyInStorage('examRoomAllotment');
                 await deleteKeyInStorage('examScribeAllotment');
-                deleteKeyInStorage('examAbsenteeList');
-                deleteKeyInStorage('examInvigilatorMapping');
-                deleteKeyInStorage('examInvigilationSlots');
-                deleteKeyInStorage('examQPCodes');
+                await deleteKeyInStorage('examAbsenteeList');
+                await deleteKeyInStorage('examInvigilatorMapping');
+                await deleteKeyInStorage('examInvigilationSlots');
+                await deleteKeyInStorage('examQPCodes');
 
                 alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
@@ -19439,7 +19439,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         renderScribeAllotmentList(currentSessionKey);
     };
 
-    window.clearAllScribeAllotments = function () {
+    window.clearAllScribeAllotments = async function () {
         if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked. Unlock first to clear."); 
         
         const count = Object.keys(currentScribeAllotment).length;
@@ -19462,7 +19462,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         
         // [V3 IDB UPGRADE]: Clear IDB Vault
         try {
-            saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
+            await saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
         } catch(e) { console.error("IDB clear failed", e); }
         hasUnsavedScribes = true;
         localStorage.setItem('hasUnsavedScribes_' + sessionKey.replace(/\s/g, '_'), 'true'); // Cross-script dirty flag
@@ -20932,7 +20932,7 @@ if (displayLoc) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `ExamFlow_Full_Backup_${new Date()getIsoDateLocal()}.json`;
+            a.download = `ExamFlow_Full_Backup_${window.getIsoDateLocal(new Date())}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -21846,7 +21846,7 @@ function generateAcquittancePDF() {
     doc.text("Verified by,", 20, finalY);
     doc.text("Chief Superintendent / Principal", 140, finalY);
 
-    doc.save(`Acquittance_${data.stream}_${new Date()getIsoDateLocal()}.pdf`);
+    doc.save(`Acquittance_${data.stream}_${window.getIsoDateLocal(new Date())}.pdf`);
 }
 
 function generateAcquittanceCSV() {
@@ -22850,7 +22850,7 @@ window.executeBulkDelete = async function() {
             });
 
             // Clean up Scribe Vaults and Dirty Flags
-            sessionsToDelete.forEach(async (s) => {
+            for (const s of sessionsToDelete) {
                 const safeKey = s.replace(/\s/g, '_');
                 localStorage.removeItem('scrAllot_' + safeKey);
                 localStorage.removeItem('hasUnsavedScribes_' + safeKey);
@@ -22861,7 +22861,7 @@ window.executeBulkDelete = async function() {
                     const tx = db.transaction('scribeVault', 'readwrite');
                     tx.objectStore('scribeVault').delete(s);
                 } catch(e) { console.error("Bulk IDB cleanup failed", e); }
-            });
+            }
         }
 
         // 3. Sync to Cloud (Smart Handling)
@@ -22952,7 +22952,7 @@ window.executeBulkDelete = async function() {
         // 🛡️ [SHARD SYNC FIX]: Push bulk-deleted slot requirements to the daily shards immediately
         // so that the next reload doesn't resurrect old slot requirements.
         if (typeof window.deleteSlotsFromCloud === 'function') {
-            await window.deleteSlotsFromCloud(sessionsToDelete);
+            await window.deleteSlotsFromCloud(sessionsToDelete, JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}'));
         }
         
         // 4. Update Master Registry (ONLY if full session delete)
@@ -23697,135 +23697,10 @@ document.addEventListener('change', (e) => {
     }
 });
 
-}); // <-- Closes the DOMContentLoaded block from the top of the file
-
-// ==========================================
-// 🔒 APP SECURITY: DAILY ENTRY LOCK
-// ==========================================
-function verifyAppPassword() {
-    const input = document.getElementById('app-entry-password').value.trim().toLowerCase();
-    const error = document.getElementById('app-entry-error');
-    
-    const today = new Date();
-    
-    // Passcode 1: Generate today's date in DDMMYYYY exactly
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0
-    const yyyy = today.getFullYear();
-    const requiredPasscodeDate = dd + mm + yyyy; // e.g., 21032026
-
-    // Passcode 2: Generate today's name in lowercase
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const requiredPasscodeDay = days[today.getDay()];
-
-    if (input === requiredPasscodeDate || input === requiredPasscodeDay) {
-        // --- NEW: Save to LocalStorage for today ---
-        // Save the date string as the verification token so it automatically expires tomorrow
-        localStorage.setItem('appDailyPasscodeToken', requiredPasscodeDate);
-        // ---------------------------------------------
-        
-        document.getElementById('password-lock-screen').style.opacity = '0';
-        document.getElementById('password-lock-screen').style.pointerEvents = 'none';
-        setTimeout(() => {
-            const lockScreen = document.getElementById('password-lock-screen');
-            if (lockScreen) lockScreen.remove();
-        }, 300);
-    } else {
-        error.classList.remove('opacity-0');
-        document.getElementById('app-entry-password').value = ''; // clear it
-        setTimeout(() => { error.classList.add('opacity-0'); }, 2000); // hide error after 2s
-    }
-}
-
-
-// Attach Event Listeners on Load
-document.addEventListener('DOMContentLoaded', () => {
-
-    // --- App Security Toggle Logic ---
-    const toggleAppPassword = document.getElementById('toggle-app-password');
-    const isPasswordEnabled = localStorage.getItem('appPasswordEnabled') === 'true'; // Default is false
-
-    if (toggleAppPassword) {
-        toggleAppPassword.checked = isPasswordEnabled;
-        toggleAppPassword.addEventListener('change', (e) => {
-            localStorage.setItem('appPasswordEnabled', e.target.checked);
-        });
-    }
-
-    // --- Auto-bypass if password is off OR already entered today ---
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
-    const currentToken = dd + mm + yyyy;
-
-    const savedToken = localStorage.getItem('appDailyPasscodeToken');
-    
-    if (!isPasswordEnabled || savedToken === currentToken) {
-        // Automatically remove the lock screen before the user sees it
-        const lockScreen = document.getElementById('password-lock-screen');
-        if (lockScreen) lockScreen.remove();
-        return; // Exit early, no need to attach listeners to UI that doesn't exist
-    }
-    // --------------------------------------------------
-
-    const btn = document.getElementById('app-entry-btn');
-    const inp = document.getElementById('app-entry-password');
-    if (btn) btn.addEventListener('click', verifyAppPassword);
-    if (inp) {
-        inp.addEventListener('keypress', (e) => { 
-            if (e.key === 'Enter') verifyAppPassword(); 
-        });
-    }
-   
-});
-
-// =======================================================
-// 📦 BATCH ARCHIVE MODAL — GLOBAL SCOPE (always available)
-// These are defined outside DOMContentLoaded so they are
-// guaranteed to be registered even if earlier code errors.
-// =======================================================
-
-window.closeBatchArchiveModal = function() {
-    const modal = document.getElementById('batch-archive-modal');
-    if (modal) modal.classList.add('hidden');
-};
-
-window.toggleAllArchiveCheckboxes = function(check) {
-    document.querySelectorAll('.archive-session-cb').forEach(cb => cb.checked = check);
-};
-
-
-/**
- * --- 📦 SESSION DOCUMENT EXPORTER HOOK ---
- * Triggered by the UI button. Feeds the selected session to the export module.
- */
-window.triggerSessionExport = function() {
-    // 🛡️ TRIPLE-CHECKED DATA FLUSH: Ensures memory is not empty before syncing
-    if (typeof qpCodeMap !== 'undefined') {
-        // Force a load if memory is empty to prevent wiping valid storage
-        if (Object.keys(qpCodeMap).length === 0 && typeof loadQPCodes === 'function') {
-            loadQPCodes();
-        }
-        localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
-    }
-    const sessionKey = document.getElementById('reports-session-select')?.value;
-    
-    if (!sessionKey) {
-        return alert("⚠️ Please select a Session from the dropdown first.");
-    }
-
-    if (typeof SESSION_EXPORT_JS !== 'undefined') {
-        SESSION_EXPORT_JS.exportSession(sessionKey);
-    } else {
-        alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
-    }
-};
-
 // --- BROWSER EXTENSION SYNC RECEIVER ---
 window.addEventListener('message', async (event) => {
     // Only accept messages from the same window (Extension -> App)
-    if (event.data.type === 'SYNC_EXAM_DATA') {
+    if (event.data && event.data.type === 'SYNC_EXAM_DATA') {
         const incomingData = event.data.data;
         
         if (!incomingData || incomingData.length === 0) {
@@ -23910,3 +23785,128 @@ document.addEventListener("visibilitychange", () => {
         }
     }
 });
+// =======================================================
+// 📦 BATCH ARCHIVE MODAL — GLOBAL SCOPE (always available)
+// These are defined outside DOMContentLoaded so they are
+// guaranteed to be registered even if earlier code errors.
+// =======================================================
+
+window.closeBatchArchiveModal = function() {
+    const modal = document.getElementById('batch-archive-modal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.toggleAllArchiveCheckboxes = function(check) {
+    document.querySelectorAll('.archive-session-cb').forEach(cb => cb.checked = check);
+};
+
+
+/**
+ * --- 📦 SESSION DOCUMENT EXPORTER HOOK ---
+ * Triggered by the UI button. Feeds the selected session to the export module.
+ */
+window.triggerSessionExport = function() {
+    // 🛡️ TRIPLE-CHECKED DATA FLUSH: Ensures memory is not empty before syncing
+    if (typeof qpCodeMap !== 'undefined') {
+        // Force a load if memory is empty to prevent wiping valid storage
+        if (Object.keys(qpCodeMap).length === 0 && typeof loadQPCodes === 'function') {
+            loadQPCodes();
+        }
+        localStorage.setItem('examQPCodes', JSON.stringify(qpCodeMap));
+    }
+    const sessionKey = document.getElementById('reports-session-select')?.value;
+    
+    if (!sessionKey) {
+        return alert("⚠️ Please select a Session from the dropdown first.");
+    }
+
+    if (typeof SESSION_EXPORT_JS !== 'undefined') {
+        SESSION_EXPORT_JS.exportSession(sessionKey);
+    } else {
+        alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
+    }
+};
+
+}); // <-- Closes the DOMContentLoaded block from the top of the file
+
+// ==========================================
+// 🔒 APP SECURITY: DAILY ENTRY LOCK
+// ==========================================
+function verifyAppPassword() {
+    const input = document.getElementById('app-entry-password').value.trim().toLowerCase();
+    const error = document.getElementById('app-entry-error');
+    
+    const today = new Date();
+    
+    // Passcode 1: Generate today's date in DDMMYYYY exactly
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0
+    const yyyy = today.getFullYear();
+    const requiredPasscodeDate = dd + mm + yyyy; // e.g., 21032026
+
+    // Passcode 2: Generate today's name in lowercase
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const requiredPasscodeDay = days[today.getDay()];
+
+    if (input === requiredPasscodeDate || input === requiredPasscodeDay) {
+        // --- NEW: Save to LocalStorage for today ---
+        // Save the date string as the verification token so it automatically expires tomorrow
+        localStorage.setItem('appDailyPasscodeToken', requiredPasscodeDate);
+        // ---------------------------------------------
+        
+        document.getElementById('password-lock-screen').style.opacity = '0';
+        document.getElementById('password-lock-screen').style.pointerEvents = 'none';
+        setTimeout(() => {
+            const lockScreen = document.getElementById('password-lock-screen');
+            if (lockScreen) lockScreen.remove();
+        }, 300);
+    } else {
+        error.classList.remove('opacity-0');
+        document.getElementById('app-entry-password').value = ''; // clear it
+        setTimeout(() => { error.classList.add('opacity-0'); }, 2000); // hide error after 2s
+    }
+}
+
+
+// Attach Event Listeners on Load
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- App Security Toggle Logic ---
+    const toggleAppPassword = document.getElementById('toggle-app-password');
+    const isPasswordEnabled = localStorage.getItem('appPasswordEnabled') === 'true'; // Default is false
+
+    if (toggleAppPassword) {
+        toggleAppPassword.checked = isPasswordEnabled;
+        toggleAppPassword.addEventListener('change', (e) => {
+            localStorage.setItem('appPasswordEnabled', e.target.checked);
+        });
+    }
+
+    // --- Auto-bypass if password is off OR already entered today ---
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const currentToken = dd + mm + yyyy;
+
+    const savedToken = localStorage.getItem('appDailyPasscodeToken');
+    
+    if (!isPasswordEnabled || savedToken === currentToken) {
+        // Automatically remove the lock screen before the user sees it
+        const lockScreen = document.getElementById('password-lock-screen');
+        if (lockScreen) lockScreen.remove();
+        return; // Exit early, no need to attach listeners to UI that doesn't exist
+    }
+    // --------------------------------------------------
+
+    const btn = document.getElementById('app-entry-btn');
+    const inp = document.getElementById('app-entry-password');
+    if (btn) btn.addEventListener('click', verifyAppPassword);
+    if (inp) {
+        inp.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') verifyAppPassword(); 
+        });
+    }
+   
+});
+

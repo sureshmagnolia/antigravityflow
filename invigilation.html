@@ -14,7 +14,7 @@
     import {
         initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
-        addDoc, updateDoc, arrayUnion, arrayRemove,
+        addDoc, updateDoc, arrayUnion, arrayRemove, deleteField,
         onSnapshot, writeBatch
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -33,7 +33,7 @@
         window.firebase = {
             auth: getAuth(app), db: initializeFirestore(app, { experimentalAutoDetectLongPolling: true }), provider: new GoogleAuthProvider(),
             signInWithPopup, signOut, onAuthStateChanged,
-            doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot
+            doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, collection, query, where, getDocs, onSnapshot, writeBatch, deleteField
         };
 
     </script>

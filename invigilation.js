@@ -99,10 +99,6 @@ let collegeSettings = {};
 let designationsConfig = {};
 let rolesConfig = {};
 
-// Helper to get local ISO date (YYYY-MM-DD) to avoid timezone-related date mismatches
-window.getIsoDateLocal = (date = new Date()) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
 
 let currentCalDate = new Date();
 let isAdmin = false;
@@ -2382,59 +2378,6 @@ function switchToStaffView() {
     }
 }
 
-// 🛡️ [AUDIT FIX]: Cloud-Absolute Deletion for Bulk Operations
-// Modifies the cloud shards directly using { merge: true } and deleteField()
-window.deleteSlotsFromCloud = async function(sessionKeys) {
-    if (!sessionKeys || sessionKeys.length === 0) return;
-    updateSyncStatus("Deleting Slots...", "neutral");
-    try {
-        const { db, doc, setDoc, writeBatch, deleteField } = window.firebase;
-        const collegeId = window.currentCollegeId || localStorage.getItem('my_college_id');
-        if (!collegeId) return;
-
-        const batch = writeBatch(db);
-        const shardUpdates = {};
-
-        function getShardId(key) {
-            try {
-                const [dRaw] = key.split(' | ');
-                const dStr = dRaw.replace(/-/g, '.');
-                const parts = dStr.split('.');
-                if (parts.length < 3) return "unknown";
-                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-            } catch (e) { return "unknown"; }
-        }
-
-        sessionKeys.forEach(sessionKey => {
-            const sid = getShardId(sessionKey);
-            if (!shardUpdates[sid]) shardUpdates[sid] = {};
-            
-            const slot = invigilationSlots[sessionKey] || {};
-            const hasVolunteers = (slot.assigned && slot.assigned.length > 0) || (slot.unavailable && slot.unavailable.length > 0);
-            
-            if (!hasVolunteers) {
-                shardUpdates[sid][sessionKey] = deleteField();
-            } else {
-                shardUpdates[sid][sessionKey] = {
-                    required: 0,
-                    reserveCount: 0,
-                    studentCount: 0,
-                    scribeCount: 0
-                };
-            }
-        });
-
-        Object.keys(shardUpdates).forEach(sid => {
-            const ref = doc(db, "colleges", collegeId, "slots_daily", sid);
-            batch.set(ref, shardUpdates[sid], { merge: true });
-        });
-
-        await batch.commit();
-        console.log("✅ Successfully updated cloud shards for deleted sessions.");
-    } catch (e) {
-        console.error("Cloud shard delete failed:", e);
-    }
-};
 
 window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
     updateSyncStatus("Saving...", "neutral");
