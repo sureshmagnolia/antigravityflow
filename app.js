@@ -8571,7 +8571,7 @@ if (toggleButton && sidebar) {
         }
 
         regNos.forEach((regNo) => {
-            const match = regNo.match(regEx);
+            const match = regNo.match(regNoRegex);
 
             if (match) {
                 const prefix = match[1];
@@ -8706,7 +8706,9 @@ if (toggleButton && sidebar) {
                     
                     // Otherwise sort normally (alphabetically)
                     return a.localeCompare(b);
-                });                const selectedFilterQP = absenteeQpFilter ? absenteeQpFilter.value : "all";
+                });
+                
+                const selectedFilterQP = absenteeQpFilter ? absenteeQpFilter.value : "all";
                 for (const key of sortedKeys) {
                     totalPages++;
                     const data = qpStreamGroups[key];
