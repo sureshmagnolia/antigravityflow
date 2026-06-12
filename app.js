@@ -24,6 +24,8 @@ window.getRegNo = getRegNo;
 if (typeof IDB_NAME === 'undefined') {
     window.IDB_NAME = 'AntigravityDB';
     window.IDB_STORE = 'examStore';
+    window.IDB_KEY = 'examBaseData';
+}
 
 // [V3 IDB UPGRADE]: Helpers for Scribe Isolation
 window.saveScribeAllotmentIDB = function(sessionKey, allotment) {
@@ -47,8 +49,6 @@ window.getScribeAllotmentIDB = function(sessionKey) {
         }).catch(() => resolve(null));
     });
 };
-    window.IDB_KEY = 'examBaseData';
-}
 
 
 window.updateLoaderProgress = function(percent, message) {
