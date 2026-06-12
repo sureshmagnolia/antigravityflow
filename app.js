@@ -2294,7 +2294,11 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
             console.log(`✅ Public seating published for ${sessionKey}`);
         } catch (e) {
             console.error('Public Seating Publish Error:', e);
-            throw e; // 🚀 Re-throw so the UI (Save Button) knows the publish failed
+            if (e.message && e.message.includes('Missing or insufficient permissions')) {
+                console.warn("Basic user: Skipping public seating publish.");
+            } else {
+                throw e; // Re-throw so the UI (Save Button) knows the publish failed
+            }
         }
     }
 
@@ -22881,12 +22885,17 @@ window.executeBulkDelete = async function() {
         }
         // 4. Final Cloud Sync
         if (typeof syncDataToCloud === 'function') {
-            await syncDataToCloud('ops');
-            await syncDataToCloud('allocation');
-
-            // 🛡️ [RESURRECTION FIX]: Authoritatively update the master Storage file.
-            // This prevents stale data from re-poisoning the local database on refresh.
-            await syncDataToCloud('baseData');
+            try {
+                await syncDataToCloud('ops');
+                await syncDataToCloud('allocation');
+                await syncDataToCloud('baseData');
+            } catch (syncErr) {
+                if (syncErr.message && syncErr.message.includes('Missing or insufficient permissions')) {
+                    console.warn("Basic user: Skipping Firebase cloud sync during delete.");
+                } else {
+                    throw syncErr;
+                }
+            }
         }
 
         // 🛡️ [AUDIT FIX]: Disabled Invigilation slot syncing in app.js.
