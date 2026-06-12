@@ -10980,7 +10980,12 @@ window.real_populate_qp_code_session_dropdown = function () {
                         console.log("V2 Session data wiped successfully.");
                     } catch (e) {
                         console.error("Cloud Wipe Error:", e);
-                        alert("⚠️ Warning: Cloud wipe failed.\nError: " + e.message);
+                        if (e.message && e.message.includes('Missing or insufficient permissions')) {
+                            console.warn("Basic user: Skipping Firebase cloud wipe.");
+                        } else {
+                            alert("Warning: Cloud wipe failed.
+Error: " + e.message);
+                        }
                     }
                 }
                 
