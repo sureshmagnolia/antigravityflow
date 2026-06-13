@@ -7972,7 +7972,7 @@ window.renderManualCards = function() {
                     </div>
                     <div class="text-[10px] text-gray-500 leading-tight search-dept flex items-center gap-1.5">
                         <span class="font-bold">${s.dept}</span> | 
-                                                <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">${isDateInVacation(parseDate(window.manualState.key)) ? 'Vac Rem:' : 'Rem:'} ${s.pending}</span>
+                        <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">${isDateInVacation(parseDate(window.manualState.key)) ? 'Vac Rem:' : 'Rem:'} ${s.pending} (D:${s.doneBase}+V:${s.volCount})</span>
                     </div>
                     <div class="flex flex-wrap gap-1 mt-2">
                         <span class="flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold shadow-sm">📅 Wk: ${s.weekCount || 0}</span>
@@ -8162,20 +8162,32 @@ window.openManualAllocationModal = function (key) {
         }
     });
 
-    // 2. Pre-calculate Volunteered Vacation Duties (Not Yet Assigned)
+    // 2. Pre-calculate Volunteered Duties (Not Yet Assigned)
     const vacationVolunteeredCount = {};
-    staffData.forEach(s => vacationVolunteeredCount[s.email] = 0);
+    const regularVolunteeredCount = {};
+    staffData.forEach(s => {
+        vacationVolunteeredCount[s.email] = 0;
+        regularVolunteeredCount[s.email] = 0;
+    });
+
+    const targetMonthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
     Object.keys(invigilationSlots).forEach(k => {
         const slotObj = invigilationSlots[k];
         const dObj = parseDate(k);
         const isoD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
         const isVacSlot = isDateInVacation(dObj) || (window.vacationDutyDates && window.vacationDutyDates.includes(isoD));
+        const mStr = dObj.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-        if (isVacSlot && slotObj.volunteers) {
+        if (slotObj.volunteers) {
             slotObj.volunteers.forEach(email => {
                 // Count if they volunteered but aren't assigned yet
                 if (!(slotObj.assigned && slotObj.assigned.includes(email))) {
-                    if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    if (isVacSlot) {
+                        if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    } else if (mStr === targetMonthStr) {
+                        if (regularVolunteeredCount[email] !== undefined) regularVolunteeredCount[email]++;
+                    }
                 }
             });
         }
@@ -8192,19 +8204,22 @@ window.openManualAllocationModal = function (key) {
         .map(s => {
             let done = 0, target = 0, pending = 0, score = 0;
             let badges = [];
+            let doneBase = 0, volCount = 0;
 
             if (isCurrentSlotVacation) {
                 // Vacation Logic: Calculate "Total Committed"
-                const doneVacation = getVacationDutiesDoneCount(s.email);
-                const volunteeredVacation = vacationVolunteeredCount[s.email] || 0;
-                done = doneVacation + volunteeredVacation; // Factor in what they already volunteered for!
+                doneBase = getVacationDutiesDoneCount(s.email);
+                volCount = vacationVolunteeredCount[s.email] || 0;
+                done = doneBase + volCount; // Factor in what they already volunteered for!
                 target = vacationDutyTarget || 0;
                 pending = target - done;
                 score = pending * 1000; // EQUAL JUSTICE: Normalizing vacation debt weight
             } else {
                 // Standard Logic
                 // 🛡️ [REMISSION FIX]: Pass targetDate to ensure target is only for the session month
-                done = getDutiesDoneCount(s.email, targetDate);
+                doneBase = getDutiesDoneCount(s.email, targetDate);
+                volCount = regularVolunteeredCount[s.email] || 0;
+                done = doneBase + volCount;
                 target = calculateStaffTarget(s, targetDate);
                 pending = Math.max(0, target - done);
                 score = pending * 1000; // EQUAL JUSTICE: Increased multiplier for regular pending
@@ -8212,10 +8227,9 @@ window.openManualAllocationModal = function (key) {
 
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
 
-// 🛡️ Volunteer Bonus for THIS slot
+// 🛡️ Volunteer Badge for THIS slot
             const hasVolunteered = slot.volunteers && slot.volunteers.includes(s.email);
             if (hasVolunteered) {
-                score += 500; // EQUAL JUSTICE: Reduced volunteer bonus (Pending Debt > Volunteering)
                 badges.push("Volunteer");
             }
 
@@ -8250,7 +8264,7 @@ window.openManualAllocationModal = function (key) {
                 }
             }
 
-            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0) };
+            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0), doneBase, volCount };
         })
         .sort((a, b) => b.score - a.score);
 
@@ -12128,12 +12142,47 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     targetSlots.sort((a, b) => a.date - b.date);
 
     const deptCounts = {};
+    
+    // --- 1.5 PRE-CALCULATE VOLUNTEERED DUTIES ---
+    const vacationVolunteeredCount = {};
+    const regularVolunteeredCount = {};
+    staffData.forEach(s => {
+        vacationVolunteeredCount[s.email] = 0;
+        regularVolunteeredCount[s.email] = 0;
+    });
+
+    Object.keys(invigilationSlots).forEach(k => {
+        const slotObj = invigilationSlots[k];
+        const dObj = parseDate(k);
+        const isoD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+        const isVacSlot = isDateInVacation(dObj) || (window.vacationDutyDates && window.vacationDutyDates.includes(isoD));
+        const mStr = dObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+        if (slotObj.volunteers) {
+            slotObj.volunteers.forEach(email => {
+                if (!(slotObj.assigned && slotObj.assigned.includes(email))) {
+                    if (isVacSlot) {
+                        if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    } else if (mStr === monthStr) {
+                        if (regularVolunteeredCount[email] !== undefined) regularVolunteeredCount[email]++;
+                    }
+                }
+            });
+        }
+    });
+
     let eligibleStaff = staffData.map(s => {
         if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+        
+        const dummyDate = new Date(`${monthStr} 15`);
+        const doneReg = getDutiesDoneCount(s.email, dummyDate) + (regularVolunteeredCount[s.email] || 0);
+        const targetReg = calculateStaffTarget(s, dummyDate);
+        const doneVac = getVacationDutiesDoneCount(s.email) + (vacationVolunteeredCount[s.email] || 0);
+
         return {
             ...s,
-            regularPending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-            vacationPending: (vacationDutyTarget || 0) - getVacationDutiesDoneCount(s.email),
+            regularPending: targetReg - doneReg,
+            vacationPending: (vacationDutyTarget || 0) - doneVac,
             weeklyLoad: {}
         };
     });
