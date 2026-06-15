@@ -10983,8 +10983,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         if (e.message && e.message.includes('Missing or insufficient permissions')) {
                             console.warn("Basic user: Skipping Firebase cloud wipe.");
                         } else {
-                            alert("Warning: Cloud wipe failed.
-Error: " + e.message);
+                            alert("Warning: Cloud wipe failed.\\nError: " + e.message);
                         }
                     }
                 }
