@@ -1611,6 +1611,49 @@
     </div>
 
 
+    <!-- 📥 DOWNLOAD REGISTER MODAL -->
+    <div id="download-register-modal"
+        class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[60] backdrop-blur-sm">
+        
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm transform scale-95 transition-transform duration-300 p-6">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                <div class="flex items-center gap-3 text-green-600">
+                    <div class="p-2 bg-green-50 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold">Download Register</h3>
+                </div>
+                <button onclick="closeModal('download-register-modal')" class="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-1 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="mb-5">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Select Academic Year:</label>
+                <select id="download-register-ay-select" class="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-800 bg-white">
+                    <!-- Options populated via JS -->
+                </select>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
+                <button onclick="closeModal('download-register-modal')" class="px-5 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button onclick="executeDownloadAttendanceCSV()" class="px-5 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg shadow-sm hover:shadow transition-all flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    Download
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 📦 MANAGE HISTORICAL DATA MODAL -->
     <div id="historical-data-modal"
         class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[60] backdrop-blur-sm">
