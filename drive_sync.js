@@ -1073,6 +1073,12 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
+
+            // 4. Force sync invigilation slots back to cloud daily shards
+            if (typeof window.syncSlotsToCloud === 'function') {
+                console.log("🚀 [Restore Hook]: Syncing invigilation slots daily shards...");
+                await window.syncSlotsToCloud("SYSTEM_WIPE"); // SYSTEM_WIPE is required to overwrite shard deletions
+            }
         }
 
         if (cloudTime) {
