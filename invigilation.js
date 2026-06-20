@@ -7628,8 +7628,6 @@ window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompt
         googleScriptUrl: src.invigGoogleScriptUrl || src.googleScriptUrl || ""
     };
 
-    alert(`DIAGNOSTIC: Parsing complete. Slots found in backup: ${Object.keys(d.invigilationSlots).length}. Staff found: ${d.staffData.length}`);
-
     if (mode === '1') {
         // --- FULL RESTORE ---
         staffData = d.staffData || [];
