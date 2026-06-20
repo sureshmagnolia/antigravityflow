@@ -10937,10 +10937,12 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // 1. Clear Local Storage
                 const keysToRemove = [
                     BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
-                    SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY,
-                    'examAllKnownSessions'
+                    SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY
                 ];
                 keysToRemove.forEach(k => localStorage.removeItem(k));
+                
+                // Initialize clean session metadata registry
+                localStorage.setItem('examAllKnownSessions', '[]');
 
                 // 2. Wipe Local IndexedDB (Crucial to prevent stale reload pulls)
                 if (typeof saveExamDataIDB === 'function') {
@@ -10981,9 +10983,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                         await batch.commit();
                         console.log("V2 and V1 data wiped successfully.");
                         
-                        // E. Overwrite the Master Student File in Firebase Storage with the empty database
+                        // E. Sync lightweight clean metadata registries to clear calendar bubbles
                         if (typeof syncDataToCloud === 'function') {
                             await syncDataToCloud('baseData');
+                            await syncDataToCloud('ops');
+                            await syncDataToCloud('settings');
                         }
                     } catch (e) {
                         console.error("Cloud Wipe Error:", e);
