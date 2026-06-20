@@ -2506,7 +2506,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 // --- PROCEED WITH SECURE WRITE ---
                 const payload = { 
                     examInvigilationSlots: JSON.stringify(localSlots),
-                    lastUpdated: serverTimestamp()
+                    lastUpdated: window.firebase.serverTimestamp()
                 };
 
                 // Merge Advance Unavailability safely
