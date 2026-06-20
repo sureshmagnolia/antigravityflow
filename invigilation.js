@@ -7606,7 +7606,27 @@ window.emergencyLogRecovery = async function() {
     }
 }
 
-window.restoreInvigilationCloudData = async function(d, mode, showPrompts = true) {
+window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompts = true) {
+    // Normalize backup formats
+    let d = rawBackup;
+    if (rawBackup.data) {
+        d = rawBackup.data;
+    } else if (rawBackup.examInvigilationSlots || rawBackup.examStaffData) {
+        d = {
+            staffData: typeof rawBackup.examStaffData === 'string' ? JSON.parse(rawBackup.examStaffData) : (rawBackup.examStaffData || []),
+            invigilationSlots: typeof rawBackup.examInvigilationSlots === 'string' ? JSON.parse(rawBackup.examInvigilationSlots) : (rawBackup.examInvigilationSlots || {}),
+            advanceUnavailability: typeof rawBackup.invigAdvanceUnavailability === 'string' ? JSON.parse(rawBackup.invigAdvanceUnavailability) : (rawBackup.invigAdvanceUnavailability || {}),
+            rolesConfig: typeof rawBackup.invigRoles === 'string' ? JSON.parse(rawBackup.invigRoles) : (rawBackup.invigRoles || {}),
+            designationsConfig: typeof rawBackup.invigDesignations === 'string' ? JSON.parse(rawBackup.invigDesignations) : (rawBackup.invigDesignations || {}),
+            departmentsConfig: typeof rawBackup.invigDepartments === 'string' ? JSON.parse(rawBackup.invigDepartments) : (rawBackup.invigDepartments || []),
+            globalDutyTarget: rawBackup.invigGlobalTarget !== undefined ? parseInt(rawBackup.invigGlobalTarget) : 2,
+            guestGlobalTarget: rawBackup.invigGuestTarget !== undefined ? parseInt(rawBackup.invigGuestTarget) : 1,
+            vacationDutyTarget: rawBackup.invigVacationTarget !== undefined ? parseInt(rawBackup.invigVacationTarget) : 0,
+            vacationDutyDates: typeof rawBackup.invigVacationDutyDates === 'string' ? (rawBackup.invigVacationDutyDates.startsWith('[') ? JSON.parse(rawBackup.invigVacationDutyDates) : rawBackup.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (rawBackup.invigVacationDutyDates || []),
+            googleScriptUrl: rawBackup.invigGoogleScriptUrl || ""
+        };
+    }
+
     if (mode === '1') {
         // --- FULL RESTORE ---
         staffData = d.staffData || [];
