@@ -10974,10 +10974,15 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const studentSnaps = await getDocs(sessionStudentsRef);
                         studentSnaps.forEach(doc => batch.delete(doc.ref));
 
+                        // D. Wipe Legacy V1 data chunks to prevent auto-restoring loop
+                        const dataColRef = collection(db, "colleges", currentCollegeId, "data");
+                        const chunkSnaps = await getDocs(dataColRef);
+                        chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+
                         await batch.commit();
-                        console.log("V2 Session data wiped successfully.");
+                        console.log("V2 and V1 data wiped successfully.");
                         
-                        // D. Overwrite the Master Student File in Firebase Storage with the empty database
+                        // E. Overwrite the Master Student File in Firebase Storage with the empty database
                         if (typeof syncDataToCloud === 'function') {
                             await syncDataToCloud('baseData');
                         }
