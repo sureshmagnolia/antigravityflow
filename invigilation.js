@@ -92,8 +92,9 @@ let collegeData = null;
 let staffData = [];
 let invigilationSlots = {};
 window._debugSlots = () => invigilationSlots;
-// FIX: Debug tool should be authoritative to allow manual data fixing
+window._debugRefresh = () => refreshSlotsUI();
 window._debugSyncSlots = () => syncSlotsToCloud("FORCE_OVERWRITE");
+window.setInvigilationSlotsForRestore = (slots) => { invigilationSlots = slots; };
 let collegeName = 'Loading College...';
 let collegeSettings = {};
 let designationsConfig = {};

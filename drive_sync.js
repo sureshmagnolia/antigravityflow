@@ -383,6 +383,20 @@ async function getBackupFolder() {
         throw new Error("Google Drive API failed to initialize. Please refresh the page.");
     }
 
+    // 🛡️ CROSS-TAB SYNC: Ensure we have the latest token from localStorage before requesting
+    const storedToken = localStorage.getItem('drive_access_token');
+    const expiry = localStorage.getItem('drive_token_expiry');
+    if (storedToken && expiry && Date.now() < parseInt(expiry)) {
+        gapi.client.setToken({ access_token: storedToken });
+    }
+
+    // 🛡️ GUARD: If no token, abort early instead of making unauthenticated 403 request
+    if (!gapi.client.getToken() || !gapi.client.getToken().access_token) {
+        const errMsg = "Drive session expired or missing. Please click 'Reconnect Drive'.";
+        pruneDriveAuthOnFailure({ status: 401 });
+        throw new Error(errMsg);
+    }
+
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     let res;
     try {
@@ -459,7 +473,18 @@ async function syncData(source = "AUTO") {
         }
 
         // Check if token is still valid, refresh silently if needed
-        const currentToken = gapi.client.getToken();
+        let currentToken = gapi.client.getToken();
+        
+        // 🛡️ CROSS-TAB SYNC: Try loading from localStorage if missing in memory
+        if (!currentToken || !currentToken.access_token) {
+            const storedToken = localStorage.getItem('drive_access_token');
+            const expiry = localStorage.getItem('drive_token_expiry');
+            if (storedToken && expiry && Date.now() < parseInt(expiry)) {
+                gapi.client.setToken({ access_token: storedToken });
+                currentToken = gapi.client.getToken();
+            }
+        }
+
         if (!currentToken || !currentToken.access_token) {
             if (btn) btn.innerHTML = "🔄 Refreshing login...";
             await new Promise((resolve, reject) => {
@@ -1053,6 +1078,11 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     // Even in Merge mode, we treat Cloud as the "Truth" for these small files
                     const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;
                     localStorage.setItem(key, stringVal);
+
+                    // 🛡️ [SURGICAL FIX]: Must update Invigilation Portal memory BEFORE authoritative sync
+                    if (key === 'examInvigilationSlots' && typeof window.setInvigilationSlotsForRestore === 'function') {
+                        window.setInvigilationSlotsForRestore(typeof val === 'string' ? JSON.parse(val) : val);
+                    }
                 }
             }
         }
