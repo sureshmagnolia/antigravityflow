@@ -2527,10 +2527,9 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                 updateSyncStatus("Slots Updated", "success");
             }
 
-                 // 6. MASTER DATA (Firebase Storage Mode - SCR5 logic for stability)
             else if (targetSection === 'baseData') {
                 const students = await loadExamDataIDB();
-                if (students && students.length > 0) {
+                if (students) {
                     const { storage, ref, uploadString } = window.firebase;
                     const storageRef = ref(storage, `colleges/${cid}/data/examBaseData.json`);
                     
