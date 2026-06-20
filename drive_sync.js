@@ -1088,7 +1088,8 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         }
 
         // --- 3. [AUTHORITY SHIFT]: Direct Cloud Restoration ---
-        if (typeof window.currentCollegeId !== 'undefined' && window.currentCollegeId && navigator.onLine) {
+        const activeCollegeId = window.currentCollegeId || localStorage.getItem('currentCollegeId');
+        if (activeCollegeId && navigator.onLine) {
             console.log("🚀 [Authority Shift]: Direct Cloud Restore in progress...");
             
             // 1. Resolve sessions from the restored data
