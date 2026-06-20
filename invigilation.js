@@ -7680,6 +7680,31 @@ window.handleMasterRestore = function (input) {
                 vacationDutyDates = d.vacationDutyDates || [];
                 googleScriptUrl = d.googleScriptUrl || "";
 
+                // Diagnostic: Check if past slots exist in the backup
+                const backupSlotKeys = Object.keys(invigilationSlots);
+                let pastSlotsFound = 0;
+                
+                try {
+                    const currentAcYear = typeof getAcademicYearForDate === 'function' ? getAcademicYearForDate(new Date()).label : "Unknown";
+                    backupSlotKeys.forEach(k => {
+                        const [dStr] = k.split(' | ');
+                        const parts = dStr.split('.');
+                        if (parts.length === 3) {
+                            const dateObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                            const acYearObj = typeof getAcademicYearForDate === 'function' ? getAcademicYearForDate(dateObj) : null;
+                            if (acYearObj && acYearObj.label !== currentAcYear) {
+                                pastSlotsFound++;
+                            }
+                        }
+                    });
+                } catch(e) {}
+
+                alert(`📦 Backup File Diagnostics:\n- Total Slots in Backup: ${backupSlotKeys.length}\n- Past Academic Year Slots: ${pastSlotsFound}`);
+
+                if (backupSlotKeys.length === 0) {
+                    alert("⚠️ WARNING: The backup file you uploaded contains ZERO slots! If you expected past slots, you might have uploaded a backup taken AFTER they were deleted.");
+                }
+
                 // Prepare Full Payload
                 updatePayload = {
                     examStaffData: JSON.stringify(staffData),
@@ -7771,7 +7796,7 @@ window.handleMasterRestore = function (input) {
             localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
 
             // 🛡️ Save Slots using Sharded Logic
-            await syncSlotsToCloud("FORCE_OVERWRITE");
+            await syncSlotsToCloud(mode === '1' ? "SYSTEM_WIPE" : "FORCE_OVERWRITE");
 
             // 4. Refresh UI and reload
             updateSyncStatus("Restored", "success");
