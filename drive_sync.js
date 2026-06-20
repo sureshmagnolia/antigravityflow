@@ -1121,12 +1121,12 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
+        }
 
-            // 🛡️ [NEW FIX]: Ensure Invigilation Settings are authoritatively pushed to the cloud
-            if (typeof window.restoreInvigilationCloudData === 'function') {
-                console.log("🛡️ Syncing Invigilation Data to Cloud...");
-                await window.restoreInvigilationCloudData(cloudData, isMerge ? '2' : '1', false);
-            }
+        // 🛡️ Ensure Invigilation Settings are authoritatively pushed to the cloud
+        if (typeof window.restoreInvigilationCloudData === 'function') {
+            console.log("🛡️ Syncing Invigilation Data to Cloud...");
+            await window.restoreInvigilationCloudData(cloudData, isMerge ? '2' : '1', false);
         }
 
         if (cloudTime) {
