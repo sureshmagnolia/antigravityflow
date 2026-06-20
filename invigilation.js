@@ -7608,24 +7608,25 @@ window.emergencyLogRecovery = async function() {
 
 window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompts = true) {
     // Normalize backup formats
-    let d = rawBackup;
+    let src = rawBackup;
     if (rawBackup.data) {
-        d = rawBackup.data;
-    } else if (rawBackup.examInvigilationSlots || rawBackup.examStaffData) {
-        d = {
-            staffData: typeof rawBackup.examStaffData === 'string' ? JSON.parse(rawBackup.examStaffData) : (rawBackup.examStaffData || []),
-            invigilationSlots: typeof rawBackup.examInvigilationSlots === 'string' ? JSON.parse(rawBackup.examInvigilationSlots) : (rawBackup.examInvigilationSlots || {}),
-            advanceUnavailability: typeof rawBackup.invigAdvanceUnavailability === 'string' ? JSON.parse(rawBackup.invigAdvanceUnavailability) : (rawBackup.invigAdvanceUnavailability || {}),
-            rolesConfig: typeof rawBackup.invigRoles === 'string' ? JSON.parse(rawBackup.invigRoles) : (rawBackup.invigRoles || {}),
-            designationsConfig: typeof rawBackup.invigDesignations === 'string' ? JSON.parse(rawBackup.invigDesignations) : (rawBackup.invigDesignations || {}),
-            departmentsConfig: typeof rawBackup.invigDepartments === 'string' ? JSON.parse(rawBackup.invigDepartments) : (rawBackup.invigDepartments || []),
-            globalDutyTarget: rawBackup.invigGlobalTarget !== undefined ? parseInt(rawBackup.invigGlobalTarget) : 2,
-            guestGlobalTarget: rawBackup.invigGuestTarget !== undefined ? parseInt(rawBackup.invigGuestTarget) : 1,
-            vacationDutyTarget: rawBackup.invigVacationTarget !== undefined ? parseInt(rawBackup.invigVacationTarget) : 0,
-            vacationDutyDates: typeof rawBackup.invigVacationDutyDates === 'string' ? (rawBackup.invigVacationDutyDates.startsWith('[') ? JSON.parse(rawBackup.invigVacationDutyDates) : rawBackup.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (rawBackup.invigVacationDutyDates || []),
-            googleScriptUrl: rawBackup.invigGoogleScriptUrl || ""
-        };
+        src = rawBackup.data;
     }
+    
+    // Now normalize src, regardless of whether it came from root or .data
+    let d = {
+        staffData: typeof src.examStaffData === 'string' ? JSON.parse(src.examStaffData) : (src.staffData || src.examStaffData || []),
+        invigilationSlots: typeof src.examInvigilationSlots === 'string' ? JSON.parse(src.examInvigilationSlots) : (src.invigilationSlots || src.examInvigilationSlots || {}),
+        advanceUnavailability: typeof src.invigAdvanceUnavailability === 'string' ? JSON.parse(src.invigAdvanceUnavailability) : (src.advanceUnavailability || src.invigAdvanceUnavailability || {}),
+        rolesConfig: typeof src.invigRoles === 'string' ? JSON.parse(src.invigRoles) : (src.rolesConfig || src.invigRoles || {}),
+        designationsConfig: typeof src.invigDesignations === 'string' ? JSON.parse(src.invigDesignations) : (src.designationsConfig || src.invigDesignations || {}),
+        departmentsConfig: typeof src.invigDepartments === 'string' ? JSON.parse(src.invigDepartments) : (src.departmentsConfig || src.invigDepartments || []),
+        globalDutyTarget: src.invigGlobalTarget !== undefined ? parseInt(src.invigGlobalTarget) : (src.globalDutyTarget !== undefined ? parseInt(src.globalDutyTarget) : 2),
+        guestGlobalTarget: src.invigGuestTarget !== undefined ? parseInt(src.invigGuestTarget) : (src.guestGlobalTarget !== undefined ? parseInt(src.guestGlobalTarget) : 1),
+        vacationDutyTarget: src.invigVacationTarget !== undefined ? parseInt(src.invigVacationTarget) : (src.vacationDutyTarget !== undefined ? parseInt(src.vacationDutyTarget) : 0),
+        vacationDutyDates: typeof src.invigVacationDutyDates === 'string' ? (src.invigVacationDutyDates.startsWith('[') ? JSON.parse(src.invigVacationDutyDates) : src.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (src.vacationDutyDates || src.invigVacationDutyDates || []),
+        googleScriptUrl: src.invigGoogleScriptUrl || src.googleScriptUrl || ""
+    };
 
     if (mode === '1') {
         // --- FULL RESTORE ---
