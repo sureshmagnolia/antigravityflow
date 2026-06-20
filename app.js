@@ -20985,10 +20985,16 @@ if (displayLoc) {
                             }
                             count++;
                             
-                        } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam')) {
+                        } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
                             // Skip stale v2 backups, restore everything else
                             if (key !== 'examData_v2') {
-                                localStorage.setItem(key, data[key]);
+                                const val = data[key];
+                                localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
+                                
+                                // Flag for invigilation portal to sync its own data
+                                if (key === 'examInvigilationSlots') {
+                                    localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+                                }
                             }
                             count++;
                         }

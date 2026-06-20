@@ -680,6 +680,29 @@ function initAdminDashboard() {
     // NEW CALL
     renderAdminTodayStats();
 
+    // --- NEW: Handle Manual Drive Restore Sync ---
+    if (localStorage.getItem('pendingInvigilationRestoreSync') === 'true') {
+        const restoredSlotsStr = localStorage.getItem('examInvigilationSlots');
+        if (restoredSlotsStr && restoredSlotsStr !== '[object Object]') {
+            console.log("🚀 [Manual Restore Detected]: Synchronizing slots to cloud...");
+            try {
+                invigilationSlots = JSON.parse(restoredSlotsStr);
+                if (typeof syncSlotsToCloud === 'function') {
+                    syncSlotsToCloud("SYSTEM_WIPE").then(() => {
+                        localStorage.removeItem('pendingInvigilationRestoreSync');
+                        refreshSlotsUI();
+                        console.log("✅ Restored slots synced to Firebase.");
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse restored slots:", e);
+                localStorage.removeItem('pendingInvigilationRestoreSync');
+            }
+        } else {
+             localStorage.removeItem('pendingInvigilationRestoreSync');
+        }
+    }
+
     showView('admin');
 }
 
