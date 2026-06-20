@@ -7606,6 +7606,77 @@ window.emergencyLogRecovery = async function() {
     }
 }
 
+window.restoreInvigilationCloudData = async function(d, mode, showPrompts = true) {
+    if (mode === '1') {
+        // --- FULL RESTORE ---
+        staffData = d.staffData || [];
+        invigilationSlots = d.invigilationSlots || {};
+        advanceUnavailability = d.advanceUnavailability || {};
+
+        if (d.rolesConfig) localStorage.setItem('invigRoles', JSON.stringify(d.rolesConfig));
+        if (d.designationsConfig) localStorage.setItem('invigDesignations', JSON.stringify(d.designationsConfig));
+        if (d.departmentsConfig) localStorage.setItem('invigDepartments', JSON.stringify(d.departmentsConfig));
+        if (d.globalDutyTarget !== undefined) localStorage.setItem('invigGlobalTarget', d.globalDutyTarget);
+        if (d.guestGlobalTarget !== undefined) localStorage.setItem('invigGuestTarget', d.guestGlobalTarget);
+        if (d.vacationDutyTarget !== undefined) localStorage.setItem('invigVacationTarget', d.vacationDutyTarget);
+        if (d.vacationDutyDates !== undefined) localStorage.setItem('invigVacationDutyDates', JSON.stringify(d.vacationDutyDates));
+        if (d.googleScriptUrl !== undefined) localStorage.setItem('invigGoogleScriptUrl', d.googleScriptUrl);
+
+    } else if (mode === '2') {
+        // --- SMART MERGE ---
+        const importedSlots = d.invigilationSlots || {};
+        let modifiedCount = 0;
+
+        Object.keys(importedSlots).forEach(key => {
+            if (invigilationSlots[key]) {
+                const target = invigilationSlots[key];
+                const source = importedSlots[key];
+                let changed = false;
+
+                if (source.volunteers && source.volunteers.length > 0) {
+                    if (!target.volunteers) target.volunteers = [];
+                    source.volunteers.forEach(v => {
+                        if (!target.volunteers.includes(v)) {
+                            target.volunteers.push(v);
+                            changed = true;
+                        }
+                    });
+                }
+                if (source.inconvenience && source.inconvenience.length > 0) {
+                    if (!target.inconvenience) target.inconvenience = [];
+                    source.inconvenience.forEach(v => {
+                        if (!target.inconvenience.includes(v)) {
+                            target.inconvenience.push(v);
+                            changed = true;
+                        }
+                    });
+                }
+                if (changed) modifiedCount++;
+            }
+        });
+        
+        if (showPrompts) alert(`Merge Complete: ${modifiedCount} existing slots updated with imported volunteers/inconveniences.`);
+    }
+
+    localStorage.setItem('examStaffData', JSON.stringify(staffData));
+    localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(advanceUnavailability));
+    localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+
+    // --- DIAGNOSTIC START ---
+    let totalSlots = Object.keys(invigilationSlots).length;
+    let pastYearSlots = 0;
+    const now = new Date();
+    const currentYearStart = new Date(now.getMonth() < 5 ? now.getFullYear() - 1 : now.getFullYear(), 5, 1);
+    Object.keys(invigilationSlots).forEach(k => {
+        if (parseDate(k) < currentYearStart) pastYearSlots++;
+    });
+    if (showPrompts) alert(`Diagnostic: Uploading ${totalSlots} total slots, including ${pastYearSlots} slots from previous academic years.`);
+    // --- DIAGNOSTIC END ---
+
+    // Save Slots using Sharded Logic
+    await syncSlotsToCloud(mode === '1' ? "SYSTEM_WIPE" : "FORCE_OVERWRITE");
+};
+
 window.handleMasterRestore = function (input) {
     const file = input.files[0];
     if (!file) return;
@@ -7650,10 +7721,8 @@ window.handleMasterRestore = function (input) {
                 return; // Cancelled silently or invalid
             }
 
-            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
-
-            // 🛡️ Save Slots using Sharded Logic
-            await syncSlotsToCloud(mode === '1' ? "SYSTEM_WIPE" : "FORCE_OVERWRITE");
+            // Calls the shared restore function
+            await window.restoreInvigilationCloudData(d, mode, true);
 
             // 4. Refresh UI and reload
             updateSyncStatus("Restored", "success");
