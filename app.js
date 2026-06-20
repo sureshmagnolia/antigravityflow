@@ -15830,13 +15830,23 @@ Are you sure?
                     localStorage.setItem(ABSENTEE_LIST_KEY, JSON.stringify(allAbsentees));
                 }
 
+                // Update IndexedDB locally (Crucial to prevent stale pulls)
+                if (typeof saveExamDataIDB === 'function') {
+                    await saveExamDataIDB(allStudentData, true); // true = skip redundant baseData auto-sync here as we await it next
+                }
+
                 alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
 
-
-               // MODULAR SYNC (V2)
+                // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(sessionVal);
                 }
+                
+                // Authoritatively upload the modified Master Student Database (Firebase Storage)
+                if (typeof syncDataToCloud === 'function') {
+                    await syncDataToCloud('baseData');
+                }
+                
                 window.location.reload();
             }
         });
