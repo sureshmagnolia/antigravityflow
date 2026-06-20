@@ -7615,8 +7615,27 @@ window.handleMasterRestore = function (input) {
         try {
             const backup = JSON.parse(e.target.result);
 
-            // Validation
-            if (!backup.data || !backup.data.staffData) {
+            // Normalize backup formats
+            let d = null;
+            if (backup.data) {
+                d = backup.data;
+            } else if (backup.examInvigilationSlots || backup.examStaffData) {
+                d = {
+                    staffData: typeof backup.examStaffData === 'string' ? JSON.parse(backup.examStaffData) : (backup.examStaffData || []),
+                    invigilationSlots: typeof backup.examInvigilationSlots === 'string' ? JSON.parse(backup.examInvigilationSlots) : (backup.examInvigilationSlots || {}),
+                    advanceUnavailability: typeof backup.invigAdvanceUnavailability === 'string' ? JSON.parse(backup.invigAdvanceUnavailability) : (backup.invigAdvanceUnavailability || {}),
+                    rolesConfig: typeof backup.invigRoles === 'string' ? JSON.parse(backup.invigRoles) : (backup.invigRoles || {}),
+                    designationsConfig: typeof backup.invigDesignations === 'string' ? JSON.parse(backup.invigDesignations) : (backup.invigDesignations || {}),
+                    departmentsConfig: typeof backup.invigDepartments === 'string' ? JSON.parse(backup.invigDepartments) : (backup.invigDepartments || []),
+                    globalDutyTarget: backup.invigGlobalTarget !== undefined ? parseInt(backup.invigGlobalTarget) : 2,
+                    guestGlobalTarget: backup.invigGuestTarget !== undefined ? parseInt(backup.invigGuestTarget) : 1,
+                    vacationDutyTarget: backup.invigVacationTarget !== undefined ? parseInt(backup.invigVacationTarget) : 0,
+                    vacationDutyDates: typeof backup.invigVacationDutyDates === 'string' ? (backup.invigVacationDutyDates.startsWith('[') ? JSON.parse(backup.invigVacationDutyDates) : backup.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (backup.invigVacationDutyDates || []),
+                    googleScriptUrl: backup.invigGoogleScriptUrl || ""
+                };
+            }
+
+            if (!d || !d.staffData) {
                 throw new Error("Invalid backup file: Missing core data.");
             }
 
@@ -7644,7 +7663,6 @@ window.handleMasterRestore = function (input) {
             }
 
             updateSyncStatus("Restoring...", "neutral");
-            const d = backup.data;
             const ref = doc(db, "colleges", currentCollegeId);
             let updatePayload = {};
 
@@ -7713,16 +7731,52 @@ window.handleMasterRestore = function (input) {
             }
 
             // 3. Save to Cloud
-            await updateDoc(ref, updatePayload);
-            
+            const collegeRootPayload = {};
+            if (updatePayload.invigRoles !== undefined) collegeRootPayload.invigRoles = updatePayload.invigRoles;
+            if (updatePayload.invigDesignations !== undefined) collegeRootPayload.invigDesignations = updatePayload.invigDesignations;
+            if (updatePayload.invigDepartments !== undefined) collegeRootPayload.invigDepartments = updatePayload.invigDepartments;
+            if (updatePayload.invigGlobalTarget !== undefined) collegeRootPayload.invigGlobalTarget = updatePayload.invigGlobalTarget;
+            if (updatePayload.invigGuestTarget !== undefined) collegeRootPayload.invigGuestTarget = updatePayload.invigGuestTarget;
+            if (updatePayload.invigVacationTarget !== undefined) collegeRootPayload.invigVacationTarget = updatePayload.invigVacationTarget;
+            if (updatePayload.invigVacationDutyDates !== undefined) collegeRootPayload.invigVacationDutyDates = updatePayload.invigVacationDutyDates;
+            if (updatePayload.invigGoogleScriptUrl !== undefined) collegeRootPayload.invigGoogleScriptUrl = updatePayload.invigGoogleScriptUrl;
+            if (d.vacationConfig) {
+                collegeRootPayload.invigVacationConfig = typeof d.vacationConfig === 'object' ? JSON.stringify(d.vacationConfig) : d.vacationConfig;
+            }
+
+            if (Object.keys(collegeRootPayload).length > 0) {
+                await updateDoc(ref, collegeRootPayload);
+            }
+
+            // Save staff data to V2 sub-document (system_data/staff)
+            if (updatePayload.examStaffData) {
+                const staffRef = doc(db, "colleges", currentCollegeId, "system_data", "staff");
+                await setDoc(staffRef, { 
+                    examStaffData: updatePayload.examStaffData,
+                    lastUpdated: new Date().toISOString()
+                }, { merge: true });
+            }
+
+            // Save advance unavailability to V2 sub-document (system_data/slots)
+            if (updatePayload.invigAdvanceUnavailability) {
+                const slotsRef = doc(db, "colleges", currentCollegeId, "system_data", "slots");
+                await setDoc(slotsRef, { 
+                    invigAdvanceUnavailability: updatePayload.invigAdvanceUnavailability 
+                }, { merge: true });
+            }
+
+            // Save to localStorage directly to prevent listeners overwriting it before sync
+            localStorage.setItem('examStaffData', JSON.stringify(staffData));
+            localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(advanceUnavailability));
+            localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+
             // 🛡️ Save Slots using Sharded Logic
             await syncSlotsToCloud("FORCE_OVERWRITE");
 
-            // 4. Refresh UI
-            updateAdminUI();
-            renderSlotsGridAdmin();
+            // 4. Refresh UI and reload
             updateSyncStatus("Restored", "success");
-            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).`);
+            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).\n\nThe page will now reload to apply all restored configurations.`);
+            location.reload();
 
         } catch (err) {
             console.error("Restore Error:", err);

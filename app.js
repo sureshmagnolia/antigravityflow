@@ -20991,7 +20991,7 @@ if (displayLoc) {
                                 const val = data[key];
                                 localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
                                 
-                                // Flag for invigilation portal to sync its own data
+                                // Keep flag just in case
                                 if (key === 'examInvigilationSlots') {
                                     localStorage.setItem('pendingInvigilationRestoreSync', 'true');
                                 }
@@ -21000,14 +21000,100 @@ if (displayLoc) {
                         }
                     }
 
-                    // Sync to Cloud (if online)
-                    if (typeof syncDataToCloud === 'function' && count > 0) {
+                    // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
+                    if (window.currentCollegeId && navigator.onLine && count > 0) {
                         updateSyncStatus("Restoring Cloud...", "neutral");
-                        await syncDataToCloud('settings');
-                        await syncDataToCloud('ops');
-                        await syncDataToCloud('allocation');
-                        await syncDataToCloud('staff');
-                        await syncDataToCloud('baseData'); // ☁️ SYNC STUDENT DATABASE
+                        const { db, doc, setDoc, writeBatch } = window.firebase;
+                        const cid = window.currentCollegeId;
+
+                        // 1. Sync settings
+                        const settingsKeys = [
+                            'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
+                            'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
+                            'examAllKnownSessions', 'examMixingStrategy'
+                        ];
+                        const settingsData = {};
+                        settingsKeys.forEach(k => {
+                            const val = localStorage.getItem(k);
+                            if (val !== null) settingsData[k] = val;
+                        });
+                        settingsData.lastUpdated = new Date().toISOString();
+                        if (Object.keys(settingsData).length > 1) {
+                            await setDoc(doc(db, "colleges", cid, "system_data", "settings"), settingsData, { merge: true });
+                        }
+
+                        // 2. Sync operations
+                        const opsData = {};
+                        const valSessions = localStorage.getItem('examAllKnownSessions');
+                        if (valSessions !== null) opsData['examAllKnownSessions'] = valSessions;
+                        if (Object.keys(opsData).length > 0) {
+                            await setDoc(doc(db, "colleges", cid, "system_data", "operations"), opsData, { merge: true });
+                        }
+
+                        // 3. Sync allocation
+                        const allocData = {};
+                        const valScribe = localStorage.getItem('examScribeList');
+                        if (valScribe !== null) allocData['examScribeList'] = valScribe;
+                        if (Object.keys(allocData).length > 0) {
+                            await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), allocData, { merge: true });
+                        }
+
+                        // 4. Sync staff
+                        const localStaff = localStorage.getItem('examStaffData');
+                        const localMap = localStorage.getItem('examInvigilatorMapping');
+                        const staffDataPayload = {};
+                        if (localStaff) staffDataPayload.examStaffData = localStaff;
+                        if (localMap) staffDataPayload.examInvigilatorMapping = localMap;
+                        staffDataPayload.lastUpdated = new Date().toISOString();
+                        if (Object.keys(staffDataPayload).length > 1) {
+                            await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
+                        }
+
+                        // 5. Sync invigilation slots (daily shards)
+                        const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
+                        if (localSlotsRaw) {
+                            let slotsObj = {};
+                            try { slotsObj = JSON.parse(localSlotsRaw); } catch(e) {}
+                            if (slotsObj && typeof slotsObj === 'object' && Object.keys(slotsObj).length > 0) {
+                                const shards = {};
+                                const getShardId = (key) => {
+                                    try {
+                                        const [dRaw] = key.split(' | ');
+                                        const dStr = dRaw.replace(/-/g, '.');
+                                        const parts = dStr.split('.');
+                                        if (parts.length < 3) return "unknown";
+                                        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                    } catch (e) { return "unknown"; }
+                                };
+                                
+                                Object.keys(slotsObj).forEach(k => {
+                                    const sid = getShardId(k);
+                                    if (!shards[sid]) shards[sid] = {};
+                                    shards[sid][k] = slotsObj[k];
+                                });
+                                
+                                const shardIds = Object.keys(shards);
+                                const CHUNK_SIZE = 450;
+                                for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
+                                    const batch = writeBatch(db);
+                                    const chunk = shardIds.slice(i, i + CHUNK_SIZE);
+                                    chunk.forEach(sid => {
+                                        const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
+                                        batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: new Date() });
+                                    });
+                                    await batch.commit();
+                                }
+                            }
+                        }
+
+                        // 6. Sync advanced unavailability
+                        const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
+                        if (localUnavRaw) {
+                            const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
+                            await setDoc(slotsRef, { 
+                                invigAdvanceUnavailability: localUnavRaw 
+                            }, { merge: true });
+                        }
                     }
                     localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
                     alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
