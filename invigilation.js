@@ -92,12 +92,15 @@ let collegeData = null;
 let staffData = [];
 let invigilationSlots = {};
 window._debugSlots = () => invigilationSlots;
-// FIX: Debug tool should be authoritative to allow manual data fixing
+window._debugRefresh = () => refreshSlotsUI();
 window._debugSyncSlots = () => syncSlotsToCloud("FORCE_OVERWRITE");
+window.setInvigilationSlotsForRestore = (slots) => { invigilationSlots = slots; };
 let collegeName = 'Loading College...';
 let collegeSettings = {};
 let designationsConfig = {};
 let rolesConfig = {};
+
+
 let currentCalDate = new Date();
 let isAdmin = false;
 let cloudUnsubscribe = null;
@@ -676,6 +679,42 @@ function initAdminDashboard() {
 
     // NEW CALL
     renderAdminTodayStats();
+
+    // --- NEW: Handle Manual Drive Restore Sync ---
+    if (localStorage.getItem('pendingInvigilationRestoreSync') === 'true') {
+        const restoredSlotsStr = localStorage.getItem('examInvigilationSlots');
+        const restoredAdvStr = localStorage.getItem('invigAdvanceUnavailability'); // Fetch advanced unavailability
+
+        if (restoredSlotsStr && restoredSlotsStr !== '[object Object]') {
+            console.log("🚀 [Manual Restore Detected]: Synchronizing slots to cloud...");
+            try {
+                invigilationSlots = JSON.parse(restoredSlotsStr);
+
+                if (restoredAdvStr && restoredAdvStr !== '[object Object]') {
+                    advanceUnavailability = JSON.parse(restoredAdvStr);
+                } else {
+                    advanceUnavailability = {};
+                }
+
+                if (typeof syncSlotsToCloud === 'function') {
+                    // Sync slots
+                    syncSlotsToCloud("SYSTEM_WIPE").then(() => {
+                        // Sync advance unavailability
+                        saveAdvanceUnavailability("FORCE_OVERWRITE").then(() => {
+                            localStorage.removeItem('pendingInvigilationRestoreSync');
+                            refreshSlotsUI();
+                            console.log("✅ Restored slots and unavailability synced to Firebase.");
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse restored slots:", e);
+                localStorage.removeItem('pendingInvigilationRestoreSync');
+            }
+        } else {
+             localStorage.removeItem('pendingInvigilationRestoreSync');
+        }
+    }
 
     showView('admin');
 }
@@ -2376,11 +2415,11 @@ function switchToStaffView() {
     }
 }
 
-async function syncSlotsToCloud(affectedKey = null) {
+
+window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
     updateSyncStatus("Saving...", "neutral");
     try {
         const localSlots = invigilationSlots;
-        const batch = writeBatch(db);
 
         function getShardId(key) {
             try {
@@ -2393,8 +2432,9 @@ async function syncSlotsToCloud(affectedKey = null) {
             } catch (e) { return "unknown"; }
         }
 
-        if (affectedKey && affectedKey !== "FORCE_OVERWRITE") {
+        if (affectedKey && affectedKey !== "FORCE_OVERWRITE" && affectedKey !== "SYSTEM_WIPE") {
             // --- OPTIMIZED SURGICAL SHARD UPDATE ---
+            const batch = writeBatch(db);
             const shardId = getShardId(affectedKey);
             const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", shardId);
             
@@ -2417,6 +2457,7 @@ async function syncSlotsToCloud(affectedKey = null) {
             } else {
                 batch.delete(shardRef);
             }
+            await batch.commit();
         } else {
             // --- FULL SYNC OR BATCH UPDATE ---
             
@@ -2430,12 +2471,12 @@ async function syncSlotsToCloud(affectedKey = null) {
             const localKeyCount = Object.keys(localSlots).length;
             const cloudShardCount = existingShardIds.size;
 
-            if (affectedKey !== "FORCE_OVERWRITE") {
+            if (affectedKey !== "FORCE_OVERWRITE" && affectedKey !== "SYSTEM_WIPE") {
                 // Rule A: Never wipe if local is completely empty.
                 if (localKeyCount === 0 && cloudShardCount > 0) {
                     console.error("🛑 CRITICAL: Local slots are empty but cloud has data. Sync Blocked to prevent wipe.");
                     updateSyncStatus("Sync Blocked", "error");
-                    return;
+                    return false;
                 }
 
                 // Rule B: Safety Check for significant data loss (Local has < 50% of existing shards)
@@ -2444,7 +2485,7 @@ async function syncSlotsToCloud(affectedKey = null) {
                     console.error(`🛑 CRITICAL: Partial Data Detected! Local has ${localKeyCount} keys, but Cloud has ${cloudShardCount} shards. Sync Blocked.`);
                     updateSyncStatus("Partial Load Blocked", "error");
                     alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
-                    return;
+                    return false;
                 }
             }
 
@@ -2460,9 +2501,15 @@ async function syncSlotsToCloud(affectedKey = null) {
             existingShardsSnap.forEach(s => existingShardsMap[s.id] = s.data().data);
 
             // 2. Update or Clear all shards
-            const allShardIds = new Set([...existingShardIds, ...Object.keys(shards)]);
+            const allShardIdsSet = new Set([...existingShardIds, ...Object.keys(shards)]);
+            const allShardIdsArray = Array.from(allShardIdsSet);
+            const CHUNK_SIZE = 450;
             
-            allShardIds.forEach(sid => {
+            for (let i = 0; i < allShardIdsArray.length; i += CHUNK_SIZE) {
+                const chunkBatch = writeBatch(db);
+                const chunk = allShardIdsArray.slice(i, i + CHUNK_SIZE);
+                
+                chunk.forEach(sid => {
                 const shardRef = doc(db, "colleges", currentCollegeId, "slots_daily", sid);
                 const shardData = shards[sid] || {};
                 
@@ -2503,26 +2550,29 @@ async function syncSlotsToCloud(affectedKey = null) {
                 }
 
                 if (Object.keys(shardData).length > 0) {
-                    batch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
+                    chunkBatch.set(shardRef, { data: JSON.stringify(shardData), lastUpdated: serverTimestamp() });
                 } else {
                     // 🛡️ [PROTECTED DELETE]: Only delete future shards if FORCE_OVERWRITE is set.
                     // This prevents accidental pruning of upcoming slots.
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE") {
-                        batch.delete(shardRef);
+                    const todayStr = getIsoDateLocal();
+                    if (sid < todayStr || affectedKey === "FORCE_OVERWRITE" || affectedKey === "SYSTEM_WIPE") {
+                        chunkBatch.delete(shardRef);
                     } else {
                         console.warn(`🛡️ Protected Shard: Skipping deletion of future empty shard: ${sid}`);
                     }
                 }
-            });
+                });
+                
+                await chunkBatch.commit();
+            }
         }
-
-        await batch.commit();
         updateSyncStatus("Synced", "success");
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
+        return true;
     } catch (e) {
         console.error("Slot Sync Failed:", e);
         updateSyncStatus("Save Failed", "error");
+        return false;
     }
 }
 
@@ -5930,7 +5980,7 @@ window.downloadFullActivityLogs = async function(btnElement) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Full_Activity_Logs_${currentCollegeId}_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `Full_Activity_Logs_${currentCollegeId}_${getIsoDateLocal()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -6494,9 +6544,60 @@ window.sendSessionSMS = function (key) {
 
 // --- YEARLY ATTENDANCE CSV EXPORT (Updated Status) ---
 window.downloadAttendanceCSV = function () {
-    if (!confirm("Download the full attendance register for the current Academic Year?")) return;
+    // Collect all available academic years from invigilationSlots that have attendance
+    const availableYearsMap = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        if (!slot.attendance || slot.attendance.length === 0) return;
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
+        availableYearsMap[acYear.label] = acYear;
+    });
 
-    const acYear = getCurrentAcademicYear();
+    const availableYearLabels = Object.keys(availableYearsMap).sort().reverse();
+
+    if (availableYearLabels.length === 0) {
+        return alert("No attendance records found.");
+    }
+
+    const selectEl = document.getElementById('download-register-ay-select');
+    if (selectEl) {
+        selectEl.innerHTML = '';
+        availableYearLabels.forEach(label => {
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = label;
+            selectEl.appendChild(option);
+        });
+    }
+
+    window.openModal('download-register-modal');
+};
+
+window.executeDownloadAttendanceCSV = function() {
+    const selectEl = document.getElementById('download-register-ay-select');
+    if (!selectEl) return;
+    const selectedLabel = selectEl.value;
+    if (!selectedLabel) return;
+
+    // Collect all available academic years to get the acYear object
+    const availableYearsMap = {};
+    Object.keys(invigilationSlots).forEach(key => {
+        const slot = invigilationSlots[key];
+        if (!slot.attendance || slot.attendance.length === 0) return;
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
+        availableYearsMap[acYear.label] = acYear;
+    });
+
+    const selectedAcYear = availableYearsMap[selectedLabel];
+    if (!selectedAcYear) {
+        return alert("Selected Academic Year not found.");
+    }
+
+    window.closeModal('download-register-modal');
+
+    const acYear = selectedAcYear;
     const rows = [];
 
     // Header Row
@@ -6633,13 +6734,13 @@ function processStaffCSV(csvText) {
 
     // --- FIXED DATE HELPER (Handles DD-MM-YY & DD-MM-YYYY) ---
     const formatDate = (dateStr) => {
-        if (!dateStr) return new Date().toISOString().split('T')[0];
+        if (!dateStr) return getIsoDateLocal();
         try {
             let cleanStr = dateStr.replace(/[./]/g, '-').trim();
             let parts = cleanStr.split('-');
 
             let y, m, d;
-            if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+            if (parts.length !== 3) return getIsoDateLocal();
 
             // Case 1: YYYY-MM-DD
             if (parts[0].length === 4) { y = parts[0]; m = parts[1]; d = parts[2]; }
@@ -6647,7 +6748,7 @@ function processStaffCSV(csvText) {
             else if (parts[2].length === 4) { y = parts[2]; m = parts[1]; d = parts[0]; }
             // Case 3: DD-MM-YY (Auto-add "20")
             else if (parts[2].length === 2) { y = "20" + parts[2]; m = parts[1]; d = parts[0]; }
-            else { return new Date().toISOString().split('T')[0]; }
+            else { return getIsoDateLocal(); }
 
             // Pad single digits (6 -> 06)
             m = m.padStart(2, '0');
@@ -6655,7 +6756,7 @@ function processStaffCSV(csvText) {
 
             return `${y}-${m}-${d}`; // HTML5 Input Standard
         } catch (e) {
-            return new Date().toISOString().split('T')[0];
+            return getIsoDateLocal();
         }
     };
 
@@ -6677,7 +6778,7 @@ function processStaffCSV(csvText) {
                 phone: phoneIdx !== -1 ? row[phoneIdx] : "",
                 dept: deptIdx !== -1 ? row[deptIdx] : "",
                 designation: desigIdx !== -1 ? row[desigIdx] : "Assistant Professor",
-                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : new Date().toISOString().split('T')[0],
+                joiningDate: joinIdx !== -1 ? formatDate(row[joinIdx]) : getIsoDateLocal(),
                 // Defaults
                 dutiesDone: 0,
                 roleHistory: [],
@@ -6752,39 +6853,107 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
     }
 });
 
-// --- MAINTENANCE: CLEAR OLD DATA ---
-window.clearOldData = async function () {
-    const acYear = getCurrentAcademicYear();
-    const cutoffDate = acYear.start; // June 1st of Current AY
+// --- MAINTENANCE: MANAGE HISTORICAL DATA ---
 
-    if (!confirm(`⚠️ MAINTENANCE: Clear Previous Year Data? ⚠️\n\nThis will DELETE all attendance slots and duty records BEFORE ${cutoffDate.toDateString()}.\n\n1. Please DOWNLOAD the Attendance Register (.csv) first as a backup.\n2. This action cannot be undone.`)) return;
+window.openManageHistoricalDataModal = function() {
+    const currentAY = getCurrentAcademicYear();
+    const historicalAYs = {}; // label -> { acYear, recordCount }
 
-    if (!confirm("Are you absolutely sure you have a backup?")) return;
+    // Aggregate records by Academic Year
+    Object.keys(invigilationSlots).forEach(key => {
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
+        
+        // Skip current Academic Year (Protection)
+        if (acYear.label === currentAY.label) return;
+
+        if (!historicalAYs[acYear.label]) {
+            historicalAYs[acYear.label] = { acYear, recordCount: 0 };
+        }
+        historicalAYs[acYear.label].recordCount++;
+    });
+
+    const labels = Object.keys(historicalAYs).sort(); // Sort chronological
+
+    if (labels.length === 0) {
+        return alert("No past Academic Year data is available for deletion.\n(The Current Academic Year is protected).");
+    }
+
+    const selectEl = document.getElementById('historical-ay-select');
+    if (selectEl) {
+        selectEl.innerHTML = '';
+        labels.forEach(label => {
+            const count = historicalAYs[label].recordCount;
+            const option = document.createElement('option');
+            option.value = label;
+            option.textContent = `${label} (${count} records)`;
+            selectEl.appendChild(option);
+        });
+    }
+
+    window.openModal('historical-data-modal');
+};
+
+window.confirmDeleteHistoricalData = async function() {
+    const selectEl = document.getElementById('historical-ay-select');
+    if (!selectEl) return;
+    
+    const targetLabel = selectEl.value;
+    if (!targetLabel) return;
+
+    const currentAY = getCurrentAcademicYear();
+    if (targetLabel === currentAY.label) {
+        alert("SECURITY ERROR: Cannot delete the Current Academic Year.");
+        return;
+    }
+
+    if (!confirm(`⚠️ CRITICAL WARNING: You are about to PERMANENTLY DELETE all data for Academic Year ${targetLabel}.\n\nHave you downloaded all necessary reports and certificates for this year?\n\nClick OK to permanently delete.`)) {
+        return;
+    }
+
+    if (!confirm(`FINAL CONFIRMATION:\nAre you absolutely sure you want to delete ${targetLabel}? This cannot be undone.`)) {
+        return;
+    }
 
     const newSlots = {};
     let removedCount = 0;
 
     Object.keys(invigilationSlots).forEach(key => {
-        const date = parseDate(key);
+        const dateObj = parseDate(key);
+        const acYear = getAcademicYearForDate(dateObj);
 
-        // Keep slots that are ON or AFTER the cutoff
-        if (date >= cutoffDate) {
+        // Keep slots that DO NOT match the target academic year
+        if (acYear.label !== targetLabel) {
             newSlots[key] = invigilationSlots[key];
         } else {
             removedCount++;
         }
     });
 
+    const previousSlots = { ...invigilationSlots };
+
     if (removedCount > 0) {
-        logActivity("Data Cleanup", `Admin cleared ${removedCount} old session records from previous AY.`);
         invigilationSlots = newSlots;
-        await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative cleanup
-        renderSlotsGridAdmin();
-        alert(`✅ Cleanup Complete.\n\nRemoved ${removedCount} old session records.\nSystem is ready for AY ${acYear.label}.`);
+        
+        // Use authoritative sync to permanently wipe the historical data
+        const success = await syncSlotsToCloud("SYSTEM_WIPE"); 
+        
+        if (success !== false) {
+            logActivity("Data Cleanup", `Admin surgically deleted ${removedCount} records for AY ${targetLabel}.`);
+            window.closeModal('historical-data-modal');
+            renderSlotsGridAdmin();
+            alert(`✅ Surgical Cleanup Complete.\n\nPermanently removed ${removedCount} records for Academic Year ${targetLabel}.`);
+        } else {
+            // Rollback local memory if cloud sync fails
+            invigilationSlots = previousSlots;
+            alert("❌ Failed to delete historical data from the cloud. Please check your connection and try again. Your local view has been restored.");
+        }
     } else {
-        alert("No old data found to clear.");
+        alert("No records found for that academic year.");
+        window.closeModal('historical-data-modal');
     }
-}
+};
+
 
 
 // --- STAFF MANAGEMENT: ADD & EDIT ---
@@ -7437,6 +7606,98 @@ window.emergencyLogRecovery = async function() {
     }
 }
 
+window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompts = true) {
+    // Normalize backup formats
+    let src = rawBackup;
+    if (rawBackup.data) {
+        src = rawBackup.data;
+    }
+    
+    // Now normalize src, regardless of whether it came from root or .data
+    let d = {
+        staffData: typeof src.examStaffData === 'string' ? JSON.parse(src.examStaffData) : (src.staffData || src.examStaffData || []),
+        invigilationSlots: typeof src.examInvigilationSlots === 'string' ? JSON.parse(src.examInvigilationSlots) : (src.invigilationSlots || src.examInvigilationSlots || {}),
+        advanceUnavailability: typeof src.invigAdvanceUnavailability === 'string' ? JSON.parse(src.invigAdvanceUnavailability) : (src.advanceUnavailability || src.invigAdvanceUnavailability || {}),
+        rolesConfig: typeof src.invigRoles === 'string' ? JSON.parse(src.invigRoles) : (src.rolesConfig || src.invigRoles || {}),
+        designationsConfig: typeof src.invigDesignations === 'string' ? JSON.parse(src.invigDesignations) : (src.designationsConfig || src.invigDesignations || {}),
+        departmentsConfig: typeof src.invigDepartments === 'string' ? JSON.parse(src.invigDepartments) : (src.departmentsConfig || src.invigDepartments || []),
+        globalDutyTarget: src.invigGlobalTarget !== undefined ? parseInt(src.invigGlobalTarget) : (src.globalDutyTarget !== undefined ? parseInt(src.globalDutyTarget) : 2),
+        guestGlobalTarget: src.invigGuestTarget !== undefined ? parseInt(src.invigGuestTarget) : (src.guestGlobalTarget !== undefined ? parseInt(src.guestGlobalTarget) : 1),
+        vacationDutyTarget: src.invigVacationTarget !== undefined ? parseInt(src.invigVacationTarget) : (src.vacationDutyTarget !== undefined ? parseInt(src.vacationDutyTarget) : 0),
+        vacationDutyDates: typeof src.invigVacationDutyDates === 'string' ? (src.invigVacationDutyDates.startsWith('[') ? JSON.parse(src.invigVacationDutyDates) : src.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (src.vacationDutyDates || src.invigVacationDutyDates || []),
+        googleScriptUrl: src.invigGoogleScriptUrl || src.googleScriptUrl || ""
+    };
+
+    if (mode === '1') {
+        // --- FULL RESTORE ---
+        staffData = d.staffData || [];
+        invigilationSlots = d.invigilationSlots || {};
+        advanceUnavailability = d.advanceUnavailability || {};
+
+        if (d.rolesConfig) localStorage.setItem('invigRoles', JSON.stringify(d.rolesConfig));
+        if (d.designationsConfig) localStorage.setItem('invigDesignations', JSON.stringify(d.designationsConfig));
+        if (d.departmentsConfig) localStorage.setItem('invigDepartments', JSON.stringify(d.departmentsConfig));
+        if (d.globalDutyTarget !== undefined) localStorage.setItem('invigGlobalTarget', d.globalDutyTarget);
+        if (d.guestGlobalTarget !== undefined) localStorage.setItem('invigGuestTarget', d.guestGlobalTarget);
+        if (d.vacationDutyTarget !== undefined) localStorage.setItem('invigVacationTarget', d.vacationDutyTarget);
+        if (d.vacationDutyDates !== undefined) localStorage.setItem('invigVacationDutyDates', JSON.stringify(d.vacationDutyDates));
+        if (d.googleScriptUrl !== undefined) localStorage.setItem('invigGoogleScriptUrl', d.googleScriptUrl);
+
+    } else if (mode === '2') {
+        // --- SMART MERGE ---
+        const importedSlots = d.invigilationSlots || {};
+        let modifiedCount = 0;
+
+        Object.keys(importedSlots).forEach(key => {
+            if (invigilationSlots[key]) {
+                const target = invigilationSlots[key];
+                const source = importedSlots[key];
+                let changed = false;
+
+                if (source.volunteers && source.volunteers.length > 0) {
+                    if (!target.volunteers) target.volunteers = [];
+                    source.volunteers.forEach(v => {
+                        if (!target.volunteers.includes(v)) {
+                            target.volunteers.push(v);
+                            changed = true;
+                        }
+                    });
+                }
+                if (source.inconvenience && source.inconvenience.length > 0) {
+                    if (!target.inconvenience) target.inconvenience = [];
+                    source.inconvenience.forEach(v => {
+                        if (!target.inconvenience.includes(v)) {
+                            target.inconvenience.push(v);
+                            changed = true;
+                        }
+                    });
+                }
+                if (changed) modifiedCount++;
+            }
+        });
+        
+        if (showPrompts) alert(`Merge Complete: ${modifiedCount} existing slots updated with imported volunteers/inconveniences.`);
+    }
+
+    localStorage.setItem('examStaffData', JSON.stringify(staffData));
+    localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(advanceUnavailability));
+    localStorage.setItem('examInvigilationSlots', JSON.stringify(invigilationSlots));
+
+    // --- DIAGNOSTIC START ---
+    let totalSlots = Object.keys(invigilationSlots).length;
+    let pastYearSlots = 0;
+    const now = new Date();
+    const currentYearStart = new Date(now.getMonth() < 5 ? now.getFullYear() - 1 : now.getFullYear(), 5, 1);
+    Object.keys(invigilationSlots).forEach(k => {
+        if (parseDate(k) < currentYearStart) pastYearSlots++;
+    });
+    if (showPrompts) alert(`Diagnostic: Uploading ${totalSlots} total slots, including ${pastYearSlots} slots from previous academic years.`);
+    // --- DIAGNOSTIC END ---
+
+    // Save Slots using Sharded Logic
+    await syncSlotsToCloud(mode === '1' ? "SYSTEM_WIPE" : "FORCE_OVERWRITE");
+};
+
 window.handleMasterRestore = function (input) {
     const file = input.files[0];
     if (!file) return;
@@ -7446,10 +7707,27 @@ window.handleMasterRestore = function (input) {
         try {
             const backup = JSON.parse(e.target.result);
 
-            // Validation
-            if (!backup.data || !backup.data.staffData) {
-                throw new Error("Invalid backup file: Missing core data.");
+            // Normalize backup formats
+            let d = null;
+            if (backup.data) {
+                d = backup.data;
+            } else if (backup.examInvigilationSlots || backup.examStaffData) {
+                d = {
+                    staffData: typeof backup.examStaffData === 'string' ? JSON.parse(backup.examStaffData) : (backup.examStaffData || []),
+                    invigilationSlots: typeof backup.examInvigilationSlots === 'string' ? JSON.parse(backup.examInvigilationSlots) : (backup.examInvigilationSlots || {}),
+                    advanceUnavailability: typeof backup.invigAdvanceUnavailability === 'string' ? JSON.parse(backup.invigAdvanceUnavailability) : (backup.invigAdvanceUnavailability || {}),
+                    rolesConfig: typeof backup.invigRoles === 'string' ? JSON.parse(backup.invigRoles) : (backup.invigRoles || {}),
+                    designationsConfig: typeof backup.invigDesignations === 'string' ? JSON.parse(backup.invigDesignations) : (backup.invigDesignations || {}),
+                    departmentsConfig: typeof backup.invigDepartments === 'string' ? JSON.parse(backup.invigDepartments) : (backup.invigDepartments || []),
+                    globalDutyTarget: backup.invigGlobalTarget !== undefined ? parseInt(backup.invigGlobalTarget) : 2,
+                    guestGlobalTarget: backup.invigGuestTarget !== undefined ? parseInt(backup.invigGuestTarget) : 1,
+                    vacationDutyTarget: backup.invigVacationTarget !== undefined ? parseInt(backup.invigVacationTarget) : 0,
+                    vacationDutyDates: typeof backup.invigVacationDutyDates === 'string' ? (backup.invigVacationDutyDates.startsWith('[') ? JSON.parse(backup.invigVacationDutyDates) : backup.invigVacationDutyDates.split(',').map(x=>x.trim()).filter(Boolean)) : (backup.invigVacationDutyDates || []),
+                    googleScriptUrl: backup.invigGoogleScriptUrl || ""
+                };
             }
+
+            if (!d) return alert("Invalid Backup File File.");
 
             // 1. Ask User for Mode
             const mode = prompt(
@@ -7464,96 +7742,13 @@ window.handleMasterRestore = function (input) {
                 return; // Cancelled silently or invalid
             }
 
-            // 2. Safety Check
-            const confirmMsg = (mode === '1') 
-                ? "⚠️ CRITICAL WARNING ⚠️\n\nThis will OVERWRITE ALL system data (Staff, Settings, Duties).\nThis cannot be undone.\n\nType 'CONFIRM' to proceed:"
-                : "⚠️ PARTIAL RESTORE ⚠️\n\nThis will OVERWRITE duty assignments and unavailability in the current schedule using data from the backup.\n\nType 'CONFIRM' to proceed:";
+            // Calls the shared restore function
+            await window.restoreInvigilationCloudData(d, mode, true);
 
-            if (prompt(confirmMsg) !== "CONFIRM") {
-                input.value = "";
-                return alert("Restore Cancelled. Incorrect code.");
-            }
-
-            updateSyncStatus("Restoring...", "neutral");
-            const d = backup.data;
-            const ref = doc(db, "colleges", currentCollegeId);
-            let updatePayload = {};
-
-            if (mode === '1') {
-                // --- FULL RESTORE ---
-                staffData = d.staffData || [];
-                invigilationSlots = d.invigilationSlots || {};
-                advanceUnavailability = d.advanceUnavailability || {};
-                rolesConfig = d.rolesConfig || {};
-                designationsConfig = d.designationsConfig || {};
-                departmentsConfig = d.departmentsConfig || [];
-                globalDutyTarget = d.globalDutyTarget || 2;
-                guestGlobalTarget = d.guestGlobalTarget || 1;
-                vacationDutyTarget = d.vacationDutyTarget || 0;
-                vacationDutyDates = d.vacationDutyDates || [];
-                googleScriptUrl = d.googleScriptUrl || "";
-
-                // Prepare Full Payload
-                updatePayload = {
-                    examStaffData: JSON.stringify(staffData),
-                    invigAdvanceUnavailability: JSON.stringify(advanceUnavailability),
-                    invigRoles: JSON.stringify(rolesConfig),
-                    invigDesignations: JSON.stringify(designationsConfig),
-                    invigDepartments: JSON.stringify(departmentsConfig),
-                    invigGlobalTarget: globalDutyTarget,
-                    invigGuestTarget: guestGlobalTarget,
-                    invigVacationTarget: vacationDutyTarget,
-                    invigVacationDutyDates: JSON.stringify(vacationDutyDates),
-                    invigGoogleScriptUrl: googleScriptUrl
-                };
-            } 
-            else {
-                // --- PARTIAL RESTORE (Volunteers & Inconvenience) ---
-                
-                // 1. Restore Advance Unavailability (General Leave)
-                if (d.advanceUnavailability) {
-                    advanceUnavailability = d.advanceUnavailability;
-                }
-
-                // 2. Restore Slot Specific Data (Merge into existing)
-                const backupSlots = d.invigilationSlots || {};
-                let restoreCount = 0;
-
-                Object.keys(backupSlots).forEach(key => {
-                    const bSlot = backupSlots[key];
-                    
-                    // Only restore if the slot exists in the current system (e.g. correct date/time matches)
-                    if (invigilationSlots[key]) {
-                        invigilationSlots[key].assigned = bSlot.assigned || [];
-                        invigilationSlots[key].unavailable = bSlot.unavailable || [];
-                        invigilationSlots[key].exchangeRequests = bSlot.exchangeRequests || [];
-                        
-                        // Optional: Restore attendance if needed, otherwise skip
-                        // invigilationSlots[key].attendance = bSlot.attendance || [];
-                        
-                        restoreCount++;
-                    }
-                });
-
-                console.log(`Partial Restore: Updated duty data for ${restoreCount} slots.`);
-
-                // Prepare Partial Payload (Metadata only)
-                updatePayload = {
-                    invigAdvanceUnavailability: JSON.stringify(advanceUnavailability)
-                };
-            }
-
-            // 3. Save to Cloud
-            await updateDoc(ref, updatePayload);
-            
-            // 🛡️ Save Slots using Sharded Logic
-            await syncSlotsToCloud("FORCE_OVERWRITE");
-
-            // 4. Refresh UI
-            updateAdminUI();
-            renderSlotsGridAdmin();
+            // 4. Refresh UI and reload
             updateSyncStatus("Restored", "success");
-            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).`);
+            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).\n\nThe page will now reload to apply all restored configurations.`);
+            location.reload();
 
         } catch (err) {
             console.error("Restore Error:", err);
@@ -7859,7 +8054,7 @@ window.renderManualCards = function() {
                     </div>
                     <div class="text-[10px] text-gray-500 leading-tight search-dept flex items-center gap-1.5">
                         <span class="font-bold">${s.dept}</span> | 
-                                                <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">${isDateInVacation(parseDate(window.manualState.key)) ? 'Vac Rem:' : 'Rem:'} ${s.pending}</span>
+                        <span class="font-mono font-bold px-1.5 py-0.5 rounded border border-gray-100 ${pendingColor}">${isDateInVacation(parseDate(window.manualState.key)) ? 'Vac Rem:' : 'Rem:'} ${s.pending} (D:${s.doneBase}+V:${s.volCount})</span>
                     </div>
                     <div class="flex flex-wrap gap-1 mt-2">
                         <span class="flex items-center gap-0.5 text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold shadow-sm">📅 Wk: ${s.weekCount || 0}</span>
@@ -8049,20 +8244,32 @@ window.openManualAllocationModal = function (key) {
         }
     });
 
-    // 2. Pre-calculate Volunteered Vacation Duties (Not Yet Assigned)
+    // 2. Pre-calculate Volunteered Duties (Not Yet Assigned)
     const vacationVolunteeredCount = {};
-    staffData.forEach(s => vacationVolunteeredCount[s.email] = 0);
+    const regularVolunteeredCount = {};
+    staffData.forEach(s => {
+        vacationVolunteeredCount[s.email] = 0;
+        regularVolunteeredCount[s.email] = 0;
+    });
+
+    const targetMonthStr = targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
     Object.keys(invigilationSlots).forEach(k => {
         const slotObj = invigilationSlots[k];
         const dObj = parseDate(k);
         const isoD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
         const isVacSlot = isDateInVacation(dObj) || (window.vacationDutyDates && window.vacationDutyDates.includes(isoD));
+        const mStr = dObj.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-        if (isVacSlot && slotObj.volunteers) {
+        if (slotObj.volunteers) {
             slotObj.volunteers.forEach(email => {
                 // Count if they volunteered but aren't assigned yet
                 if (!(slotObj.assigned && slotObj.assigned.includes(email))) {
-                    if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    if (isVacSlot) {
+                        if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    } else if (mStr === targetMonthStr) {
+                        if (regularVolunteeredCount[email] !== undefined) regularVolunteeredCount[email]++;
+                    }
                 }
             });
         }
@@ -8079,19 +8286,22 @@ window.openManualAllocationModal = function (key) {
         .map(s => {
             let done = 0, target = 0, pending = 0, score = 0;
             let badges = [];
+            let doneBase = 0, volCount = 0;
 
             if (isCurrentSlotVacation) {
                 // Vacation Logic: Calculate "Total Committed"
-                const doneVacation = getVacationDutiesDoneCount(s.email);
-                const volunteeredVacation = vacationVolunteeredCount[s.email] || 0;
-                done = doneVacation + volunteeredVacation; // Factor in what they already volunteered for!
+                doneBase = getVacationDutiesDoneCount(s.email);
+                volCount = vacationVolunteeredCount[s.email] || 0;
+                done = doneBase + volCount; // Factor in what they already volunteered for!
                 target = vacationDutyTarget || 0;
                 pending = target - done;
                 score = pending * 1000; // EQUAL JUSTICE: Normalizing vacation debt weight
             } else {
                 // Standard Logic
                 // 🛡️ [REMISSION FIX]: Pass targetDate to ensure target is only for the session month
-                done = getDutiesDoneCount(s.email, targetDate);
+                doneBase = getDutiesDoneCount(s.email, targetDate);
+                volCount = regularVolunteeredCount[s.email] || 0;
+                done = doneBase + volCount;
                 target = calculateStaffTarget(s, targetDate);
                 pending = Math.max(0, target - done);
                 score = pending * 1000; // EQUAL JUSTICE: Increased multiplier for regular pending
@@ -8099,10 +8309,9 @@ window.openManualAllocationModal = function (key) {
 
             const ctx = staffContext[s.email] || { weekCount: 0, hasSameDay: false, hasAdjacent: false };
 
-// 🛡️ Volunteer Bonus for THIS slot
+// 🛡️ Volunteer Badge for THIS slot
             const hasVolunteered = slot.volunteers && slot.volunteers.includes(s.email);
             if (hasVolunteered) {
-                score += 500; // EQUAL JUSTICE: Reduced volunteer bonus (Pending Debt > Volunteering)
                 badges.push("Volunteer");
             }
 
@@ -8137,7 +8346,7 @@ window.openManualAllocationModal = function (key) {
                 }
             }
 
-            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0) };
+            return { ...s, pending, score, badges, weekCount: ctx.weekCount + ((slot.assigned || []).includes(s.email) ? 1 : 0), doneBase, volCount };
         })
         .sort((a, b) => b.score - a.score);
 
@@ -9116,7 +9325,7 @@ window.openHodMonitorModal = function () {
             // Safety Check: Ensure dateObj is valid before calling toISOString
             if (isNaN(dateObj.getTime())) return null;
 
-            const key = dateObj.toISOString().split('T')[0];
+            const key = getIsoDateLocal(dateObj);
             if (!schedule[key]) {
                 schedule[key] = {
                     dateObj: dateObj,
@@ -12015,12 +12224,47 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     targetSlots.sort((a, b) => a.date - b.date);
 
     const deptCounts = {};
+    
+    // --- 1.5 PRE-CALCULATE VOLUNTEERED DUTIES ---
+    const vacationVolunteeredCount = {};
+    const regularVolunteeredCount = {};
+    staffData.forEach(s => {
+        vacationVolunteeredCount[s.email] = 0;
+        regularVolunteeredCount[s.email] = 0;
+    });
+
+    Object.keys(invigilationSlots).forEach(k => {
+        const slotObj = invigilationSlots[k];
+        const dObj = parseDate(k);
+        const isoD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+        const isVacSlot = isDateInVacation(dObj) || (window.vacationDutyDates && window.vacationDutyDates.includes(isoD));
+        const mStr = dObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+        if (slotObj.volunteers) {
+            slotObj.volunteers.forEach(email => {
+                if (!(slotObj.assigned && slotObj.assigned.includes(email))) {
+                    if (isVacSlot) {
+                        if (vacationVolunteeredCount[email] !== undefined) vacationVolunteeredCount[email]++;
+                    } else if (mStr === monthStr) {
+                        if (regularVolunteeredCount[email] !== undefined) regularVolunteeredCount[email]++;
+                    }
+                }
+            });
+        }
+    });
+
     let eligibleStaff = staffData.map(s => {
         if (s.status !== 'archived') deptCounts[s.dept] = (deptCounts[s.dept] || 0) + 1;
+        
+        const dummyDate = new Date(`${monthStr} 15`);
+        const doneReg = getDutiesDoneCount(s.email, dummyDate) + (regularVolunteeredCount[s.email] || 0);
+        const targetReg = calculateStaffTarget(s, dummyDate);
+        const doneVac = getVacationDutiesDoneCount(s.email) + (vacationVolunteeredCount[s.email] || 0);
+
         return {
             ...s,
-            regularPending: calculateStaffTarget(s) - getDutiesDoneCount(s.email),
-            vacationPending: (vacationDutyTarget || 0) - getVacationDutiesDoneCount(s.email),
+            regularPending: targetReg - doneReg,
+            vacationPending: (vacationDutyTarget || 0) - doneVac,
             weeklyLoad: {}
         };
     });

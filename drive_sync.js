@@ -24,6 +24,70 @@ const DATA_KEYS = [
   ];
 window.DATA_KEYS = DATA_KEYS; // Expose to app.js
 
+// Helper to get local ISO date (YYYY-MM-DD) to avoid timezone-related date mismatches
+window.getIsoDateLocal = (date = new Date()) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+// 🛡️ [AUDIT FIX]: Cloud-Absolute Deletion for Bulk Operations
+// Modifies the cloud shards directly using { merge: true } and deleteField()
+window.deleteSlotsFromCloud = async function(sessionKeys, localSlots) {
+    if (!sessionKeys || sessionKeys.length === 0) return;
+    if (typeof updateSyncStatus === 'function') updateSyncStatus("Deleting Slots...", "neutral");
+    try {
+        const { db, doc, writeBatch, deleteField } = window.firebase;
+        const collegeId = window.currentCollegeId || localStorage.getItem('my_college_id');
+        if (!collegeId) return;
+
+        const batch = writeBatch(db);
+        const shardUpdates = {};
+
+        function getShardId(key) {
+            try {
+                const [dRaw] = key.split(' | ');
+                const dStr = dRaw.replace(/-/g, '.');
+                const parts = dStr.split('.');
+                if (parts.length < 3) return "unknown";
+                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            } catch (e) { return "unknown"; }
+        }
+
+        sessionKeys.forEach(sessionKey => {
+            const sid = getShardId(sessionKey);
+            if (!shardUpdates[sid]) shardUpdates[sid] = {};
+            
+            let slot = {};
+            if (localSlots) {
+                slot = localSlots[sessionKey] || {};
+            } else if (typeof invigilationSlots !== 'undefined') {
+                slot = invigilationSlots[sessionKey] || {};
+            }
+            const hasVolunteers = (slot.assigned && slot.assigned.length > 0) || (slot.unavailable && slot.unavailable.length > 0);
+            
+            if (!hasVolunteers) {
+                shardUpdates[sid][sessionKey] = deleteField();
+            } else {
+                shardUpdates[sid][sessionKey] = {
+                    required: 0,
+                    reserveCount: 0,
+                    studentCount: 0,
+                    scribeCount: 0
+                };
+            }
+        });
+
+        Object.keys(shardUpdates).forEach(sid => {
+            const ref = doc(db, "colleges", collegeId, "slots_daily", sid);
+            batch.set(ref, shardUpdates[sid], { merge: true });
+        });
+
+        await batch.commit();
+        console.log("✅ Successfully updated cloud shards for deleted sessions.");
+    } catch (e) {
+        console.error("Cloud shard delete failed:", e);
+    }
+};
+
 
 // --- IndexedDB Configuration (Sync with app.js) ---
 const IDB_NAME = 'AntigravityDB';
@@ -32,7 +96,7 @@ const IDB_KEY = 'examBaseData';
 
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 2);
+        const req = indexedDB.open(IDB_NAME, 3);
         req.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE); };
         req.onsuccess = e => resolve(e.target.result);
         req.onerror = e => reject(e.target.error);
@@ -283,6 +347,29 @@ function handleAuthClick() {
 
 // --- FOLDER & UPLOAD LOGIC ---
 
+function pruneDriveAuthOnFailure(e) {
+    if (!e) return false;
+    const isAuthError = e.status === 401 || e.status === 403 || e.code === 401 || e.code === 403 || 
+                        (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403));
+    if (isAuthError) {
+        const isForbidden = e.status === 403 || e.code === 403 || 
+                            (e.result && e.result.error && e.result.error.code === 403);
+        localStorage.removeItem('drive_access_token');
+        localStorage.removeItem('drive_token_expiry');
+        localStorage.removeItem('isDriveConnected');
+        if (window.gapi && gapi.client) {
+            gapi.client.setToken(null);
+        }
+        showReconnectState();
+        const errMsg = isForbidden 
+            ? "Drive permissions missing. Please click 'Reconnect Drive' and ensure you TICK THE CHECKBOX for Drive access in the Google popup." 
+            : "Drive session expired. Please reconnect.";
+        console.warn(errMsg);
+        return errMsg;
+    }
+    return false;
+}
+
 async function getBackupFolder() {
     // 🛡️ WAIT FOR GAPI: Ensure the drive client is fully loaded before making requests
     let retries = 0;
@@ -296,44 +383,39 @@ async function getBackupFolder() {
         throw new Error("Google Drive API failed to initialize. Please refresh the page.");
     }
 
+    // 🛡️ CROSS-TAB SYNC: Ensure we have the latest token from localStorage before requesting
+    const storedToken = localStorage.getItem('drive_access_token');
+    const expiry = localStorage.getItem('drive_token_expiry');
+    if (storedToken && expiry && Date.now() < parseInt(expiry)) {
+        gapi.client.setToken({ access_token: storedToken });
+    }
+
+    // 🛡️ GUARD: If no token, abort early instead of making unauthenticated 403 request
+    if (!gapi.client.getToken() || !gapi.client.getToken().access_token) {
+        const errMsg = "Drive session expired or missing. Please click 'Reconnect Drive'.";
+        pruneDriveAuthOnFailure({ status: 401 });
+        throw new Error(errMsg);
+    }
+
     const q = "mimeType='application/vnd.google-apps.folder' and name='ExamFlow_Backups' and trashed=false";
     let res;
     try {
         res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     } catch(e) {
-        // 🛡️ FIX: Deeply check for 401 or 403 errors
-        const isAuthError = e.status === 401 || e.status === 403 || e.code === 401 || e.code === 403 || (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403));
-
-        if (isAuthError) {
-            localStorage.removeItem('drive_access_token');
-            localStorage.removeItem('drive_token_expiry');
-            localStorage.removeItem('isDriveConnected');
-            gapi.client.setToken(null);
-            showReconnectState();
-
-            // Determine if it was specifically a 403 (permissions) or a 401 (expired)
-            const isForbidden = e.status === 403 || e.code === 403 || (e.result && e.result.error && e.result.error.code === 403);
-            const errMsg = isForbidden ? "Drive permissions missing. Please click 'Reconnect Drive' and ensure you TICK THE CHECKBOX for Drive access in the Google popup." : "Drive session expired. Please reconnect.";
-
-            // Log it, and only alert if they clicked a manual button
-            console.warn(errMsg);
+        const authMsg = pruneDriveAuthOnFailure(e);
+        if (authMsg) {
             if (!document.getElementById('drive-sync-status-ribbon')?.classList.contains('hidden')) {
-                 alert("⚠️ " + errMsg);
+                 alert("⚠️ " + authMsg);
             }
-            throw new Error(errMsg);
+            throw new Error(authMsg);
         }
-        // For other errors (like API not ready), warn but don't logout
         console.warn("Drive connection check deferred:", e);
         throw e;
     }
     
-    if (res.status === 401) {
-        localStorage.removeItem('drive_access_token');
-        localStorage.removeItem('drive_token_expiry');
-        localStorage.removeItem('isDriveConnected');
-        gapi.client.setToken(null);
-        showReconnectState();
-        throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+    if (res && (res.status === 401 || res.status === 403)) {
+        const authMsg = pruneDriveAuthOnFailure(res);
+        throw new Error(authMsg || "Auth error");
     }
     if (res.result.files.length > 0) return res.result.files[0].id;
     const meta = { 'name': 'ExamFlow_Backups', 'mimeType': 'application/vnd.google-apps.folder' };
@@ -359,7 +441,10 @@ async function findLatestBackupTime() {
             }
         }
 
-} catch(e) { console.error(e); }
+    } catch(e) { 
+        pruneDriveAuthOnFailure(e);
+        console.error(e); 
+    }
 }
 
 window.syncData = syncData; // 🛡️ Expose to HTML buttons
@@ -388,7 +473,18 @@ async function syncData(source = "AUTO") {
         }
 
         // Check if token is still valid, refresh silently if needed
-        const currentToken = gapi.client.getToken();
+        let currentToken = gapi.client.getToken();
+        
+        // 🛡️ CROSS-TAB SYNC: Try loading from localStorage if missing in memory
+        if (!currentToken || !currentToken.access_token) {
+            const storedToken = localStorage.getItem('drive_access_token');
+            const expiry = localStorage.getItem('drive_token_expiry');
+            if (storedToken && expiry && Date.now() < parseInt(expiry)) {
+                gapi.client.setToken({ access_token: storedToken });
+                currentToken = gapi.client.getToken();
+            }
+        }
+
         if (!currentToken || !currentToken.access_token) {
             if (btn) btn.innerHTML = "🔄 Refreshing login...";
             await new Promise((resolve, reject) => {
@@ -463,7 +559,7 @@ async function syncData(source = "AUTO") {
         
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
-        const fileName = `${source}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `${source}_Backup_${window.getIsoDateLocal ? window.getIsoDateLocal(now) : now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
@@ -495,8 +591,10 @@ async function syncData(source = "AUTO") {
 
     } catch (e) {
         console.error(e);
-        // Show a friendly message for token/auth errors
-        if (e.message && e.message.includes('expired')) {
+        const authMsg = pruneDriveAuthOnFailure(e);
+        if (authMsg) {
+            alert("⚠️ " + authMsg);
+        } else if (e.message && e.message.includes('expired')) {
             alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
         } else {
             alert("Backup Failed: " + e.message);
@@ -632,7 +730,7 @@ async function syncDataSilent() {
         // 🛡️ [AUDIT FIX]: Include prefix for silent backups
         const isInvig = window.location.pathname.includes('invigilation');
         const prefix = isInvig ? 'INVIG_AUTO' : 'ADMIN_AUTO';
-        const fileName = `${prefix}_Backup_${now.toISOString().split('T')[0]}_${timeStr}.json`;
+        const fileName = `${prefix}_Backup_${window.getIsoDateLocal ? window.getIsoDateLocal(now) : now.toISOString().split('T')[0]}_${timeStr}.json`;
 
         const createRes = await gapi.client.drive.files.create({
             resource: { name: fileName, parents: [folderId], mimeType: 'application/json' },
@@ -665,6 +763,7 @@ async function syncDataSilent() {
 
         console.log("Manual Sync Complete.");
     } catch(e) {
+        pruneDriveAuthOnFailure(e);
         console.error("Silent Auto-Sync failed:", e);
     }
 }
@@ -766,6 +865,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
             }
         }
     } catch(e) {
+        pruneDriveAuthOnFailure(e);
         console.error("Drive Check Failed:", e);
         if (isManual && log) {
             log.textContent = "Check Failed";
@@ -801,7 +901,10 @@ async function restoreFromDrive() {
         });
         if (res.result.files.length === 0) return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
         showRestoreModal(res.result.files);
-    } catch (e) { alert("Error: " + e.message); }
+    } catch (e) { 
+        pruneDriveAuthOnFailure(e);
+        alert("Error: " + e.message); 
+    }
 }
 
 function showRestoreModal(files) {
@@ -855,7 +958,10 @@ window.executeRestore = async function(fileId, cloudTime = null) {
             try { cloudData = JSON.parse(cloudData); } 
             catch (e) { cloudData = JSON.parse(response.body); }
         }
-    } catch (e) { return alert("Fetch Error: " + e.message); }
+    } catch (e) { 
+        pruneDriveAuthOnFailure(e);
+        return alert("Fetch Error: " + e.message); 
+    }
 
     // 2. SHOW CUSTOM UI MODAL with Text Confirmation
     const promptModal = document.createElement('div');
@@ -972,12 +1078,18 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     // Even in Merge mode, we treat Cloud as the "Truth" for these small files
                     const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;
                     localStorage.setItem(key, stringVal);
+
+                    // 🛡️ [SURGICAL FIX]: Must update Invigilation Portal memory BEFORE authoritative sync
+                    if (key === 'examInvigilationSlots' && typeof window.setInvigilationSlotsForRestore === 'function') {
+                        window.setInvigilationSlotsForRestore(typeof val === 'string' ? JSON.parse(val) : val);
+                    }
                 }
             }
         }
 
         // --- 3. [AUTHORITY SHIFT]: Direct Cloud Restoration ---
-        if (typeof window.currentCollegeId !== 'undefined' && window.currentCollegeId && navigator.onLine) {
+        const activeCollegeId = window.currentCollegeId || localStorage.getItem('currentCollegeId');
+        if (activeCollegeId && navigator.onLine) {
             console.log("🚀 [Authority Shift]: Direct Cloud Restore in progress...");
             
             // 1. Resolve sessions from the restored data
@@ -1009,6 +1121,12 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                     await new Promise(r => setTimeout(r, 500));
                 }
             }
+        }
+
+        // 🛡️ Ensure Invigilation Settings are authoritatively pushed to the cloud
+        if (typeof window.restoreInvigilationCloudData === 'function') {
+            console.log("🛡️ Syncing Invigilation Data to Cloud...");
+            await window.restoreInvigilationCloudData(cloudData, isMerge ? '2' : '1', false);
         }
 
         if (cloudTime) {

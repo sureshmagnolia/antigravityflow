@@ -136,7 +136,7 @@
                 const todayStr = `${p1.day}.${p1.month}.${p1.year}`;
                 
                 const sessionsObj = indexCache ? (indexCache.sessions || {}) : {};
-                const hasExamsToday = Object.keys(sessionsObj).some(key => key.startsWith(todayStr));
+                const hasExamsToday = Object.keys(sessionsObj).some(key => key.split(' | ')[0].trim() === todayStr);
 
                 if (!hasExamsToday) {
                     statusEl.innerHTML = `<span class="bg-gray-100 text-gray-700 px-4 py-2 rounded-full font-bold text-sm border border-gray-200">No Exams Scheduled Today</span>`;
@@ -200,7 +200,7 @@
     const now = window.getExamsNow ? window.getExamsNow() : new Date();
 
     for (const [label, sInfo] of Object.entries(sessions)) {
-        if (!label.startsWith(todayString)) continue;
+        if (label.split(' | ')[0].trim() !== todayString) continue;
 
         const [dPart, tPart] = label.split(' | ');
         const sessionTime = parseSessionTime(dPart.trim(), tPart.trim());
@@ -255,7 +255,7 @@
                 const dateStr = session.date;
                 const timeStr = session.time;
                 const examDayStart = parseSessionTime(dateStr, "00:00 AM");
-                if (examDayStart < todayMidnight) return;
+                if (examDayStart.getTime() !== todayMidnight.getTime()) return;
 
                 let studentRecord = null;
                 let studentRoom = "Not Allotted";

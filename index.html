@@ -17,7 +17,7 @@
     <script src="jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <script src="drive_sync.js"></script>
+    <script src="drive_sync.js?v=v3"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
@@ -31,8 +31,8 @@
     import {
         initializeFirestore, getFirestore, doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
-        addDoc, updateDoc, arrayUnion, arrayRemove,
-        onSnapshot, writeBatch, persistentLocalCache, persistentMultipleTabManager
+        addDoc, updateDoc, arrayUnion, arrayRemove, deleteField,
+        onSnapshot, writeBatch, persistentLocalCache, persistentMultipleTabManager, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 
@@ -63,8 +63,8 @@
         auth, db, storage, provider, signInWithPopup, signOut, onAuthStateChanged,
         doc, getDoc, setDoc, deleteDoc,
         collection, query, where, getDocs, orderBy,
-        addDoc, updateDoc, arrayUnion, arrayRemove,
-        onSnapshot, writeBatch,
+        addDoc, updateDoc, arrayUnion, arrayRemove, deleteField,
+        onSnapshot, writeBatch, serverTimestamp,
         // --- EXPOSE STORAGE METHODS ---
         ref, uploadString, getDownloadURL, deleteObject, listAll
     };
@@ -4570,7 +4570,7 @@
 </div>
 
 <script src="session_export.js"></script>
-<script src="app.js?v=12.8.8"></script>
+<script src="app.js?v=12.8.10"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>
