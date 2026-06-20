@@ -1121,10 +1121,10 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                 }
             }
 
-            // 4. Force sync invigilation slots back to cloud daily shards
-            if (typeof window.syncSlotsToCloud === 'function') {
-                console.log("🚀 [Restore Hook]: Syncing invigilation slots daily shards...");
-                await window.syncSlotsToCloud("SYSTEM_WIPE"); // SYSTEM_WIPE is required to overwrite shard deletions
+            // 🛡️ [NEW FIX]: Ensure Invigilation Settings are authoritatively pushed to the cloud
+            if (typeof window.restoreInvigilationCloudData === 'function') {
+                console.log("🛡️ Syncing Invigilation Data to Cloud...");
+                await window.restoreInvigilationCloudData(cloudData, isMerge ? '2' : '1', false);
             }
         }
 
