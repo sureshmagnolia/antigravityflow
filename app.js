@@ -10938,54 +10938,63 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // 1. Clear Local Storage
                 const keysToRemove = [
                     BASE_DATA_KEY, ROOM_ALLOTMENT_KEY, SCRIBE_ALLOTMENT_KEY,
-                    SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY
+                    SCRIBE_LIST_KEY, ABSENTEE_LIST_KEY, QP_CODE_LIST_KEY,
+                    'examAllKnownSessions'
                 ];
                 keysToRemove.forEach(k => localStorage.removeItem(k));
 
-                // 2. Wipe Cloud Data (The Fix)
+                // 2. Wipe Local IndexedDB (Crucial to prevent stale reload pulls)
+                if (typeof saveExamDataIDB === 'function') {
+                    await saveExamDataIDB([], true); // true = skip redundant auto-sync loop
+                }
+
+                // 3. Wipe Cloud Data
                 if (currentCollegeId) {
                     try {
                         const originalText = resetStudentDataButton.innerHTML;
-                        resetStudentDataButton.innerHTML = "☁️ Wiping V2 Data...";
+                        resetStudentDataButton.innerHTML = "☁️ Wiping Cloud Data...";
                         resetStudentDataButton.disabled = true;
                         
-                        const { db, doc, writeBatch, collection, getDocs } = window.firebase;
+                        const { db, doc, writeBatch, collection, getDocs, deleteDoc } = window.firebase;
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
 
                         // A. Reset fields in the main document (Metadata only)
-                        // We do NOT reset global shared lists to protect V1
                         batch.update(mainRef, {
                             lastUpdated: new Date().toISOString()
                         });
 
-                        // B. [DISABLED] DELETE SUB-COLLECTIONS 
-                        // These are shared with V1. We keep them safe.
-                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "operations"));
-                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "allocation"));
-                        // batch.delete(doc(db, "colleges", currentCollegeId, "system_data", "slots"));
-
-                        // C. [NEW] Delete ONLY V2 SESSIONS (Modular Data)
+                        // B. Delete ONLY V2 SESSIONS (Modular Data)
                         const sessionsRef = collection(db, "colleges", currentCollegeId, "sessions");
                         const sessionSnaps = await getDocs(sessionsRef);
                         sessionSnaps.forEach(doc => batch.delete(doc.ref));
 
-                        // D. [DISABLED] Delete Legacy Chunks (V1 Data)
-                        // Kept strictly safe so V1 continues to work
-                        // const dataColRef = collection(db, "colleges", currentCollegeId, "data");
-                        // const chunkSnaps = await getDocs(dataColRef);
-                        // chunkSnaps.forEach(chunk => batch.delete(chunk.ref));
+                        // C. Wipe V2 session_students collection
+                        const sessionStudentsRef = collection(db, "colleges", currentCollegeId, "session_students");
+                        const studentSnaps = await getDocs(sessionStudentsRef);
+                        studentSnaps.forEach(doc => batch.delete(doc.ref));
 
                         await batch.commit();
                         console.log("V2 Session data wiped successfully.");
+                        
+                        // D. Overwrite the Master Student File in Firebase Storage with the empty database
+                        if (typeof syncDataToCloud === 'function') {
+                            await syncDataToCloud('baseData');
+                        }
                     } catch (e) {
                         console.error("Cloud Wipe Error:", e);
                         if (e.message && e.message.includes('Missing or insufficient permissions')) {
                             console.warn("Basic user: Skipping Firebase cloud wipe.");
                         } else {
-                            alert("Warning: Cloud wipe failed.\\nError: " + e.message);
+                            alert("Warning: Cloud wipe failed.\nError: " + e.message);
                         }
                     }
+                }
+                
+                // 4. Force Drive Sync for Basic Users
+                if (typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId) {
+                    localStorage.setItem('lastUpdated', new Date().toISOString());
+                    window.triggerDriveAutoSync(true); // Sync immediately
                 }
                 
                 alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
