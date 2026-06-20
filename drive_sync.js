@@ -347,6 +347,29 @@ function handleAuthClick() {
 
 // --- FOLDER & UPLOAD LOGIC ---
 
+function pruneDriveAuthOnFailure(e) {
+    if (!e) return false;
+    const isAuthError = e.status === 401 || e.status === 403 || e.code === 401 || e.code === 403 || 
+                        (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403));
+    if (isAuthError) {
+        const isForbidden = e.status === 403 || e.code === 403 || 
+                            (e.result && e.result.error && e.result.error.code === 403);
+        localStorage.removeItem('drive_access_token');
+        localStorage.removeItem('drive_token_expiry');
+        localStorage.removeItem('isDriveConnected');
+        if (window.gapi && gapi.client) {
+            gapi.client.setToken(null);
+        }
+        showReconnectState();
+        const errMsg = isForbidden 
+            ? "Drive permissions missing. Please click 'Reconnect Drive' and ensure you TICK THE CHECKBOX for Drive access in the Google popup." 
+            : "Drive session expired. Please reconnect.";
+        console.warn(errMsg);
+        return errMsg;
+    }
+    return false;
+}
+
 async function getBackupFolder() {
     // 🛡️ WAIT FOR GAPI: Ensure the drive client is fully loaded before making requests
     let retries = 0;
@@ -365,39 +388,20 @@ async function getBackupFolder() {
     try {
         res = await gapi.client.drive.files.list({ q: q, fields: 'files(id)' });
     } catch(e) {
-        // 🛡️ FIX: Deeply check for 401 or 403 errors
-        const isAuthError = e.status === 401 || e.status === 403 || e.code === 401 || e.code === 403 || (e.result && e.result.error && (e.result.error.code === 401 || e.result.error.code === 403));
-
-        if (isAuthError) {
-            localStorage.removeItem('drive_access_token');
-            localStorage.removeItem('drive_token_expiry');
-            localStorage.removeItem('isDriveConnected');
-            gapi.client.setToken(null);
-            showReconnectState();
-
-            // Determine if it was specifically a 403 (permissions) or a 401 (expired)
-            const isForbidden = e.status === 403 || e.code === 403 || (e.result && e.result.error && e.result.error.code === 403);
-            const errMsg = isForbidden ? "Drive permissions missing. Please click 'Reconnect Drive' and ensure you TICK THE CHECKBOX for Drive access in the Google popup." : "Drive session expired. Please reconnect.";
-
-            // Log it, and only alert if they clicked a manual button
-            console.warn(errMsg);
+        const authMsg = pruneDriveAuthOnFailure(e);
+        if (authMsg) {
             if (!document.getElementById('drive-sync-status-ribbon')?.classList.contains('hidden')) {
-                 alert("⚠️ " + errMsg);
+                 alert("⚠️ " + authMsg);
             }
-            throw new Error(errMsg);
+            throw new Error(authMsg);
         }
-        // For other errors (like API not ready), warn but don't logout
         console.warn("Drive connection check deferred:", e);
         throw e;
     }
     
-    if (res.status === 401) {
-        localStorage.removeItem('drive_access_token');
-        localStorage.removeItem('drive_token_expiry');
-        localStorage.removeItem('isDriveConnected');
-        gapi.client.setToken(null);
-        showReconnectState();
-        throw new Error('Drive session expired. Please click Reconnect Drive and try again.');
+    if (res && (res.status === 401 || res.status === 403)) {
+        const authMsg = pruneDriveAuthOnFailure(res);
+        throw new Error(authMsg || "Auth error");
     }
     if (res.result.files.length > 0) return res.result.files[0].id;
     const meta = { 'name': 'ExamFlow_Backups', 'mimeType': 'application/vnd.google-apps.folder' };
@@ -423,7 +427,10 @@ async function findLatestBackupTime() {
             }
         }
 
-} catch(e) { console.error(e); }
+    } catch(e) { 
+        pruneDriveAuthOnFailure(e);
+        console.error(e); 
+    }
 }
 
 window.syncData = syncData; // 🛡️ Expose to HTML buttons
@@ -559,8 +566,10 @@ async function syncData(source = "AUTO") {
 
     } catch (e) {
         console.error(e);
-        // Show a friendly message for token/auth errors
-        if (e.message && e.message.includes('expired')) {
+        const authMsg = pruneDriveAuthOnFailure(e);
+        if (authMsg) {
+            alert("⚠️ " + authMsg);
+        } else if (e.message && e.message.includes('expired')) {
             alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
         } else {
             alert("Backup Failed: " + e.message);
@@ -729,6 +738,7 @@ async function syncDataSilent() {
 
         console.log("Manual Sync Complete.");
     } catch(e) {
+        pruneDriveAuthOnFailure(e);
         console.error("Silent Auto-Sync failed:", e);
     }
 }
@@ -830,6 +840,7 @@ async function checkForNewerDataOnDrive(isManual = false) {
             }
         }
     } catch(e) {
+        pruneDriveAuthOnFailure(e);
         console.error("Drive Check Failed:", e);
         if (isManual && log) {
             log.textContent = "Check Failed";
@@ -865,7 +876,10 @@ async function restoreFromDrive() {
         });
         if (res.result.files.length === 0) return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
         showRestoreModal(res.result.files);
-    } catch (e) { alert("Error: " + e.message); }
+    } catch (e) { 
+        pruneDriveAuthOnFailure(e);
+        alert("Error: " + e.message); 
+    }
 }
 
 function showRestoreModal(files) {
@@ -919,7 +933,10 @@ window.executeRestore = async function(fileId, cloudTime = null) {
             try { cloudData = JSON.parse(cloudData); } 
             catch (e) { cloudData = JSON.parse(response.body); }
         }
-    } catch (e) { return alert("Fetch Error: " + e.message); }
+    } catch (e) { 
+        pruneDriveAuthOnFailure(e);
+        return alert("Fetch Error: " + e.message); 
+    }
 
     // 2. SHOW CUSTOM UI MODAL with Text Confirmation
     const promptModal = document.createElement('div');
