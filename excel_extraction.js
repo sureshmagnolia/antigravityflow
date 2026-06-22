@@ -77,14 +77,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     const finalDate = (dateParts[0] || "").replace(/[-/]/g, '.');
                     const finalTime = dateParts.slice(1).join(' ') || "";
 
+                    // 3. Format Course Name to EXACTLY match PDF output
+                    let courseName = paperName ? paperName.trim() : "Unknown Course";
+                    if (courseName.includes('/')) {
+                        let parts = courseName.split('/');
+                        let mainPart = parts[0].trim();
+                        let yearPart = parts[1] ? parts[1].replace(/[^0-9]/g, '') : ""; // Extract just the year digits
+                        
+                        // Replace "--(" with " (" to match PDF styling
+                        mainPart = mainPart.replace(/--\(/g, ' (');
+                        // Replace any remaining "--" with space
+                        mainPart = mainPart.replace(/--/g, ' ');
+                        
+                        if (yearPart && yearPart.length === 4) {
+                            courseName = `${mainPart} [${yearPart} SYLLABUS]`;
+                        } else {
+                            courseName = mainPart;
+                        }
+                    } else {
+                        courseName = courseName.replace(/--\(/g, ' (').replace(/--/g, ' ');
+                    }
+
                     allStudents.push({
                         "Register Number": r[1].toString().trim(),
                         "Name": r[2].toString().trim(),
                         "Date": finalDate,
                         "Time": finalTime,
-                        "Course": paperName ? paperName.split('/')[0].trim() : "Unknown Course",
+                        "Course": courseName,
                         "Exam Name": selectedExamName,
                         "Stream": document.getElementById('global-stream-select').value || "Regular",
+                        "Source File": file.name, // Match PDF output metadata
                         "DOB": r[3] || ""
                     });
                     fileStudentCount++;
