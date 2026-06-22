@@ -184,14 +184,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!r[regIdx] || !r[nameIdx]) continue; // Skip empty rows
 
                     let finalDate = "", finalTime = "";
-                    if (examDate && examDate.includes(" ") && examDate.match(/\d{2}/)) {
+                    if (examDate && examDate.includes(" ") && examDate.match(/\d{4}/)) {
                         // Strict parsing: "06.07.2026 10:00 AM"
                         const dateParts = examDate.split(' ');
                         finalDate = (dateParts[0] || "").replace(/[-/]/g, '.');
                         finalTime = dateParts.slice(1).join(' ') || "";
                     } else {
                         // Dynamic Fallback parsing
-                        finalDate = examDate || findDateInText(allHeaderRows);
+                        finalDate = findDateInText(allHeaderRows) || examDate;
                         finalTime = findTimeInText(allHeaderRows);
                     }
 
