@@ -455,6 +455,7 @@ let isScribeAllotmentLocked = true; // Default to Locked
 // --- MAIN APP LOGIC ---
 // ADD THESE:
 let settingsUnsub = null;
+let metadataUnsub = null;
 let opsUnsub = null;
 let allocUnsub = null;
 let staffUnsub = null;
@@ -1382,6 +1383,7 @@ window.recalcInvigSlots = async function () {
 
         // Cleanup old listeners
         if (cloudSyncUnsubscribe) cloudSyncUnsubscribe();
+        if (metadataUnsub) metadataUnsub();
         if (settingsUnsub) settingsUnsub();
         if (opsUnsub) opsUnsub();
         if (allocUnsub) allocUnsub();
@@ -1411,47 +1413,116 @@ window.recalcInvigSlots = async function () {
             });
         };
           // 1. METADATA (Root Doc) - Converted to one-time fetch!
-        const checkCollegeMetadata = async () => {
-            const { getDoc, doc } = window.firebase;
-            const snap = await getDoc(doc(db, "colleges", collegeId));
-            if (snap.exists()) {
-                clearTimeout(connectionTimeout);
-                currentCollegeData = snap.data();
-                const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
-                const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
-                // 🛡️ Save Admin status for Drive Reactive Sync
-                localStorage.setItem('isAdminUser', isAdminUser ? 'true' : 'false');
+        const checkCollegeMetadata = () => {
+            const { doc, onSnapshot } = window.firebase;
+            
+            if (metadataUnsub) metadataUnsub();
+            
+            metadataUnsub = onSnapshot(doc(db, "colleges", collegeId), async (snap) => {
+                if (snap.exists()) {
+                    clearTimeout(connectionTimeout);
+                    currentCollegeData = snap.data();
+                    const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
+                    const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
+                    // 🛡️ Save Admin status for Drive Reactive Sync
+                    localStorage.setItem('isAdminUser', isAdminUser ? 'true' : 'false');
 
-                if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
-                if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
+                    if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
+                    if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
 
-                // --- PRO FEATURES REVEAL (GATING) ---
-                const syncStatusDisplay = document.getElementById('sync-status');
-                const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
-                const portalSection = document.getElementById('student-portal-section');
-                const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
-                const loaderRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-loader');
-                const editorRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-editor');
+                    // --- PRO FEATURES REVEAL (GATING) ---
+                    const syncStatusDisplay = document.getElementById('sync-status');
+                    const forceSyncAllotmentButton = document.getElementById('force-sync-allotment-button');
+                    const portalSection = document.getElementById('student-portal-section');
+                    const invigSlotWrapper = document.getElementById('invig-slot-sync-wrapper');
+                    const loaderRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-loader');
+                    const editorRecalcWrapper = document.getElementById('invig-slot-sync-wrapper-editor');
 
-                if (syncStatusDisplay) syncStatusDisplay.classList.remove('hidden');
-                if (forceSyncAllotmentButton) forceSyncAllotmentButton.classList.remove('hidden');
-                if (portalSection) portalSection.classList.remove('hidden');
+                    if (syncStatusDisplay) syncStatusDisplay.classList.remove('hidden');
+                    if (forceSyncAllotmentButton) forceSyncAllotmentButton.classList.remove('hidden');
+                    if (portalSection) portalSection.classList.remove('hidden');
 
-                // Show Slot Recalc only if Admin
-                if (invigSlotWrapper) invigSlotWrapper.classList.toggle('hidden', !isAdminUser);
-                if (loaderRecalcWrapper) loaderRecalcWrapper.classList.toggle('hidden', !isAdminUser);
-                if (editorRecalcWrapper) editorRecalcWrapper.classList.toggle('hidden', !isAdminUser);
+                    // Show Slot Recalc only if Admin
+                    if (invigSlotWrapper) invigSlotWrapper.classList.toggle('hidden', !isAdminUser);
+                    if (loaderRecalcWrapper) loaderRecalcWrapper.classList.toggle('hidden', !isAdminUser);
+                    if (editorRecalcWrapper) editorRecalcWrapper.classList.toggle('hidden', !isAdminUser);
 
-                updateHeaderCollegeName();
-                if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
-            } else {
-                console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
-                localStorage.clear();
-                sessionStorage.clear();
-                alert("Session corrupted or expired. Please log in again.");
-                if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
-                location.reload();
-            }
+                    updateHeaderCollegeName();
+                    if (typeof updateStudentPortalLink === 'function') updateStudentPortalLink();
+                    
+                    // --- CROSS-SESSION EVENT DETECTION ---
+                    const localWipeEvent = localStorage.getItem('lastWipeEvent') || "";
+                    if (currentCollegeData.lastWipeEvent && currentCollegeData.lastWipeEvent > localWipeEvent) {
+                        if (typeof UiModal !== 'undefined') {
+                            setTimeout(async () => {
+                                const doWipe = await UiModal.confirm(
+                                    "🚨 Master Reset Detected", 
+                                    "A Master Reset of Students was detected from another User session.\n\nShould we clear the ghost data here too to prevent corruption?"
+                                );
+                                if (doWipe) {
+                                    localStorage.removeItem(BASE_DATA_KEY);
+                                    localStorage.removeItem(ROOM_ALLOTMENT_KEY);
+                                    localStorage.removeItem(SCRIBE_ALLOTMENT_KEY);
+                                    localStorage.removeItem(SCRIBE_LIST_KEY);
+                                    localStorage.removeItem(ABSENTEE_LIST_KEY);
+                                    localStorage.removeItem(QP_CODE_LIST_KEY);
+                                    localStorage.setItem('examAllKnownSessions', '[]');
+                                    if (typeof saveExamDataIDB === 'function') {
+                                        await saveExamDataIDB([], true);
+                                    }
+                                    localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    if (currentCollegeData.lastUploadEvent) {
+                                        localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    }
+                                    window.location.reload();
+                                    return;
+                                } else {
+                                    localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    if (currentCollegeData.lastUploadEvent) {
+                                        localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    }
+                                }
+                            }, 500);
+                        }
+                    }
+
+                    const localUploadEvent = localStorage.getItem('lastUploadEvent') || "";
+                    if (currentCollegeData.lastUploadEvent && currentCollegeData.lastUploadEvent > localUploadEvent) {
+                        if (typeof UiModal !== 'undefined') {
+                            setTimeout(async () => {
+                                const doReplace = await UiModal.confirm(
+                                    "📡 New Master Data Detected",
+                                    "New Master Data was uploaded from another session. The data in the cloud is new.\n\nClick [OK] to REPLACE your local data with the new cloud data.\nClick [Cancel] to simply MERGE it with your existing local data."
+                                );
+                                if (doReplace) {
+                                    if (typeof saveExamDataIDB === 'function') {
+                                        await saveExamDataIDB([], true);
+                                    }
+                                    localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    if (currentCollegeData.lastWipeEvent) {
+                                        localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    }
+                                    window.location.reload();
+                                    return;
+                                } else {
+                                    localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    if (currentCollegeData.lastWipeEvent) {
+                                        localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    }
+                                }
+                            }, 500);
+                        }
+                    }
+                    
+                } else {
+                    console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    alert("Session corrupted or expired. Please log in again.");
+                    if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
+                    location.reload();
+                }
+            });
         };
         checkCollegeMetadata();
         // 2. LAZY CONFIG FETCHERS (Settings, Staff, Slots) - Saves Billing!
@@ -2537,6 +2608,13 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     await uploadString(storageRef, JSON.stringify(students), 'raw', {
                         contentType: 'application/json'
                     });
+                    const ts = new Date().toISOString();
+                    // Track global upload event BEFORE setDoc to prevent optimistic onSnapshot loop
+                    localStorage.setItem('lastUploadEvent', ts);
+                    await setDoc(doc(db, "colleges", cid), {
+                        lastUploadEvent: ts
+                    }, { merge: true });
+                    
                     console.log("📁 Master Data synced to Firebase Storage.");
                 }
             }
@@ -10960,10 +11038,14 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
 
+                        const wipeTs = new Date().toISOString();
                         // A. Reset fields in the main document (Metadata only)
                         batch.update(mainRef, {
-                            lastUpdated: new Date().toISOString()
+                            lastUpdated: wipeTs,
+                            lastWipeEvent: wipeTs
                         });
+                        localStorage.setItem('lastWipeEvent', wipeTs);
+                        localStorage.setItem('lastUpdated', wipeTs);
 
                         // B. Delete ONLY V2 SESSIONS (Modular Data)
                         const sessionsRef = collection(db, "colleges", currentCollegeId, "sessions");
@@ -17227,10 +17309,14 @@ window.handlePythonExtraction = async function (jsonString) {
                         batch.delete(doc(db, "colleges", cid, "system_data", type));
                     });
 
+                    const nukeTs = new Date().toISOString();
                     // 2. Prepare Update Object (Reset fields in main doc)
                     const updatePayload = {
-                        lastUpdated: new Date().toISOString()
+                        lastUpdated: nukeTs,
+                        lastWipeEvent: nukeTs
                     };
+                    localStorage.setItem('lastWipeEvent', nukeTs);
+                    localStorage.setItem('lastUpdated', nukeTs);
 
                     keysToWipe.forEach(key => {
                         // Reset to sensible defaults based on key type
