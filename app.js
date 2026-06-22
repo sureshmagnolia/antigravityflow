@@ -2597,10 +2597,12 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                         contentType: 'application/json'
                     });
                     
+                    const ts = new Date().toISOString();
                     // Track global upload event
                     await setDoc(doc(db, "colleges", cid), {
-                        lastUploadEvent: new Date().toISOString()
+                        lastUploadEvent: ts
                     }, { merge: true });
+                    localStorage.setItem('lastUploadEvent', ts);
                     
                     console.log("📁 Master Data synced to Firebase Storage.");
                 }
@@ -11025,11 +11027,14 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const batch = writeBatch(db);
                         const mainRef = doc(db, "colleges", currentCollegeId);
 
+                        const wipeTs = new Date().toISOString();
                         // A. Reset fields in the main document (Metadata only)
                         batch.update(mainRef, {
-                            lastUpdated: new Date().toISOString(),
-                            lastWipeEvent: new Date().toISOString()
+                            lastUpdated: wipeTs,
+                            lastWipeEvent: wipeTs
                         });
+                        localStorage.setItem('lastWipeEvent', wipeTs);
+                        localStorage.setItem('lastUpdated', wipeTs);
 
                         // B. Delete ONLY V2 SESSIONS (Modular Data)
                         const sessionsRef = collection(db, "colleges", currentCollegeId, "sessions");
@@ -17293,10 +17298,14 @@ window.handlePythonExtraction = async function (jsonString) {
                         batch.delete(doc(db, "colleges", cid, "system_data", type));
                     });
 
+                    const nukeTs = new Date().toISOString();
                     // 2. Prepare Update Object (Reset fields in main doc)
                     const updatePayload = {
-                        lastUpdated: new Date().toISOString()
+                        lastUpdated: nukeTs,
+                        lastWipeEvent: nukeTs
                     };
+                    localStorage.setItem('lastWipeEvent', nukeTs);
+                    localStorage.setItem('lastUpdated', nukeTs);
 
                     keysToWipe.forEach(key => {
                         // Reset to sensible defaults based on key type
