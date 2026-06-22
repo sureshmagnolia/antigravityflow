@@ -1471,10 +1471,16 @@ window.recalcInvigSlots = async function () {
                                         await saveExamDataIDB([], true);
                                     }
                                     localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    if (currentCollegeData.lastUploadEvent) {
+                                        localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    }
                                     window.location.reload();
                                     return;
                                 } else {
                                     localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    if (currentCollegeData.lastUploadEvent) {
+                                        localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    }
                                 }
                             }, 500);
                         }
@@ -1493,10 +1499,16 @@ window.recalcInvigSlots = async function () {
                                         await saveExamDataIDB([], true);
                                     }
                                     localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    if (currentCollegeData.lastWipeEvent) {
+                                        localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    }
                                     window.location.reload();
                                     return;
                                 } else {
                                     localStorage.setItem('lastUploadEvent', currentCollegeData.lastUploadEvent);
+                                    if (currentCollegeData.lastWipeEvent) {
+                                        localStorage.setItem('lastWipeEvent', currentCollegeData.lastWipeEvent);
+                                    }
                                 }
                             }, 500);
                         }
