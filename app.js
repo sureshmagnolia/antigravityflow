@@ -2596,13 +2596,12 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     await uploadString(storageRef, JSON.stringify(students), 'raw', {
                         contentType: 'application/json'
                     });
-                    
                     const ts = new Date().toISOString();
-                    // Track global upload event
+                    // Track global upload event BEFORE setDoc to prevent optimistic onSnapshot loop
+                    localStorage.setItem('lastUploadEvent', ts);
                     await setDoc(doc(db, "colleges", cid), {
                         lastUploadEvent: ts
                     }, { merge: true });
-                    localStorage.setItem('lastUploadEvent', ts);
                     
                     console.log("📁 Master Data synced to Firebase Storage.");
                 }
