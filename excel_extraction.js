@@ -106,8 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         "Course": courseName,
                         "Exam Name": selectedExamName,
                         "Stream": document.getElementById('global-stream-select').value || "Regular",
-                        "Source File": file.name, // Match PDF output metadata
-                        "DOB": r[3] || ""
+                        "Source File": file.name // Match PDF output metadata
                     });
                     fileStudentCount++;
                 }
