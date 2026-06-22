@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     allStudents.push({
                         "Register Number": r[1].toString().trim(),
-                        "Name": r[2].toString().trim(),
+                        "Name": r[2].toString().trim().replace(/\s+/g, ' '),
                         "Date": finalDate,
                         "Time": finalTime,
                         "Course": courseName,
