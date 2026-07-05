@@ -18641,15 +18641,25 @@ window.renderBatchArchiveList = async function() {
             return;
         }
 
-        listDiv.innerHTML = known.map(sk => `
+        listDiv.innerHTML = known.map(sk => {
+            const [date, time] = sk.split(' | ');
+            const sessionStudents = sourceData.filter(s => 
+                String(s.Date || "").trim() === date.trim() && 
+                String(s.Time || "").trim() === time.trim()
+            );
+            const names = new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean));
+            const displayName = Array.from(names).join(' + ') || 'Untitled Exam';
+
+            return `
             <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
                 <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                 <div class="flex flex-col">
                     <span class="text-xs font-bold text-gray-700">${sk}</span>
-                    <span class="text-[10px] text-gray-400 font-medium">${getExamName(sk.split(' | ')[0], sk.split(' | ')[1], 'Regular') || 'Untitled Exam'}</span>
+                    <span class="text-[10px] text-gray-400 font-medium">${displayName}</span>
                 </div>
             </label>
-        `).join('');
+            `;
+        }).join('');
     } else {
         // --- 2. RENDER BY EXAM NAME (Robust Multi-Exam Grouping) ---
         const examMap = {};
