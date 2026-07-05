@@ -18605,11 +18605,24 @@ window.switchArchiveView = function(mode) {
     window.renderBatchArchiveList();
 };
 
-window.renderBatchArchiveList = function() {
+window.renderBatchArchiveList = async function() {
     const listDiv = document.getElementById('batch-archive-checkbox-list');
     if (!listDiv) return;
     
-    const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+    listDiv.innerHTML = '<p class="text-xs text-gray-500 italic p-4 text-center animate-pulse">Loading archive data...</p>';
+    
+    let sourceData = allStudentData;
+    if (!sourceData || sourceData.length === 0) {
+        sourceData = await loadExamDataIDB().catch(() => []) || [];
+        allStudentData = sourceData; // Ensure global functions like getExamName have access
+    }
+    
+    // Rebuild known sessions from actual data to prevent sync issues
+    const allSessions = new Set(sourceData.map(s => {
+        if (!s.Date || !s.Time) return null;
+        return `${String(s.Date).trim()} | ${String(s.Time).trim()}`;
+    }).filter(Boolean));
+    const known = Array.from(allSessions);
     
     if (window.archiveModalViewMode === 'sessions') {
         // --- 1. RENDER INDIVIDUAL SESSIONS ---
@@ -18623,7 +18636,12 @@ window.renderBatchArchiveList = function() {
             } catch(e) { return 0; }
         });
 
-        listDiv.innerHTML = known.filter(sk => sk).map(sk => `
+        if (known.length === 0) {
+            listDiv.innerHTML = `<p class="text-xs text-gray-500 italic p-4 text-center">No sessions found in database.</p>`;
+            return;
+        }
+
+        listDiv.innerHTML = known.map(sk => `
             <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded shadow-sm hover:bg-indigo-50 cursor-pointer transition">
                 <input type="checkbox" value="${sk}" class="archive-session-cb w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
                 <div class="flex flex-col">
@@ -18635,15 +18653,14 @@ window.renderBatchArchiveList = function() {
     } else {
         // --- 2. RENDER BY EXAM NAME (Robust Multi-Exam Grouping) ---
         const examMap = {};
-        const sourceData = allStudentData.length > 0 ? allStudentData : (JSON.parse(localStorage.getItem('examAllStudentData_Cache') || '[]'));
 
         known.forEach(sk => {
             const [date, time] = sk.split(' | ');
             if (date && time) {
                 // Find all unique exam names present in this specific session
                 const sessionStudents = sourceData.filter(s => 
-                    (s.Date || "").trim() === date.trim() && 
-                    (s.Time || "").trim() === time.trim()
+                    String(s.Date || "").trim() === date.trim() && 
+                    String(s.Time || "").trim() === time.trim()
                 );
                 const names = new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean));
                 
@@ -18698,13 +18715,19 @@ window.generateBatchArchive = async function() {
        // --- STEP 1: RESOLVE GROUPS AND ALLOWED EXAMS ---
     const finalSessionSet = new Set();
     const allowedExamNames = new Set();
-    const known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
     
     // Ensure we have student data for resolution
     let sourceStudentData = allStudentData;
     if (!sourceStudentData || sourceStudentData.length === 0) {
-        sourceStudentData = await loadExamDataIDB() || [];
+        sourceStudentData = await loadExamDataIDB().catch(() => []) || [];
     }
+
+    // Dynamically rebuild known sessions to prevent empty archive bugs
+    const allSessions = new Set(sourceStudentData.map(s => {
+        if (!s.Date || !s.Time) return null;
+        return `${String(s.Date).trim()} | ${String(s.Time).trim()}`;
+    }).filter(Boolean));
+    const known = Array.from(allSessions);
 
     rawChecked.forEach(val => {
         if (val.startsWith('EXAM_GROUP::')) {
@@ -18714,8 +18737,8 @@ window.generateBatchArchive = async function() {
                 const [d, t] = sk.split(' | ');
                 // Check if this session ACTUALLY contains this exam name
                 const hasExam = sourceStudentData.some(s => 
-                    (s.Date || "").trim() === d.trim() && 
-                    (s.Time || "").trim() === t.trim() &&
+                    String(s.Date || "").trim() === d.trim() && 
+                    String(s.Time || "").trim() === t.trim() &&
                     (s.examName || s['Exam Name']) === targetName
                 );
                 if (hasExam) finalSessionSet.add(sk);
