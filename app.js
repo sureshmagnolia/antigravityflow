@@ -1544,10 +1544,38 @@ window.recalcInvigSlots = async function () {
         };
 
         window.fetchSlotsData = async () => {
-            // 🛡️ [AUDIT FIX]: fetchSlotsData is decommissioned. 
-            // Authority is now moved to the Sharded Listener in invigilation.js.
-            // This prevents legacy root document fetches from overwriting active sharded state.
-            console.log("ℹ️ fetchSlotsData bypassed: Sharded Authority Active.");
+            const { collection, getDocs } = window.firebase;
+            try {
+                const shardsRef = collection(db, "colleges", collegeId, "system_data", "slots", "shards");
+                const querySnap = await getDocs(shardsRef);
+                let newSlots = {};
+                querySnap.forEach(shardDoc => {
+                    const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                    Object.keys(shardMap).forEach(key => {
+                        newSlots[key] = shardMap[key];
+                    });
+                });
+                
+                const localRaw = localStorage.getItem('examInvigilationSlots');
+                let mergedSlots = { ...newSlots };
+                
+                if (localRaw) {
+                    try {
+                        const localSlots = JSON.parse(localRaw);
+                        // Local takes precedence for 'assigned' array to preserve surgical edits
+                        Object.keys(localSlots).forEach(k => {
+                            if (!mergedSlots[k]) mergedSlots[k] = localSlots[k];
+                            else if (localSlots[k].assigned) mergedSlots[k].assigned = localSlots[k].assigned;
+                        });
+                    } catch(e){}
+                }
+                
+                if (Object.keys(mergedSlots).length > 0) {
+                    localStorage.setItem('examInvigilationSlots', JSON.stringify(mergedSlots));
+                }
+            } catch (e) {
+                console.error("Failed to fetch slots from shards:", e);
+            }
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -1576,6 +1604,7 @@ window.recalcInvigSlots = async function () {
           fetchSettingsData();
           if (typeof fetchAllocationData === 'function') fetchAllocationData();
           if (typeof fetchStaffData === 'function') fetchStaffData();
+          if (typeof fetchSlotsData === 'function') fetchSlotsData();
           if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
