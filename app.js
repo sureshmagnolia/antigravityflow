@@ -19599,6 +19599,41 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
     let swapSourceRoom = null; // Track which room is selected for swapping
 
+    window.cleanupGhostInvigilatorMappings = function (sessionKey) {
+        if (!sessionKey) return;
+        const allMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+        const sessionMapping = allMappings[sessionKey];
+        if (!sessionMapping) return;
+
+        const validRooms = new Set();
+        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment) {
+            currentSessionAllotment.forEach(room => validRooms.add(room.roomName));
+        }
+        
+        const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+        Object.values(sessionScribeMap).forEach(roomName => validRooms.add(roomName));
+        
+        let cleaned = false;
+        Object.keys(sessionMapping).forEach(roomName => {
+            if (!validRooms.has(roomName)) {
+                console.log(`🧹 [Ghost Cleanup] Removing orphaned mapping for room: ${roomName}`);
+                delete sessionMapping[roomName];
+                if (typeof window.currentInvigMapping !== 'undefined' && window.currentInvigMapping) {
+                    delete window.currentInvigMapping[roomName];
+                }
+                cleaned = true;
+            }
+        });
+        
+        if (cleaned) {
+            localStorage.setItem('examInvigilatorMapping', JSON.stringify(allMappings));
+            if (typeof syncDataToCloud === 'function') {
+                syncDataToCloud('staff', sessionKey).catch(e => console.log(e));
+            }
+        }
+    };
+
     // 1. Render the Main Assignment Panel (Vertical Buttons on PC)
     window.renderInvigilationPanel = function () {
         const section = document.getElementById('invigilator-assignment-section');
@@ -19609,6 +19644,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
             return;
+        }
+
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
         }
 
         // A. Consolidate Rooms
@@ -20073,6 +20112,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
+
         // Ensure we have latest local data before starting
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         currentInvigMapping = allMappings[sessionKey] || {};
@@ -20146,6 +20189,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
+
         // Count current assignments to show in confirmation
         const currentCount = Object.keys(currentInvigMapping).length;
         if (currentCount === 0) return alert("No invigilators assigned to clear.");
@@ -20195,6 +20242,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
     window.printInvigilatorList = function () {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
+
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
 
         const [date, time] = sessionKey.split(' | ');
         const serialMap = getRoomSerialMap(sessionKey);
