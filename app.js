@@ -1544,10 +1544,38 @@ window.recalcInvigSlots = async function () {
         };
 
         window.fetchSlotsData = async () => {
-            // 🛡️ [AUDIT FIX]: fetchSlotsData is decommissioned. 
-            // Authority is now moved to the Sharded Listener in invigilation.js.
-            // This prevents legacy root document fetches from overwriting active sharded state.
-            console.log("ℹ️ fetchSlotsData bypassed: Sharded Authority Active.");
+            const { collection, getDocs } = window.firebase;
+            try {
+                const shardsRef = collection(db, "colleges", collegeId, "slots_daily");
+                const querySnap = await getDocs(shardsRef);
+                let newSlots = {};
+                querySnap.forEach(shardDoc => {
+                    const shardMap = JSON.parse(shardDoc.data().data || '{}');
+                    Object.keys(shardMap).forEach(key => {
+                        newSlots[key] = shardMap[key];
+                    });
+                });
+                
+                const localRaw = localStorage.getItem('examInvigilationSlots');
+                let mergedSlots = { ...newSlots };
+                
+                if (localRaw) {
+                    try {
+                        const localSlots = JSON.parse(localRaw);
+                        // Local takes precedence for 'assigned' array to preserve surgical edits
+                        Object.keys(localSlots).forEach(k => {
+                            if (!mergedSlots[k]) mergedSlots[k] = localSlots[k];
+                            else if (localSlots[k].assigned) mergedSlots[k].assigned = localSlots[k].assigned;
+                        });
+                    } catch(e){}
+                }
+                
+                if (Object.keys(mergedSlots).length > 0) {
+                    localStorage.setItem('examInvigilationSlots', JSON.stringify(mergedSlots));
+                }
+            } catch (e) {
+                console.error("Failed to fetch slots from shards:", e);
+            }
         };
 
         // 3. OPERATIONS (Absentees/QP) - On-Demand Fetcher
@@ -1576,6 +1604,7 @@ window.recalcInvigSlots = async function () {
           fetchSettingsData();
           if (typeof fetchAllocationData === 'function') fetchAllocationData();
           if (typeof fetchStaffData === 'function') fetchStaffData();
+          if (typeof fetchSlotsData === 'function') fetchSlotsData();
           if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
         // 7. FETCH HEAVY DATA (HYBRID V2/V1 STRATEGY)
                 const fetchHeavyData = async () => {
@@ -19599,6 +19628,41 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
     let swapSourceRoom = null; // Track which room is selected for swapping
 
+    window.cleanupGhostInvigilatorMappings = function (sessionKey) {
+        if (!sessionKey) return;
+        const allMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
+        const sessionMapping = allMappings[sessionKey];
+        if (!sessionMapping) return;
+
+        const validRooms = new Set();
+        if (typeof currentSessionAllotment !== 'undefined' && currentSessionAllotment) {
+            currentSessionAllotment.forEach(room => validRooms.add(room.roomName));
+        }
+        
+        const allScribeAllotments = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
+        const sessionScribeMap = allScribeAllotments[sessionKey] || {};
+        Object.values(sessionScribeMap).forEach(roomName => validRooms.add(roomName));
+        
+        let cleaned = false;
+        Object.keys(sessionMapping).forEach(roomName => {
+            if (!validRooms.has(roomName)) {
+                console.log(`🧹 [Ghost Cleanup] Removing orphaned mapping for room: ${roomName}`);
+                delete sessionMapping[roomName];
+                if (typeof window.currentInvigMapping !== 'undefined' && window.currentInvigMapping) {
+                    delete window.currentInvigMapping[roomName];
+                }
+                cleaned = true;
+            }
+        });
+        
+        if (cleaned) {
+            localStorage.setItem('examInvigilatorMapping', JSON.stringify(allMappings));
+            if (typeof syncDataToCloud === 'function') {
+                syncDataToCloud('staff', sessionKey).catch(e => console.log(e));
+            }
+        }
+    };
+
     // 1. Render the Main Assignment Panel (Vertical Buttons on PC)
     window.renderInvigilationPanel = function () {
         const section = document.getElementById('invigilator-assignment-section');
@@ -19609,6 +19673,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         if (!sessionKey) {
             if (section) section.classList.add('hidden');
             return;
+        }
+
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
         }
 
         // A. Consolidate Rooms
@@ -20073,6 +20141,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
+
         // Ensure we have latest local data before starting
         const allMappings = JSON.parse(localStorage.getItem(INVIG_MAPPING_KEY) || '{}');
         currentInvigMapping = allMappings[sessionKey] || {};
@@ -20146,6 +20218,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
 
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
+
         // Count current assignments to show in confirmation
         const currentCount = Object.keys(currentInvigMapping).length;
         if (currentCount === 0) return alert("No invigilators assigned to clear.");
@@ -20195,6 +20271,10 @@ window.toggleAllArchiveCheckboxes = function(check) {
     window.printInvigilatorList = function () {
         const sessionKey = allotmentSessionSelect.value;
         if (!sessionKey) return;
+
+        if (typeof window.cleanupGhostInvigilatorMappings === 'function') {
+            window.cleanupGhostInvigilatorMappings(sessionKey);
+        }
 
         const [date, time] = sessionKey.split(' | ');
         const serialMap = getRoomSerialMap(sessionKey);
