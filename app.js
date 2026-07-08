@@ -1546,7 +1546,7 @@ window.recalcInvigSlots = async function () {
         window.fetchSlotsData = async () => {
             const { collection, getDocs } = window.firebase;
             try {
-                const shardsRef = collection(db, "colleges", collegeId, "system_data", "slots", "shards");
+                const shardsRef = collection(db, "colleges", collegeId, "slots_daily");
                 const querySnap = await getDocs(shardsRef);
                 let newSlots = {};
                 querySnap.forEach(shardDoc => {
