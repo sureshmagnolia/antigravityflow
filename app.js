@@ -50,6 +50,82 @@ window.getScribeAllotmentIDB = function(sessionKey) {
     });
 };
 
+// [V4 IDB UPGRADE]: Two-Tier Storage Shield Vault for Allotments
+window.saveRoomAllotmentIDB = function(sessionKey, allotment) {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            try {
+                const tx = db.transaction('allotmentVault', 'readwrite');
+                tx.objectStore('allotmentVault').put(allotment, sessionKey);
+                tx.oncomplete = () => { db.close(); resolve(true); };
+                tx.onerror = () => { db.close(); resolve(false); };
+            } catch(e) {
+                db.close();
+                resolve(false);
+            }
+        }).catch(() => resolve(false));
+    });
+};
+
+window.getRoomAllotmentIDB = function(sessionKey) {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            try {
+                const tx = db.transaction('allotmentVault', 'readonly');
+                const req = tx.objectStore('allotmentVault').get(sessionKey);
+                req.onsuccess = () => { db.close(); resolve(req.result || null); };
+                req.onerror = () => { db.close(); resolve(null); };
+            } catch(e) {
+                db.close();
+                resolve(null);
+            }
+        }).catch(() => resolve(null));
+    });
+};
+
+window.getAllAllotmentsIDB = function() {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            try {
+                const tx = db.transaction('allotmentVault', 'readonly');
+                const store = tx.objectStore('allotmentVault');
+                const req = store.openCursor();
+                const result = {};
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        result[cursor.key] = cursor.value;
+                        cursor.continue();
+                    } else {
+                        db.close();
+                        resolve(result);
+                    }
+                };
+                req.onerror = () => { db.close(); resolve({}); };
+            } catch(e) {
+                db.close();
+                resolve({});
+            }
+        }).catch(() => resolve({}));
+    });
+};
+
+window.deleteRoomAllotmentIDB = function(sessionKey) {
+    return new Promise((resolve) => {
+        openExamDB().then(db => {
+            try {
+                const tx = db.transaction('allotmentVault', 'readwrite');
+                tx.objectStore('allotmentVault').delete(sessionKey);
+                tx.oncomplete = () => { db.close(); resolve(true); };
+                tx.onerror = () => { db.close(); resolve(false); };
+            } catch(e) {
+                db.close();
+                resolve(false);
+            }
+        }).catch(() => resolve(false));
+    });
+};
+
 
 window.updateLoaderProgress = function(percent, message) {
     const progressBar = document.getElementById('loader-progress-bar');
@@ -438,6 +514,7 @@ function dismissLoader() {
 async function finalizeAppLoad() {
     await migrateFromLocalStorage(); // Add this line!
     compactRoomAllotmentsInStorage();
+    await initTwoTierStorageShield();
     if (typeof updateDashboard === 'function') updateDashboard();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
     if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
@@ -486,6 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modalMixingRadio) modalMixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
     compactRoomAllotmentsInStorage();
+    initTwoTierStorageShield();
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
     const loaderMessages = [
@@ -550,15 +628,17 @@ document.addEventListener('DOMContentLoaded', () => {
 /* Bumping to version 2 to force the missing store creation */
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 3); // BUMPED TO 2
+        const req = indexedDB.open(IDB_NAME, 4);
         req.onupgradeneeded = e => {
             const db = e.target.result;
-            // Safe check: create the store if it doesn't exist
             if (!db.objectStoreNames.contains(IDB_STORE)) {
                 db.createObjectStore(IDB_STORE);
-                    }
-                    if (!db.objectStoreNames.contains('scribeVault')) {
-                        db.createObjectStore('scribeVault');
+            }
+            if (!db.objectStoreNames.contains('scribeVault')) {
+                db.createObjectStore('scribeVault');
+            }
+            if (!db.objectStoreNames.contains('allotmentVault')) {
+                db.createObjectStore('allotmentVault');
             }
         };
         req.onsuccess = e => resolve(e.target.result);
@@ -672,6 +752,99 @@ function compactRoomAllotmentsInStorage() {
 window.compactRoomAllotmentObject = compactRoomAllotmentObject;
 window.compactRoomAllotmentsInStorage = compactRoomAllotmentsInStorage;
 
+// --- TWO-TIER STORAGE SHIELD: Sliding Window Pruner ---
+window.pruneLocalStorageAllotments = function(allAllotments, keepSessionKey = null) {
+    if (!allAllotments || typeof allAllotments !== 'object') return allAllotments;
+    const sessionKeys = Object.keys(allAllotments);
+    const MAX_LOCAL_SESSIONS = 10;
+    if (sessionKeys.length <= MAX_LOCAL_SESSIONS) return allAllotments;
+
+    const parseSessionDate = (k) => {
+        try {
+            const rawDate = k.split(' | ')[0].trim();
+            const p = rawDate.replace(/[\/-]/g, '.').split('.');
+            if (p.length === 3) {
+                return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0])).getTime();
+            }
+        } catch(e) {}
+        return 0;
+    };
+
+    sessionKeys.sort((a, b) => parseSessionDate(b) - parseSessionDate(a));
+
+    const activeKeys = new Set(sessionKeys.slice(0, MAX_LOCAL_SESSIONS));
+    if (keepSessionKey) activeKeys.add(keepSessionKey);
+    if (typeof window !== 'undefined' && window.currentSessionKey) activeKeys.add(window.currentSessionKey);
+
+    const pruned = {};
+    for (const k of activeKeys) {
+        if (allAllotments[k]) pruned[k] = allAllotments[k];
+    }
+    return pruned;
+};
+
+// --- TWO-TIER STORAGE SHIELD: On-Demand Session Hydration ---
+window.ensureSessionInLocalStorage = async function(sessionKey) {
+    if (!sessionKey) return;
+    try {
+        let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        if (allAllotments[sessionKey] && Array.isArray(allAllotments[sessionKey]) && allAllotments[sessionKey].length > 0) {
+            return; // Already present in active window
+        }
+        if (typeof window.getRoomAllotmentIDB === 'function') {
+            const vaultedRooms = await window.getRoomAllotmentIDB(sessionKey);
+            if (vaultedRooms && Array.isArray(vaultedRooms) && vaultedRooms.length > 0) {
+                allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                allAllotments[sessionKey] = vaultedRooms;
+                const trimmed = window.pruneLocalStorageAllotments(allAllotments, sessionKey);
+                try {
+                    localStorage.setItem('examRoomAllotment', JSON.stringify(trimmed));
+                    console.log(`🛡️ [Storage Shield]: Hydrated "${sessionKey}" from IndexedDB Vault into localStorage.`);
+                } catch(e) {
+                    console.warn('Storage Shield hydration save warning:', e);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Storage Shield ensureSession failed:", e);
+    }
+};
+
+// --- TWO-TIER STORAGE SHIELD: Startup Archiving & Sliding Window Activation ---
+window.initTwoTierStorageShield = async function() {
+    try {
+        const raw = localStorage.getItem('examRoomAllotment');
+        if (!raw) return;
+        const allAllotments = JSON.parse(raw);
+        if (!allAllotments || typeof allAllotments !== 'object') return;
+
+        const sessionKeys = Object.keys(allAllotments);
+        if (sessionKeys.length === 0) return;
+
+        // 1. Vault all existing sessions safely in IndexedDB
+        for (const sk of sessionKeys) {
+            const rooms = allAllotments[sk];
+            if (rooms && Array.isArray(rooms) && rooms.length > 0) {
+                await window.saveRoomAllotmentIDB(sk, rooms);
+            }
+        }
+
+        // 2. Prune localStorage to the top 10 sessions (Sliding Window)
+        if (sessionKeys.length > 10) {
+            const activeSession = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : window.currentSessionKey;
+            const pruned = window.pruneLocalStorageAllotments(allAllotments, activeSession);
+            try {
+                localStorage.setItem('examRoomAllotment', JSON.stringify(pruned));
+                console.log(`🛡️ [Storage Shield]: Archived ${sessionKeys.length - Object.keys(pruned).length} older sessions to IndexedDB Vault. Active window: ${Object.keys(pruned).length} sessions.`);
+            } catch(e) {
+                console.warn('Storage Shield startup trim warning:', e);
+            }
+        }
+    } catch (e) {
+        console.error("Storage Shield init error:", e);
+    }
+};
+
 // --- INTERCEPT LOCALSTORAGE FOR DRIVE SYNC & QUOTA RECOVERY ---
 const originalSetItem = localStorage.setItem;
 localStorage.setItem = function(key, value) {
@@ -779,7 +952,7 @@ async function migrateFromLocalStorage() {
             const dataArray = JSON.parse(oldData);
             // Save to IDB
             await new Promise(resolve => {
-                const req = indexedDB.open(IDB_NAME, 3);
+                const req = indexedDB.open(IDB_NAME, 4);
                 req.onsuccess = e => {
                     const db = e.target.result;
                     const tx = db.transaction(IDB_STORE, 'readwrite');
@@ -11902,17 +12075,28 @@ window.real_populate_qp_code_session_dropdown = function () {
     // -------------------------------------------------------------------
 
 
-    // Load Room Allotment for a session
+    // Load Room Allotment for a session (with Vault Fallback)
     function loadRoomAllotment(sessionKey) {
         currentSessionKey = sessionKey;
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        let allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        if ((!allAllotments[sessionKey] || allAllotments[sessionKey].length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
+            window.getRoomAllotmentIDB(sessionKey).then(vaulted => {
+                if (vaulted && Array.isArray(vaulted) && vaulted.length > 0) {
+                    const fresh = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+                    fresh[sessionKey] = vaulted;
+                    try { localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(fresh)); } catch(e){}
+                    currentSessionAllotment = vaulted;
+                    updateAllotmentDisplay();
+                }
+            });
+        }
         currentSessionAllotment = allAllotments[sessionKey] || [];
         updateAllotmentDisplay();
     }
 
-    // Save Room Allotment for a session (with Auto-Compact & Quota Protection)
+    // Save Room Allotment for a session (with Auto-Compact & Two-Tier Storage Shield)
     function saveRoomAllotment() {
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        let allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
         if (Array.isArray(currentSessionAllotment)) {
             currentSessionAllotment.forEach(room => {
                 if (Array.isArray(room.students)) {
@@ -11929,6 +12113,17 @@ window.real_populate_qp_code_session_dropdown = function () {
             });
         }
         allAllotments[currentSessionKey] = currentSessionAllotment;
+
+        // 1. Double-write permanently to IndexedDB Vault
+        if (typeof window.saveRoomAllotmentIDB === 'function') {
+            window.saveRoomAllotmentIDB(currentSessionKey, currentSessionAllotment);
+        }
+
+        // 2. Sliding window check before saving to localStorage
+        if (typeof window.pruneLocalStorageAllotments === 'function') {
+            allAllotments = window.pruneLocalStorageAllotments(allAllotments, currentSessionKey);
+        }
+
         try {
             localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
         } catch (err) {
@@ -13225,6 +13420,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         allotmentSessionSelect.addEventListener('change', async () => {
         const savedSession = allotmentSessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+        if (typeof window.ensureSessionInLocalStorage === 'function') {
+            await window.ensureSessionInLocalStorage(savedSession);
+        }
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
@@ -21236,6 +21434,17 @@ if (displayLoc) {
                         } catch (err) {
                             console.error("Backup Error: Failed to load student data from IDB", err);
                         }
+                    } else if (key === 'examRoomAllotment') {
+                        try {
+                            const vaulted = (typeof window.getAllAllotmentsIDB === 'function') ? await window.getAllAllotmentsIDB() : {};
+                            const local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                            const merged = { ...vaulted, ...local };
+                            backup[key] = JSON.stringify(merged);
+                        } catch (err) {
+                            console.warn("Backup Error: Merging allotment vault failed, fallback to local", err);
+                            const val = localStorage.getItem(key);
+                            if (val) backup[key] = val;
+                        }
                     } else {
                         const val = localStorage.getItem(key);
                         if (val) backup[key] = val;
@@ -21314,6 +21523,19 @@ if (displayLoc) {
                             }
                             count++;
                             
+                        } else if (key === 'examRoomAllotment') {
+                            const rawVal = data[key];
+                            const parsed = (typeof rawVal === 'string') ? JSON.parse(rawVal || '{}') : rawVal;
+                            if (parsed && typeof parsed === 'object') {
+                                for (const sk in parsed) {
+                                    if (Array.isArray(parsed[sk])) {
+                                        await window.saveRoomAllotmentIDB(sk, parsed[sk]);
+                                    }
+                                }
+                                const pruned = (typeof window.pruneLocalStorageAllotments === 'function') ? window.pruneLocalStorageAllotments(parsed) : parsed;
+                                localStorage.setItem(key, JSON.stringify(pruned));
+                            }
+                            count++;
                         } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
                             // Skip stale v2 backups, restore everything else
                             if (key !== 'examData_v2') {

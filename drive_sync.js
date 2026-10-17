@@ -96,8 +96,13 @@ const IDB_KEY = 'examBaseData';
 
 function openExamDB() {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 3);
-        req.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE); };
+        const req = indexedDB.open(IDB_NAME, 4);
+        req.onupgradeneeded = e => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+            if (!db.objectStoreNames.contains('scribeVault')) db.createObjectStore('scribeVault');
+            if (!db.objectStoreNames.contains('allotmentVault')) db.createObjectStore('allotmentVault');
+        };
         req.onsuccess = e => resolve(e.target.result);
         req.onerror = e => reject(e.target.error);
     });
