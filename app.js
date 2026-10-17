@@ -12621,34 +12621,46 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             return regA.localeCompare(regB);
         });
+
+        const targetStreamNormalized = (targetStream || "Regular").toString().trim().toLowerCase();
         for (const student of sessionStudentRecords) {
-            if (!allottedRegNos.has(getRegNo(student)) && (student.Stream || "Regular") === targetStream) {
+            const sStream = (student.Stream || "Regular").toString().trim().toLowerCase();
+            if (!allottedRegNos.has(getRegNo(student)) && sStream === targetStreamNormalized) {
                 candidates.push(student);
             }
         }
         
         let limit = parseInt(capacity) || 30;
         let newStudents = [];
-        const streamPart = typeof mixingParts !== 'undefined' ? mixingParts[targetStream] : null;
-        const leftoverThreshold = Math.max(limit, 33); 
+        const leftoverThreshold = limit + 3; 
         
+        const candidateCourses = [...new Set(candidates.map(s => s.Course || 'Unknown'))];
+
         if (candidates.length <= leftoverThreshold) {
             newStudents = candidates.slice();
-        } else if (!streamPart || !streamPart.partB || streamPart.partB.length === 0) {
+        } else if (strategy === 'none' || candidateCourses.length <= 1) {
             newStudents = candidates.slice(0, limit);
         } else if (strategy === 'ratio_1_1' || strategy === 'ratio_2_1') {
             const ratio = (strategy === 'ratio_2_1') ? (2 / 3) : 0.5;
             let takeA = Math.round(limit * ratio);
             let takeB = limit - takeA;
-            const sliceA = streamPart.partA.slice(streamPart.pA, streamPart.pA + takeA);
-            const sliceB = streamPart.partB.slice(streamPart.pB, streamPart.pB + takeB);
-            if (sliceA.length < takeA || sliceB.length < takeB) {
-                newStudents = candidates.slice(0, candidates.length);
-            } else {
-                newStudents = [...sliceA, ...sliceB];
-                streamPart.pA += sliceA.length;
-                streamPart.pB += sliceB.length;
+
+            const primaryCourse = candidateCourses[0];
+            const courseAStudents = candidates.filter(s => (s.Course || 'Unknown') === primaryCourse);
+            const courseBStudents = candidates.filter(s => (s.Course || 'Unknown') !== primaryCourse);
+
+            let sliceA = courseAStudents.slice(0, takeA);
+            let sliceB = courseBStudents.slice(0, takeB);
+
+            if (sliceB.length < takeB) {
+                const deficitB = takeB - sliceB.length;
+                sliceA = courseAStudents.slice(0, takeA + deficitB);
+            } else if (sliceA.length < takeA) {
+                const deficitA = takeA - sliceA.length;
+                sliceB = courseBStudents.slice(0, takeB + deficitA);
             }
+
+            newStudents = [...sliceA, ...sliceB].slice(0, limit);
         } else {
             newStudents = candidates.slice(0, limit);
         }
@@ -12810,22 +12822,24 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // 1. Smart Default Stream Logic (Existing)
         const [date, time] = currentSessionKey.split(' | ');
-        const sessionStudents = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const sessionStudents = window.getStudentsForSession(allStudentData, date, time);
 
         const stats = {};
         currentStreamConfig.forEach(s => stats[s] = { needed: 0, allotted: 0 });
         if (!stats["Regular"]) stats["Regular"] = { needed: 0, allotted: 0 };
 
         sessionStudents.forEach(s => {
-            const strm = s.Stream || "Regular";
-            if (!stats[strm]) stats[strm] = { needed: 0, allotted: 0 };
-            stats[strm].needed++;
+            const rawStream = (s.Stream || "Regular").toString().trim();
+            const matchedStream = currentStreamConfig.find(cs => cs.toLowerCase() === rawStream.toLowerCase()) || "Regular";
+            if (!stats[matchedStream]) stats[matchedStream] = { needed: 0, allotted: 0 };
+            stats[matchedStream].needed++;
         });
 
         currentSessionAllotment.forEach(room => {
-            const roomStream = room.stream || "Regular";
-            if (!stats[roomStream]) stats[roomStream] = { needed: 0, allotted: 0 };
-            stats[roomStream].allotted += room.students.length;
+            const rawRoomStream = (room.stream || "Regular").toString().trim();
+            const matchedStream = currentStreamConfig.find(cs => cs.toLowerCase() === rawRoomStream.toLowerCase()) || "Regular";
+            if (!stats[matchedStream]) stats[matchedStream] = { needed: 0, allotted: 0 };
+            stats[matchedStream].allotted += room.students.length;
         });
 
         let suggestedStream = currentStreamConfig[0];
@@ -12959,7 +12973,7 @@ window.real_populate_qp_code_session_dropdown = function () {
        async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none') {
         const [date, time] = currentSessionKey.split(' | ');
 
-        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
+        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
 
         const allottedRegNos = new Set();
         currentSessionAllotment.forEach(room => {
@@ -12989,63 +13003,58 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             return regA.localeCompare(regB);
         });
+
+        const targetStreamNormalized = (targetStream || "Regular").toString().trim().toLowerCase();
         for (const student of sessionStudentRecords) {
             const regNo = getRegNo(student);
-            const studentStream = student.Stream || "Regular";
-            if (!allottedRegNos.has(regNo) && studentStream === targetStream) {
+            const studentStream = (student.Stream || "Regular").toString().trim().toLowerCase();
+            if (!allottedRegNos.has(regNo) && studentStream === targetStreamNormalized) {
                 candidates.push(student);
             }
         }
 
-       
-        // --- MIXING ENGINE: Per-Stream Pre-Split Queue Strategy ---
+        // --- ALLOTMENT & MIXING ENGINE ---
         let limit = parseInt(capacity) || 30;
         let newStudents = [];
 
-        const streamPart = mixingParts[targetStream]; // This stream's own independent queues
-
         // ── GUARD 1: Last room / Leftover Logic (V1 Feature Restored) ───────
-        // If unallotted students are 33 or below, allot them all to this room
-        // even if the capacity is standard (30), to avoid a stray 1 or 2 students.
-        const leftoverThreshold = Math.max(limit, 33); 
+        // If unallotted students fit within room nominal capacity + 3 grace limit,
+        // allot them all to this room to avoid leaving stray students.
+        const leftoverThreshold = limit + 3;
         
+        const activeStrategy = strategy || (typeof mixingActiveStrategy !== 'undefined' ? mixingActiveStrategy : 'none');
+        const candidateCourses = [...new Set(candidates.map(s => s.Course || 'Unknown'))];
+
         if (candidates.length <= leftoverThreshold) {
             newStudents = candidates.slice();
             console.log(`💡 Leftover Guard: Allotting all ${candidates.length} students to this room.`);
-
-
-        // ── GUARD 2: Only one course in this stream ───────────────────────────
-        // partB will be empty if all students belong to a single course.
-        // Mixing is meaningless — fall back to standard fill.
-        } else if (!streamPart || streamPart.partB.length === 0) {
+        } else if (activeStrategy === 'none' || candidateCourses.length <= 1) {
+            // No mixing requested, or only 1 course remains among unallotted students
             newStudents = candidates.slice(0, limit);
-
-        // ── MIXING ENGINE ─────────────────────────────────────────────────────
-        } else if (mixingActiveStrategy === 'ratio_1_1' || mixingActiveStrategy === 'ratio_2_1') {
-
-            const ratio = (mixingActiveStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
+        } else if (activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1') {
+            const ratio = (activeStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
             let takeA = Math.round(limit * ratio);
             let takeB = limit - takeA;
 
-            // Take from THIS stream's own Part A and Part B using its own pointers
-            const sliceA = streamPart.partA.slice(streamPart.pA, streamPart.pA + takeA);
-            const sliceB = streamPart.partB.slice(streamPart.pB, streamPart.pB + takeB);
+            const primaryCourse = candidateCourses[0];
+            const courseAStudents = candidates.filter(s => (s.Course || 'Unknown') === primaryCourse);
+            const courseBStudents = candidates.filter(s => (s.Course || 'Unknown') !== primaryCourse);
 
-            // ── GUARD 3: Partial last room — one course nearly exhausted ──────
-            if (sliceA.length < takeA || sliceB.length < takeB) {
-                newStudents = candidates.slice(0, candidates.length);
-            } else {
-                // 🛡️ BLOCK MIXING: Always continuous seats (A1...A20, then B1...B10)
-                newStudents = [...sliceA, ...sliceB];
+            let sliceA = courseAStudents.slice(0, takeA);
+            let sliceB = courseBStudents.slice(0, takeB);
 
-                streamPart.pA += sliceA.length;
-                streamPart.pB += sliceB.length;
-
+            if (sliceB.length < takeB) {
+                const deficitB = takeB - sliceB.length;
+                sliceA = courseAStudents.slice(0, takeA + deficitB);
+            } else if (sliceA.length < takeA) {
+                const deficitA = takeA - sliceA.length;
+                sliceB = courseBStudents.slice(0, takeB + deficitA);
             }
 
-
+            // Continuous block seats (Course A then Course B), strictly capped at room capacity
+            newStudents = [...sliceA, ...sliceB].slice(0, limit);
         } else {
-            // No Mix selected: standard fill, original behaviour preserved
+            // Fallback standard fill
             newStudents = candidates.slice(0, limit);
         }
         // -----------------------------------------------
