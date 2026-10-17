@@ -2066,20 +2066,21 @@ window.fetchHeavyDataOnDemand = async function(sessionKey) {
     window.getStudentsForSession = function(allData, targetDate, targetTime) {
         if (!allData || !targetDate || !targetTime) return [];
         
-        const dateRaw = targetDate.trim().replace(/[./-]/g, '');
-        const timeRaw = targetTime.trim().toUpperCase();
+        const dateRaw = targetDate.toString().trim().replace(/[./-]/g, '');
+        const timeRaw = targetTime.toString().trim().toUpperCase();
 
         return allData.filter(s => {
-            // 1. Normalize Date
-            const studentDateNorm = (s.Date || "").replace(/[./-]/g, '');
+            if (!s) return false;
+            // 1. Normalize Date (trim whitespace and strip delimiters)
+            const studentDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
             const dateMatch = studentDateNorm === dateRaw;
             
-            // 2. Smart Time Match
-            let timeMatch = s.Time === timeRaw;
+            // 2. Smart Time Match (trim whitespace and normalize casing)
+            const sTime = (s.Time || "").toString().trim().toUpperCase();
+            let timeMatch = sTime === timeRaw;
             if (!timeMatch) {
                 const isAN = timeRaw.includes("AN") || timeRaw.includes("PM") || 
                              timeRaw.startsWith("12:") || timeRaw.startsWith("13:");
-                const sTime = (s.Time || "").toUpperCase();
                 const sIsAN = sTime.includes("PM") || sTime.includes("AN") || 
                               sTime.startsWith("12:") || sTime.startsWith("13:") || 
                               sTime.startsWith("14:") || sTime.startsWith("15:") || 
@@ -12971,9 +12972,20 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // Select a room and allot students (Auto-Save & Sync enabled)
        async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none') {
-        const [date, time] = currentSessionKey.split(' | ');
+        const [rawDate, rawTime] = (currentSessionKey || '').split(' | ');
+        const date = (rawDate || '').trim();
+        const time = (rawTime || '').trim();
 
-        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+        let sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+        if (!sessionStudentRecords || sessionStudentRecords.length === 0) {
+            const dateNorm = date.replace(/[./-]/g, '');
+            const timeNorm = time.toUpperCase();
+            sessionStudentRecords = allStudentData.filter(s => {
+                const sD = (s.Date || '').toString().trim().replace(/[./-]/g, '');
+                const sT = (s.Time || '').toString().trim().toUpperCase();
+                return sD === dateNorm && (sT === timeNorm || (sT.includes('PM') && timeNorm.includes('PM')) || (sT.includes('AM') && timeNorm.includes('AM')));
+            });
+        }
 
         const allottedRegNos = new Set();
         currentSessionAllotment.forEach(room => {
