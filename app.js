@@ -437,6 +437,7 @@ function dismissLoader() {
 // Single function called when data is local, from cloud, or auth fails
 async function finalizeAppLoad() {
     await migrateFromLocalStorage(); // Add this line!
+    compactRoomAllotmentsInStorage();
     if (typeof updateDashboard === 'function') updateDashboard();
     if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
     if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
@@ -484,6 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mixingRadio) mixingRadio.checked = true;
     if (modalMixingRadio) modalMixingRadio.checked = true;
     migrateFromLocalStorage(); // ← ADD THIS LINE HERE
+    compactRoomAllotmentsInStorage();
     populateAllExamDropdowns(); // <--- ADD THIS LINE
     // --- LOADER ANIMATION LOGIC (New) ---
     const loaderMessages = [
@@ -619,15 +621,85 @@ function loadExamDataIDB() {
         });
     });
 }
-// --- INTERCEPT LOCALSTORAGE FOR DRIVE SYNC ---
+// --- COMPACT ROOM ALLOTMENT OBJECT (Removes redundant metadata to stay within 5MB Quota) ---
+function compactRoomAllotmentObject(allAllotments) {
+    if (!allAllotments || typeof allAllotments !== 'object') return { allAllotments, changed: false };
+    let changed = false;
+    for (const sessionKey in allAllotments) {
+        const rooms = allAllotments[sessionKey];
+        if (Array.isArray(rooms)) {
+            for (let r = 0; r < rooms.length; r++) {
+                const room = rooms[r];
+                if (room && Array.isArray(room.students)) {
+                    for (let i = 0; i < room.students.length; i++) {
+                        const s = room.students[i];
+                        if (s && typeof s === 'object') {
+                            if ('Source File' in s || 'sourceFile' in s || 'Exam Name' in s || 'Date' in s || 'Time' in s) {
+                                delete s['Source File'];
+                                delete s['sourceFile'];
+                                delete s['Exam Name'];
+                                delete s['Date'];
+                                delete s['Time'];
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return { allAllotments, changed };
+}
+
+function compactRoomAllotmentsInStorage() {
+    try {
+        const raw = localStorage.getItem('examRoomAllotment');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const { allAllotments, changed } = compactRoomAllotmentObject(data);
+        if (changed) {
+            console.log('🧹 [Storage Optimizer]: Compacted examRoomAllotment to free up quota.');
+            try {
+                originalSetItem.call(localStorage, 'examRoomAllotment', JSON.stringify(allAllotments));
+            } catch(e) {
+                console.warn('Storage Optimizer write error:', e);
+            }
+        }
+    } catch (e) {
+        console.warn('Storage compact check failed:', e);
+    }
+}
+window.compactRoomAllotmentObject = compactRoomAllotmentObject;
+window.compactRoomAllotmentsInStorage = compactRoomAllotmentsInStorage;
+
+// --- INTERCEPT LOCALSTORAGE FOR DRIVE SYNC & QUOTA RECOVERY ---
 const originalSetItem = localStorage.setItem;
 localStorage.setItem = function(key, value) {
-    originalSetItem.apply(this, arguments);
+    try {
+        originalSetItem.apply(this, arguments);
+    } catch (e) {
+        if ((e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) && key === 'examRoomAllotment') {
+            console.warn('⚠️ QuotaExceededError detected for examRoomAllotment. Applying emergency compaction...');
+            try {
+                const parsed = JSON.parse(value);
+                const { allAllotments } = compactRoomAllotmentObject(parsed);
+                const compactedStr = JSON.stringify(allAllotments);
+                originalSetItem.call(this, key, compactedStr);
+                value = compactedStr;
+                console.log('✅ Emergency compaction successful. Saved to localStorage.');
+            } catch (compactErr) {
+                console.error('Emergency compaction failed:', compactErr);
+                throw e;
+            }
+        } else {
+            throw e;
+        }
+    }
     // 🛡️ SEPARATION: !window.currentCollegeId ensures this NEVER runs for Firebase Pro users.
     // window.isDriveRestoringData ensures Drive restores don't trigger auto-sync loops.
     if (!window.isDriveRestoringData && key !== 'lastUpdated' && typeof window.triggerDriveAutoSync === 'function' && !window.currentCollegeId && window.DATA_KEYS && window.DATA_KEYS.includes(key)) {
         // Automatically update the timestamp for conflict detection
-        originalSetItem.apply(this, ['lastUpdated', new Date().toISOString()]);
+        try { originalSetItem.apply(this, ['lastUpdated', new Date().toISOString()]); } catch(e) {}
         window.triggerDriveAutoSync();
     }
 };
@@ -11838,11 +11910,38 @@ window.real_populate_qp_code_session_dropdown = function () {
         updateAllotmentDisplay();
     }
 
-    // Save Room Allotment for a session
+    // Save Room Allotment for a session (with Auto-Compact & Quota Protection)
     function saveRoomAllotment() {
         const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        if (Array.isArray(currentSessionAllotment)) {
+            currentSessionAllotment.forEach(room => {
+                if (Array.isArray(room.students)) {
+                    room.students.forEach(s => {
+                        if (s && typeof s === 'object') {
+                            delete s['Source File'];
+                            delete s['sourceFile'];
+                            delete s['Exam Name'];
+                            delete s['Date'];
+                            delete s['Time'];
+                        }
+                    });
+                }
+            });
+        }
         allAllotments[currentSessionKey] = currentSessionAllotment;
-        localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        try {
+            localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+        } catch (err) {
+            if (err.name === 'QuotaExceededError' || err.code === 22) {
+                console.warn('Storage Quota Exceeded in saveRoomAllotment, compacting all sessions...');
+                if (typeof compactRoomAllotmentObject === 'function') {
+                    compactRoomAllotmentObject(allAllotments);
+                }
+                localStorage.setItem(ROOM_ALLOTMENT_KEY, JSON.stringify(allAllotments));
+            } else {
+                throw err;
+            }
+        }
     }
 
 
@@ -13078,11 +13177,20 @@ window.real_populate_qp_code_session_dropdown = function () {
             return;
         }
 
-        // Assign "Sticky Seat" numbers permanently during allotment
+        // Assign "Sticky Seat" numbers permanently during allotment (Clean Fields to save storage quota)
         const studentsWithSeats = newStudents.map((s, idx) => {
-            const studentObj = (typeof s === 'object') ? { ...s } : { RegisterNo: s };
-            studentObj.seat = idx + 1; // Assigned once here!
-            return studentObj;
+            if (typeof s === 'object') {
+                const reg = getRegNo(s);
+                return {
+                    'Register Number': reg,
+                    RegisterNo: reg,
+                    Name: s.Name || s.name || '',
+                    Course: s.Course || s.course || '',
+                    Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    seat: idx + 1
+                };
+            }
+            return { RegisterNo: s, 'Register Number': s, seat: idx + 1 };
         });
 
         currentSessionAllotment.push({
@@ -13092,21 +13200,22 @@ window.real_populate_qp_code_session_dropdown = function () {
             stream: targetStream
         });
 
+        // --- AUTO SAVE & SYNC (With Rollback Guard) ---
+        try {
+            saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
 
-       
+            // MODULAR SYNC (V2)
+            hasUnsavedAllotment = true;
+            updateSyncStatus("Unsaved Changes", "warning");
 
-        // --- AUTO SAVE & SYNC ---
-        saveRoomAllotment(); // Save to Local Storage (Updates Serial #)
-
-        // MODULAR SYNC (V2)
-        // This handles both Room Allotment and Scribes for this session
-        hasUnsavedAllotment = true; // ADD THIS FLAG
-        updateSyncStatus("Unsaved Changes", "warning"); // <--- ADD THIS LINE
-        // ------------------------
-
-        roomSelectionModal.classList.add('hidden');
-        updateAllotmentDisplay(); // Now reads the saved data and shows Serial #
-        if (window.renderInvigilationPanel) window.renderInvigilationPanel(); 
+            roomSelectionModal.classList.add('hidden');
+            updateAllotmentDisplay(); // Now reads the saved data and shows Serial #
+            if (window.renderInvigilationPanel) window.renderInvigilationPanel();
+        } catch (saveErr) {
+            currentSessionAllotment.pop(); // 🛡️ Rollback in-memory state on storage error
+            console.error('Failed to save room allotment:', saveErr);
+            alert('Storage Error: ' + (saveErr.message || 'LocalStorage Quota Exceeded. Please free up space or clear old exams.'));
+        } 
 
     }
 
