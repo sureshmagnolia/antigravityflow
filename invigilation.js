@@ -9925,21 +9925,21 @@ window.filterPrincipalMonitor = function () {
 
                         if (isPosted) {
                             assignedContent += `
-                                <span class="px-2 py-1 rounded-md border bg-amber-50 text-amber-900 border-amber-200 text-xs font-semibold flex items-center gap-1 shadow-2xs"
+                                <span class="px-2 py-1 rounded-md border bg-amber-50 text-amber-900 border-amber-200 text-xs font-semibold inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                     title="Relief Requested by ${escapeHtml(name)} (${escapeHtml(dept)})">
                                     <span class="text-amber-600">⏳</span>
                                     <span>${escapeHtml(name)}</span>
-                                    <span class="text-[10px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold">${escapeHtml(dept)}</span>
-                                    <span class="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded uppercase font-bold">Relief</span>
+                                    <span class="text-[10px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
+                                    <span class="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded uppercase font-bold shrink-0">Relief</span>
                                 </span>
                             `;
                         } else {
                             assignedContent += `
-                                <span class="px-2 py-1 rounded-md border bg-emerald-50 text-emerald-900 border-emerald-200 text-xs font-medium flex items-center gap-1 shadow-2xs"
+                                <span class="px-2 py-1 rounded-md border bg-emerald-50 text-emerald-900 border-emerald-200 text-xs font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                     title="Assigned: ${escapeHtml(name)} (${escapeHtml(dept)})">
                                     <span class="text-emerald-600">✅</span>
                                     <span>${escapeHtml(name)}</span>
-                                    <span class="text-[10px] bg-emerald-100/70 text-emerald-800 px-1 py-0.2 rounded font-semibold">${escapeHtml(dept)}</span>
+                                    <span class="text-[10px] bg-emerald-100/70 text-emerald-800 px-1 py-0.2 rounded font-semibold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
                                 </span>
                             `;
                         }
@@ -9961,12 +9961,12 @@ window.filterPrincipalMonitor = function () {
                         const name = staff ? staff.name : getNameFromEmail(u.email);
                         const dept = staff?.dept || 'Unassigned';
                         unavContent += `
-                            <span class="px-2 py-1 rounded-md border bg-rose-50 text-rose-900 border-rose-200 text-xs font-medium flex items-center gap-1 shadow-2xs"
+                            <span class="px-2 py-1 rounded-md border bg-rose-50 text-rose-900 border-rose-200 text-xs font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                 title="${escapeHtml(u.reason)} - ${escapeHtml(name)} (${escapeHtml(dept)})">
                                 <span class="text-rose-600">⛔</span>
                                 <span>${escapeHtml(name)}</span>
-                                <span class="text-[10px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold">${escapeHtml(dept)}</span>
-                                <span class="text-[9px] text-rose-600 italic">(${escapeHtml(u.reason)})</span>
+                                <span class="text-[10px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
+                                <span class="text-[9px] text-rose-600 italic break-words">(${escapeHtml(u.reason)})</span>
                             </span>
                         `;
                     });
@@ -9978,7 +9978,7 @@ window.filterPrincipalMonitor = function () {
                     : "";
 
                 return `
-                    <div class="flex-1 min-w-[280px] bg-white p-3.5 rounded-xl border-l-4 ${borderColor} border border-gray-100 shadow-xs">
+                    <div class="w-full sm:flex-1 sm:min-w-0 bg-white p-2.5 sm:p-3.5 rounded-xl border-l-4 ${borderColor} border border-gray-100 shadow-2xs">
                         <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
                             <h5 class="font-bold text-gray-800 text-xs tracking-wide uppercase flex items-center gap-1.5">
                                 <span>${sessName.includes('Forenoon') ? '🌅' : '🌇'}</span>
@@ -10000,31 +10000,31 @@ window.filterPrincipalMonitor = function () {
             const dayLeavesCount = fnUnavailable.length + anUnavailable.length;
 
             scheduleHtml += `
-                <div class="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-xs hover:border-gray-300 transition">
-                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <div class="flex items-center gap-2">
-                            <span class="bg-gray-800 text-white font-bold px-3 py-1 rounded-lg text-xs uppercase tracking-wide shadow-xs">
+                <div class="bg-white border border-gray-200/80 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs hover:border-gray-300 transition">
+                    <div class="flex flex-wrap items-center justify-between gap-1.5 mb-2.5">
+                        <div class="flex items-center gap-1.5">
+                            <span class="bg-gray-800 text-white font-bold px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[11px] sm:text-xs uppercase tracking-wide shadow-2xs">
                                 ${dayData.dateStr}
                             </span>
-                            <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">${dayName}</span>
+                            <span class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase tracking-wide">${dayName}</span>
                         </div>
-                        <div class="flex items-center gap-1.5 text-xs">
-                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                        <div class="flex flex-wrap items-center gap-1 text-xs">
+                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
                                 ✅ ${dayDutiesCount} Duties
                             </span>
                             ${dayReliefCount > 0 ? `
-                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
                                     ⏳ ${dayReliefCount} Relief
                                 </span>
                             ` : ''}
                             ${dayLeavesCount > 0 ? `
-                                <span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                                <span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
                                     ⛔ ${dayLeavesCount} Leaves
                                 </span>
                             ` : ''}
                         </div>
                     </div>
-                    <div class="flex flex-wrap gap-3">
+                    <div class="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
                         ${renderSessionColumn("Forenoon (FN)", fnAssigned, fnPosted, fnUnavailable, "border-indigo-500")}
                         ${renderSessionColumn("Afternoon (AN)", anAssigned, anPosted, anUnavailable, "border-teal-500")}
                     </div>
@@ -10047,8 +10047,8 @@ window.filterPrincipalMonitor = function () {
         });
 
         let deptTableHtml = `
-            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
-                <table class="w-full text-left text-xs border-collapse">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto custom-scroll shadow-xs w-full" style="-webkit-overflow-scrolling: touch;">
+                <table class="w-full min-w-[520px] text-left text-xs border-collapse">
                     <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
                         <tr>
                             <th class="py-3 px-4">#</th>
