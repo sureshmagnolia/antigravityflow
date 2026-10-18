@@ -150,6 +150,14 @@
                 <span class="hidden md:inline">HoD Monitor</span>
             </button>
 
+            <!-- Super Admin Switch College Button -->
+            <button id="btn-super-admin-switch"
+                class="hidden bg-amber-500 hover:bg-amber-600 text-white p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm border border-amber-400"
+                title="Super Admin: Switch College">
+                <span>👑</span>
+                <span class="hidden md:inline">Switch College</span>
+            </button>
+
             <div class="text-right flex flex-col justify-center">
                 <div id="user-name"
                     class="hidden sm:block text-xs md:text-sm font-bold text-gray-800 truncate max-w-[100px]">User</div>
@@ -2199,7 +2207,34 @@
 
     
 
-    <script type="module" src="invigilation.js?v=v32">
+    <!-- Super Admin College Switcher Modal -->
+    <div id="super-admin-college-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-100 overflow-hidden transform transition-all">
+            <div class="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4 text-white flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">👑</span>
+                    <h3 class="font-bold text-base md:text-lg">Super Admin College Portal</h3>
+                </div>
+                <button id="close-super-college-modal" class="text-white hover:text-amber-100 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600">Select any college to access its Invigilation Portal with full Administrative rights:</p>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Target College</label>
+                    <select id="super-admin-college-select" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white">
+                        <option value="">Loading colleges...</option>
+                    </select>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button id="btn-confirm-super-college" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm shadow transition">
+                        Open Invigilation Portal
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="invigilation.js?v=v33">
     </script>
 
 

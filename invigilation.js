@@ -47,6 +47,7 @@ getRedirectResult(auth).catch((error) => {
 
 
 // --- CONFIG ---
+const SUPER_ADMIN_EMAIL = "sureshmagnolia@gmail.com";
 const DEFAULT_DESIGNATIONS = { "Assistant Professor": 2, "Associate Professor": 1, "Guest Lecturer": 4, "Professor": 0 };
 
 // CANONICAL ROLE NAMES (The "Official" System Names)
@@ -291,6 +292,16 @@ async function handleLogin(user) {
 
     // 3. Database Search (Fallback - Costs Reads)
     try {
+        // 👑 SUPER ADMIN BYPASS: If no college in URL or cache, load College Picker instead of blocking
+        if (user && user.email === SUPER_ADMIN_EMAIL) {
+            console.log("👑 Super Admin detected. Opening College Selector...");
+            document.getElementById('login-btn').innerText = "Select College";
+            if (typeof window.openSuperAdminCollegeModal === 'function') {
+                await window.openSuperAdminCollegeModal();
+            }
+            return;
+        }
+
         const collegesRef = collection(db, "colleges");
         const [adminSnap, staffSnap] = await Promise.all([
             getDocs(query(collegesRef, where("allowedUsers", "array-contains", user.email))),
@@ -325,16 +336,17 @@ async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
         if (snap.exists()) {
             const data = snap.data();
             
-            // Check Role
-            const isAdmin = data.allowedUsers?.includes(user.email);
+            // Check Role (👑 Super Admin automatically gains Admin privileges without faculty listing)
+            const isSuper = (user && user.email === SUPER_ADMIN_EMAIL);
+            const isAdmin = isSuper || data.allowedUsers?.includes(user.email);
             const isStaff = data.staffAccessList?.includes(user.email);
             const sList = JSON.parse(data.examStaffData || '[]');
-            const isStaffData = sList.some(s => s.email.toLowerCase() === user.email.toLowerCase());
+            const isStaffData = sList.some(s => s.email && s.email.toLowerCase() === user.email.toLowerCase());
 
             if (isAdmin || isStaff || isStaffData) {
                 // Success: Cache ID and Start
                 localStorage.setItem('my_college_id', collegeId);
-                const role = isAdmin ? "Admin" : "Staff";
+                const role = isSuper ? "SUPER ADMIN" : (isAdmin ? "Admin" : "Staff");
                 // 🛡️ Save Admin status for Drive Reactive Sync
                 localStorage.setItem('isAdminUser', isAdmin ? 'true' : 'false');
                 initializeSession(collegeId, isAdmin, role);
@@ -360,6 +372,12 @@ function initializeSession(id, adminStatus, roleName) {
     console.log(`✅ Initializing Session: ${id} as ${roleName}`);
     currentCollegeId = id;
     isAdmin = adminStatus;
+
+    // Show Super Admin Switch College button if logged in as Super Admin
+    if (currentUser && currentUser.email === SUPER_ADMIN_EMAIL) {
+        const switchBtn = document.getElementById('btn-super-admin-switch');
+        if (switchBtn) switchBtn.classList.remove('hidden');
+    }
 
     if (typeof window.initLivePresence === 'function') {
         window.initLivePresence(currentUser.email, currentUser.displayName || roleName, isAdmin);
@@ -670,7 +688,7 @@ function applyCollegeConfig(data, mode, triggerRender) {
 function initAdminDashboard() {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = currentUser.displayName;
-    ui.userRole.textContent = "ADMIN";
+    ui.userRole.textContent = (currentUser && currentUser.email === SUPER_ADMIN_EMAIL) ? "SUPER ADMIN" : "ADMIN";
     document.getElementById('auth-section').classList.remove('hidden');
     updateHeaderButtons('admin');
     updateAdminUI();
@@ -12851,4 +12869,92 @@ window.generateCertificateForAY = async function(acYear) {
         alert("Failed to generate PDF. Check console for details.");
     }
 };
+
+// ==========================================
+// 👑 SUPER ADMIN COLLEGE SWITCHER (INVIGILATION)
+// ==========================================
+window.openSuperAdminCollegeModal = async function() {
+    const modal = document.getElementById('super-admin-college-modal');
+    const select = document.getElementById('super-admin-college-select');
+    if (!modal || !select) return;
+
+    modal.classList.remove('hidden');
+    select.innerHTML = '<option value="">Loading colleges...</option>';
+
+    try {
+        const colRef = collection(db, "colleges");
+        const snap = await getDocs(colRef);
+        
+        if (snap.empty) {
+            select.innerHTML = '<option value="">No colleges found</option>';
+            return;
+        }
+
+        select.innerHTML = '<option value="">-- Choose a College --</option>';
+        snap.forEach(docSnap => {
+            const d = docSnap.data();
+            const name = d.examCollegeName || "Unnamed College";
+            const opt = document.createElement('option');
+            opt.value = docSnap.id;
+            opt.textContent = `${name} (${docSnap.id})`;
+            if (docSnap.id === currentCollegeId) opt.selected = true;
+            select.appendChild(opt);
+        });
+    } catch(err) {
+        console.error("Error loading colleges for Super Admin:", err);
+        select.innerHTML = '<option value="">Error loading colleges</option>';
+    }
+};
+
+window.switchSuperAdminCollege = async function() {
+    const select = document.getElementById('super-admin-college-select');
+    const targetId = select ? select.value : null;
+    if (!targetId) {
+        alert("Please select a college from the list.");
+        return;
+    }
+    const modal = document.getElementById('super-admin-college-modal');
+    if (modal) modal.classList.add('hidden');
+
+    console.log("👑 Super Admin switching to college:", targetId);
+    localStorage.setItem('my_college_id', targetId);
+    
+    // Stop previous listeners
+    if (typeof stopAllInvigilationListeners === 'function') {
+        stopAllInvigilationListeners();
+    }
+
+    // Reset views to loading state
+    const adminView = document.getElementById('view-admin');
+    const staffView = document.getElementById('view-staff');
+    if (adminView) adminView.classList.add('hidden');
+    if (staffView) staffView.classList.add('hidden');
+
+    // Relaunch with full Admin permissions
+    await verifyAndLaunch(targetId, currentUser);
+};
+
+// Wire up Super Admin modal controls
+const closeSuperModalBtn = document.getElementById('close-super-college-modal');
+if (closeSuperModalBtn) {
+    closeSuperModalBtn.addEventListener('click', () => {
+        const modal = document.getElementById('super-admin-college-modal');
+        if (modal) modal.classList.add('hidden');
+    });
+}
+
+const confirmSuperCollegeBtn = document.getElementById('btn-confirm-super-college');
+if (confirmSuperCollegeBtn) {
+    confirmSuperCollegeBtn.addEventListener('click', () => {
+        window.switchSuperAdminCollege();
+    });
+}
+
+const btnSuperAdminSwitch = document.getElementById('btn-super-admin-switch');
+if (btnSuperAdminSwitch) {
+    btnSuperAdminSwitch.addEventListener('click', () => {
+        window.openSuperAdminCollegeModal();
+    });
+}
+
 

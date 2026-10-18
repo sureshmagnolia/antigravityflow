@@ -333,6 +333,13 @@ localStorage.setItem = function(key, value) {
     }
 };
 
+function openInvigilationPortal() {
+    const targetId = window.currentCollegeId || (typeof currentCollegeId !== 'undefined' ? currentCollegeId : null) || localStorage.getItem('my_college_id') || '';
+    const url = targetId ? `invigilation.html?id=${encodeURIComponent(targetId)}` : 'invigilation.html';
+    window.open(url, '_blank');
+}
+window.openInvigilationPortal = openInvigilationPortal;
+
 window.updateLoaderProgress = function(percent, message) {
     const progressBar = document.getElementById('loader-progress-bar');
     const percentText = document.getElementById('loader-percentage');
@@ -1695,10 +1702,12 @@ window.recalcInvigSlots = async function () {
                 if (snap.exists()) {
                     clearTimeout(connectionTimeout);
                     currentCollegeData = snap.data();
-                    const isAdminUser = currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email);
-                    const isTeamMember = currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email);
-                    // 🛡️ Save Admin status for Drive Reactive Sync
+                    const isSuperAdmin = currentUser && currentUser.email === SUPER_ADMIN_EMAIL;
+                    const isAdminUser = isSuperAdmin || (currentCollegeData.admins && currentUser && currentCollegeData.admins.includes(currentUser.email));
+                    const isTeamMember = isSuperAdmin || (currentCollegeData.allowedUsers && currentUser && currentCollegeData.allowedUsers.includes(currentUser.email));
+                    // 🛡️ Save Admin status for Drive Reactive Sync & Invigilation portal
                     localStorage.setItem('isAdminUser', isAdminUser ? 'true' : 'false');
+                    localStorage.setItem('my_college_id', collegeId);
 
                     if (adminBtn) isAdminUser ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
                     if (btnInvigilation) (isAdminUser || isTeamMember) ? btnInvigilation.classList.remove('hidden') : btnInvigilation.classList.add('hidden');
@@ -16544,12 +16553,30 @@ Are you sure?
                 // SUCCESS: Found existing college
                 const collegeDoc = querySnapshot.docs[0];
                 currentCollegeId = collegeDoc.id;
+                window.currentCollegeId = collegeDoc.id;
+                localStorage.setItem('my_college_id', collegeDoc.id);
                 console.log("Joined College:", currentCollegeId);
                 syncDataFromCloud(currentCollegeId);
                 document.getElementById('cloud-migration-wrapper')?.classList.remove('hidden');
 
             } else {
-                // FAIL: No college found. 
+                // FAIL: No college found where user is in allowedUsers
+                // 👑 SUPER ADMIN: If colleges exist, open the Super Admin college switcher immediately
+                if (email === SUPER_ADMIN_EMAIL) {
+                    console.log("👑 Super Admin logged in. Checking colleges collection...");
+                    const allCollegesSnap = await getDocs(collegesRef);
+                    if (!allCollegesSnap.empty) {
+                        updateSyncStatus("Super Admin", "success");
+                        const superAdminModal = document.getElementById('super-admin-modal');
+                        if (superAdminModal) superAdminModal.classList.remove('hidden');
+                        loadWhitelist();
+                        loadAllCollegesForAdmin();
+                        updateLoaderProgress(100, "Super Admin Ready");
+                        if (typeof finalizeAppLoad === 'function') finalizeAppLoad();
+                        return;
+                    }
+                }
+
                 // 2. CHECK WHITELIST: Is this user allowed to create a NEW college?
                 console.log("Checking whitelist authorization...");
                 const whitelistRef = doc(db, "global", "whitelist");
@@ -16598,6 +16625,8 @@ Are you sure?
             if (confirm(`Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
                 // 1. Update Global ID
                 currentCollegeId = newCollegeId;
+                window.currentCollegeId = newCollegeId;
+                localStorage.setItem('my_college_id', newCollegeId);
 
                 // 2. Trigger Sync
                 syncDataFromCloud(newCollegeId);
