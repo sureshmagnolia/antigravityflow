@@ -9911,11 +9911,11 @@ window.filterPrincipalMonitor = function () {
                 let assignedContent = "";
                 if (assigned.length > 0) {
                     assignedContent = `
-                        <div class="mb-2.5">
-                            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                        <div class="mb-2">
+                            <span class="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                                 Assigned Faculty (${assigned.length})
                             </span>
-                            <div class="flex flex-wrap gap-1.5">
+                            <div class="flex flex-wrap gap-1 sm:gap-1.5">
                     `;
                     assigned.forEach(eLower => {
                         const staff = staffLookup.get(eLower);
@@ -9925,21 +9925,21 @@ window.filterPrincipalMonitor = function () {
 
                         if (isPosted) {
                             assignedContent += `
-                                <span class="px-2 py-1 rounded-md border bg-amber-50 text-amber-900 border-amber-200 text-xs font-semibold inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
+                                <span class="px-1.5 py-0.5 rounded-md border bg-amber-50 text-amber-950 border-amber-200 text-[10px] sm:text-[11px] font-semibold inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                     title="Relief Requested by ${escapeHtml(name)} (${escapeHtml(dept)})">
                                     <span class="text-amber-600">⏳</span>
                                     <span>${escapeHtml(name)}</span>
-                                    <span class="text-[10px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
-                                    <span class="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded uppercase font-bold shrink-0">Relief</span>
+                                    <span class="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold max-w-[90px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
+                                    <span class="text-[8px] bg-red-100 text-red-700 px-1 py-0.2 rounded uppercase font-extrabold shrink-0">Relief</span>
                                 </span>
                             `;
                         } else {
                             assignedContent += `
-                                <span class="px-2 py-1 rounded-md border bg-emerald-50 text-emerald-900 border-emerald-200 text-xs font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
+                                <span class="px-1.5 py-0.5 rounded-md border bg-emerald-50 text-emerald-950 border-emerald-200 text-[10px] sm:text-[11px] font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                     title="Assigned: ${escapeHtml(name)} (${escapeHtml(dept)})">
                                     <span class="text-emerald-600">✅</span>
                                     <span>${escapeHtml(name)}</span>
-                                    <span class="text-[10px] bg-emerald-100/70 text-emerald-800 px-1 py-0.2 rounded font-semibold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
+                                    <span class="text-[9px] bg-emerald-100/70 text-emerald-800 px-1 py-0.2 rounded font-semibold max-w-[90px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
                                 </span>
                             `;
                         }
@@ -9951,22 +9951,22 @@ window.filterPrincipalMonitor = function () {
                 if (unavailable.length > 0) {
                     unavContent = `
                         <div>
-                            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                            <span class="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                                 Unavailable / Leaves / OD (${unavailable.length})
                             </span>
-                            <div class="flex flex-wrap gap-1.5">
+                            <div class="flex flex-wrap gap-1 sm:gap-1.5">
                     `;
                     unavailable.forEach(u => {
                         const staff = staffLookup.get(u.email);
                         const name = staff ? staff.name : getNameFromEmail(u.email);
                         const dept = staff?.dept || 'Unassigned';
                         unavContent += `
-                            <span class="px-2 py-1 rounded-md border bg-rose-50 text-rose-900 border-rose-200 text-xs font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
+                            <span class="px-1.5 py-0.5 rounded-md border bg-rose-50 text-rose-950 border-rose-200 text-[10px] sm:text-[11px] font-medium inline-flex flex-wrap items-center gap-1 shadow-2xs max-w-full break-words"
                                 title="${escapeHtml(u.reason)} - ${escapeHtml(name)} (${escapeHtml(dept)})">
                                 <span class="text-rose-600">⛔</span>
                                 <span>${escapeHtml(name)}</span>
-                                <span class="text-[10px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold max-w-[120px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
-                                <span class="text-[9px] text-rose-600 italic break-words">(${escapeHtml(u.reason)})</span>
+                                <span class="text-[9px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold max-w-[90px] sm:max-w-none truncate">${escapeHtml(dept)}</span>
+                                <span class="text-[8px] text-rose-600 italic break-words">(${escapeHtml(u.reason)})</span>
                             </span>
                         `;
                     });
@@ -9974,17 +9974,17 @@ window.filterPrincipalMonitor = function () {
                 }
 
                 const emptyNotice = (!assignedContent && !unavContent)
-                    ? `<div class="text-xs text-gray-400 italic py-2">No duties or leaves recorded for this session</div>`
+                    ? `<div class="text-[11px] text-gray-400 italic py-1.5">No duties or leaves recorded</div>`
                     : "";
 
                 return `
-                    <div class="w-full sm:flex-1 sm:min-w-0 bg-white p-2.5 sm:p-3.5 rounded-xl border-l-4 ${borderColor} border border-gray-100 shadow-2xs">
-                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
-                            <h5 class="font-bold text-gray-800 text-xs tracking-wide uppercase flex items-center gap-1.5">
+                    <div class="w-full sm:flex-1 sm:min-w-0 bg-white p-2 sm:p-3 rounded-xl border-l-4 ${borderColor} border border-gray-100 shadow-2xs overflow-hidden">
+                        <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-gray-100">
+                            <h5 class="font-bold text-gray-800 text-[11px] sm:text-xs tracking-wide uppercase flex items-center gap-1">
                                 <span>${sessName.includes('Forenoon') ? '🌅' : '🌇'}</span>
                                 <span>${sessName}</span>
                             </h5>
-                            <span class="text-[10px] font-bold text-gray-400">
+                            <span class="text-[9px] sm:text-[10px] font-bold text-gray-400">
                                 ${(assigned.length + unavailable.length)} records
                             </span>
                         </div>
@@ -10000,31 +10000,31 @@ window.filterPrincipalMonitor = function () {
             const dayLeavesCount = fnUnavailable.length + anUnavailable.length;
 
             scheduleHtml += `
-                <div class="bg-white border border-gray-200/80 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xs hover:border-gray-300 transition">
-                    <div class="flex flex-wrap items-center justify-between gap-1.5 mb-2.5">
-                        <div class="flex items-center gap-1.5">
-                            <span class="bg-gray-800 text-white font-bold px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[11px] sm:text-xs uppercase tracking-wide shadow-2xs">
+                <div class="bg-white border border-gray-200/80 rounded-xl sm:rounded-2xl p-2.5 sm:p-3.5 shadow-2xs hover:border-gray-300 transition overflow-hidden">
+                    <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="bg-gray-800 text-white font-bold px-2 py-0.5 rounded text-[10px] sm:text-[11px] uppercase tracking-wide shadow-2xs shrink-0">
                                 ${dayData.dateStr}
                             </span>
-                            <span class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase tracking-wide">${dayName}</span>
+                            <span class="text-[10px] sm:text-xs font-bold text-gray-500 uppercase tracking-wide truncate">${dayName}</span>
                         </div>
-                        <div class="flex flex-wrap items-center gap-1 text-xs">
-                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
+                        <div class="flex flex-wrap items-center gap-1 text-[10px]">
+                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold text-[9px] sm:text-[10px]">
                                 ✅ ${dayDutiesCount} Duties
                             </span>
                             ${dayReliefCount > 0 ? `
-                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
+                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold text-[9px] sm:text-[10px]">
                                     ⏳ ${dayReliefCount} Relief
                                 </span>
                             ` : ''}
                             ${dayLeavesCount > 0 ? `
-                                <span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px]">
+                                <span class="bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-bold text-[9px] sm:text-[10px]">
                                     ⛔ ${dayLeavesCount} Leaves
                                 </span>
                             ` : ''}
                         </div>
                     </div>
-                    <div class="flex flex-col sm:flex-row gap-2.5 sm:gap-3">
+                    <div class="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
                         ${renderSessionColumn("Forenoon (FN)", fnAssigned, fnPosted, fnUnavailable, "border-indigo-500")}
                         ${renderSessionColumn("Afternoon (AN)", anAssigned, anPosted, anUnavailable, "border-teal-500")}
                     </div>
@@ -10033,10 +10033,10 @@ window.filterPrincipalMonitor = function () {
         });
 
         scheduleView.innerHTML = scheduleHtml || `
-            <div class="text-center text-gray-400 py-12 italic border-2 border-dashed border-gray-200 rounded-xl bg-white">
-                <div class="text-3xl mb-2">📋</div>
-                <div class="font-bold text-gray-600 mb-1">No Matching Schedule Records</div>
-                <p class="text-xs text-gray-400">No invigilation duties, relief requests, or leaves match your current filter selections.</p>
+            <div class="text-center text-gray-400 py-10 italic border-2 border-dashed border-gray-200 rounded-xl bg-white">
+                <div class="text-2xl mb-1.5">📋</div>
+                <div class="font-bold text-gray-600 text-xs mb-0.5">No Matching Schedule Records</div>
+                <p class="text-[11px] text-gray-400">No invigilation duties, relief requests, or leaves match your current filter selections.</p>
             </div>
         `;
 
@@ -10046,27 +10046,13 @@ window.filterPrincipalMonitor = function () {
             return a.dept.localeCompare(b.dept);
         });
 
-        let deptTableHtml = `
-            <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto custom-scroll shadow-xs w-full" style="-webkit-overflow-scrolling: touch;">
-                <table class="w-full min-w-[520px] text-left text-xs border-collapse">
-                    <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
-                        <tr>
-                            <th class="py-3 px-4">#</th>
-                            <th class="py-3 px-4">Department</th>
-                            <th class="py-3 px-4 text-center">Faculty</th>
-                            <th class="py-3 px-4 text-center">Duties Assigned</th>
-                            <th class="py-3 px-4 text-center">Relief Requests</th>
-                            <th class="py-3 px-4 text-center">Leaves / OD</th>
-                            <th class="py-3 px-4 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-        `;
-
         let sumFaculty = 0;
         let sumDuties = 0;
         let sumRelief = 0;
         let sumLeaves = 0;
+
+        let mobileCardsHtml = '<div class="space-y-1.5 block sm:hidden w-full">';
+        let desktopTableRows = '';
 
         sortedDepts.forEach((d, idx) => {
             sumFaculty += d.facultyCount;
@@ -10074,7 +10060,46 @@ window.filterPrincipalMonitor = function () {
             sumRelief += d.relief;
             sumLeaves += d.leaves;
 
-            deptTableHtml += `
+            // Mobile cute compact card (Zero horizontal scroll)
+            mobileCardsHtml += `
+                <div class="bg-white border border-gray-200 rounded-xl p-2 shadow-2xs space-y-1 overflow-hidden">
+                    <div class="flex items-center justify-between gap-1.5">
+                        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span class="w-4 h-4 rounded bg-gray-100 text-gray-500 text-[9px] font-mono font-bold flex items-center justify-center shrink-0">
+                                ${idx + 1}
+                            </span>
+                            <h6 class="font-bold text-gray-900 text-[11px] truncate" title="${escapeHtml(d.dept)}">
+                                ${escapeHtml(d.dept)}
+                            </h6>
+                        </div>
+                        <button onclick="selectPrincipalMonitorDept('${escapeHtml(d.dept)}')"
+                            class="text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold transition shrink-0">
+                            Roster ›
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1 text-center pt-1 border-t border-gray-100">
+                        <div class="bg-gray-50 rounded px-1 py-0.5">
+                            <span class="block text-[7px] text-gray-400 font-bold uppercase tracking-tight">Staff</span>
+                            <span class="block text-[10px] font-extrabold text-gray-700">${d.facultyCount}</span>
+                        </div>
+                        <div class="bg-emerald-50/70 rounded px-1 py-0.5">
+                            <span class="block text-[7px] text-emerald-600 font-bold uppercase tracking-tight">Duties</span>
+                            <span class="block text-[10px] font-black text-emerald-800">${d.duties}</span>
+                        </div>
+                        <div class="${d.relief > 0 ? 'bg-amber-50' : 'bg-gray-50'} rounded px-1 py-0.5">
+                            <span class="block text-[7px] ${d.relief > 0 ? 'text-amber-600 font-bold' : 'text-gray-400 font-bold'} uppercase tracking-tight">Relief</span>
+                            <span class="block text-[10px] font-black ${d.relief > 0 ? 'text-amber-800' : 'text-gray-400'}">${d.relief}</span>
+                        </div>
+                        <div class="${d.leaves > 0 ? 'bg-rose-50' : 'bg-gray-50'} rounded px-1 py-0.5">
+                            <span class="block text-[7px] ${d.leaves > 0 ? 'text-rose-600 font-bold' : 'text-gray-400 font-bold'} uppercase tracking-tight">Leaves</span>
+                            <span class="block text-[10px] font-black ${d.leaves > 0 ? 'text-rose-800' : 'text-gray-400'}">${d.leaves}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Desktop Table Row
+            desktopTableRows += `
                 <tr class="hover:bg-emerald-50/40 transition">
                     <td class="py-2.5 px-4 text-gray-400 font-mono">${idx + 1}</td>
                     <td class="py-2.5 px-4 font-bold text-gray-800">${escapeHtml(d.dept)}</td>
@@ -10104,7 +10129,56 @@ window.filterPrincipalMonitor = function () {
             `;
         });
 
-        deptTableHtml += `
+        // Mobile Summary Card
+        mobileCardsHtml += `
+            <div class="bg-gray-100 border border-gray-200 rounded-xl p-2 shadow-2xs space-y-1 mt-2">
+                <div class="flex items-center justify-between gap-1.5">
+                    <h6 class="font-extrabold text-gray-800 text-[11px] uppercase tracking-wider">
+                        Total Institutional
+                    </h6>
+                    <button onclick="selectPrincipalMonitorDept('ALL')"
+                        class="text-gray-700 hover:text-gray-900 bg-white border border-gray-300 px-2 py-0.5 rounded-md text-[10px] font-bold transition shrink-0">
+                        Show All
+                    </button>
+                </div>
+                <div class="grid grid-cols-4 gap-1 text-center pt-1 border-t border-gray-200">
+                    <div class="bg-white rounded px-1 py-0.5">
+                        <span class="block text-[7px] text-gray-500 font-bold uppercase tracking-tight">Staff</span>
+                        <span class="block text-[10px] font-black text-gray-800">${sumFaculty}</span>
+                    </div>
+                    <div class="bg-emerald-50 rounded px-1 py-0.5">
+                        <span class="block text-[7px] text-emerald-700 font-bold uppercase tracking-tight">Duties</span>
+                        <span class="block text-[10px] font-black text-emerald-800">${sumDuties}</span>
+                    </div>
+                    <div class="bg-amber-50 rounded px-1 py-0.5">
+                        <span class="block text-[7px] text-amber-700 font-bold uppercase tracking-tight">Relief</span>
+                        <span class="block text-[10px] font-black text-amber-800">${sumRelief}</span>
+                    </div>
+                    <div class="bg-rose-50 rounded px-1 py-0.5">
+                        <span class="block text-[7px] text-rose-700 font-bold uppercase tracking-tight">Leaves</span>
+                        <span class="block text-[10px] font-black text-rose-800">${sumLeaves}</span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+        // Desktop Table Container
+        let desktopTableHtml = `
+            <div class="hidden sm:block bg-white rounded-xl border border-gray-200 overflow-x-auto custom-scroll shadow-xs w-full" style="-webkit-overflow-scrolling: touch;">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
+                        <tr>
+                            <th class="py-3 px-4">#</th>
+                            <th class="py-3 px-4">Department</th>
+                            <th class="py-3 px-4 text-center">Faculty</th>
+                            <th class="py-3 px-4 text-center">Duties Assigned</th>
+                            <th class="py-3 px-4 text-center">Relief Requests</th>
+                            <th class="py-3 px-4 text-center">Leaves / OD</th>
+                            <th class="py-3 px-4 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        ${desktopTableRows}
                     </tbody>
                     <tfoot class="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-800">
                         <tr>
@@ -10124,6 +10198,8 @@ window.filterPrincipalMonitor = function () {
                 </table>
             </div>
         `;
+
+        let deptTableHtml = mobileCardsHtml + desktopTableHtml;
 
         if (deptContainer) {
             deptContainer.innerHTML = deptTableHtml;

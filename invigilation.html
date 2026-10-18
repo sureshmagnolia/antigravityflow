@@ -2011,38 +2011,39 @@
 
     <!-- Principal / Executive Faculty Monitor Modal -->
     <div id="principal-monitor-modal"
-        class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-center z-50 p-1 sm:p-4 backdrop-blur-sm transition-opacity">
+        class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity overflow-hidden"
+        style="overflow-x: hidden; touch-action: pan-y;">
         <div
-            class="bg-white w-full max-w-5xl h-[96dvh] max-h-[96dvh] sm:h-auto sm:max-h-[90vh] rounded-xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-100"
-            style="height: 96dvh; max-height: 96dvh;">
+            class="bg-white w-full max-w-full sm:max-w-5xl h-[95dvh] max-h-[95dvh] sm:h-auto sm:max-h-[90vh] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-100"
+            style="min-width: 0; max-width: 100vw; overflow-x: hidden;">
 
             <!-- Modal Header -->
-            <div class="flex justify-between items-center px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-gray-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-white shrink-0">
-                <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base sm:text-xl shadow-xs shrink-0">
+            <div class="flex justify-between items-center px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-100 bg-gradient-to-r from-emerald-50 via-teal-50 to-white shrink-0 overflow-hidden">
+                <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div class="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-sm sm:text-lg shadow-2xs shrink-0">
                         🏛️
                     </div>
-                    <div class="min-w-0">
-                        <h3 class="text-xs sm:text-base md:text-lg font-bold text-gray-900 flex items-center gap-1.5 truncate">
+                    <div class="min-w-0 flex-1">
+                        <h3 class="text-xs sm:text-base font-extrabold text-gray-900 flex items-center gap-1.5 truncate">
                             <span>Principal Monitor</span>
                             <span class="hidden sm:inline-block text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">Institution-Wide</span>
                         </h3>
-                        <p class="text-[10px] sm:text-xs text-gray-500 truncate max-w-[200px] sm:max-w-none" id="principal-monitor-subtitle">All Faculty Duty Allocations & Leaves</p>
+                        <p class="text-[10px] sm:text-xs text-gray-500 truncate" id="principal-monitor-subtitle">All Faculty Duty Allocations & Leaves</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-1">
                     <button onclick="printPrincipalMonitorReport()"
-                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center gap-1 shadow-2xs"
                         title="Print or Save PDF of Consolidated Report">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                         </svg>
                         <span class="hidden sm:inline">Print Report</span>
                     </button>
                     <button onclick="closeModal('principal-monitor-modal')"
-                        class="bg-gray-100 text-gray-500 hover:text-gray-800 p-1.5 sm:p-2 rounded-full transition">
-                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        class="bg-gray-100 text-gray-500 hover:text-gray-800 p-1.5 sm:p-2 rounded-full transition shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -2051,56 +2052,59 @@
             </div>
 
             <!-- Filters & Controls Bar -->
-            <div class="px-3 sm:px-6 py-2.5 sm:py-3 bg-gray-50 border-b border-gray-200 shrink-0">
+            <div class="px-2.5 sm:px-6 py-2 sm:py-2.5 bg-gray-50/90 border-b border-gray-200 shrink-0 overflow-hidden">
                 <!-- Row 1: Search & Tabs -->
-                <div class="flex items-center gap-2 mb-2">
+                <div class="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                     <div class="relative flex-1 min-w-0">
-                        <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-gray-400 text-xs">🔍</span>
+                        <span class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400 text-[11px]">🔍</span>
                         <input id="principal-search-filter" oninput="filterPrincipalMonitor()" type="text"
-                            placeholder="Search faculty, dept, reason..."
-                            class="w-full text-xs border border-gray-300 rounded-lg pl-7 pr-2.5 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-gray-400 shadow-2xs" />
+                            placeholder="Search faculty, dept..."
+                            class="w-full text-[11px] sm:text-xs border border-gray-200 rounded-lg pl-6 pr-2 py-1 sm:py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-gray-400 shadow-2xs" />
                     </div>
 
                     <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-2xs shrink-0">
                         <button id="btn-principal-tab-schedule" onclick="switchPrincipalMonitorTab('schedule')"
-                            class="px-2 sm:px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-600 text-white transition">
-                            📅 <span class="hidden xs:inline sm:inline">Schedule</span>
+                            class="px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-bold rounded-md bg-emerald-600 text-white transition">
+                            📅 Schedule
                         </button>
                         <button id="btn-principal-tab-dept" onclick="switchPrincipalMonitorTab('dept')"
-                            class="px-2 sm:px-2.5 py-1 text-xs font-bold rounded-md text-gray-600 hover:text-gray-900 transition">
-                            📊 <span class="hidden xs:inline sm:inline">Depts</span>
+                            class="px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-bold rounded-md text-gray-600 hover:text-gray-900 transition">
+                            📊 Depts
                         </button>
                     </div>
                 </div>
 
-                <!-- Row 2: 3-Column Dropdowns Grid (Mobile) / Flex (Desktop) -->
-                <div class="grid grid-cols-3 gap-1.5 sm:flex sm:items-center sm:gap-2.5">
+                <!-- Row 2: 3-Column Dropdowns Grid (Zero intrinsic width blowout on mobile) -->
+                <div class="grid grid-cols-3 gap-1 sm:flex sm:items-center sm:gap-2.5 overflow-hidden">
                     <!-- Dept Filter -->
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-                        <label for="principal-dept-filter" class="text-[9px] sm:text-xs font-bold text-gray-500 uppercase tracking-tight">Dept</label>
+                    <div class="min-w-0 overflow-hidden flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5">
+                        <label for="principal-dept-filter" class="text-[8px] sm:text-xs font-extrabold text-gray-400 uppercase tracking-tight truncate">Dept</label>
                         <select id="principal-dept-filter" onchange="filterPrincipalMonitor()"
-                            class="w-full sm:w-auto text-xs font-semibold border border-gray-300 rounded-lg px-1.5 py-1 sm:px-2.5 sm:py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate">
+                            class="w-full sm:w-auto text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1 py-1 sm:px-2 sm:py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
                             <option value="ALL">All Depts</option>
                         </select>
                     </div>
 
                     <!-- Status Filter -->
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-                        <label for="principal-status-filter" class="text-[9px] sm:text-xs font-bold text-gray-500 uppercase tracking-tight">Category</label>
+                    <div class="min-w-0 overflow-hidden flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5">
+                        <label for="principal-status-filter" class="text-[8px] sm:text-xs font-extrabold text-gray-400 uppercase tracking-tight truncate">Type</label>
                         <select id="principal-status-filter" onchange="filterPrincipalMonitor()"
-                            class="w-full sm:w-auto text-xs font-semibold border border-gray-300 rounded-lg px-1.5 py-1 sm:px-2.5 sm:py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate">
-                            <option value="ALL">All Entries</option>
+                            class="w-full sm:w-auto text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1 py-1 sm:px-2 sm:py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
+                            <option value="ALL">All</option>
                             <option value="DUTIES">Duties</option>
-                            <option value="RELIEF">Relief Reqs</option>
-                            <option value="UNAVAILABLE">Leaves / OD</option>
+                            <option value="RELIEF">Relief</option>
+                            <option value="UNAVAILABLE">Leaves</option>
                         </select>
                     </div>
 
                     <!-- Time Window -->
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-                        <label for="principal-time-filter" class="text-[9px] sm:text-xs font-bold text-gray-500 uppercase tracking-tight">Window</label>
+                    <div class="min-w-0 overflow-hidden flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5">
+                        <label for="principal-time-filter" class="text-[8px] sm:text-xs font-extrabold text-gray-400 uppercase tracking-tight truncate">When</label>
                         <select id="principal-time-filter" onchange="filterPrincipalMonitor()"
-                            class="w-full sm:w-auto text-xs font-semibold border border-gray-300 rounded-lg px-1.5 py-1 sm:px-2.5 sm:py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate">
+                            class="w-full sm:w-auto text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1 py-1 sm:px-2 sm:py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
                             <option value="UPCOMING">Upcoming</option>
                             <option value="WEEK">7 Days</option>
                             <option value="MONTH">30 Days</option>
@@ -2109,58 +2113,58 @@
                     </div>
                 </div>
 
-                <!-- Row 3: KPI Metrics Strip (5 Equal Columns) -->
-                <div class="grid grid-cols-5 gap-1 sm:gap-2 mt-2 pt-2 border-t border-gray-200/70">
-                    <div class="bg-white px-1 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border border-gray-200 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:justify-between min-w-0">
-                        <span class="block text-[8px] sm:text-[11px] font-semibold text-gray-500 uppercase tracking-tighter truncate">Faculty</span>
-                        <span id="kpi-principal-faculty" class="block text-[11px] sm:text-xs font-extrabold text-gray-800">0</span>
+                <!-- Row 3: KPI Metrics Strip (5 Cute Equal Columns) -->
+                <div class="grid grid-cols-5 gap-1 sm:gap-2 mt-1.5 pt-1.5 border-t border-gray-200/60 overflow-hidden">
+                    <div class="bg-white px-1 py-0.5 sm:px-2 sm:py-1 rounded-md border border-gray-200 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[8px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-tighter truncate">Staff</span>
+                        <span id="kpi-principal-faculty" class="block text-[11px] sm:text-xs font-black text-gray-800 truncate">0</span>
                     </div>
-                    <div class="bg-white px-1 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border border-gray-200 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:justify-between min-w-0">
-                        <span class="block text-[8px] sm:text-[11px] font-semibold text-gray-500 uppercase tracking-tighter truncate">Days</span>
-                        <span id="kpi-principal-days" class="block text-[11px] sm:text-xs font-extrabold text-gray-800">0</span>
+                    <div class="bg-white px-1 py-0.5 sm:px-2 sm:py-1 rounded-md border border-gray-200 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[8px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-tighter truncate">Days</span>
+                        <span id="kpi-principal-days" class="block text-[11px] sm:text-xs font-black text-gray-800 truncate">0</span>
                     </div>
-                    <div class="bg-emerald-50/70 px-1 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border border-emerald-200 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:justify-between min-w-0">
-                        <span class="block text-[8px] sm:text-[11px] font-semibold text-emerald-700 uppercase tracking-tighter truncate">Duties</span>
-                        <span id="kpi-principal-duties" class="block text-[11px] sm:text-xs font-extrabold text-emerald-800">0</span>
+                    <div class="bg-emerald-50/80 px-1 py-0.5 sm:px-2 sm:py-1 rounded-md border border-emerald-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[8px] sm:text-[10px] font-bold text-emerald-700 uppercase tracking-tighter truncate">Duties</span>
+                        <span id="kpi-principal-duties" class="block text-[11px] sm:text-xs font-black text-emerald-800 truncate">0</span>
                     </div>
-                    <div class="bg-amber-50/70 px-1 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border border-amber-200 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:justify-between min-w-0">
-                        <span class="block text-[8px] sm:text-[11px] font-semibold text-amber-700 uppercase tracking-tighter truncate">Relief</span>
-                        <span id="kpi-principal-relief" class="block text-[11px] sm:text-xs font-extrabold text-amber-800">0</span>
+                    <div class="bg-amber-50/80 px-1 py-0.5 sm:px-2 sm:py-1 rounded-md border border-amber-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[8px] sm:text-[10px] font-bold text-amber-700 uppercase tracking-tighter truncate">Relief</span>
+                        <span id="kpi-principal-relief" class="block text-[11px] sm:text-xs font-black text-amber-800 truncate">0</span>
                     </div>
-                    <div class="bg-rose-50/70 px-1 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border border-rose-200 shadow-2xs text-center sm:text-left sm:flex sm:items-center sm:justify-between min-w-0">
-                        <span class="block text-[8px] sm:text-[11px] font-semibold text-rose-700 uppercase tracking-tighter truncate">Leaves</span>
-                        <span id="kpi-principal-leaves" class="block text-[11px] sm:text-xs font-extrabold text-rose-800">0</span>
+                    <div class="bg-rose-50/80 px-1 py-0.5 sm:px-2 sm:py-1 rounded-md border border-rose-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[8px] sm:text-[10px] font-bold text-rose-700 uppercase tracking-tighter truncate">Leaves</span>
+                        <span id="kpi-principal-leaves" class="block text-[11px] sm:text-xs font-black text-rose-800 truncate">0</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Modal Body Scrollable (Guaranteed scrolling with min-h-0 and touch scrolling) -->
-            <div id="principal-monitor-body" class="p-2.5 sm:p-6 overflow-y-auto min-h-0 flex-1 bg-gray-50/50 space-y-3 custom-scroll"
-                style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
+            <!-- Modal Body Scrollable (Zero horizontal overflow guaranteed) -->
+            <div id="principal-monitor-body" class="p-2 sm:p-4 overflow-y-auto min-h-0 flex-1 bg-gray-50/60 space-y-2 custom-scroll"
+                style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain; overflow-x: hidden; max-width: 100%;">
                 <!-- Tab 1: Schedule View -->
-                <div id="principal-monitor-schedule-view" class="space-y-3">
+                <div id="principal-monitor-schedule-view" class="space-y-2 w-full overflow-hidden">
                     <div class="text-center py-10">
                         <span class="animate-spin text-2xl inline-block">⏳</span>
-                        <span class="block mt-2 text-sm text-gray-500">Loading institutional schedule...</span>
+                        <span class="block mt-2 text-xs text-gray-500">Loading institutional schedule...</span>
                     </div>
                 </div>
 
                 <!-- Tab 2: Department Breakdown View -->
-                <div id="principal-monitor-dept-view" class="hidden">
-                    <div id="principal-monitor-dept-table-container"></div>
+                <div id="principal-monitor-dept-view" class="hidden w-full overflow-hidden">
+                    <div id="principal-monitor-dept-table-container" class="w-full overflow-hidden"></div>
                 </div>
             </div>
 
             <!-- Modal Footer -->
-            <div class="px-3 sm:px-6 py-2.5 sm:py-3 border-t border-gray-200 bg-white shrink-0 flex items-center justify-between gap-2">
-                <span id="principal-monitor-footer-summary" class="text-[11px] sm:text-xs text-gray-500 font-medium truncate max-w-[150px] sm:max-w-none">Ready</span>
+            <div class="px-3 sm:px-6 py-2 sm:py-2.5 border-t border-gray-200 bg-white shrink-0 flex items-center justify-between gap-2 overflow-hidden">
+                <span id="principal-monitor-footer-summary" class="text-[10px] sm:text-xs text-gray-500 font-medium truncate flex-1 min-w-0">Ready</span>
                 <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <button onclick="printPrincipalMonitorReport()"
-                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition flex items-center gap-1">
                         🖨️ <span class="hidden sm:inline">Print</span>
                     </button>
                     <button onclick="closeModal('principal-monitor-modal')"
-                        class="bg-gray-800 text-white px-4 py-1.5 sm:px-5 sm:py-2 rounded-lg text-xs font-bold hover:bg-gray-900 shadow-sm transition">
+                        class="bg-gray-800 hover:bg-gray-900 text-white px-3 py-1 sm:px-4 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold shadow-2xs transition">
                         Close
                     </button>
                 </div>
@@ -2406,7 +2410,7 @@
         </div>
     </div>
 
-    <script type="module" src="invigilation.js?v=v35">
+    <script type="module" src="invigilation.js?v=v36">
     </script>
 
 
