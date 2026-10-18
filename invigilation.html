@@ -150,6 +150,25 @@
                 <span class="hidden md:inline">HoD Monitor</span>
             </button>
 
+            <!-- Principal / Executive Monitor Button -->
+            <button id="btn-principal-monitor" onclick="openPrincipalMonitorModal()"
+                class="hidden bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm"
+                title="Principal / Executive Faculty Monitor">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span class="hidden md:inline">Principal Monitor</span>
+            </button>
+
+            <!-- Super Admin Switch College Button -->
+            <button id="btn-super-admin-switch"
+                class="hidden bg-amber-500 hover:bg-amber-600 text-white p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm border border-amber-400"
+                title="Super Admin: Switch College">
+                <span>👑</span>
+                <span class="hidden md:inline">Switch College</span>
+            </button>
+
             <div class="text-right flex flex-col justify-center">
                 <div id="user-name"
                     class="hidden sm:block text-xs md:text-sm font-bold text-gray-800 truncate max-w-[100px]">User</div>
@@ -1990,6 +2009,171 @@
 
 
 
+    <!-- Principal / Executive Faculty Monitor Modal -->
+    <div id="principal-monitor-modal"
+        class="hidden fixed inset-0 bg-gray-900/70 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity overflow-hidden"
+        style="width: 100vw; max-width: 100vw; overflow-x: hidden; touch-action: pan-y;">
+        <div
+            class="bg-white w-full max-w-full sm:max-w-4xl lg:max-w-5xl h-[92dvh] max-h-[92dvh] sm:h-[86vh] sm:max-h-[820px] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-200/80"
+            style="min-width: 0; max-width: 100vw; box-sizing: border-box; overflow-x: hidden;">
+
+            <!-- Compartment 1: Modal Header (Fixed, shrink-0) -->
+            <div class="flex justify-between items-center px-3 sm:px-5 py-2 sm:py-2.5 border-b border-gray-100 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white shrink-0 overflow-hidden">
+                <div class="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                    <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs sm:text-sm shadow-2xs shrink-0">
+                        🏛️
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 class="text-xs sm:text-sm font-extrabold text-gray-900 flex items-center gap-1.5 truncate">
+                            <span>Principal Monitor</span>
+                            <span class="hidden sm:inline-block text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full border border-emerald-200 shrink-0">Institution-Wide</span>
+                        </h3>
+                        <p class="text-[10px] text-gray-500 truncate" id="principal-monitor-subtitle">All Faculty Duty Allocations & Leaves</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="printPrincipalMonitorReport()"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 shadow-2xs"
+                        title="Print or Save PDF of Consolidated Report">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        <span class="hidden sm:inline">Print</span>
+                    </button>
+                    <button onclick="closeModal('principal-monitor-modal')"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 w-7 h-7 rounded-full transition flex items-center justify-center shrink-0"
+                        title="Close Monitor">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Compartment 2: Control Panel (Filters & KPIs, Fixed, shrink-0) -->
+            <div class="px-2.5 sm:px-5 py-2 bg-gray-50/90 border-b border-gray-200/80 shrink-0 space-y-1.5 overflow-hidden">
+                <!-- Row 1: Search & Tabs -->
+                <div class="flex items-center gap-1.5 sm:gap-2">
+                    <div class="relative flex-1 min-w-0">
+                        <span class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400 text-[11px]">🔍</span>
+                        <input id="principal-search-filter" oninput="filterPrincipalMonitor()" type="text"
+                            placeholder="Search faculty, dept, reason..."
+                            class="w-full text-[11px] border border-gray-200 rounded-lg pl-6 pr-2 py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-gray-400 shadow-2xs" />
+                    </div>
+
+                    <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-2xs shrink-0">
+                        <button id="btn-principal-tab-schedule" onclick="switchPrincipalMonitorTab('schedule')"
+                            class="px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md bg-emerald-600 text-white transition">
+                            📅 Schedule
+                        </button>
+                        <button id="btn-principal-tab-dept" onclick="switchPrincipalMonitorTab('dept')"
+                            class="px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md text-gray-600 hover:text-gray-900 transition">
+                            📊 Depts
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Row 2: 3-Column Dropdowns Grid (Balanced on PC and mobile, 0 blowout) -->
+                <div class="grid grid-cols-3 gap-1.5 sm:gap-3 overflow-hidden">
+                    <!-- Dept Filter -->
+                    <div class="min-w-0 overflow-hidden flex flex-col gap-0.5">
+                        <label for="principal-dept-filter" class="text-[8px] sm:text-[10px] font-extrabold text-gray-400 uppercase tracking-tight truncate">Dept</label>
+                        <select id="principal-dept-filter" onchange="filterPrincipalMonitor()"
+                            class="w-full text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
+                            <option value="ALL">All Depts</option>
+                        </select>
+                    </div>
+
+                    <!-- Status Filter -->
+                    <div class="min-w-0 overflow-hidden flex flex-col gap-0.5">
+                        <label for="principal-status-filter" class="text-[8px] sm:text-[10px] font-extrabold text-gray-400 uppercase tracking-tight truncate">Type</label>
+                        <select id="principal-status-filter" onchange="filterPrincipalMonitor()"
+                            class="w-full text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
+                            <option value="ALL">All Records</option>
+                            <option value="DUTIES">Duties</option>
+                            <option value="RELIEF">Relief</option>
+                            <option value="UNAVAILABLE">Leaves</option>
+                        </select>
+                    </div>
+
+                    <!-- Time Window -->
+                    <div class="min-w-0 overflow-hidden flex flex-col gap-0.5">
+                        <label for="principal-time-filter" class="text-[8px] sm:text-[10px] font-extrabold text-gray-400 uppercase tracking-tight truncate">When</label>
+                        <select id="principal-time-filter" onchange="filterPrincipalMonitor()"
+                            class="w-full text-[10px] sm:text-xs font-semibold border border-gray-200 rounded-md px-1.5 py-1 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-2xs truncate"
+                            style="min-width: 0; max-width: 100%;">
+                            <option value="UPCOMING">Upcoming</option>
+                            <option value="WEEK">7 Days</option>
+                            <option value="MONTH">30 Days</option>
+                            <option value="ALL">All Dates</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 3: KPI Metrics Strip (5 Cute Equal Columns) -->
+                <div class="grid grid-cols-5 gap-1 sm:gap-2 pt-1 border-t border-gray-200/60 overflow-hidden">
+                    <div class="bg-white px-1 py-0.5 sm:px-2.5 sm:py-1 rounded-md border border-gray-200 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[7px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-tight truncate">Staff</span>
+                        <span id="kpi-principal-faculty" class="block text-[10px] sm:text-sm font-black text-gray-800 truncate">0</span>
+                    </div>
+                    <div class="bg-white px-1 py-0.5 sm:px-2.5 sm:py-1 rounded-md border border-gray-200 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[7px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-tight truncate">Days</span>
+                        <span id="kpi-principal-days" class="block text-[10px] sm:text-sm font-black text-gray-800 truncate">0</span>
+                    </div>
+                    <div class="bg-emerald-50/80 px-1 py-0.5 sm:px-2.5 sm:py-1 rounded-md border border-emerald-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[7px] sm:text-[10px] font-bold text-emerald-700 uppercase tracking-tight truncate">Duties</span>
+                        <span id="kpi-principal-duties" class="block text-[10px] sm:text-sm font-black text-emerald-800 truncate">0</span>
+                    </div>
+                    <div class="bg-amber-50/80 px-1 py-0.5 sm:px-2.5 sm:py-1 rounded-md border border-amber-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[7px] sm:text-[10px] font-bold text-amber-700 uppercase tracking-tight truncate">Relief</span>
+                        <span id="kpi-principal-relief" class="block text-[10px] sm:text-sm font-black text-amber-800 truncate">0</span>
+                    </div>
+                    <div class="bg-rose-50/80 px-1 py-0.5 sm:px-2.5 sm:py-1 rounded-md border border-rose-200/80 shadow-2xs text-center min-w-0 overflow-hidden">
+                        <span class="block text-[7px] sm:text-[10px] font-bold text-rose-700 uppercase tracking-tight truncate">Leaves</span>
+                        <span id="kpi-principal-leaves" class="block text-[10px] sm:text-sm font-black text-rose-800 truncate">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compartment 3: Modal Body (ONLY this scrolls vertically, zero horizontal overflow) -->
+            <div id="principal-monitor-body" class="p-2 sm:p-4 overflow-y-auto min-h-0 flex-1 bg-gray-50/60 space-y-2 custom-scroll"
+                style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain; overflow-x: hidden; width: 100%; box-sizing: border-box;">
+                <!-- Tab 1: Schedule View -->
+                <div id="principal-monitor-schedule-view" class="space-y-2 w-full overflow-hidden">
+                    <div class="text-center py-10">
+                        <span class="animate-spin text-2xl inline-block">⏳</span>
+                        <span class="block mt-2 text-xs text-gray-500">Loading institutional schedule...</span>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Department Breakdown View -->
+                <div id="principal-monitor-dept-view" class="hidden w-full overflow-hidden">
+                    <div id="principal-monitor-dept-table-container" class="w-full overflow-hidden"></div>
+                </div>
+            </div>
+
+            <!-- Compartment 4: Modal Footer (Fixed, shrink-0) -->
+            <div class="px-3 sm:px-5 py-2 border-t border-gray-100 bg-white shrink-0 flex items-center justify-between gap-2 overflow-hidden">
+                <span id="principal-monitor-footer-summary" class="text-[10px] text-gray-500 font-medium truncate flex-1 min-w-0">Ready</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button onclick="printPrincipalMonitorReport()"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition flex items-center gap-1">
+                        <span>🖨️</span> <span class="hidden sm:inline">Print</span>
+                    </button>
+                    <button onclick="closeModal('principal-monitor-modal')"
+                        class="bg-gray-800 hover:bg-gray-900 text-white px-3 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold shadow-2xs transition">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
     <div id="dashboard-invig-modal"
         class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-[80] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
         <div
@@ -2199,7 +2383,34 @@
 
     
 
-    <script type="module" src="invigilation.js?v=v32">
+    <!-- Super Admin College Switcher Modal -->
+    <div id="super-admin-college-modal" class="hidden fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-gray-100 overflow-hidden transform transition-all">
+            <div class="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4 text-white flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">👑</span>
+                    <h3 class="font-bold text-base md:text-lg">Super Admin College Portal</h3>
+                </div>
+                <button id="close-super-college-modal" class="text-white hover:text-amber-100 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600">Select any college to access its Invigilation Portal with full Administrative rights:</p>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Target College</label>
+                    <select id="super-admin-college-select" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white">
+                        <option value="">Loading colleges...</option>
+                    </select>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button id="btn-confirm-super-college" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm shadow transition">
+                        Open Invigilation Portal
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="invigilation.js?v=v37">
     </script>
 
 
