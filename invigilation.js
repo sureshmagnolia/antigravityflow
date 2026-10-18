@@ -695,6 +695,10 @@ function initAdminDashboard() {
     renderSlotsGridAdmin();
     populateAttendanceSessions();
 
+    // Show Principal Monitor button for Admin & Super Admin
+    const btnPrincipal = document.getElementById('btn-principal-monitor');
+    if (btnPrincipal) btnPrincipal.classList.remove('hidden');
+
     // NEW CALL
     renderAdminTodayStats();
 
@@ -1037,6 +1041,16 @@ function initStaffDashboard(me) {
             btnMonitor.classList.remove('hidden');
         } else {
             btnMonitor.classList.add('hidden');
+        }
+    }
+
+    // --- CHECK FOR PRINCIPAL / ADMIN ROLE & SHOW PRINCIPAL MONITOR BUTTON ---
+    const btnPrincMonitor = document.getElementById('btn-principal-monitor');
+    if (btnPrincMonitor) {
+        if (isPrincipalUser(me)) {
+            btnPrincMonitor.classList.remove('hidden');
+        } else {
+            btnPrincMonitor.classList.add('hidden');
         }
     }
 
@@ -2412,6 +2426,12 @@ function updateHeaderButtons(currentView) {
         btn.innerHTML = (currentView === 'admin') ? `Switch to My Duties` : `Back to Admin`;
         btn.onclick = (currentView === 'admin') ? switchToStaffView : initAdminDashboard;
         container.insertBefore(btn, document.getElementById('logout-btn'));
+    }
+
+    // Preserve Principal Monitor visibility for Admin / Principal
+    const btnPrinc = document.getElementById('btn-principal-monitor');
+    if (btnPrinc && (isAdmin || isPrincipalUser())) {
+        btnPrinc.classList.remove('hidden');
     }
 }
 
@@ -9496,6 +9516,909 @@ window.openHodMonitorModal = function () {
 
     }, 50);
 }
+
+
+
+// --- PRINCIPAL & EXECUTIVE MONITORING LOGIC (All Faculty & Departments) ---
+let _principalActiveTab = 'schedule';
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function isPrincipalUser(userStaff = null) {
+    if (isAdmin || (currentUser && currentUser.email === SUPER_ADMIN_EMAIL)) {
+        return true;
+    }
+    const staff = userStaff || (staffData && staffData.find(s => s.email.toLowerCase() === (currentUser?.email || '').toLowerCase()));
+    if (!staff) return false;
+
+    // Check designation
+    const desig = (staff.designation || '').toUpperCase().trim();
+    if (desig === 'PRINCIPAL' || desig.includes('PRINCIPAL')) return true;
+
+    // Check role history
+    if (staff.roleHistory && staff.roleHistory.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return staff.roleHistory.some(r => {
+            const start = new Date(r.start);
+            start.setHours(0, 0, 0, 0);
+            let end = r.end ? new Date(r.end) : new Date("9999-12-31");
+            end.setHours(23, 59, 59, 999);
+
+            const roleEndObj = r.end ? new Date(r.end) : null;
+            const isEndOfYear = roleEndObj && roleEndObj.getMonth() === 4 && roleEndObj.getDate() === 31;
+            if (isEndOfYear) {
+                const hasNewerRole = staff.roleHistory.some(nr => new Date(nr.start) > new Date(r.start));
+                if (!hasNewerRole) end = new Date("9999-12-31");
+            }
+
+            const roleName = (r.role || '').toUpperCase().trim();
+            const isPrincRole = roleName === 'PRINCIPAL' || roleName.includes('PRINCIPAL');
+            return isPrincRole && (today >= start && today <= end);
+        });
+    }
+    return false;
+}
+
+window.openPrincipalMonitorModal = function () {
+    if (!isPrincipalUser()) {
+        alert("Access Restricted: This executive monitor is reserved for the Principal, Admin, and Super Admin.");
+        return;
+    }
+
+    // Populate Department Filter options
+    const deptSelect = document.getElementById('principal-dept-filter');
+    if (deptSelect) {
+        const currentVal = deptSelect.value || 'ALL';
+        const distinctDepts = Array.from(new Set(
+            (staffData || [])
+                .filter(s => s.status !== 'archived' && s.dept && s.dept.trim() !== '')
+                .map(s => s.dept.trim())
+        )).sort((a, b) => a.localeCompare(b));
+
+        let optHtml = `<option value="ALL">All Departments (${distinctDepts.length})</option>`;
+        distinctDepts.forEach(d => {
+            optHtml += `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`;
+        });
+        deptSelect.innerHTML = optHtml;
+        deptSelect.value = distinctDepts.includes(currentVal) ? currentVal : 'ALL';
+    }
+
+    // Reset status and time filters if needed
+    const statusSelect = document.getElementById('principal-status-filter');
+    if (statusSelect && !statusSelect.value) statusSelect.value = 'ALL';
+
+    const timeSelect = document.getElementById('principal-time-filter');
+    if (timeSelect && !timeSelect.value) timeSelect.value = 'UPCOMING';
+
+    // Open modal
+    window.openModal('principal-monitor-modal');
+
+    // Reset tab to schedule
+    window.switchPrincipalMonitorTab('schedule');
+
+    // Process & Render
+    window.filterPrincipalMonitor();
+};
+
+window.switchPrincipalMonitorTab = function (tab) {
+    _principalActiveTab = tab;
+    const scheduleView = document.getElementById('principal-monitor-schedule-view');
+    const deptView = document.getElementById('principal-monitor-dept-view');
+    const btnSchedule = document.getElementById('btn-principal-tab-schedule');
+    const btnDept = document.getElementById('btn-principal-tab-dept');
+
+    if (tab === 'dept') {
+        if (scheduleView) scheduleView.classList.add('hidden');
+        if (deptView) deptView.classList.remove('hidden');
+        if (btnSchedule) {
+            btnSchedule.className = "px-2.5 py-1 text-xs font-bold rounded-md text-gray-600 hover:text-gray-900 transition";
+        }
+        if (btnDept) {
+            btnDept.className = "px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-600 text-white transition";
+        }
+    } else {
+        if (scheduleView) scheduleView.classList.remove('hidden');
+        if (deptView) deptView.classList.add('hidden');
+        if (btnSchedule) {
+            btnSchedule.className = "px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-600 text-white transition";
+        }
+        if (btnDept) {
+            btnDept.className = "px-2.5 py-1 text-xs font-bold rounded-md text-gray-600 hover:text-gray-900 transition";
+        }
+    }
+};
+
+window.selectPrincipalMonitorDept = function (deptName) {
+    const deptSelect = document.getElementById('principal-dept-filter');
+    if (deptSelect) {
+        deptSelect.value = deptName;
+    }
+    window.switchPrincipalMonitorTab('schedule');
+    window.filterPrincipalMonitor();
+};
+
+window.filterPrincipalMonitor = function () {
+    const scheduleView = document.getElementById('principal-monitor-schedule-view');
+    const deptContainer = document.getElementById('principal-monitor-dept-table-container');
+
+    if (scheduleView) {
+        scheduleView.innerHTML = '<div class="text-center py-10"><span class="animate-spin text-2xl inline-block">⏳</span> <span class="block mt-2 text-sm text-gray-500">Processing institutional schedule...</span></div>';
+    }
+
+    setTimeout(() => {
+        const deptFilter = document.getElementById('principal-dept-filter')?.value || 'ALL';
+        const statusFilter = document.getElementById('principal-status-filter')?.value || 'ALL';
+        const timeFilter = document.getElementById('principal-time-filter')?.value || 'UPCOMING';
+        const searchFilter = (document.getElementById('principal-search-filter')?.value || '').trim().toLowerCase();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // 1. Identify Target Staff
+        const activeStaff = (staffData || []).filter(s => s.status !== 'archived');
+        const targetStaffList = deptFilter === 'ALL'
+            ? activeStaff
+            : activeStaff.filter(s => s.dept === deptFilter);
+
+        const targetEmails = new Set(targetStaffList.map(s => s.email.toLowerCase()));
+
+        // Fast lookup map: email -> staff
+        const staffLookup = new Map();
+        activeStaff.forEach(s => staffLookup.set(s.email.toLowerCase(), s));
+
+        // 2. Build Day & Session Aggregation
+        const schedule = {};
+        const getDayEntry = (dateObj, dateStr) => {
+            if (!dateObj || isNaN(dateObj.getTime())) return null;
+            const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            if (!schedule[key]) {
+                schedule[key] = {
+                    dateObj: dateObj,
+                    dateStr: dateStr,
+                    FN: { assigned: [], posted: [], unavailable: [] },
+                    AN: { assigned: [], posted: [], unavailable: [] }
+                };
+            }
+            return schedule[key];
+        };
+
+        // Time Window Bounds Check
+        const isDateInWindow = (date) => {
+            if (isNaN(date.getTime())) return false;
+            if (timeFilter === 'UPCOMING') {
+                return date >= today;
+            } else if (timeFilter === 'WEEK') {
+                const weekEnd = new Date(today.getTime() + 7 * 86400000);
+                weekEnd.setHours(23, 59, 59, 999);
+                return date >= today && date <= weekEnd;
+            } else if (timeFilter === 'MONTH') {
+                const monthEnd = new Date(today.getTime() + 30 * 86400000);
+                monthEnd.setHours(23, 59, 59, 999);
+                return date >= today && date <= monthEnd;
+            }
+            return true; // 'ALL'
+        };
+
+        // A. Process Invigilation Slots
+        Object.keys(invigilationSlots || {}).forEach(key => {
+            if (!key.includes(' | ')) return;
+            const date = parseDate(key);
+            if (!isDateInWindow(date)) return;
+
+            const [dStr, tStr] = key.split(' | ');
+            const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+            const sess = isAN ? "AN" : "FN";
+
+            const dayEntry = getDayEntry(date, dStr);
+            if (!dayEntry) return;
+
+            const slot = invigilationSlots[key];
+
+            // Assigned & Posted
+            (slot.assigned || []).forEach(email => {
+                const eLower = email.toLowerCase();
+                if (targetEmails.has(eLower)) {
+                    if (!dayEntry[sess].assigned.includes(eLower)) {
+                        dayEntry[sess].assigned.push(eLower);
+                    }
+                    if (slot.exchangeRequests && slot.exchangeRequests.some(x => x.toLowerCase() === eLower)) {
+                        if (!dayEntry[sess].posted.includes(eLower)) {
+                            dayEntry[sess].posted.push(eLower);
+                        }
+                    }
+                }
+            });
+
+            // Slot Unavailable
+            if (slot.unavailable) {
+                slot.unavailable.forEach(u => {
+                    const eLower = (typeof u === 'string' ? u : u.email).toLowerCase();
+                    const reason = (typeof u === 'object' ? u.reason : "Unspecified");
+                    if (targetEmails.has(eLower)) {
+                        if (!dayEntry[sess].unavailable.some(x => x.email === eLower)) {
+                            dayEntry[sess].unavailable.push({ email: eLower, reason });
+                        }
+                    }
+                });
+            }
+        });
+
+        // B. Process Advance Unavailability
+        Object.keys(advanceUnavailability || {}).forEach(dateStr => {
+            if (!dateStr || (!dateStr.includes('.') && !dateStr.includes('-'))) return;
+            const cleanStr = dateStr.replace(/-/g, '.');
+            const parts = cleanStr.split('.');
+            if (parts.length !== 3) return;
+
+            const date = new Date(parts[2], parts[1] - 1, parts[0]);
+            if (!isDateInWindow(date)) return;
+
+            const dayEntry = getDayEntry(date, cleanStr);
+            if (!dayEntry) return;
+
+            ['FN', 'AN'].forEach(sess => {
+                if (advanceUnavailability[dateStr][sess]) {
+                    advanceUnavailability[dateStr][sess].forEach(u => {
+                        const eLower = (typeof u === 'string' ? u : u.email).toLowerCase();
+                        const reason = (typeof u === 'object' ? u.reason : "OD/Leave");
+                        if (targetEmails.has(eLower)) {
+                            if (!dayEntry[sess].unavailable.some(x => x.email === eLower)) {
+                                dayEntry[sess].unavailable.push({ email: eLower, reason });
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        // 3. Compute Metrics & Department Breakdown
+        let totalDutyCount = 0;
+        let totalReliefCount = 0;
+        let totalLeavesCount = 0;
+        const facultyInvolvedSet = new Set();
+        let activeDaysCount = 0;
+
+        // Department breakdown accumulator
+        const deptStats = {};
+        targetStaffList.forEach(s => {
+            const d = s.dept || 'Unassigned';
+            if (!deptStats[d]) {
+                deptStats[d] = {
+                    dept: d,
+                    facultyCount: 0,
+                    duties: 0,
+                    relief: 0,
+                    leaves: 0
+                };
+            }
+            deptStats[d].facultyCount++;
+        });
+
+        const sortedKeys = Object.keys(schedule).sort();
+
+        sortedKeys.forEach(dateKey => {
+            const dayData = schedule[dateKey];
+            ['FN', 'AN'].forEach(sess => {
+                dayData[sess].assigned.forEach(e => {
+                    totalDutyCount++;
+                    facultyInvolvedSet.add(e);
+                    const s = staffLookup.get(e);
+                    const d = s?.dept || 'Unassigned';
+                    if (deptStats[d]) deptStats[d].duties++;
+                });
+                dayData[sess].posted.forEach(e => {
+                    totalReliefCount++;
+                    const s = staffLookup.get(e);
+                    const d = s?.dept || 'Unassigned';
+                    if (deptStats[d]) deptStats[d].relief++;
+                });
+                dayData[sess].unavailable.forEach(u => {
+                    totalLeavesCount++;
+                    facultyInvolvedSet.add(u.email);
+                    const s = staffLookup.get(u.email);
+                    const d = s?.dept || 'Unassigned';
+                    if (deptStats[d]) deptStats[d].leaves++;
+                });
+            });
+
+            const hasEntries = dayData.FN.assigned.length > 0 || dayData.FN.unavailable.length > 0 ||
+                               dayData.AN.assigned.length > 0 || dayData.AN.unavailable.length > 0;
+            if (hasEntries) activeDaysCount++;
+        });
+
+        // Update KPI Counters
+        const kpiFaculty = document.getElementById('kpi-principal-faculty');
+        if (kpiFaculty) kpiFaculty.textContent = targetStaffList.length;
+
+        const kpiDays = document.getElementById('kpi-principal-days');
+        if (kpiDays) kpiDays.textContent = activeDaysCount;
+
+        const kpiDuties = document.getElementById('kpi-principal-duties');
+        if (kpiDuties) kpiDuties.textContent = totalDutyCount;
+
+        const kpiRelief = document.getElementById('kpi-principal-relief');
+        if (kpiRelief) kpiRelief.textContent = totalReliefCount;
+
+        const kpiLeaves = document.getElementById('kpi-principal-leaves');
+        if (kpiLeaves) kpiLeaves.textContent = totalLeavesCount;
+
+        const subtitleEl = document.getElementById('principal-monitor-subtitle');
+        if (subtitleEl) {
+            subtitleEl.textContent = deptFilter === 'ALL'
+                ? `Consolidated Overview for All Faculty (${targetStaffList.length} staff across ${Object.keys(deptStats).length} departments)`
+                : `Filtered Department: ${deptFilter} (${targetStaffList.length} staff)`;
+        }
+
+        const footerSummary = document.getElementById('principal-monitor-footer-summary');
+        if (footerSummary) {
+            footerSummary.textContent = `Showing ${activeDaysCount} exam days | ${totalDutyCount} total duties | ${totalReliefCount} relief requests | ${totalLeavesCount} leaves/OD`;
+        }
+
+        // 4. Render Tab 1: Schedule View
+        let scheduleHtml = "";
+
+        sortedKeys.forEach(dateKey => {
+            const dayData = schedule[dateKey];
+            const dayName = dayData.dateObj.toLocaleString('en-us', { weekday: 'long' });
+
+            const filterItems = (items, isUnav = false) => {
+                return items.filter(item => {
+                    const eLower = isUnav ? item.email : item;
+                    const staff = staffLookup.get(eLower);
+                    const name = staff ? staff.name : getNameFromEmail(eLower);
+                    const dept = staff ? staff.dept : 'Unassigned';
+                    const reason = isUnav ? (item.reason || '') : '';
+
+                    if (searchFilter) {
+                        const match = name.toLowerCase().includes(searchFilter) ||
+                                      dept.toLowerCase().includes(searchFilter) ||
+                                      eLower.includes(searchFilter) ||
+                                      reason.toLowerCase().includes(searchFilter);
+                        if (!match) return false;
+                    }
+
+                    if (statusFilter === 'RELIEF') {
+                        return (!isUnav && (dayData.FN.posted.includes(eLower) || dayData.AN.posted.includes(eLower)));
+                    }
+                    return true;
+                });
+            };
+
+            const fnAssigned = (statusFilter === 'UNAVAILABLE') ? [] : filterItems(dayData.FN.assigned);
+            const fnPosted = dayData.FN.posted;
+            const fnUnavailable = (statusFilter === 'DUTIES' || statusFilter === 'RELIEF') ? [] : filterItems(dayData.FN.unavailable, true);
+
+            const anAssigned = (statusFilter === 'UNAVAILABLE') ? [] : filterItems(dayData.AN.assigned);
+            const anPosted = dayData.AN.posted;
+            const anUnavailable = (statusFilter === 'DUTIES' || statusFilter === 'RELIEF') ? [] : filterItems(dayData.AN.unavailable, true);
+
+            const hasFN = fnAssigned.length > 0 || fnUnavailable.length > 0;
+            const hasAN = anAssigned.length > 0 || anUnavailable.length > 0;
+
+            if (!hasFN && !hasAN) return;
+
+            const renderSessionColumn = (sessName, assigned, posted, unavailable, borderColor) => {
+                let assignedContent = "";
+                if (assigned.length > 0) {
+                    assignedContent = `
+                        <div class="mb-2.5">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                                Assigned Faculty (${assigned.length})
+                            </span>
+                            <div class="flex flex-wrap gap-1.5">
+                    `;
+                    assigned.forEach(eLower => {
+                        const staff = staffLookup.get(eLower);
+                        const name = staff ? staff.name : getNameFromEmail(eLower);
+                        const dept = staff?.dept || 'Unassigned';
+                        const isPosted = posted.includes(eLower);
+
+                        if (isPosted) {
+                            assignedContent += `
+                                <span class="px-2 py-1 rounded-md border bg-amber-50 text-amber-900 border-amber-200 text-xs font-semibold flex items-center gap-1 shadow-2xs"
+                                    title="Relief Requested by ${escapeHtml(name)} (${escapeHtml(dept)})">
+                                    <span class="text-amber-600">⏳</span>
+                                    <span>${escapeHtml(name)}</span>
+                                    <span class="text-[10px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold">${escapeHtml(dept)}</span>
+                                    <span class="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded uppercase font-bold">Relief</span>
+                                </span>
+                            `;
+                        } else {
+                            assignedContent += `
+                                <span class="px-2 py-1 rounded-md border bg-emerald-50 text-emerald-900 border-emerald-200 text-xs font-medium flex items-center gap-1 shadow-2xs"
+                                    title="Assigned: ${escapeHtml(name)} (${escapeHtml(dept)})">
+                                    <span class="text-emerald-600">✅</span>
+                                    <span>${escapeHtml(name)}</span>
+                                    <span class="text-[10px] bg-emerald-100/70 text-emerald-800 px-1 py-0.2 rounded font-semibold">${escapeHtml(dept)}</span>
+                                </span>
+                            `;
+                        }
+                    });
+                    assignedContent += `</div></div>`;
+                }
+
+                let unavContent = "";
+                if (unavailable.length > 0) {
+                    unavContent = `
+                        <div>
+                            <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                                Unavailable / Leaves / OD (${unavailable.length})
+                            </span>
+                            <div class="flex flex-wrap gap-1.5">
+                    `;
+                    unavailable.forEach(u => {
+                        const staff = staffLookup.get(u.email);
+                        const name = staff ? staff.name : getNameFromEmail(u.email);
+                        const dept = staff?.dept || 'Unassigned';
+                        unavContent += `
+                            <span class="px-2 py-1 rounded-md border bg-rose-50 text-rose-900 border-rose-200 text-xs font-medium flex items-center gap-1 shadow-2xs"
+                                title="${escapeHtml(u.reason)} - ${escapeHtml(name)} (${escapeHtml(dept)})">
+                                <span class="text-rose-600">⛔</span>
+                                <span>${escapeHtml(name)}</span>
+                                <span class="text-[10px] bg-rose-100 text-rose-800 px-1 py-0.2 rounded font-semibold">${escapeHtml(dept)}</span>
+                                <span class="text-[9px] text-rose-600 italic">(${escapeHtml(u.reason)})</span>
+                            </span>
+                        `;
+                    });
+                    unavContent += `</div></div>`;
+                }
+
+                const emptyNotice = (!assignedContent && !unavContent)
+                    ? `<div class="text-xs text-gray-400 italic py-2">No duties or leaves recorded for this session</div>`
+                    : "";
+
+                return `
+                    <div class="flex-1 min-w-[280px] bg-white p-3.5 rounded-xl border-l-4 ${borderColor} border border-gray-100 shadow-xs">
+                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
+                            <h5 class="font-bold text-gray-800 text-xs tracking-wide uppercase flex items-center gap-1.5">
+                                <span>${sessName.includes('Forenoon') ? '🌅' : '🌇'}</span>
+                                <span>${sessName}</span>
+                            </h5>
+                            <span class="text-[10px] font-bold text-gray-400">
+                                ${(assigned.length + unavailable.length)} records
+                            </span>
+                        </div>
+                        ${assignedContent}
+                        ${unavContent}
+                        ${emptyNotice}
+                    </div>
+                `;
+            };
+
+            const dayDutiesCount = fnAssigned.length + anAssigned.length;
+            const dayReliefCount = fnPosted.length + anPosted.length;
+            const dayLeavesCount = fnUnavailable.length + anUnavailable.length;
+
+            scheduleHtml += `
+                <div class="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-xs hover:border-gray-300 transition">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="bg-gray-800 text-white font-bold px-3 py-1 rounded-lg text-xs uppercase tracking-wide shadow-xs">
+                                ${dayData.dateStr}
+                            </span>
+                            <span class="text-xs font-bold text-gray-600 uppercase tracking-wide">${dayName}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                                ✅ ${dayDutiesCount} Duties
+                            </span>
+                            ${dayReliefCount > 0 ? `
+                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                                    ⏳ ${dayReliefCount} Relief
+                                </span>
+                            ` : ''}
+                            ${dayLeavesCount > 0 ? `
+                                <span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                                    ⛔ ${dayLeavesCount} Leaves
+                                </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        ${renderSessionColumn("Forenoon (FN)", fnAssigned, fnPosted, fnUnavailable, "border-indigo-500")}
+                        ${renderSessionColumn("Afternoon (AN)", anAssigned, anPosted, anUnavailable, "border-teal-500")}
+                    </div>
+                </div>
+            `;
+        });
+
+        scheduleView.innerHTML = scheduleHtml || `
+            <div class="text-center text-gray-400 py-12 italic border-2 border-dashed border-gray-200 rounded-xl bg-white">
+                <div class="text-3xl mb-2">📋</div>
+                <div class="font-bold text-gray-600 mb-1">No Matching Schedule Records</div>
+                <p class="text-xs text-gray-400">No invigilation duties, relief requests, or leaves match your current filter selections.</p>
+            </div>
+        `;
+
+        // 5. Render Tab 2: Department Breakdown View
+        const sortedDepts = Object.values(deptStats).sort((a, b) => {
+            if (b.duties !== a.duties) return b.duties - a.duties;
+            return a.dept.localeCompare(b.dept);
+        });
+
+        let deptTableHtml = `
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
+                        <tr>
+                            <th class="py-3 px-4">#</th>
+                            <th class="py-3 px-4">Department</th>
+                            <th class="py-3 px-4 text-center">Faculty</th>
+                            <th class="py-3 px-4 text-center">Duties Assigned</th>
+                            <th class="py-3 px-4 text-center">Relief Requests</th>
+                            <th class="py-3 px-4 text-center">Leaves / OD</th>
+                            <th class="py-3 px-4 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+        `;
+
+        let sumFaculty = 0;
+        let sumDuties = 0;
+        let sumRelief = 0;
+        let sumLeaves = 0;
+
+        sortedDepts.forEach((d, idx) => {
+            sumFaculty += d.facultyCount;
+            sumDuties += d.duties;
+            sumRelief += d.relief;
+            sumLeaves += d.leaves;
+
+            deptTableHtml += `
+                <tr class="hover:bg-emerald-50/40 transition">
+                    <td class="py-2.5 px-4 text-gray-400 font-mono">${idx + 1}</td>
+                    <td class="py-2.5 px-4 font-bold text-gray-800">${escapeHtml(d.dept)}</td>
+                    <td class="py-2.5 px-4 text-center font-semibold text-gray-600">${d.facultyCount}</td>
+                    <td class="py-2.5 px-4 text-center">
+                        <span class="inline-block bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold border border-emerald-200">
+                            ${d.duties}
+                        </span>
+                    </td>
+                    <td class="py-2.5 px-4 text-center">
+                        <span class="inline-block ${d.relief > 0 ? 'bg-amber-50 text-amber-700 border border-amber-200 font-bold' : 'text-gray-400'} px-2 py-0.5 rounded">
+                            ${d.relief}
+                        </span>
+                    </td>
+                    <td class="py-2.5 px-4 text-center">
+                        <span class="inline-block ${d.leaves > 0 ? 'bg-rose-50 text-rose-700 border border-rose-200 font-bold' : 'text-gray-400'} px-2 py-0.5 rounded">
+                            ${d.leaves}
+                        </span>
+                    </td>
+                    <td class="py-2.5 px-4 text-right">
+                        <button onclick="selectPrincipalMonitorDept('${escapeHtml(d.dept)}')"
+                            class="text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded text-[11px] font-bold transition">
+                            View Roster
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        deptTableHtml += `
+                    </tbody>
+                    <tfoot class="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-800">
+                        <tr>
+                            <td class="py-3 px-4" colspan="2">TOTAL (INSTITUTION-WIDE)</td>
+                            <td class="py-3 px-4 text-center">${sumFaculty}</td>
+                            <td class="py-3 px-4 text-center text-emerald-700">${sumDuties}</td>
+                            <td class="py-3 px-4 text-center text-amber-700">${sumRelief}</td>
+                            <td class="py-3 px-4 text-center text-rose-700">${sumLeaves}</td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="selectPrincipalMonitorDept('ALL')"
+                                    class="text-gray-700 hover:text-gray-900 bg-gray-200 px-2.5 py-1 rounded text-[11px] font-bold transition">
+                                    Show All
+                                </button>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        `;
+
+        if (deptContainer) {
+            deptContainer.innerHTML = deptTableHtml;
+        }
+
+    }, 40);
+};
+
+// --- PRINT CONCISE PRINCIPAL REPORT ---
+window.printPrincipalMonitorReport = function () {
+    const deptFilter = document.getElementById('principal-dept-filter')?.value || 'ALL';
+    const timeFilter = document.getElementById('principal-time-filter')?.value || 'UPCOMING';
+
+    const collegeName = collegeData?.examCollegeName || "Institutional Examination Authority";
+    const acYear = (typeof getAcademicYearForDate === 'function') ? getAcademicYearForDate(new Date()) : { label: "Current Academic Session" };
+    const dateFormatted = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeFormatted = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const activeStaff = (staffData || []).filter(s => s.status !== 'archived');
+    const targetStaffList = deptFilter === 'ALL'
+        ? activeStaff
+        : activeStaff.filter(s => s.dept === deptFilter);
+
+    const targetEmails = new Set(targetStaffList.map(s => s.email.toLowerCase()));
+    const staffLookup = new Map();
+    activeStaff.forEach(s => staffLookup.set(s.email.toLowerCase(), s));
+
+    const schedule = {};
+    const getDayEntry = (dateObj, dateStr) => {
+        if (!dateObj || isNaN(dateObj.getTime())) return null;
+        const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        if (!schedule[key]) {
+            schedule[key] = {
+                dateObj: dateObj,
+                dateStr: dateStr,
+                FN: { assigned: [], posted: [], unavailable: [] },
+                AN: { assigned: [], posted: [], unavailable: [] }
+            };
+        }
+        return schedule[key];
+    };
+
+    const isDateInWindow = (date) => {
+        if (isNaN(date.getTime())) return false;
+        if (timeFilter === 'UPCOMING') return date >= today;
+        if (timeFilter === 'WEEK') {
+            const weekEnd = new Date(today.getTime() + 7 * 86400000);
+            weekEnd.setHours(23, 59, 59, 999);
+            return date >= today && date <= weekEnd;
+        }
+        if (timeFilter === 'MONTH') {
+            const monthEnd = new Date(today.getTime() + 30 * 86400000);
+            monthEnd.setHours(23, 59, 59, 999);
+            return date >= today && date <= monthEnd;
+        }
+        return true;
+    };
+
+    // Gather Slots
+    Object.keys(invigilationSlots || {}).forEach(key => {
+        if (!key.includes(' | ')) return;
+        const date = parseDate(key);
+        if (!isDateInWindow(date)) return;
+
+        const [dStr, tStr] = key.split(' | ');
+        const isAN = (tStr.includes("PM") || tStr.startsWith("12:") || tStr.startsWith("12."));
+        const sess = isAN ? "AN" : "FN";
+
+        const dayEntry = getDayEntry(date, dStr);
+        if (!dayEntry) return;
+
+        const slot = invigilationSlots[key];
+        (slot.assigned || []).forEach(email => {
+            const eLower = email.toLowerCase();
+            if (targetEmails.has(eLower)) {
+                if (!dayEntry[sess].assigned.includes(eLower)) dayEntry[sess].assigned.push(eLower);
+                if (slot.exchangeRequests && slot.exchangeRequests.some(x => x.toLowerCase() === eLower)) {
+                    if (!dayEntry[sess].posted.includes(eLower)) dayEntry[sess].posted.push(eLower);
+                }
+            }
+        });
+
+        if (slot.unavailable) {
+            slot.unavailable.forEach(u => {
+                const eLower = (typeof u === 'string' ? u : u.email).toLowerCase();
+                const reason = (typeof u === 'object' ? u.reason : "Unspecified");
+                if (targetEmails.has(eLower)) {
+                    if (!dayEntry[sess].unavailable.some(x => x.email === eLower)) {
+                        dayEntry[sess].unavailable.push({ email: eLower, reason });
+                    }
+                }
+            });
+        }
+    });
+
+    // Gather Advance Unavailability
+    Object.keys(advanceUnavailability || {}).forEach(dateStr => {
+        if (!dateStr || (!dateStr.includes('.') && !dateStr.includes('-'))) return;
+        const cleanStr = dateStr.replace(/-/g, '.');
+        const parts = cleanStr.split('.');
+        if (parts.length !== 3) return;
+
+        const date = new Date(parts[2], parts[1] - 1, parts[0]);
+        if (!isDateInWindow(date)) return;
+
+        const dayEntry = getDayEntry(date, cleanStr);
+        if (!dayEntry) return;
+
+        ['FN', 'AN'].forEach(sess => {
+            if (advanceUnavailability[dateStr][sess]) {
+                advanceUnavailability[dateStr][sess].forEach(u => {
+                    const eLower = (typeof u === 'string' ? u : u.email).toLowerCase();
+                    const reason = (typeof u === 'object' ? u.reason : "OD/Leave");
+                    if (targetEmails.has(eLower)) {
+                        if (!dayEntry[sess].unavailable.some(x => x.email === eLower)) {
+                            dayEntry[sess].unavailable.push({ email: eLower, reason });
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    const sortedKeys = Object.keys(schedule).sort();
+
+    let tableRows = "";
+    let totalDuties = 0;
+    let totalRelief = 0;
+    let totalLeaves = 0;
+
+    sortedKeys.forEach(dateKey => {
+        const dayData = schedule[dateKey];
+        const dayName = dayData.dateObj.toLocaleString('en-us', { weekday: 'short' });
+
+        ['FN', 'AN'].forEach(sess => {
+            const assigned = dayData[sess].assigned;
+            const posted = dayData[sess].posted;
+            const unavailable = dayData[sess].unavailable;
+
+            if (assigned.length === 0 && unavailable.length === 0) return;
+
+            totalDuties += assigned.length;
+            totalRelief += posted.length;
+            totalLeaves += unavailable.length;
+
+            const assignedFormatted = assigned.map(e => {
+                const s = staffLookup.get(e);
+                const name = s ? s.name : getNameFromEmail(e);
+                const dept = s?.dept || 'Unassigned';
+                const isRelief = posted.includes(e);
+                return `<span class="badge ${isRelief ? 'badge-amber' : 'badge-green'}">${escapeHtml(name)} (${escapeHtml(dept)})${isRelief ? ' [Relief]' : ''}</span>`;
+            }).join(' ');
+
+            const unavFormatted = unavailable.map(u => {
+                const s = staffLookup.get(u.email);
+                const name = s ? s.name : getNameFromEmail(u.email);
+                const dept = s?.dept || 'Unassigned';
+                return `<span class="badge badge-red">${escapeHtml(name)} (${escapeHtml(dept)}) [${escapeHtml(u.reason)}]</span>`;
+            }).join(' ') || '<span class="text-muted">None</span>';
+
+            const sessLabel = sess === 'FN' ? 'Forenoon (FN)' : 'Afternoon (AN)';
+
+            tableRows += `
+                <tr>
+                    <td style="white-space:nowrap;font-weight:bold;">${dayData.dateStr}<br><small style="color:#6b7280;text-transform:uppercase;">${dayName}</small></td>
+                    <td style="font-weight:600;white-space:nowrap;">${sessLabel}</td>
+                    <td>${assignedFormatted || '<span class="text-muted">No invigilators assigned</span>'}</td>
+                    <td>${unavFormatted}</td>
+                </tr>
+            `;
+        });
+    });
+
+    if (!tableRows) {
+        tableRows = `<tr><td colspan="4" style="text-align:center;padding:20px;color:#9ca3af;font-style:italic;">No duties or leaves found for the selected scope.</td></tr>`;
+    }
+
+    const printHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Executive Principal Monitor Report - ${escapeHtml(collegeName)}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 25px; background: #f8fafc; color: #1e293b; font-size: 12px; }
+        .control-bar { max-width: 1050px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+        .btn-print { background: #059669; color: white; border: none; padding: 8px 18px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-print:hover { background: #047857; }
+        .report-page { max-width: 1050px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .header { text-align: center; border-bottom: 2px solid #059669; padding-bottom: 15px; margin-bottom: 20px; }
+        .college-title { font-size: 20px; font-weight: 800; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px; }
+        .office-title { font-size: 14px; font-weight: 700; color: #059669; margin-top: 4px; text-transform: uppercase; }
+        .report-title { font-size: 16px; font-weight: 700; color: #334155; margin-top: 6px; }
+        .meta-strip { display: flex; justify-content: space-between; font-size: 11px; color: #64748b; background: #f1f5f9; padding: 8px 14px; border-radius: 6px; margin-bottom: 20px; font-weight: 600; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 25px; }
+        .kpi-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; text-align: center; }
+        .kpi-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        .kpi-val { font-size: 18px; font-weight: 800; margin-top: 3px; color: #0f172a; }
+        .kpi-card.green .kpi-val { color: #059669; }
+        .kpi-card.amber .kpi-val { color: #d97706; }
+        .kpi-card.red .kpi-val { color: #e11d48; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+        th { background: #f1f5f9; color: #334155; padding: 8px 10px; text-align: left; font-weight: 700; border: 1px solid #cbd5e1; }
+        td { padding: 8px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+        tr:nth-child(even) { background: #f8fafc; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin: 2px 2px 2px 0; border: 1px solid transparent; }
+        .badge-green { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+        .badge-amber { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+        .badge-red { background: #fff1f2; color: #9f1239; border-color: #fecdd3; }
+        .text-muted { color: #94a3b8; font-style: italic; }
+        .sig-block { margin-top: 50px; display: flex; justify-content: space-between; padding: 0 30px; }
+        .sig-box { text-align: center; min-width: 220px; border-top: 1px solid #64748b; padding-top: 8px; font-weight: 700; font-size: 12px; color: #1e293b; }
+        .footer-note { margin-top: 30px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+        @media print {
+            body { padding: 0; background: white; font-size: 10px; }
+            .control-bar { display: none !important; }
+            .report-page { box-shadow: none; padding: 0; width: 100%; max-width: 100%; }
+            .badge { font-size: 9px; padding: 1px 4px; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; }
+            @page { margin: 15mm; size: A4 portrait; }
+        }
+    </style>
+</head>
+<body>
+    <div class="control-bar">
+        <div><strong>Executive Principal Monitor</strong> • Printable Official Summary</div>
+        <button onclick="window.print()" class="btn-print">🖨️ Print / Save as PDF</button>
+    </div>
+    <div class="report-page">
+        <div class="header">
+            <div class="college-title">${escapeHtml(collegeName)}</div>
+            <div class="office-title">Office of the Principal & Chief Superintendent of Examinations</div>
+            <div class="report-title">CONSOLIDATED FACULTY INVIGILATION & LEAVE MONITORING REPORT</div>
+        </div>
+        <div class="meta-strip">
+            <span>Academic Session: ${escapeHtml(acYear.label)}</span>
+            <span>Department Scope: ${escapeHtml(deptFilter === 'ALL' ? 'All Departments' : deptFilter)}</span>
+            <span>Generated: ${dateFormatted} at ${timeFormatted}</span>
+        </div>
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">Target Faculty</div>
+                <div class="kpi-val">${targetStaffList.length}</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">Total Duties</div>
+                <div class="kpi-val">${totalDuties}</div>
+            </div>
+            <div class="kpi-card amber">
+                <div class="kpi-label">Relief Requests</div>
+                <div class="kpi-val">${totalRelief}</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-label">Leaves / OD</div>
+                <div class="kpi-val">${totalLeaves}</div>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:15%;">Date & Day</th>
+                    <th style="width:15%;">Session</th>
+                    <th style="width:45%;">Assigned Faculty & Department</th>
+                    <th style="width:25%;">Leaves / Inconveniences</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows}
+            </tbody>
+        </table>
+        <div class="sig-block">
+            <div class="sig-box">Chief Superintendent / Exam Convener</div>
+            <div class="sig-box">Principal</div>
+        </div>
+        <div class="footer-note">
+            Confidential Examination Record • Generated by Automated Invigilation Monitoring System • ${escapeHtml(collegeName)}
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+        alert("Please allow popups to view and print the Principal Monitor Report.");
+        return;
+    }
+    printWin.document.open();
+    printWin.document.write(printHtml);
+    printWin.document.close();
+};
 
 
 

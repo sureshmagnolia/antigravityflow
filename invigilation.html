@@ -150,6 +150,17 @@
                 <span class="hidden md:inline">HoD Monitor</span>
             </button>
 
+            <!-- Principal / Executive Monitor Button -->
+            <button id="btn-principal-monitor" onclick="openPrincipalMonitorModal()"
+                class="hidden bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm"
+                title="Principal / Executive Faculty Monitor">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span class="hidden md:inline">Principal Monitor</span>
+            </button>
+
             <!-- Super Admin Switch College Button -->
             <button id="btn-super-admin-switch"
                 class="hidden bg-amber-500 hover:bg-amber-600 text-white p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm border border-amber-400"
@@ -1998,6 +2009,162 @@
 
 
 
+    <!-- Principal / Executive Faculty Monitor Modal -->
+    <div id="principal-monitor-modal"
+        class="hidden fixed inset-0 bg-gray-900/60 flex justify-center items-center z-50 p-2 sm:p-4 backdrop-blur-sm transition-opacity">
+        <div
+            class="bg-white w-full max-w-5xl max-h-[92vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-100">
+
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center px-4 sm:px-6 py-3.5 border-b border-gray-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-white shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-sm shrink-0">
+                        🏛️
+                    </div>
+                    <div>
+                        <h3 class="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                            Principal Executive Monitor
+                            <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">Institution-Wide</span>
+                        </h3>
+                        <p class="text-xs text-gray-500" id="principal-monitor-subtitle">Consolidated Duty Allocations, Relief Requests & Leaves for All Faculty</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="printPrincipalMonitorReport()"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                        title="Print or Save PDF of Consolidated Report">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        <span class="hidden sm:inline">Print Report</span>
+                    </button>
+                    <button onclick="closeModal('principal-monitor-modal')"
+                        class="bg-gray-100 text-gray-500 hover:text-gray-800 p-2 rounded-full transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filters & Controls Bar -->
+            <div class="px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-200 shrink-0">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <!-- Dept Filter -->
+                    <div class="flex items-center gap-1.5">
+                        <label for="principal-dept-filter" class="text-xs font-bold text-gray-600">Dept:</label>
+                        <select id="principal-dept-filter" onchange="filterPrincipalMonitor()"
+                            class="text-xs font-semibold border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <option value="ALL">All Departments</option>
+                        </select>
+                    </div>
+
+                    <!-- Status Filter -->
+                    <div class="flex items-center gap-1.5">
+                        <label for="principal-status-filter" class="text-xs font-bold text-gray-600">Category:</label>
+                        <select id="principal-status-filter" onchange="filterPrincipalMonitor()"
+                            class="text-xs font-semibold border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <option value="ALL">All Entries</option>
+                            <option value="DUTIES">Assigned / Active</option>
+                            <option value="RELIEF">Relief Requests Only</option>
+                            <option value="UNAVAILABLE">Leaves / Inconveniences Only</option>
+                        </select>
+                    </div>
+
+                    <!-- Time Window -->
+                    <div class="flex items-center gap-1.5">
+                        <label for="principal-time-filter" class="text-xs font-bold text-gray-600">Window:</label>
+                        <select id="principal-time-filter" onchange="filterPrincipalMonitor()"
+                            class="text-xs font-semibold border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                            <option value="UPCOMING">Upcoming (Today Onwards)</option>
+                            <option value="WEEK">Next 7 Days</option>
+                            <option value="MONTH">Next 30 Days</option>
+                            <option value="ALL">All Exam Dates</option>
+                        </select>
+                    </div>
+
+                    <!-- Search Input -->
+                    <div class="flex-1 min-w-[160px]">
+                        <input id="principal-search-filter" oninput="filterPrincipalMonitor()" type="text"
+                            placeholder="🔍 Search faculty, dept, reason..."
+                            class="w-full text-xs border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-gray-400" />
+                    </div>
+
+                    <!-- View Switcher Tabs -->
+                    <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-xs">
+                        <button id="btn-principal-tab-schedule" onclick="switchPrincipalMonitorTab('schedule')"
+                            class="px-2.5 py-1 text-xs font-bold rounded-md bg-emerald-600 text-white transition">
+                            📅 Schedule
+                        </button>
+                        <button id="btn-principal-tab-dept" onclick="switchPrincipalMonitorTab('dept')"
+                            class="px-2.5 py-1 text-xs font-bold rounded-md text-gray-600 hover:text-gray-900 transition">
+                            📊 Departments
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Metric Badges -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2.5 pt-2.5 border-t border-gray-200/70">
+                    <div class="bg-white px-2.5 py-1.5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between">
+                        <span class="text-[11px] font-medium text-gray-500">Faculty</span>
+                        <span id="kpi-principal-faculty" class="text-xs font-bold text-gray-800">0</span>
+                    </div>
+                    <div class="bg-white px-2.5 py-1.5 rounded-lg border border-gray-200 shadow-xs flex items-center justify-between">
+                        <span class="text-[11px] font-medium text-gray-500">Exam Days</span>
+                        <span id="kpi-principal-days" class="text-xs font-bold text-gray-800">0</span>
+                    </div>
+                    <div class="bg-emerald-50/60 px-2.5 py-1.5 rounded-lg border border-emerald-200/70 shadow-xs flex items-center justify-between">
+                        <span class="text-[11px] font-medium text-emerald-700">Duties</span>
+                        <span id="kpi-principal-duties" class="text-xs font-bold text-emerald-800">0</span>
+                    </div>
+                    <div class="bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/70 shadow-xs flex items-center justify-between">
+                        <span class="text-[11px] font-medium text-amber-700">Relief Reqs</span>
+                        <span id="kpi-principal-relief" class="text-xs font-bold text-amber-800">0</span>
+                    </div>
+                    <div class="bg-rose-50/60 px-2.5 py-1.5 rounded-lg border border-rose-200/70 shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
+                        <span class="text-[11px] font-medium text-rose-700">Leaves / OD</span>
+                        <span id="kpi-principal-leaves" class="text-xs font-bold text-rose-800">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Body Scrollable -->
+            <div class="p-4 sm:p-6 overflow-y-auto custom-scroll bg-gray-50/50 flex-1">
+                <!-- Tab 1: Schedule View -->
+                <div id="principal-monitor-schedule-view" class="space-y-4">
+                    <div class="text-center py-10">
+                        <span class="animate-spin text-2xl inline-block">⏳</span>
+                        <span class="block mt-2 text-sm text-gray-500">Loading institutional schedule...</span>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Department Breakdown View -->
+                <div id="principal-monitor-dept-view" class="hidden">
+                    <div id="principal-monitor-dept-table-container"></div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-4 sm:px-6 py-3 border-t border-gray-200 bg-white shrink-0 flex items-center justify-between">
+                <span id="principal-monitor-footer-summary" class="text-xs text-gray-500 font-medium">Ready</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="printPrincipalMonitorReport()"
+                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                        🖨️ Print
+                    </button>
+                    <button onclick="closeModal('principal-monitor-modal')"
+                        class="bg-gray-800 text-white px-5 py-2 rounded-lg text-xs font-bold hover:bg-gray-900 shadow-sm transition">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
     <div id="dashboard-invig-modal"
         class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-[80] flex justify-center items-center p-4 backdrop-blur-sm transition-opacity">
         <div
@@ -2234,7 +2401,7 @@
         </div>
     </div>
 
-    <script type="module" src="invigilation.js?v=v33">
+    <script type="module" src="invigilation.js?v=v34">
     </script>
 
 
