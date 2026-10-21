@@ -1317,7 +1317,6 @@ function populateAllExamDropdowns() {
     // 2. Define all dropdowns to update
     const dropdowns = [
         { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
-        { id: 'session-new-exam-name', defaultText: '-- Select New Exam Name --' }, // Session Ops
         { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
         { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
         { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
@@ -1353,7 +1352,74 @@ function populateAllExamDropdowns() {
             }
         }
     });
+
+    // Refresh session ops dropdown if a session is currently chosen in editSessionSelect
+    if (typeof window.populateSessionOpsExamDropdown === 'function') {
+        const editSelect = document.getElementById('edit-session-select');
+        window.populateSessionOpsExamDropdown(editSelect ? editSelect.value : null);
+    }
 }
+
+// --- SESSION OPS EXAM DROPDOWN POPULATOR ---
+// Populates the dropdown with ONLY exam names available in the currently selected exam session
+window.populateSessionOpsExamDropdown = function(sessionKey, prefilteredStudents = null) {
+    const examSelect = document.getElementById('session-new-exam-name');
+    if (!examSelect) return;
+
+    const currentVal = examSelect.value;
+    examSelect.innerHTML = '';
+
+    if (!sessionKey) {
+        examSelect.innerHTML = '<option value="">-- Select a Session First --</option>';
+        return;
+    }
+
+    const [dateRaw, timeRaw] = sessionKey.split(' | ');
+    if (!dateRaw || !timeRaw) {
+        examSelect.innerHTML = '<option value="">-- Select a Session First --</option>';
+        return;
+    }
+
+    const sessionStudents = prefilteredStudents || (typeof window.getStudentsForSession === 'function'
+        ? window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim())
+        : (allStudentData || []).filter(s => {
+            if (!s) return false;
+            const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+            const targetDateNorm = dateRaw.trim().replace(/[./-]/g, '');
+            const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+            const targetTimeNorm = timeRaw.trim().toUpperCase();
+            let timeMatch = (sTimeNorm === targetTimeNorm);
+            if (!timeMatch && typeof normalizeTime === 'function') {
+                timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(targetTimeNorm));
+            }
+            return (sDateNorm === targetDateNorm) && timeMatch;
+        }));
+
+    const uniqueExamNames = [...new Set(sessionStudents.map(s => (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim()).filter(Boolean))].sort();
+
+    if (uniqueExamNames.length === 0) {
+        examSelect.innerHTML = '<option value="">-- All Students in Session (No Exam Tag) --</option>';
+    } else {
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = uniqueExamNames.length === 1 
+            ? `-- All Exams (${uniqueExamNames[0]}) --` 
+            : '-- All Exams in Session --';
+        examSelect.appendChild(defaultOpt);
+
+        uniqueExamNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            examSelect.appendChild(opt);
+        });
+
+        // Restore value if it is still present in the updated session list
+        if (currentVal && uniqueExamNames.includes(currentVal)) {
+            examSelect.value = currentVal;
+        }
+    }
+};
 
 
 
@@ -14471,8 +14537,10 @@ window.real_disable_all_report_buttons = function (disabled) {
             const [dateRaw, timeRaw] = currentEditSession.split(' | ');
             const sessionStudents = window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim());
 
-
-
+            // --- Populate Session Ops Exam Dropdown with ONLY exams in this session ---
+            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                window.populateSessionOpsExamDropdown(currentEditSession, sessionStudents);
+            }
 
             // --- NEW: Update and Show Badge Count ---
             if (opsCountBadge) {
@@ -14518,6 +14586,9 @@ window.real_disable_all_report_buttons = function (disabled) {
 
             editCourseSelectContainer.classList.remove('hidden');
         } else {
+            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                window.populateSessionOpsExamDropdown(null);
+            }
             editCourseSelectContainer.classList.add('hidden');
             if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
         }
@@ -18784,19 +18855,38 @@ function updateSessionOpsLockUI() {
         }
     }
 
-if (btnSessionReschedule) {
+    // 1b. Update Count Badge when selecting a specific Exam in Session Ops
+    if (sessionExamNameInput) {
+        sessionExamNameInput.addEventListener('change', () => {
+            const selectedExam = sessionExamNameInput.value.trim();
+            const opsCountBadge = document.getElementById('session-ops-count-badge');
+            const currentSession = editSessionSelect ? editSessionSelect.value : null;
+            if (!opsCountBadge || !currentSession) return;
+            const [dateRaw, timeRaw] = currentSession.split(' | ');
+            const sessionStudents = typeof window.getStudentsForSession === 'function'
+                ? window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim())
+                : [];
+            if (!selectedExam) {
+                opsCountBadge.textContent = `${sessionStudents.length} Students`;
+            } else {
+                const count = sessionStudents.filter(s => (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim() === selectedExam).length;
+                opsCountBadge.textContent = `${count} Students (${selectedExam})`;
+            }
+        });
+    }
+
+    if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
-            const newExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : ""; // Capture Name
+            const targetExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : "";
             const currentSession = editSessionSelect.value;
 
             if (!currentSession) return alert("No session selected.");
 
-
-                        // Validation: Must have AT LEAST ONE field changed
-            if (!rawDate && !rawTime && !newExamName) {
-                return alert("Please enter a New Date, a New Time, OR a New Exam Name to apply changes.");
+            // Validation: Must enter at least New Date or New Time to reschedule
+            if (!rawDate && !rawTime) {
+                return alert("Please enter a New Date, a New Time, or both to reschedule.");
             }
 
             // A. Determine New Date/Time (Support changing Date or Time independently)
@@ -18811,7 +18901,6 @@ if (btnSessionReschedule) {
             if (rawDate) {
                 const [y, m, d] = rawDate.split('-');
                 newDate = `${d}.${m}.${y}`;
-
             } else {
                 newDate = oldDate;
             }
@@ -18826,31 +18915,32 @@ if (btnSessionReschedule) {
                     hours = hours % 12;
                     hours = hours ? hours : 12;
                     newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
-
                 }
             } else {
                 newTime = oldTime;
             }
 
             const newSessionKey = `${newDate} | ${newTime}`;
-            if (newSessionKey !== currentSession) isMove = true;
-
-            
+            if (newSessionKey === currentSession) {
+                return alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
+            }
+            isMove = true;
 
             // B. Confirmation Message
-            let changesMsg = "";
-            if (isMove) changesMsg += `• Move to: ${newSessionKey}\n`;
-            if (newExamName) changesMsg += `• Rename Exam to: "${newExamName}"\n`;
+            let changesMsg = `• Move to: ${newSessionKey}\n`;
+            if (targetExamName) {
+                changesMsg += `• Target Exam: "${targetExamName}" (Only students of this exam will be rescheduled)\n`;
+            } else {
+                changesMsg += `• Target Exam: All Exams in Session (Entire session will be rescheduled)\n`;
+            }
 
-            const msg = `⚠️ CONFIRM SESSION UPDATE ⚠️\n\nTarget: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
+            const msg = `⚠️ CONFIRM SESSION RESCHEDULE ⚠️\n\nCurrent Session: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
             if (!confirm(msg)) return;
             
             // Safety check for moves
-            if (isMove) {
-                const check = prompt("Type 'CHANGE' to confirm moving this session:");
-                if (check !== 'CHANGE') return alert("Cancelled.");
-            }
+            const check = prompt("Type 'CHANGE' to confirm moving this session:");
+            if (check !== 'CHANGE') return alert("Cancelled.");
 
             try {
                 // 1. Update Students (Memory)
@@ -18871,23 +18961,41 @@ if (btnSessionReschedule) {
                     }
 
                     if (dateMatch && timeMatch) {
-                        // Update Date/Time if moving
-                        if (isMove) {
-                            s.Date = newDate;
-                            s.Time = newTime;
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || "").toString().trim();
+                        // If a specific exam was selected, only reschedule students matching that exam
+                        if (targetExamName && sExam !== targetExamName) {
+                            return;
                         }
-                        // Update Exam Name if provided
-                        if (newExamName) {
-                            s['Exam Name'] = newExamName;
-                        }
+
+                        // Update Date/Time (keep existing Exam Name intact)
+                        s.Date = newDate;
+                        s.Time = newTime;
                         studentCount++;
                     }
                 });
 
+                if (studentCount === 0) {
+                    return alert(targetExamName 
+                        ? `No students found for exam "${targetExamName}" in this session.`
+                        : "No students found in this session to reschedule.");
+                }
+
                 // 2. Persist updated students to IndexedDB & LocalStorage
                 await saveExamDataIDB(allStudentData);
 
-                // 3. Move Auxiliary Data & Storage Keys (ONLY IF MOVING)
+                // 3. Check remaining students in old session
+                const remainingInOldSession = allStudentData.filter(s => {
+                    if (!s) return false;
+                    const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                    const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                    let timeMatch = (sTimeNorm === timeRawNorm);
+                    if (!timeMatch && typeof normalizeTime === 'function') {
+                        timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                    }
+                    return (sDateNorm === dateRawNorm) && timeMatch;
+                }).length;
+
+                // 4. Move Auxiliary Data & Storage Keys (ONLY IF MOVING)
                 if (isMove) {
                     const moveKeyInStorage = (storageKey, type) => {
                         const raw = localStorage.getItem(storageKey);
@@ -18900,10 +19008,12 @@ if (btnSessionReschedule) {
                                     if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
                                     else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
                                 } else {
-                                    // Move
+                                    // Move/Copy
                                     data[newSessionKey] = data[currentSession];
                                 }
-                                delete data[currentSession];
+                                if (remainingInOldSession === 0) {
+                                    delete data[currentSession];
+                                }
                                 localStorage.setItem(storageKey, JSON.stringify(data));
                             }
                         } catch (err) {
@@ -18919,27 +19029,31 @@ if (btnSessionReschedule) {
                     moveKeyInStorage('examInvigilationSlots', 'object');
                     moveKeyInStorage('examQPCodes', 'object');
 
-                    // 3b. Move Scribe Vault Keys & IDB (Preserving Physical Scribe Room)
+                    // 4b. Move Scribe Vault Keys & IDB (Preserving Physical Scribe Room)
                     try {
                         const oldVaultKey = `scrAllot_` + currentSession.replace(/\s/g, '_');
                         const newVaultKey = `scrAllot_` + newSessionKey.replace(/\s/g, '_');
                         const oldVaultData = localStorage.getItem(oldVaultKey);
                         if (oldVaultData) {
                             localStorage.setItem(newVaultKey, oldVaultData);
-                            localStorage.removeItem(oldVaultKey);
+                            if (remainingInOldSession === 0) {
+                                localStorage.removeItem(oldVaultKey);
+                            }
                         }
                         const oldDirty = `hasUnsavedScribes_` + currentSession.replace(/\s/g, '_');
                         const newDirty = `hasUnsavedScribes_` + newSessionKey.replace(/\s/g, '_');
                         const dirtyVal = localStorage.getItem(oldDirty);
                         if (dirtyVal) {
                             localStorage.setItem(newDirty, dirtyVal);
-                            localStorage.removeItem(oldDirty);
+                            if (remainingInOldSession === 0) {
+                                localStorage.removeItem(oldDirty);
+                            }
                         }
                         if (typeof window.getScribeAllotmentIDB === 'function' && typeof window.saveScribeAllotmentIDB === 'function') {
                             const scrAllot = await window.getScribeAllotmentIDB(currentSession);
                             if (scrAllot) {
                                 await window.saveScribeAllotmentIDB(newSessionKey, scrAllot);
-                                if (typeof openExamDB === 'function') {
+                                if (remainingInOldSession === 0 && typeof openExamDB === 'function') {
                                     const db = await openExamDB();
                                     const tx = db.transaction('scribeVault', 'readwrite');
                                     tx.objectStore('scribeVault').delete(currentSession);
@@ -18950,13 +19064,13 @@ if (btnSessionReschedule) {
                         console.warn("Scribe vault migration error:", vaultErr);
                     }
 
-                    // 3c. Move Room Allotment IDB (allotmentVault)
+                    // 4c. Move Room Allotment IDB (allotmentVault)
                     try {
                         if (typeof window.getRoomAllotmentIDB === 'function' && typeof window.saveRoomAllotmentIDB === 'function') {
                             const roomAllot = await window.getRoomAllotmentIDB(currentSession);
                             if (roomAllot) {
                                 await window.saveRoomAllotmentIDB(newSessionKey, roomAllot);
-                                if (typeof window.deleteRoomAllotmentIDB === 'function') {
+                                if (remainingInOldSession === 0 && typeof window.deleteRoomAllotmentIDB === 'function') {
                                     await window.deleteRoomAllotmentIDB(currentSession);
                                 }
                             }
@@ -18965,10 +19079,12 @@ if (btnSessionReschedule) {
                         console.warn("Room IDB vault migration error:", allotErr);
                     }
 
-                    // 3d. Update Master Registry for Calendar & Selectors
+                    // 4d. Update Master Registry for Calendar & Selectors
                     try {
                         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
-                        known = known.filter(k => k !== currentSession);
+                        if (remainingInOldSession === 0) {
+                            known = known.filter(k => k !== currentSession);
+                        }
                         if (!known.includes(newSessionKey)) {
                             known.push(newSessionKey);
                         }
@@ -18977,7 +19093,7 @@ if (btnSessionReschedule) {
                         console.warn("Registry update error:", regErr);
                     }
 
-                    // 3e. Sync invigilation slots if available
+                    // 4e. Sync invigilation slots if available
                     if (typeof window.syncSlotsToCloud === 'function') {
                         try {
                             await window.syncSlotsToCloud("FORCE_OVERWRITE");
@@ -18987,30 +19103,26 @@ if (btnSessionReschedule) {
                     }
                 }
 
-                alert(`✅ Successfully Updated ${studentCount} records.\nSyncing to Cloud...`);
+                alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
 
-                // 4. Cloud Sync
-                if (isMove) {
-                    if (typeof deleteSessionFromCloud === 'function') {
-                        await deleteSessionFromCloud(currentSession);
-                    }
-                    if (typeof syncSessionToCloud === 'function') {
-                        await syncSessionToCloud(newSessionKey);
-                    }
-                } else {
-                    if (typeof syncSessionToCloud === 'function') {
-                        await syncSessionToCloud(currentSession);
-                    }
+                // 5. Cloud Sync
+                if (remainingInOldSession === 0 && typeof deleteSessionFromCloud === 'function') {
+                    await deleteSessionFromCloud(currentSession);
+                } else if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(currentSession);
+                }
+                if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(newSessionKey);
                 }
 
                 window.location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("Error during update: " + e.message);
+                alert("Error during reschedule: " + e.message);
             }
         });
-}
+    }
 
 // 3. Delete Logic (Wipes Students + Associated Data)
     if (btnSessionDelete) {
