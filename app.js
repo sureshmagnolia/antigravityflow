@@ -11374,7 +11374,10 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
-            if (confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.")) {
+            const wantBackup = (typeof UiModal !== 'undefined')
+                ? await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?")
+                : confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.");
+            if (wantBackup) {
                 // Trigger Downloads
                 const csvBtn = document.getElementById('master-download-csv-btn');
                 const jsonBtn = document.getElementById('backup-data-button');
@@ -11387,7 +11390,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             // ---------------------
 
-            const confirmReset = confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
+            const confirmReset = (typeof UiModal !== 'undefined')
+                ? await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)")
+                : confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
             
             if (confirmReset) {
                 // 1. Clear Local Storage
@@ -11465,7 +11470,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                     window.triggerDriveAutoSync(true); // Sync immediately
                 }
                 
-                alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                if (typeof UiModal !== 'undefined') {
+                    await UiModal.alert('✅ Cleanup Successful!', 'All student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                } else {
+                    alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                }
                 window.location.reload();
             }
         });
@@ -17698,153 +17707,327 @@ window.handlePythonExtraction = async function (jsonString) {
     const restoreSettingsBtn = document.getElementById('restore-settings-btn');
     const restoreSettingsInput = document.getElementById('restore-settings-input');
 
-    // B. NUKE IT ALL (Master Reset - Selective Wipe)
+    // ==========================================
+    // ☢️ NUKE IT ALL SEQUENTIAL LAUNCH MODAL LOGIC
+    // ==========================================
+
+    let nukeCurrentPayloadMode = 'DATA'; // Default payload mode
+
+    window.openNukeSequenceModal = function() {
+        nukeCurrentPayloadMode = 'DATA';
+        window.nukeSelectPayload('DATA');
+        window.nukeGoToStep(1);
+
+        const input = document.getElementById('nuke-auth-input');
+        if (input) input.value = '';
+        const err = document.getElementById('nuke-auth-error');
+        if (err) err.classList.add('hidden');
+        const statusMsg = document.getElementById('nuke-backup-status-msg');
+        if (statusMsg) statusMsg.classList.add('hidden');
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('nuke-sequence-modal');
+        } else {
+            const m = document.getElementById('nuke-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeNukeModal = function() {
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('nuke-sequence-modal');
+        } else {
+            const m = document.getElementById('nuke-sequence-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.nukeGoToStep = function(stepNum) {
+        const stepBackup = document.getElementById('nuke-step-backup');
+        const stepWarning = document.getElementById('nuke-step-warning');
+        const stepPayload = document.getElementById('nuke-step-payload');
+        const stepAuth = document.getElementById('nuke-step-auth');
+        const stepExec = document.getElementById('nuke-step-executing');
+        const stepComplete = document.getElementById('nuke-step-complete');
+
+        const title = document.getElementById('nuke-modal-title');
+        const subtitle = document.getElementById('nuke-modal-subtitle');
+        const badge = document.getElementById('nuke-modal-badge');
+
+        const allSteps = [stepBackup, stepWarning, stepPayload, stepAuth, stepExec, stepComplete];
+        allSteps.forEach(s => { if (s) s.classList.add('hidden'); });
+
+        switch (stepNum) {
+            case 1:
+                if (stepBackup) stepBackup.classList.remove('hidden');
+                if (title) title.textContent = "Nuke It All Protocol";
+                if (subtitle) subtitle.textContent = "Step 1 of 4: Safety Backup";
+                if (badge) badge.textContent = "🛡️";
+                break;
+            case 2:
+                if (stepWarning) stepWarning.classList.remove('hidden');
+                if (title) title.textContent = "Nuclear Launch Detected";
+                if (subtitle) subtitle.textContent = "Step 2 of 4: Destruction Authorization";
+                if (badge) badge.textContent = "⚠️";
+                break;
+            case 3:
+                if (stepPayload) stepPayload.classList.remove('hidden');
+                if (title) title.textContent = "Select Payload Yield";
+                if (subtitle) subtitle.textContent = "Step 3 of 4: Choose Scope";
+                if (badge) badge.textContent = "☢️";
+                break;
+            case 4:
+                if (stepAuth) stepAuth.classList.remove('hidden');
+                if (title) title.textContent = "Security Authorization";
+                if (subtitle) subtitle.textContent = "Step 4 of 4: Enter Launch Code";
+                if (badge) badge.textContent = "☠️";
+                const targetLabel = document.getElementById('nuke-auth-target-label');
+                if (targetLabel) {
+                    targetLabel.textContent = (nukeCurrentPayloadMode === 'FULL') ? "FULL WIPE (Master Reset)" : "DATA WIPE (Selective)";
+                    targetLabel.className = (nukeCurrentPayloadMode === 'FULL') ? "underline uppercase text-red-600 font-bold" : "underline uppercase text-orange-600 font-bold";
+                }
+                const input = document.getElementById('nuke-auth-input');
+                if (input) {
+                    input.value = '';
+                    setTimeout(() => input.focus(), 150);
+                }
+                const err = document.getElementById('nuke-auth-error');
+                if (err) err.classList.add('hidden');
+                break;
+            case 5:
+                if (stepExec) stepExec.classList.remove('hidden');
+                if (title) title.textContent = "Missiles Fired";
+                if (subtitle) subtitle.textContent = "Purging Databases in Real-Time";
+                if (badge) badge.textContent = "🚀";
+                break;
+            case 6:
+                if (stepComplete) stepComplete.classList.remove('hidden');
+                if (title) title.textContent = "Strike Outcome";
+                if (subtitle) subtitle.textContent = "Operations Finalized";
+                if (badge) badge.textContent = "💥";
+                break;
+        }
+    };
+
+    window.nukeSelectPayload = function(mode) {
+        nukeCurrentPayloadMode = mode;
+        const optData = document.getElementById('nuke-opt-data');
+        const optFull = document.getElementById('nuke-opt-full');
+        const badgeData = document.getElementById('nuke-badge-data');
+        const badgeFull = document.getElementById('nuke-badge-full');
+
+        if (mode === 'DATA') {
+            if (optData) {
+                optData.className = "cursor-pointer p-4 rounded-2xl border-2 border-orange-400 bg-orange-50/70 hover:bg-orange-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-orange-500/30";
+            }
+            if (badgeData) badgeData.classList.remove('hidden');
+            if (optFull) {
+                optFull.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-red-50 hover:border-red-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeFull) badgeFull.classList.add('hidden');
+        } else {
+            if (optFull) {
+                optFull.className = "cursor-pointer p-4 rounded-2xl border-2 border-red-500 bg-red-50/70 hover:bg-red-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-red-500/30";
+            }
+            if (badgeFull) badgeFull.classList.remove('hidden');
+            if (optData) {
+                optData.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-orange-50 hover:border-orange-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeData) badgeData.classList.add('hidden');
+        }
+    };
+
+    window.nukeDownloadBackupAndProceed = async function() {
+        const statusMsg = document.getElementById('nuke-backup-status-msg');
+        const downloadBtn = document.getElementById('btn-nuke-backup-download');
+        if (statusMsg) statusMsg.classList.remove('hidden');
+        if (downloadBtn) {
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        try {
+            await triggerSafetyBackup();
+        } catch (backupErr) {
+            console.warn("Safety backup error:", backupErr);
+        }
+
+        if (statusMsg) statusMsg.classList.add('hidden');
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        window.nukeGoToStep(2);
+    };
+
+    window.nukeExecuteMissiles = async function() {
+        const input = document.getElementById('nuke-auth-input');
+        const err = document.getElementById('nuke-auth-error');
+        const entered = (input ? input.value : '').trim().toUpperCase();
+
+        if (entered !== 'DELETE') {
+            if (err) {
+                err.classList.remove('hidden');
+                err.textContent = "🚫 ACCESS DENIED: Incorrect launch code. Type DELETE exactly to authorize.";
+            }
+            if (input) {
+                input.focus();
+                input.classList.add('ring-2', 'ring-red-500');
+            }
+            return;
+        }
+
+        if (err) err.classList.add('hidden');
+
+        // Transition to Step 5 (Executing)
+        window.nukeGoToStep(5);
+
+        const mode = nukeCurrentPayloadMode;
+
+        try {
+            const { db, doc, writeBatch, updateDoc, collection, getDocs, deleteDoc } = window.firebase;
+
+            // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
+            const dataKeys = [
+                'examBaseData',        // Students
+                'examRoomAllotment',   // Seating
+                'examScribeAllotment', // Scribe Mapping
+                'examAbsenteeList',    // Absentees
+                'examQPCodes',         // QP Codes
+                'examScribeList'       // Scribe List
+            ];
+
+            const settingsKeys = [
+                'examRoomConfig',      // Rooms
+                'examStreamsConfig',   // Streams
+                'examSessionNames',    // Exam Names
+                'examRulesConfig',     // Exam Schedule
+                'examCollegeName'      // College Name
+            ];
+
+            let keysToWipe = [...dataKeys];
+            if (mode === 'FULL') {
+                keysToWipe = [...dataKeys, ...settingsKeys];
+            }
+
+            // --- A. LOCAL WIPE (Browser) ---
+            keysToWipe.forEach(key => localStorage.removeItem(key));
+            localStorage.setItem('examAllKnownSessions', '[]');
+
+            // Wipe the student database (IndexedDB)
+            if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]);
+
+            // --- B. CLOUD WIPE (Firebase) ---
+            if (currentCollegeId) {
+                const batch = writeBatch(db);
+                const mainRef = doc(db, "colleges", currentCollegeId);
+                const cid = currentCollegeId;
+
+                const collectionsToDelete = ['operations', 'allocation'];
+                if (mode === 'FULL') {
+                    collectionsToDelete.push('settings');
+                    collectionsToDelete.push('staff');
+                }
+
+                collectionsToDelete.forEach(type => {
+                    batch.delete(doc(db, "colleges", cid, "system_data", type));
+                });
+
+                const nukeTs = new Date().toISOString();
+                const updatePayload = {
+                    lastUpdated: nukeTs,
+                    lastWipeEvent: nukeTs
+                };
+                localStorage.setItem('lastWipeEvent', nukeTs);
+                localStorage.setItem('lastUpdated', nukeTs);
+
+                keysToWipe.forEach(key => {
+                    if (key === 'examCollegeName') updatePayload[key] = "University of Calicut";
+                    else if (key === 'examStreamsConfig') updatePayload[key] = '["Regular"]';
+                    else if (key.includes('List') || key.includes('Config')) updatePayload[key] = "[]";
+                    else updatePayload[key] = "{}";
+                });
+
+                batch.update(mainRef, updatePayload);
+
+                const statusEl = document.getElementById('nuke-executing-status');
+                if (statusEl) statusEl.textContent = "Vaporizing live session databases...";
+
+                const sessionsColRef = collection(db, "colleges", currentCollegeId, "sessions");
+                const studentsColRef = collection(db, "colleges", currentCollegeId, "session_students");
+
+                const sSnap = await getDocs(sessionsColRef);
+                for (const sDoc of sSnap.docs) { await deleteDoc(sDoc.ref); }
+
+                const stuSnap = await getDocs(studentsColRef);
+                for (const stuDoc of stuSnap.docs) { await deleteDoc(stuDoc.ref); }
+
+                await batch.commit();
+            }
+
+            // Transition to Step 6 (Completion)
+            window.nukeGoToStep(6);
+
+            const iconBox = document.getElementById('nuke-complete-icon-box');
+            const compTitle = document.getElementById('nuke-complete-title');
+            const compMsg = document.getElementById('nuke-complete-message');
+            const reloadBtn = document.getElementById('btn-nuke-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "💥";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-green-200";
+            }
+
+            if (mode === 'FULL') {
+                if (compTitle) compTitle.textContent = "💥 KABOOM! MASTER RESET COMPLETE";
+                if (compMsg) compMsg.textContent = "Exam Configuration, Student Data, and Room Settings wiped from Browser and Cloud.\nInvigilation Module & Staff data are SAFE.";
+            } else {
+                if (compTitle) compTitle.textContent = "💥 TACTICAL STRIKE SUCCESSFUL";
+                if (compMsg) compMsg.textContent = "Student Database and Seating Allotments have been purged from Browser and Cloud.\nSettings & Invigilators remain intact.";
+            }
+
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>🔄 Reload System Now</span>";
+                reloadBtn.onclick = () => window.location.reload();
+            }
+
+        } catch (e) {
+            console.error("Nuke failed:", e);
+            window.nukeGoToStep(6);
+
+            const iconBox = document.getElementById('nuke-complete-icon-box');
+            const compTitle = document.getElementById('nuke-complete-title');
+            const compMsg = document.getElementById('nuke-complete-message');
+            const reloadBtn = document.getElementById('btn-nuke-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "⚠️";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-red-100 text-red-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-red-200";
+            }
+            if (compTitle) compTitle.textContent = "⚠️ LAUNCH FAILURE";
+            if (compMsg) compMsg.textContent = "An error occurred during execution: " + e.message;
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>Close Modal & Review</span>";
+                reloadBtn.onclick = () => window.closeNukeModal();
+            }
+        }
+    };
+
+    // Attach key listener for auth input Enter key
+    const nukeAuthInput = document.getElementById('nuke-auth-input');
+    if (nukeAuthInput) {
+        nukeAuthInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                window.nukeExecuteMissiles();
+            }
+        });
+    }
+
+    // B. NUKE IT ALL (Master Reset - Trigger Modal)
     if (nukeBtn) {
-        nukeBtn.addEventListener('click', async () => {
-            // 1. Safety Backup Prompt
-            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy data...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\n• Click OK to Backup first.\n• Click Cancel to proceed without backup.")) {
-                await triggerSafetyBackup();
-            }
-
-            // 2. Level 1 Warning
-            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a DESTRUCTIVE sequence for this College Database.\n\nAre you sure you want to proceed?")) {
-                return;
-            }
-
-            // 3. Payload Selection
-            const choice = prompt(
-                "☢️ SELECT PAYLOAD YIELD ☢️\n\n" +
-                "Type 'DATA' to wipe Students & Allotments (Keeps Rooms/Settings)\n" +
-                "Type 'FULL' to wipe All Exam Data, Rooms & College Name (Keeps Invigilators)\n\n" +
-                "Enter payload type below:"
-            );
-
-            if (!choice) return;
-            const mode = choice.trim().toUpperCase();
-
-            if (mode !== 'DATA' && mode !== 'FULL') {
-                alert("🚫 LAUNCH ABORTED 🚫\n\nInvalid payload type.\nSystem returning to safe mode.");
-                return;
-            }
-
-            // 4. Final Security Check
-            const confirmCode = prompt(`⚠ FINAL SECURITY CHECK ⚠\n\nTo authorize this ${mode} reset, type 'DELETE' in the box below:`);
-
-            if (confirmCode !== 'DELETE') {
-                alert("🚫 ACCESS DENIED 🚫\n\nIncorrect launch code.\nThe nuclear payload has been disarmed.");
-                return;
-            }
-
-            // 5. EXECUTION
-            nukeBtn.textContent = "🚀 MISSILES FIRED...";
-            nukeBtn.disabled = true;
-
-            try {
-                const { db, doc, writeBatch, updateDoc, collection, getDocs, deleteDoc } = window.firebase;
-
-                
-                // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
-                // List 1: Student Data & Operations (Target of DATA mode)
-                const dataKeys = [
-                    'examBaseData',        // Students
-                    'examRoomAllotment',   // Seating
-                    'examScribeAllotment', // Scribe Mapping
-                    'examAbsenteeList',    // Absentees
-                    'examQPCodes',         // QP Codes
-                    'examScribeList'       // Scribe List
-                ];
-
-                // List 2: Infrastructure & Settings (Target of FULL mode)
-                const settingsKeys = [
-                    'examRoomConfig',      // Rooms
-                    'examStreamsConfig',   // Streams
-                    'examSessionNames',    // Exam Names
-                    'examRulesConfig',     // Exam Schedule
-                    'examCollegeName'      // College Name
-                ];
-
-                // Determine what to wipe locally
-                let keysToWipe = [...dataKeys]; // DATA mode always wipes data
-                if (mode === 'FULL') {
-                    keysToWipe = [...dataKeys, ...settingsKeys]; // FULL adds settings
-                }
-
-                // --- A. LOCAL WIPE (Browser) ---
-                keysToWipe.forEach(key => localStorage.removeItem(key));
-                                // ✅ ADDED: Wipe the student database (IndexedDB)
-                if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]); 
-
-
-                // --- B. CLOUD WIPE (Firebase) ---
-                if (currentCollegeId) {
-                    const batch = writeBatch(db);
-                    const mainRef = doc(db, "colleges", currentCollegeId);
-                    const cid = currentCollegeId;
-
-                    // 1. Delete Sub-Collections based on Mode
-                    // 🛡️ [AUDIT FIX]: Removed 'slots' to ensure app.js never touches Invigilation data
-                    const collectionsToDelete = ['operations', 'allocation']; // Always wipe these
-                    
-                    if (mode === 'FULL') {
-                        collectionsToDelete.push('settings'); // Wipe settings too
-                        collectionsToDelete.push('staff');    // Wipe staff too (optional, usually kept safe, but FULL implies deep clean)
-                    }
-
-                    collectionsToDelete.forEach(type => {
-                        batch.delete(doc(db, "colleges", cid, "system_data", type));
-                    });
-
-                    const nukeTs = new Date().toISOString();
-                    // 2. Prepare Update Object (Reset fields in main doc)
-                    const updatePayload = {
-                        lastUpdated: nukeTs,
-                        lastWipeEvent: nukeTs
-                    };
-                    localStorage.setItem('lastWipeEvent', nukeTs);
-                    localStorage.setItem('lastUpdated', nukeTs);
-
-                    keysToWipe.forEach(key => {
-                        // Reset to sensible defaults based on key type
-                        if (key === 'examCollegeName') updatePayload[key] = "University of Calicut";
-                        else if (key === 'examStreamsConfig') updatePayload[key] = '["Regular"]';
-                        else if (key.includes('List') || key.includes('Config')) updatePayload[key] = "[]"; // Arrays
-                        else updatePayload[key] = "{}"; // Objects/Maps
-                    });
-
-                    // Update Main Document (Selective Erase)
-                    batch.update(mainRef, updatePayload);
-
-                    // --- 🔥 NEW: V2 DESTRUCTION LOGIC 🔥 ---
-                    updateSyncStatus("Vaporizing live session databases...", "neutral");
-                    const sessionsColRef = collection(db, "colleges", currentCollegeId, "sessions");
-                    const studentsColRef = collection(db, "colleges", currentCollegeId, "session_students");
-                    
-                    // Nuke all 59+ sessions (Outside the batch to prevent 500-limit errors)
-                    const sSnap = await getDocs(sessionsColRef);
-                    for (const sDoc of sSnap.docs) { await deleteDoc(sDoc.ref); }
-                    
-                    const stuSnap = await getDocs(studentsColRef);
-                    for (const stuDoc of stuSnap.docs) { await deleteDoc(stuDoc.ref); }
-                    // ----------------------------------------
-
-
-                    await batch.commit();
-                }
-
-                if (mode === 'FULL') {
-                    alert("💥 KABOOM! 💥\n\nExam Configuration & Student Data wiped.\nInvigilation Module & Staff data are SAFE.");
-                } else {
-                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent Data wiped.\nSettings & Invigilators remain intact.");
-                }
-
-                window.location.reload();
-
-            } catch (e) {
-                console.error("Nuke failed:", e);
-                alert("⚠️ LAUNCH FAILURE ⚠️\n\nAn error occurred: " + e.message);
-                nukeBtn.textContent = "☢️ NUKE IT ALL";
-                nukeBtn.disabled = false;
-            }
+        nukeBtn.addEventListener('click', () => {
+            window.openNukeSequenceModal();
         });
     }
 
