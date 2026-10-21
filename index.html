@@ -4342,7 +4342,101 @@
         </div>
 
 
-        
+        <!-- === DANGER ZONE GATEKEEPER WARNING MODAL === -->
+        <div id="danger-gatekeeper-modal" class="hidden fixed inset-0 bg-gray-950/85 backdrop-blur-md z-[110] flex justify-center items-center p-4 transition-all duration-300" onclick="if(event.target === this) window.closeDangerGatekeeper()">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-slide-up relative ring-8 ring-red-500/20 border border-red-500/30">
+                
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-red-600 via-rose-600 to-orange-600 p-5 shrink-0 relative overflow-hidden">
+                    <div class="absolute inset-0 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-15"></div>
+                    <div class="flex justify-between items-center relative z-10">
+                        <div class="flex items-center gap-3">
+                            <div id="danger-gatekeeper-badge" class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shadow-inner border border-white/20">
+                                ⚠️
+                            </div>
+                            <div>
+                                <h3 id="danger-gatekeeper-title" class="text-lg font-black text-white uppercase tracking-wider">
+                                    Danger Zone Gatekeeper
+                                </h3>
+                                <p id="danger-gatekeeper-subtitle" class="text-red-100 text-xs font-semibold opacity-90">Security Warning Level 1</p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="window.closeDangerGatekeeper()" class="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition backdrop-blur-md" title="Close">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Body / Content -->
+                <div class="p-6 bg-gradient-to-b from-white to-gray-50 flex flex-col gap-4">
+                    
+                    <!-- STEP 1: The Challenge -->
+                    <div id="danger-gatekeeper-step1" class="space-y-4">
+                        <div class="flex items-start gap-3 p-3.5 bg-red-50 border border-red-200 rounded-2xl">
+                            <span class="text-2xl mt-0.5">⚠️</span>
+                            <div>
+                                <h4 class="text-sm font-black text-red-900 tracking-wide uppercase">Hold It Right There!</h4>
+                                <p class="text-xs text-red-700 mt-1 leading-relaxed">
+                                    You are approaching the <strong>DANGER ZONE</strong>.<br>
+                                    Here lie the buttons of destruction, master resets, and the void.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 leading-relaxed font-medium">
+                            ⚡ <strong>Proceed with caution:</strong> Master data resets, student record cleanups, and system-wide overrides reside in this area.
+                        </div>
+
+                        <p class="text-xs font-bold text-gray-700 text-center pt-1">
+                            Do you have the courage to proceed?
+                        </p>
+
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="window.closeDangerGatekeeper()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-xl text-xs transition border border-gray-200">
+                                🛡️ Turn Back (Safe)
+                            </button>
+                            <button type="button" id="btn-danger-gatekeeper-proceed" onclick="window.proceedDangerGatekeeperStep2()" class="flex-1 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md shadow-red-500/20 transition flex items-center justify-center gap-1.5 active:scale-95">
+                                <span>I Have Courage</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: The Final Warning -->
+                    <div id="danger-gatekeeper-step2" class="hidden space-y-4">
+                        <div class="flex items-start gap-3 p-3.5 bg-red-100/90 border-2 border-red-300 rounded-2xl animate-pulse">
+                            <span class="text-2xl mt-0.5">☢️</span>
+                            <div>
+                                <h4 class="text-sm font-black text-red-950 tracking-wide uppercase">Access Granted... With A Warning</h4>
+                                <p class="text-xs text-red-800 mt-1 leading-relaxed font-semibold">
+                                    Some actions inside <strong>CANNOT</strong> be undone.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-gray-900 text-gray-200 rounded-xl text-xs space-y-2 border border-gray-800">
+                            <p class="leading-relaxed">
+                                ⚠️ We are not responsible for lost data, tears, or accidental timeline disruptions.
+                            </p>
+                            <p class="text-rose-400 font-black tracking-wider text-[11px] uppercase">
+                                ☠️ YOU HAVE BEEN WARNED.
+                            </p>
+                        </div>
+
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="window.closeDangerGatekeeper()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-xl text-xs transition border border-gray-200">
+                                Abort
+                            </button>
+                            <button type="button" id="btn-danger-gatekeeper-enter" onclick="window.confirmEnterDangerZone()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-black py-2.5 px-4 rounded-xl text-xs shadow-lg shadow-red-600/30 transition flex items-center justify-center gap-1.5 active:scale-95">
+                                <span>Enter Danger Zone</span>
+                                <span>☢️</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
 
 <div id="danger-zone-modal" class="hidden fixed inset-0 bg-gray-900/90 backdrop-blur-sm z-[100] flex justify-center items-center p-4 transition-opacity duration-300">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-slide-up relative ring-8 ring-red-500/20">

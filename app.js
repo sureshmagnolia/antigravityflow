@@ -21519,38 +21519,69 @@ if (displayLoc) {
     }
 
 // ==========================================
-    // ☢️ CINEMATIC DANGER ZONE LOGIC
+    // ☢️ CINEMATIC DANGER ZONE GATEKEEPER MODAL LOGIC
     // ==========================================
     
+    window.openDangerGatekeeper = function() {
+        const step1 = document.getElementById('danger-gatekeeper-step1');
+        const step2 = document.getElementById('danger-gatekeeper-step2');
+        const badge = document.getElementById('danger-gatekeeper-badge');
+        const title = document.getElementById('danger-gatekeeper-title');
+        const subtitle = document.getElementById('danger-gatekeeper-subtitle');
+
+        if (step1) step1.classList.remove('hidden');
+        if (step2) step2.classList.add('hidden');
+        if (badge) badge.innerHTML = '⚠️';
+        if (title) title.textContent = 'Danger Zone Gatekeeper';
+        if (subtitle) subtitle.textContent = 'Security Warning Level 1';
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('danger-gatekeeper-modal');
+        } else {
+            const m = document.getElementById('danger-gatekeeper-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeDangerGatekeeper = function() {
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('danger-gatekeeper-modal');
+        } else {
+            const m = document.getElementById('danger-gatekeeper-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.proceedDangerGatekeeperStep2 = function() {
+        const step1 = document.getElementById('danger-gatekeeper-step1');
+        const step2 = document.getElementById('danger-gatekeeper-step2');
+        const badge = document.getElementById('danger-gatekeeper-badge');
+        const title = document.getElementById('danger-gatekeeper-title');
+        const subtitle = document.getElementById('danger-gatekeeper-subtitle');
+
+        if (step1) step1.classList.add('hidden');
+        if (step2) step2.classList.remove('hidden');
+        if (badge) badge.innerHTML = '☢️';
+        if (title) title.textContent = 'Access Granted... With A Warning';
+        if (subtitle) subtitle.textContent = 'Final Security Warning';
+    };
+
+    window.confirmEnterDangerZone = function() {
+        window.closeDangerGatekeeper();
+        if (typeof window.openModal === 'function') {
+            window.openModal('danger-zone-modal');
+        } else {
+            const dz = document.getElementById('danger-zone-modal');
+            if (dz) dz.classList.remove('hidden');
+        }
+    };
+
     const btnEnterDanger = document.getElementById('btn-enter-danger-zone');
     
     if (btnEnterDanger) {
-        btnEnterDanger.addEventListener('click', async () => {
-            // 🎬 Cinematic Alert 1: The Gatekeeper
-            // Using standard confirm/alert for now, but phrasing it dramatically
-            
-            const step1 = confirm(
-                "⚠️ HOLD IT RIGHT THERE! ⚠️\n\n" +
-                "You are approaching the DANGER ZONE.\n" +
-                "Here lie the buttons of destruction, master resets, and the void.\n\n" +
-                "Do you have the courage to proceed?"
-            );
-
-            if (!step1) return;
-
-            // 🎬 Cinematic Alert 2: The Final Warning
-            // We use a small timeout to make it feel like a "system check"
-            await new Promise(r => setTimeout(r, 300));
-            
-            alert(
-                "☢️ ACCESS GRANTED... WITH A WARNING ☢️\n\n" +
-                "Some actions inside CANNOT be undone.\n" +
-                "We are not responsible for lost data, tears, or accidental timeline disruptions.\n\n" +
-                "YOU HAVE BEEN WARNED."
-            );
-
-            // Open the Modal
-            window.openModal('danger-zone-modal');
+        btnEnterDanger.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.openDangerGatekeeper();
         });
     }
 
