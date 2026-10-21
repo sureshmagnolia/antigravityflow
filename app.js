@@ -18855,10 +18855,22 @@ if (btnSessionReschedule) {
             try {
                 // 1. Update Students (Memory)
                 let studentCount = 0;
-                const [oldDate, oldTime] = currentSession.split(' | ');
+                const [targetDateRaw, targetTimeRaw] = currentSession.split('|').map(p => p.trim());
+                const dateRawNorm = (targetDateRaw || "").replace(/[./-]/g, '');
+                const timeRawNorm = (targetTimeRaw || "").toUpperCase();
 
                 allStudentData.forEach(s => {
-                    if (s.Date === oldDate.trim() && s.Time === oldTime.trim()) {
+                    if (!s) return;
+                    const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                    const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                    
+                    const dateMatch = (sDateNorm === dateRawNorm);
+                    let timeMatch = (sTimeNorm === timeRawNorm);
+                    if (!timeMatch && typeof normalizeTime === 'function') {
+                        timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                    }
+
+                    if (dateMatch && timeMatch) {
                         // Update Date/Time if moving
                         if (isMove) {
                             s.Date = newDate;
@@ -18872,26 +18884,30 @@ if (btnSessionReschedule) {
                     }
                 });
 
-                // Save to Local Storage
-                
+                // 2. Persist updated students to IndexedDB & LocalStorage
+                await saveExamDataIDB(allStudentData);
 
-                // 2. Move Auxiliary Data (ONLY IF MOVING)
+                // 3. Move Auxiliary Data & Storage Keys (ONLY IF MOVING)
                 if (isMove) {
                     const moveKeyInStorage = (storageKey, type) => {
                         const raw = localStorage.getItem(storageKey);
                         if (!raw) return;
-                        const data = JSON.parse(raw);
-                        if (data[currentSession]) {
-                            if (data[newSessionKey]) {
-                                // Merge
-                                if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
-                                else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
-                            } else {
-                                // Move
-                                data[newSessionKey] = data[currentSession];
+                        try {
+                            const data = JSON.parse(raw);
+                            if (data[currentSession]) {
+                                if (data[newSessionKey]) {
+                                    // Merge
+                                    if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
+                                    else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
+                                } else {
+                                    // Move
+                                    data[newSessionKey] = data[currentSession];
+                                }
+                                delete data[currentSession];
+                                localStorage.setItem(storageKey, JSON.stringify(data));
                             }
-                            delete data[currentSession];
-                            localStorage.setItem(storageKey, JSON.stringify(data));
+                        } catch (err) {
+                            console.error(`Error moving ${storageKey}:`, err);
                         }
                     };
 
@@ -18901,17 +18917,90 @@ if (btnSessionReschedule) {
                     moveKeyInStorage('examInvigilatorMapping', 'object');
                     moveKeyInStorage('examInvigilationSlots', 'object');
                     moveKeyInStorage('examQPCodes', 'object');
+
+                    // 3b. Move Scribe Vault Keys & IDB
+                    try {
+                        const oldVaultKey = `scrAllot_` + currentSession.replace(/\s/g, '_');
+                        const newVaultKey = `scrAllot_` + newSessionKey.replace(/\s/g, '_');
+                        const oldVaultData = localStorage.getItem(oldVaultKey);
+                        if (oldVaultData) {
+                            localStorage.setItem(newVaultKey, oldVaultData);
+                            localStorage.removeItem(oldVaultKey);
+                        }
+                        const oldDirty = `hasUnsavedScribes_` + currentSession.replace(/\s/g, '_');
+                        const newDirty = `hasUnsavedScribes_` + newSessionKey.replace(/\s/g, '_');
+                        const dirtyVal = localStorage.getItem(oldDirty);
+                        if (dirtyVal) {
+                            localStorage.setItem(newDirty, dirtyVal);
+                            localStorage.removeItem(oldDirty);
+                        }
+                        if (typeof openExamDB === 'function') {
+                            const db = await openExamDB();
+                            const tx = db.transaction('scribeVault', 'readwrite');
+                            const store = tx.objectStore('scribeVault');
+                            const req = store.get(currentSession);
+                            req.onsuccess = () => {
+                                if (req.result) {
+                                    store.put(req.result, newSessionKey);
+                                    store.delete(currentSession);
+                                }
+                            };
+                        }
+                    } catch (vaultErr) {
+                        console.warn("Scribe vault migration error:", vaultErr);
+                    }
+
+                    // 3c. Move Room Allotment IDB (allotmentVault)
+                    try {
+                        if (typeof window.getRoomAllotmentIDB === 'function' && typeof window.saveRoomAllotmentIDB === 'function') {
+                            const roomAllot = await window.getRoomAllotmentIDB(currentSession);
+                            if (roomAllot) {
+                                await window.saveRoomAllotmentIDB(newSessionKey, roomAllot);
+                                if (typeof window.deleteRoomAllotmentIDB === 'function') {
+                                    await window.deleteRoomAllotmentIDB(currentSession);
+                                }
+                            }
+                        }
+                    } catch (allotErr) {
+                        console.warn("Room IDB vault migration error:", allotErr);
+                    }
+
+                    // 3d. Update Master Registry for Calendar & Selectors
+                    try {
+                        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                        known = known.filter(k => k !== currentSession);
+                        if (!known.includes(newSessionKey)) {
+                            known.push(newSessionKey);
+                        }
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+                    } catch (regErr) {
+                        console.warn("Registry update error:", regErr);
+                    }
+
+                    // 3e. Sync invigilation slots if available
+                    if (typeof window.syncSlotsToCloud === 'function') {
+                        try {
+                            await window.syncSlotsToCloud("FORCE_OVERWRITE");
+                        } catch (slotErr) {
+                            console.warn("Slot sync failed:", slotErr);
+                        }
+                    }
                 }
 
                 alert(`✅ Successfully Updated ${studentCount} records.\nSyncing to Cloud...`);
 
-                // 3. Cloud Sync
-                // Sync the OLD session (to clear it if moved, or update it if just renamed)
-                await syncSessionToCloud(currentSession);
-                
-                // If moved, also sync the NEW session
+                // 4. Cloud Sync
                 if (isMove) {
-                    await syncSessionToCloud(newSessionKey);
+                    if (typeof deleteSessionFromCloud === 'function') {
+                        await deleteSessionFromCloud(currentSession);
+                    }
+                    if (typeof syncSessionToCloud === 'function') {
+                        await syncSessionToCloud(newSessionKey);
+                    }
+                } else {
+                    if (typeof syncSessionToCloud === 'function') {
+                        await syncSessionToCloud(currentSession);
+                    }
                 }
 
                 window.location.reload();
