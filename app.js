@@ -22331,9 +22331,17 @@ if (displayLoc) {
                                     }
                                 }
 
+                                if (isMerge) {
+                                    Object.assign(slotsObj, finalShardData);
+                                }
+
                                 batch.set(shardRef, { data: JSON.stringify(finalShardData), lastUpdated: new Date() });
                             }
                             await batch.commit();
+                        }
+
+                        if (isMerge) {
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(slotsObj));
                         }
                     }
                 }
