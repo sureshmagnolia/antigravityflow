@@ -4685,6 +4685,155 @@
             </div>
         </div>
 
+        <!-- === RESTORE SEQUENTIAL LAUNCH MODAL === -->
+        <div id="restore-sequence-modal" class="hidden fixed inset-0 bg-gray-950/90 backdrop-blur-md z-[120] flex justify-center items-center p-4 transition-all duration-300" onclick="if(event.target === this) window.closeRestoreModal()">
+            <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-slide-up relative ring-8 ring-indigo-600/30 border border-indigo-500/40 max-h-[92vh]">
+                
+                <!-- Header -->
+                <div class="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-950 p-5 shrink-0 relative overflow-hidden text-white">
+                    <div class="absolute inset-0 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] opacity-15"></div>
+                    <div class="flex justify-between items-center relative z-10">
+                        <div class="flex items-center gap-3">
+                            <div id="restore-modal-badge" class="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner border border-white/20">
+                                📥
+                            </div>
+                            <div>
+                                <h3 id="restore-modal-title" class="text-lg font-black text-white uppercase tracking-wider">
+                                    Restore Protocol
+                                </h3>
+                                <p id="restore-modal-subtitle" class="text-indigo-100 text-xs font-semibold opacity-90">
+                                    Select Restore Strategy
+                                </p>
+                            </div>
+                        </div>
+                        <button type="button" onclick="window.closeRestoreModal()" class="text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition backdrop-blur-md" title="Close">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Body / Steps Content -->
+                <div class="p-6 bg-gradient-to-b from-white to-gray-50 flex flex-col gap-4 overflow-y-auto custom-scroll">
+                    
+                    <!-- STEP 1: RESTORE STRATEGY SELECTION -->
+                    <div id="restore-step-choose" class="space-y-4">
+                        <!-- File Info Badge -->
+                        <div class="p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-lg shrink-0">
+                                📄
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-[10px] uppercase font-black text-indigo-600 tracking-wider">Backup Snapshot Selected</p>
+                                <p id="restore-file-name" class="text-xs font-bold text-gray-800 truncate font-mono">ExamFlow_Backup.json</p>
+                                <p id="restore-file-summary" class="text-[11px] text-gray-500 mt-0.5">Ready for inspection</p>
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <h4 class="text-sm font-black text-gray-800 tracking-wide uppercase">Select Restore Mode</h4>
+                            <p class="text-xs text-gray-500 mt-0.5">Choose how to integrate this backup with your active database:</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-3">
+                            <!-- OPTION A: MERGE (SAFE) -->
+                            <div id="restore-opt-merge" onclick="window.restoreSelectMode(true)" class="cursor-pointer p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50/70 hover:bg-emerald-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-emerald-500/30">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl shrink-0">
+                                    🔄
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-gray-900 text-xs">MERGE DATA (Recommended)</span>
+                                        <span id="restore-badge-merge" class="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">Selected</span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                                        Combines imported student records, rooms, and settings with existing data.
+                                    </p>
+                                    <p class="text-[10px] text-emerald-700 font-semibold mt-1">
+                                        ✓ Safe: Existing unique records will NOT be deleted.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- OPTION B: REPLACE (OVERWRITE) -->
+                            <div id="restore-opt-replace" onclick="window.restoreSelectMode(false)" class="cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-red-50 hover:border-red-400 transition-all flex items-start gap-3 relative shadow-sm">
+                                <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl shrink-0">
+                                    ⚠️
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-gray-900 text-xs">REPLACE ENTIRELY (Clean Overwrite)</span>
+                                        <span id="restore-badge-replace" class="hidden text-[10px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded-full">Selected</span>
+                                    </div>
+                                    <p class="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                                        Wipes existing local data and IndexedDB student cache first.
+                                    </p>
+                                    <p class="text-[10px] text-rose-700 font-semibold mt-1">
+                                        ⚡ Destructive: Entire database is replaced by this snapshot.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="window.closeRestoreModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 px-4 rounded-xl text-xs transition border border-gray-200">
+                                🛡️ Cancel
+                            </button>
+                            <button type="button" id="btn-restore-proceed" onclick="window.executeRestoreModalAction()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-1.5 active:scale-95">
+                                <span>Proceed with Restore</span>
+                                <span>📥</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: RESTORING IN PROGRESS -->
+                    <div id="restore-step-executing" class="hidden space-y-6 py-6 text-center">
+                        <div class="relative w-20 h-20 mx-auto">
+                            <div class="absolute inset-0 rounded-full border-4 border-indigo-200 animate-ping opacity-75"></div>
+                            <div class="relative w-20 h-20 rounded-full bg-indigo-600 text-white flex items-center justify-center text-3xl shadow-xl shadow-indigo-600/50">
+                                📥
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-base font-black text-gray-900 uppercase tracking-wider">Restoring Data Modules...</h4>
+                            <p id="restore-executing-status" class="text-xs text-indigo-600 font-semibold mt-1 animate-pulse">
+                                Writing records to IndexedDB and synchronizing to Cloud...
+                            </p>
+                        </div>
+
+                        <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                            <div class="bg-indigo-600 h-full w-full animate-pulse"></div>
+                        </div>
+
+                        <p class="text-[11px] text-gray-400 font-medium">Please do not close or refresh your browser.</p>
+                    </div>
+
+                    <!-- STEP 3: COMPLETION / OUTCOME -->
+                    <div id="restore-step-complete" class="hidden space-y-5 py-4 text-center">
+                        <div id="restore-complete-icon-box" class="w-16 h-16 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-green-200">
+                            ✅
+                        </div>
+
+                        <div>
+                            <h4 id="restore-complete-title" class="text-lg font-black text-gray-900 uppercase tracking-wide">
+                                Recovery Successful!
+                            </h4>
+                            <p id="restore-complete-message" class="text-xs text-gray-600 mt-2 leading-relaxed px-4">
+                                Data modules have been restored and synchronized.
+                            </p>
+                        </div>
+
+                        <div class="pt-2">
+                            <button type="button" id="btn-restore-complete-reload" onclick="window.location.reload()" class="w-full bg-gray-900 hover:bg-black text-white font-black py-3 px-4 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 active:scale-95">
+                                <span>🔄 Reload Application Now</span>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
 <div id="danger-zone-modal" class="hidden fixed inset-0 bg-gray-900/90 backdrop-blur-sm z-[100] flex justify-center items-center p-4 transition-opacity duration-300">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-slide-up relative ring-8 ring-red-500/20">
         

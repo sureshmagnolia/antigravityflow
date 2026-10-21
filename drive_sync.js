@@ -1142,12 +1142,20 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
         window.isDriveRestoringData = false;
-        alert("✅ Restored & Synced successfully! Reloading to apply changes.");
+        if (typeof UiModal !== 'undefined') {
+            await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
+        } else {
+            alert("✅ Restored & Synced successfully! Reloading to apply changes.");
+        }
         location.reload();
 
     } catch (e) { 
         window.isDriveRestoringData = false;
-        alert("Execution Error: " + e.message); 
+        if (typeof UiModal !== 'undefined') {
+            await UiModal.alert("Execution Error", "Restore execution failed: " + e.message);
+        } else {
+            alert("Execution Error: " + e.message); 
+        }
     }
 
 }

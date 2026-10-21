@@ -11508,59 +11508,18 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return;
             }
 
-            if (!confirm('Are you sure you want to restore? This will OVERWRITE all current data.')) {
-                return;
-            }
-
             const reader = new FileReader();
-               reader.onload = async (event) => { //
+            reader.onload = async (event) => {
                 try {
-
-
-                                        const jsonString = event.target.result;
-                    const restoredData = JSON.parse(jsonString);
-
-                    // Ask user for Restore Mode
-                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported file's data with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
-
-                    if (!isMerge) {
-                        localStorage.clear();
-                        await saveExamDataIDB([]);
+                    const restoredData = JSON.parse(event.target.result);
+                    if (typeof window.openRestoreSequenceModal === 'function') {
+                        window.openRestoreSequenceModal(restoredData, file.name);
                     }
-
-                    // Restore data with Interception
-                    for (const key in restoredData) {
-                        if (Object.hasOwnProperty.call(restoredData, key)) {
-                            if (key === 'examBaseData') {
-                                const importedStudents = restoredData[key];
-                                if (isMerge) {
-                                    const existingData = await loadExamDataIDB() || [];
-                                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
-                                    const existingKeys = new Set(existingData.map(getRowKey));
-                                    
-                                    const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
-                                    await saveExamDataIDB([...existingData, ...newUniqueData]);
-                                } else {
-                                    await saveExamDataIDB(importedStudents);
-                                }
-                    
-                            } else if (key !== 'examData_v2') {
-                                // Restore everything else normally (except stale v2 backups)
-                                localStorage.setItem(key, restoredData[key]);
-                            }
-                        }
-                    }
-
-
-                    alert('Restore successful! Syncing all sessions to V2 Cloud...');
-                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
-                    localStorage.removeItem('searchIndex');
-                    location.reload();
-                    
-
                 } catch (e) {
                     console.error("Error parsing restore file:", e);
-                    restoreStatus.textContent = 'Error: The selected file is not a valid backup.';
+                    if (typeof window.showRestoreErrorModal === 'function') {
+                        window.showRestoreErrorModal("Invalid Backup File", "The selected file is not a valid JSON backup: " + e.message);
+                    }
                 }
             };
             reader.onerror = () => {
@@ -18063,10 +18022,14 @@ window.handlePythonExtraction = async function (jsonString) {
 
     // 3. RESTORE SETTINGS ONLY
     if (restoreSettingsBtn && restoreSettingsInput) {
-        restoreSettingsBtn.addEventListener('click', () => {
+        restoreSettingsBtn.addEventListener('click', async () => {
             const file = restoreSettingsInput.files[0];
             if (!file) {
-                alert("Please select a Settings JSON file first.");
+                if (typeof UiModal !== 'undefined') {
+                    await UiModal.alert("No File Selected", "Please select a Settings JSON file first.");
+                } else {
+                    alert("Please select a Settings JSON file first.");
+                }
                 return;
             }
 
@@ -18082,7 +18045,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         STREAM_CONFIG_KEY,
                         COLLEGE_NAME_KEY,
                         SCRIBE_LIST_KEY,
-                        EXAM_RULES_KEY   // <--- ADD THIS LINE
+                        EXAM_RULES_KEY
                     ];
 
                     validKeys.forEach(key => {
@@ -18093,32 +18056,41 @@ window.handlePythonExtraction = async function (jsonString) {
                     });
 
                     if (loadedCount > 0) {
-                        alert(`Successfully restored settings configurations.\n\nSyncing to cloud...`);
-
                         // Update Runtime Variables
                         if (typeof loadRoomConfig === 'function') loadRoomConfig();
                         if (typeof loadStreamConfig === 'function') loadStreamConfig();
                         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                     
-                    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+                        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
 
-                    // Sync to Cloud
-                    if (typeof syncDataToCloud === 'function') {
-                        await syncDataToCloud('settings');
-                        await syncDataToCloud('allocation');
-                        await syncDataToCloud('ops');
-                    }
+                        // Sync to Cloud
+                        if (typeof syncDataToCloud === 'function') {
+                            await syncDataToCloud('settings');
+                            await syncDataToCloud('allocation');
+                            await syncDataToCloud('ops');
+                        }
 
-                    alert("Settings updated and synced!");
+                        if (typeof UiModal !== 'undefined') {
+                            await UiModal.alert("Settings Restored", "✅ Settings configurations restored and synchronized with Cloud!\n\nReloading to apply changes.");
+                        } else {
+                            alert("Settings updated and synced!");
+                        }
+                        window.location.reload();
 
                     } else {
-                        alert("No valid settings found in this file.");
+                        if (typeof UiModal !== 'undefined') {
+                            await UiModal.alert("No Valid Settings", "No valid settings configurations were found in this file.");
+                        } else {
+                            alert("No valid settings found in this file.");
+                        }
                     }
-
 
                 } catch (err) {
                     console.error(err);
-                    alert("Error parsing settings file: " + err.message);
+                    if (typeof UiModal !== 'undefined') {
+                        await UiModal.alert("Invalid File", "Error parsing settings file: " + err.message);
+                    } else {
+                        alert("Error parsing settings file: " + err.message);
+                    }
                 }
             };
             reader.readAsText(file);
@@ -21948,12 +21920,343 @@ if (displayLoc) {
         });
     }
 
+    // ==========================================
+    // 📥 RESTORE SEQUENTIAL LAUNCH MODAL LOGIC
+    // ==========================================
+
+    let restorePendingData = null;
+    let restorePendingFileName = "";
+    let restoreIsMergeMode = true;
+
+    window.openRestoreSequenceModal = function(data, fileName) {
+        restorePendingData = data;
+        restorePendingFileName = fileName || "ExamFlow_Backup.json";
+        restoreIsMergeMode = true;
+        window.restoreSelectMode(true);
+
+        const fileNameEl = document.getElementById('restore-file-name');
+        if (fileNameEl) fileNameEl.textContent = restorePendingFileName;
+
+        const summaryEl = document.getElementById('restore-file-summary');
+        if (summaryEl && data) {
+            const studentCount = Array.isArray(data.examBaseData) ? data.examBaseData.length : 0;
+            const keysCount = Object.keys(data).length;
+            summaryEl.textContent = `${studentCount} student records • ${keysCount} system data modules ready`;
+        }
+
+        // Show step 1 (choose), hide others
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.remove('hidden');
+        if (stepExec) stepExec.classList.add('hidden');
+        if (stepComplete) stepComplete.classList.add('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restore Protocol";
+        if (subtitle) subtitle.textContent = "Select Restore Strategy";
+        if (badge) badge.textContent = "📥";
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeRestoreModal = function() {
+        restorePendingData = null;
+        restorePendingFileName = "";
+        const input = document.getElementById('restore-file-input');
+        if (input) input.value = '';
+
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.restoreSelectMode = function(isMerge) {
+        restoreIsMergeMode = isMerge;
+        const optMerge = document.getElementById('restore-opt-merge');
+        const optReplace = document.getElementById('restore-opt-replace');
+        const badgeMerge = document.getElementById('restore-badge-merge');
+        const badgeReplace = document.getElementById('restore-badge-replace');
+
+        if (isMerge) {
+            if (optMerge) {
+                optMerge.className = "cursor-pointer p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50/70 hover:bg-emerald-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-emerald-500/30";
+            }
+            if (badgeMerge) badgeMerge.classList.remove('hidden');
+            if (optReplace) {
+                optReplace.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-red-50 hover:border-red-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeReplace) badgeReplace.classList.add('hidden');
+        } else {
+            if (optReplace) {
+                optReplace.className = "cursor-pointer p-4 rounded-2xl border-2 border-rose-500 bg-rose-50/70 hover:bg-red-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-rose-500/30";
+            }
+            if (badgeReplace) badgeReplace.classList.remove('hidden');
+            if (optMerge) {
+                optMerge.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeMerge) badgeMerge.classList.add('hidden');
+        }
+    };
+
+    window.showRestoreErrorModal = function(titleText, msgText) {
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.add('hidden');
+        if (stepExec) stepExec.classList.add('hidden');
+        if (stepComplete) stepComplete.classList.remove('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restore Protocol";
+        if (subtitle) subtitle.textContent = "Error Encountered";
+        if (badge) badge.textContent = "❌";
+
+        const iconBox = document.getElementById('restore-complete-icon-box');
+        const compTitle = document.getElementById('restore-complete-title');
+        const compMsg = document.getElementById('restore-complete-message');
+        const reloadBtn = document.getElementById('btn-restore-complete-reload');
+
+        if (iconBox) {
+            iconBox.textContent = "❌";
+            iconBox.className = "w-16 h-16 rounded-3xl bg-red-100 text-red-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-red-200";
+        }
+        if (compTitle) compTitle.textContent = titleText || "Restore Failed";
+        if (compMsg) compMsg.textContent = msgText || "An error occurred during restore.";
+        if (reloadBtn) {
+            reloadBtn.innerHTML = "<span>Close & Try Again</span>";
+            reloadBtn.onclick = () => window.closeRestoreModal();
+        }
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.executeRestoreModalAction = async function() {
+        if (!restorePendingData) return;
+
+        const data = restorePendingData;
+        const isMerge = restoreIsMergeMode;
+
+        // Transition to Step 2 (Executing)
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.add('hidden');
+        if (stepExec) stepExec.classList.remove('hidden');
+        if (stepComplete) stepComplete.classList.add('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restoring Database";
+        if (subtitle) subtitle.textContent = isMerge ? "Merging Data Modules" : "Replacing Active Database";
+        if (badge) badge.textContent = "⚙️";
+
+        try {
+            if (!isMerge) {
+                localStorage.clear();
+                await saveExamDataIDB([]);
+            }
+
+            // Restore & Sync securely
+            let count = 0;
+            for (const key of Object.keys(data)) {
+                if (key === 'examBaseData') {
+                    const importedStudents = data[key];
+                    if (isMerge) {
+                        const existingData = await loadExamDataIDB() || [];
+                        const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                        const existingKeys = new Set(existingData.map(getRowKey));
+                        
+                        const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
+                        await saveExamDataIDB([...existingData, ...newUniqueData]);
+                    } else {
+                        await saveExamDataIDB(importedStudents);
+                    }
+                    count++;
+                    
+                } else if (key === 'examRoomAllotment') {
+                    const rawVal = data[key];
+                    const parsed = (typeof rawVal === 'string') ? JSON.parse(rawVal || '{}') : rawVal;
+                    if (parsed && typeof parsed === 'object') {
+                        for (const sk in parsed) {
+                            if (Array.isArray(parsed[sk])) {
+                                await window.saveRoomAllotmentIDB(sk, parsed[sk]);
+                            }
+                        }
+                        const pruned = (typeof window.pruneLocalStorageAllotments === 'function') ? window.pruneLocalStorageAllotments(parsed) : parsed;
+                        localStorage.setItem(key, JSON.stringify(pruned));
+                    }
+                    count++;
+                } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
+                    if (key !== 'examData_v2') {
+                        const val = data[key];
+                        localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
+                        
+                        if (key === 'examInvigilationSlots') {
+                            localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+                        }
+                    }
+                    count++;
+                }
+            }
+
+            // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
+            if (window.currentCollegeId && navigator.onLine && count > 0) {
+                updateSyncStatus("Restoring Cloud...", "neutral");
+                const { db, doc, setDoc, writeBatch } = window.firebase;
+                const cid = window.currentCollegeId;
+
+                // 1. Sync settings
+                const settingsKeys = [
+                    'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
+                    'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
+                    'examAllKnownSessions', 'examMixingStrategy'
+                ];
+                const settingsData = {};
+                settingsKeys.forEach(k => {
+                    const val = localStorage.getItem(k);
+                    if (val !== null) settingsData[k] = val;
+                });
+                settingsData.lastUpdated = new Date().toISOString();
+                if (Object.keys(settingsData).length > 1) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "settings"), settingsData, { merge: true });
+                }
+
+                // 2. Sync operations
+                const opsData = {};
+                const valSessions = localStorage.getItem('examAllKnownSessions');
+                if (valSessions !== null) opsData['examAllKnownSessions'] = valSessions;
+                if (Object.keys(opsData).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "operations"), opsData, { merge: true });
+                }
+
+                // 3. Sync allocation
+                const allocData = {};
+                const valScribe = localStorage.getItem('examScribeList');
+                if (valScribe !== null) allocData['examScribeList'] = valScribe;
+                if (Object.keys(allocData).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), allocData, { merge: true });
+                }
+
+                // 4. Sync staff
+                const localStaff = localStorage.getItem('examStaffData');
+                const localMap = localStorage.getItem('examInvigilatorMapping');
+                const staffDataPayload = {};
+                if (localStaff) staffDataPayload.examStaffData = localStaff;
+                if (localMap) staffDataPayload.examInvigilatorMapping = localMap;
+                staffDataPayload.lastUpdated = new Date().toISOString();
+                if (Object.keys(staffDataPayload).length > 1) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
+                }
+
+                // 5. Sync invigilation slots (daily shards)
+                const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
+                if (localSlotsRaw) {
+                    let slotsObj = {};
+                    try { slotsObj = JSON.parse(localSlotsRaw); } catch(e) {}
+                    if (slotsObj && typeof slotsObj === 'object' && Object.keys(slotsObj).length > 0) {
+                        const shards = {};
+                        const getShardId = (key) => {
+                            try {
+                                const [dRaw] = key.split(' | ');
+                                const dStr = dRaw.replace(/-/g, '.');
+                                const parts = dStr.split('.');
+                                if (parts.length < 3) return "unknown";
+                                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                            } catch (e) { return "unknown"; }
+                        };
+                        
+                        Object.keys(slotsObj).forEach(k => {
+                            const sid = getShardId(k);
+                            if (!shards[sid]) shards[sid] = {};
+                            shards[sid][k] = slotsObj[k];
+                        });
+                        
+                        const shardIds = Object.keys(shards);
+                        const CHUNK_SIZE = 450;
+                        for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
+                            const batch = writeBatch(db);
+                            const chunk = shardIds.slice(i, i + CHUNK_SIZE);
+                            chunk.forEach(sid => {
+                                const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
+                                batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: new Date() });
+                            });
+                            await batch.commit();
+                        }
+                    }
+                }
+
+                // 6. Sync advanced unavailability
+                const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
+                if (localUnavRaw) {
+                    const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
+                    await setDoc(slotsRef, { 
+                        invigAdvanceUnavailability: localUnavRaw 
+                    }, { merge: true });
+                }
+            }
+
+            localStorage.setItem('pendingDriveRestoreSync', 'true');
+
+            // Transition to Step 3 (Outcome)
+            if (stepExec) stepExec.classList.add('hidden');
+            if (stepComplete) stepComplete.classList.remove('hidden');
+
+            if (title) title.textContent = "Recovery Successful";
+            if (subtitle) subtitle.textContent = "System Restored & Synchronized";
+            if (badge) badge.textContent = "✅";
+
+            const iconBox = document.getElementById('restore-complete-icon-box');
+            const compTitle = document.getElementById('restore-complete-title');
+            const compMsg = document.getElementById('restore-complete-message');
+            const reloadBtn = document.getElementById('btn-restore-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "✅";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-green-200";
+            }
+            if (compTitle) compTitle.textContent = "Recovery Successful!";
+            if (compMsg) compMsg.textContent = `Restored ${count} data modules (${isMerge ? 'Merged safely with active data' : 'Replaced active database cleanly'}). Cloud synchronization finalized.`;
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>🔄 Reload Application Now</span>";
+                reloadBtn.onclick = () => window.location.reload();
+            }
+
+        } catch (err) {
+            console.error("Full Restore Error:", err);
+            window.showRestoreErrorModal("Restore Failed", "An error occurred during restore: " + err.message);
+        }
+    };
+
     // 2. FULL RESTORE (Upload JSON)
-    // We attach the listener directly to the file input that the button clicks
+    // Attach the listener directly to the file input that the button clicks
     const fullRestoreInput = document.getElementById('restore-file-input');
     
     if (fullRestoreInput) {
-        // Remove old listeners
         const newInput = fullRestoreInput.cloneNode(true);
         fullRestoreInput.parentNode.replaceChild(newInput, fullRestoreInput);
 
@@ -21970,167 +22273,14 @@ if (displayLoc) {
                         throw new Error("Invalid or empty backup file.");
                     }
 
-                    // Ask user for Restore Mode
-                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported backup with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
-
-                    if (!isMerge) {
-                        localStorage.clear();
-                        await saveExamDataIDB([]);
-                    }
-
-                    // Restore & Sync securely
-                    let count = 0;
-                    for (const key of Object.keys(data)) {
-                        if (key === 'examBaseData') {
-                            const importedStudents = data[key];
-                            if (isMerge) {
-                                const existingData = await loadExamDataIDB() || [];
-                                const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
-                                const existingKeys = new Set(existingData.map(getRowKey));
-                                
-                                const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
-                                await saveExamDataIDB([...existingData, ...newUniqueData]);
-                            } else {
-                                await saveExamDataIDB(importedStudents);
-                            }
-                            count++;
-                            
-                        } else if (key === 'examRoomAllotment') {
-                            const rawVal = data[key];
-                            const parsed = (typeof rawVal === 'string') ? JSON.parse(rawVal || '{}') : rawVal;
-                            if (parsed && typeof parsed === 'object') {
-                                for (const sk in parsed) {
-                                    if (Array.isArray(parsed[sk])) {
-                                        await window.saveRoomAllotmentIDB(sk, parsed[sk]);
-                                    }
-                                }
-                                const pruned = (typeof window.pruneLocalStorageAllotments === 'function') ? window.pruneLocalStorageAllotments(parsed) : parsed;
-                                localStorage.setItem(key, JSON.stringify(pruned));
-                            }
-                            count++;
-                        } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
-                            // Skip stale v2 backups, restore everything else
-                            if (key !== 'examData_v2') {
-                                const val = data[key];
-                                localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
-                                
-                                // Keep flag just in case
-                                if (key === 'examInvigilationSlots') {
-                                    localStorage.setItem('pendingInvigilationRestoreSync', 'true');
-                                }
-                            }
-                            count++;
-                        }
-                    }
-
-                    // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
-                    if (window.currentCollegeId && navigator.onLine && count > 0) {
-                        updateSyncStatus("Restoring Cloud...", "neutral");
-                        const { db, doc, setDoc, writeBatch } = window.firebase;
-                        const cid = window.currentCollegeId;
-
-                        // 1. Sync settings
-                        const settingsKeys = [
-                            'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
-                            'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
-                            'examAllKnownSessions', 'examMixingStrategy'
-                        ];
-                        const settingsData = {};
-                        settingsKeys.forEach(k => {
-                            const val = localStorage.getItem(k);
-                            if (val !== null) settingsData[k] = val;
-                        });
-                        settingsData.lastUpdated = new Date().toISOString();
-                        if (Object.keys(settingsData).length > 1) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "settings"), settingsData, { merge: true });
-                        }
-
-                        // 2. Sync operations
-                        const opsData = {};
-                        const valSessions = localStorage.getItem('examAllKnownSessions');
-                        if (valSessions !== null) opsData['examAllKnownSessions'] = valSessions;
-                        if (Object.keys(opsData).length > 0) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "operations"), opsData, { merge: true });
-                        }
-
-                        // 3. Sync allocation
-                        const allocData = {};
-                        const valScribe = localStorage.getItem('examScribeList');
-                        if (valScribe !== null) allocData['examScribeList'] = valScribe;
-                        if (Object.keys(allocData).length > 0) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), allocData, { merge: true });
-                        }
-
-                        // 4. Sync staff
-                        const localStaff = localStorage.getItem('examStaffData');
-                        const localMap = localStorage.getItem('examInvigilatorMapping');
-                        const staffDataPayload = {};
-                        if (localStaff) staffDataPayload.examStaffData = localStaff;
-                        if (localMap) staffDataPayload.examInvigilatorMapping = localMap;
-                        staffDataPayload.lastUpdated = new Date().toISOString();
-                        if (Object.keys(staffDataPayload).length > 1) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
-                        }
-
-                        // 5. Sync invigilation slots (daily shards)
-                        const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
-                        if (localSlotsRaw) {
-                            let slotsObj = {};
-                            try { slotsObj = JSON.parse(localSlotsRaw); } catch(e) {}
-                            if (slotsObj && typeof slotsObj === 'object' && Object.keys(slotsObj).length > 0) {
-                                const shards = {};
-                                const getShardId = (key) => {
-                                    try {
-                                        const [dRaw] = key.split(' | ');
-                                        const dStr = dRaw.replace(/-/g, '.');
-                                        const parts = dStr.split('.');
-                                        if (parts.length < 3) return "unknown";
-                                        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                                    } catch (e) { return "unknown"; }
-                                };
-                                
-                                Object.keys(slotsObj).forEach(k => {
-                                    const sid = getShardId(k);
-                                    if (!shards[sid]) shards[sid] = {};
-                                    shards[sid][k] = slotsObj[k];
-                                });
-                                
-                                const shardIds = Object.keys(shards);
-                                const CHUNK_SIZE = 450;
-                                for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
-                                    const batch = writeBatch(db);
-                                    const chunk = shardIds.slice(i, i + CHUNK_SIZE);
-                                    chunk.forEach(sid => {
-                                        const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
-                                        batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: new Date() });
-                                    });
-                                    await batch.commit();
-                                }
-                            }
-                        }
-
-                        // 6. Sync advanced unavailability
-                        const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
-                        if (localUnavRaw) {
-                            const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
-                            await setDoc(slotsRef, { 
-                                invigAdvanceUnavailability: localUnavRaw 
-                            }, { merge: true });
-                        }
-                    }
-                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
-                    alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
-                    window.location.reload();
+                    window.openRestoreSequenceModal(data, file.name);
 
                 } catch (err) {
                     console.error("Full Restore Error:", err);
-                    alert("❌ Restore Failed!\n\nThe file appears to be corrupt or invalid.\n" + err.message);
+                    window.showRestoreErrorModal("Invalid Backup File", "The selected file is not a valid JSON backup: " + err.message);
                 }
             };
             reader.readAsText(file);
-            
-            // Reset input so same file can be selected again
-            newInput.value = '';
         });
     }
 
