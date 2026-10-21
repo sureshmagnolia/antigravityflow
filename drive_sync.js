@@ -1079,6 +1079,11 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                         await saveExamDataIDB(val);
                     }
                 } else {
+                    // 🛡️ [PEOPLE PRESERVATION]: In merge mode, defer slots and leaves to restoreInvigilationCloudData below
+                    if (isMerge && (key === 'examInvigilationSlots' || key === 'invigAdvanceUnavailability')) {
+                        continue;
+                    }
+
                     // CONFIG DATA (Staff, Rooms, Settings):
                     // Even in Merge mode, we treat Cloud as the "Truth" for these small files
                     const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;

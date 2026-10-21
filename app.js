@@ -22114,10 +22114,88 @@ if (displayLoc) {
                 } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
                     if (key !== 'examData_v2') {
                         const val = data[key];
-                        localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
                         
-                        if (key === 'examInvigilationSlots') {
+                        // 🛡️ [PEOPLE PRESERVATION]: Deep-merge Invigilation Slots in Merge Mode
+                        if (isMerge && key === 'examInvigilationSlots') {
+                            const importedSlots = (typeof val === 'string') ? JSON.parse(val || '{}') : (val || {});
+                            const existingRaw = localStorage.getItem('examInvigilationSlots');
+                            const existingSlots = existingRaw ? JSON.parse(existingRaw) : {};
+                            
+                            Object.keys(importedSlots).forEach(k => {
+                                if (existingSlots[k]) {
+                                    // 1. Union assigned invigilators (preserves volunteers & existing assignments)
+                                    const exAssigned = existingSlots[k].assigned || [];
+                                    const impAssigned = importedSlots[k].assigned || [];
+                                    existingSlots[k].assigned = [...new Set([...exAssigned, ...impAssigned])];
+
+                                    // 2. Merge assignment metadata (preserve VOLUNTEER, AUTO, ADMIN badges)
+                                    if (importedSlots[k].assignmentMeta || existingSlots[k].assignmentMeta) {
+                                        existingSlots[k].assignmentMeta = {
+                                            ...(importedSlots[k].assignmentMeta || {}),
+                                            ...(existingSlots[k].assignmentMeta || {}) // Live state takes precedence
+                                        };
+                                    }
+
+                                    // 3. Merge unavailability / inconveniences without losing details
+                                    const exUnav = (existingSlots[k].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                    const impUnav = (importedSlots[k].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                    const uniqueUnavEmails = [...new Set([...exUnav, ...impUnav])];
+                                    existingSlots[k].unavailable = uniqueUnavEmails.map(email => {
+                                        const exObj = (existingSlots[k].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                        const impObj = (importedSlots[k].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                        return exObj || impObj || email;
+                                    });
+
+                                    // 4. Merge exchange requests
+                                    existingSlots[k].exchangeRequests = [...new Set([
+                                        ...(existingSlots[k].exchangeRequests || []),
+                                        ...(importedSlots[k].exchangeRequests || [])
+                                    ])];
+
+                                    // 5. Merge legacy volunteers array if present
+                                    if (importedSlots[k].volunteers && Array.isArray(importedSlots[k].volunteers)) {
+                                        if (!existingSlots[k].volunteers) existingSlots[k].volunteers = [];
+                                        importedSlots[k].volunteers.forEach(v => {
+                                            if (!existingSlots[k].volunteers.includes(v)) existingSlots[k].volunteers.push(v);
+                                        });
+                                    }
+                                } else {
+                                    existingSlots[k] = importedSlots[k];
+                                }
+                            });
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
                             localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+
+                        // 🛡️ [PEOPLE PRESERVATION]: Deep-merge Advance Unavailability in Merge Mode
+                        } else if (isMerge && key === 'invigAdvanceUnavailability') {
+                            const importedUnav = (typeof val === 'string') ? JSON.parse(val || '{}') : (val || {});
+                            const existingRaw = localStorage.getItem('invigAdvanceUnavailability');
+                            const existingUnav = existingRaw ? JSON.parse(existingRaw) : {};
+
+                            Object.keys(importedUnav).forEach(date => {
+                                if (!existingUnav[date]) {
+                                    existingUnav[date] = importedUnav[date];
+                                } else {
+                                    ['FN', 'AN'].forEach(sess => {
+                                        const exList = existingUnav[date][sess] || [];
+                                        const impList = importedUnav[date][sess] || [];
+                                        const exEmails = exList.map(u => typeof u === 'string' ? u : u.email);
+                                        const merged = [...exList];
+                                        impList.forEach(u => {
+                                            const email = typeof u === 'string' ? u : u.email;
+                                            if (!exEmails.includes(email)) merged.push(u);
+                                        });
+                                        existingUnav[date][sess] = merged;
+                                    });
+                                }
+                            });
+                            localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(existingUnav));
+
+                        } else {
+                            localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
+                            if (key === 'examInvigilationSlots') {
+                                localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+                            }
                         }
                     }
                     count++;
@@ -22127,7 +22205,7 @@ if (displayLoc) {
             // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
             if (window.currentCollegeId && navigator.onLine && count > 0) {
                 updateSyncStatus("Restoring Cloud...", "neutral");
-                const { db, doc, setDoc, writeBatch } = window.firebase;
+                const { db, doc, setDoc, getDoc, writeBatch } = window.firebase;
                 const cid = window.currentCollegeId;
 
                 // 1. Sync settings
@@ -22173,7 +22251,7 @@ if (displayLoc) {
                     await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
                 }
 
-                // 5. Sync invigilation slots (daily shards)
+                // 5. Sync invigilation slots (daily shards) with People Preservation
                 const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
                 if (localSlotsRaw) {
                     let slotsObj = {};
@@ -22201,22 +22279,102 @@ if (displayLoc) {
                         for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
                             const batch = writeBatch(db);
                             const chunk = shardIds.slice(i, i + CHUNK_SIZE);
-                            chunk.forEach(sid => {
+                            for (const sid of chunk) {
                                 const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
-                                batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: new Date() });
-                            });
+                                let finalShardData = shards[sid] || {};
+
+                                // 🛡️ Cloud Merge: Ensure active cloud volunteering and inconveniences are preserved
+                                if (isMerge) {
+                                    try {
+                                        const cloudSnap = await getDoc(shardRef);
+                                        if (cloudSnap.exists()) {
+                                            const cloudShard = JSON.parse(cloudSnap.data().data || '{}');
+                                            Object.keys(cloudShard).forEach(sk => {
+                                                const cSlot = cloudShard[sk];
+                                                if (finalShardData[sk]) {
+                                                    // Union assignments
+                                                    const lAssigned = finalShardData[sk].assigned || [];
+                                                    const cAssigned = cSlot.assigned || [];
+                                                    finalShardData[sk].assigned = [...new Set([...lAssigned, ...cAssigned])];
+
+                                                    // Merge metadata (preserves VOLUNTEER status)
+                                                    if (cSlot.assignmentMeta || finalShardData[sk].assignmentMeta) {
+                                                        finalShardData[sk].assignmentMeta = {
+                                                            ...(cSlot.assignmentMeta || {}),
+                                                            ...(finalShardData[sk].assignmentMeta || {})
+                                                        };
+                                                    }
+
+                                                    // Union inconveniences
+                                                    const lUnav = (finalShardData[sk].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                                    const cUnav = (cSlot.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                                    const uniqueUnav = [...new Set([...lUnav, ...cUnav])];
+                                                    finalShardData[sk].unavailable = uniqueUnav.map(email => {
+                                                        const cObj = (cSlot.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                                        const lObj = (finalShardData[sk].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                                        return cObj || lObj || email;
+                                                    });
+
+                                                    // Union exchanges
+                                                    finalShardData[sk].exchangeRequests = [...new Set([
+                                                        ...(finalShardData[sk].exchangeRequests || []),
+                                                        ...(cSlot.exchangeRequests || [])
+                                                    ])];
+                                                } else {
+                                                    // Preserve slot from cloud if missing from backup
+                                                    finalShardData[sk] = cSlot;
+                                                }
+                                            });
+                                        }
+                                    } catch (cloudErr) {
+                                        console.warn("Restore cloud shard merge note:", sid, cloudErr);
+                                    }
+                                }
+
+                                batch.set(shardRef, { data: JSON.stringify(finalShardData), lastUpdated: new Date() });
+                            }
                             await batch.commit();
                         }
                     }
                 }
 
-                // 6. Sync advanced unavailability
+                // 6. Sync advanced unavailability with People Preservation
                 const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
                 if (localUnavRaw) {
                     const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
+                    let finalUnav = JSON.parse(localUnavRaw || '{}');
+
+                    if (isMerge) {
+                        try {
+                            const cloudSnap = await getDoc(slotsRef);
+                            if (cloudSnap.exists()) {
+                                const cloudUnav = JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}');
+                                Object.keys(cloudUnav).forEach(d => {
+                                    if (!finalUnav[d]) {
+                                        finalUnav[d] = cloudUnav[d];
+                                    } else {
+                                        ['FN', 'AN'].forEach(sess => {
+                                            const cList = cloudUnav[d][sess] || [];
+                                            const lList = finalUnav[d][sess] || [];
+                                            const lEmails = lList.map(u => typeof u === 'string' ? u : u.email);
+                                            cList.forEach(cu => {
+                                                const cEmail = typeof cu === 'string' ? cu : cu.email;
+                                                if (!lEmails.includes(cEmail)) lList.push(cu);
+                                            });
+                                            finalUnav[d][sess] = lList;
+                                        });
+                                    }
+                                });
+                            }
+                        } catch (cloudUnavErr) {
+                            console.warn("Advance unavailability cloud merge note:", cloudUnavErr);
+                        }
+                    }
+
                     await setDoc(slotsRef, { 
-                        invigAdvanceUnavailability: localUnavRaw 
+                        invigAdvanceUnavailability: JSON.stringify(finalUnav) 
                     }, { merge: true });
+                    localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(finalUnav));
                 }
             }
 

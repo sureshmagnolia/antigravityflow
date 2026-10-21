@@ -7682,16 +7682,52 @@ window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompt
         if (d.googleScriptUrl !== undefined) localStorage.setItem('invigGoogleScriptUrl', d.googleScriptUrl);
 
     } else if (mode === '2') {
-        // --- SMART MERGE ---
+        // --- SMART MERGE (PEOPLE PRESERVATION) ---
         const importedSlots = d.invigilationSlots || {};
         let modifiedCount = 0;
 
         Object.keys(importedSlots).forEach(key => {
+            const source = importedSlots[key];
             if (invigilationSlots[key]) {
                 const target = invigilationSlots[key];
-                const source = importedSlots[key];
                 let changed = false;
 
+                // 1. Union assigned invigilators (preserves volunteers & existing assignments)
+                if (source.assigned && source.assigned.length > 0) {
+                    const beforeLen = (target.assigned || []).length;
+                    target.assigned = [...new Set([...(target.assigned || []), ...source.assigned])];
+                    if (target.assigned.length !== beforeLen) changed = true;
+                }
+
+                // 2. Merge assignment metadata (preserves VOLUNTEER badges)
+                if (source.assignmentMeta || target.assignmentMeta) {
+                    target.assignmentMeta = {
+                        ...(source.assignmentMeta || {}),
+                        ...(target.assignmentMeta || {}) // Live state takes precedence
+                    };
+                    changed = true;
+                }
+
+                // 3. Merge slot-specific inconveniences / unavailability
+                if (source.unavailable && source.unavailable.length > 0) {
+                    const targetUnavEmails = (target.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                    const sourceUnavEmails = source.unavailable.map(u => typeof u === 'string' ? u : u.email);
+                    const allUnavEmails = [...new Set([...targetUnavEmails, ...sourceUnavEmails])];
+                    target.unavailable = allUnavEmails.map(email => {
+                        const tObj = (target.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                        const sObj = source.unavailable.find(u => (typeof u === 'string' ? u : u.email) === email);
+                        return tObj || sObj || email;
+                    });
+                    changed = true;
+                }
+
+                // 4. Merge duty exchanges
+                if (source.exchangeRequests && source.exchangeRequests.length > 0) {
+                    target.exchangeRequests = [...new Set([...(target.exchangeRequests || []), ...source.exchangeRequests])];
+                    changed = true;
+                }
+
+                // 5. Backwards compatibility for legacy volunteers & inconvenience fields
                 if (source.volunteers && source.volunteers.length > 0) {
                     if (!target.volunteers) target.volunteers = [];
                     source.volunteers.forEach(v => {
@@ -7711,10 +7747,35 @@ window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompt
                     });
                 }
                 if (changed) modifiedCount++;
+            } else {
+                // New slot from imported backup
+                invigilationSlots[key] = source;
+                modifiedCount++;
             }
         });
+
+        // 6. Deep-merge advance leaves / unavailability in Mode 2
+        if (d.advanceUnavailability && typeof d.advanceUnavailability === 'object') {
+            Object.keys(d.advanceUnavailability).forEach(date => {
+                if (!advanceUnavailability[date]) {
+                    advanceUnavailability[date] = d.advanceUnavailability[date];
+                } else {
+                    ['FN', 'AN'].forEach(sess => {
+                        const curList = advanceUnavailability[date][sess] || [];
+                        const impList = d.advanceUnavailability[date][sess] || [];
+                        const curEmails = curList.map(u => typeof u === 'string' ? u : u.email);
+                        const merged = [...curList];
+                        impList.forEach(u => {
+                            const email = typeof u === 'string' ? u : u.email;
+                            if (!curEmails.includes(email)) merged.push(u);
+                        });
+                        advanceUnavailability[date][sess] = merged;
+                    });
+                }
+            });
+        }
         
-        if (showPrompts) alert(`Merge Complete: ${modifiedCount} existing slots updated with imported volunteers/inconveniences.`);
+        if (showPrompts) alert(`Merge Complete: ${modifiedCount} slots and advance leaves updated with imported data.`);
     }
 
     localStorage.setItem('examStaffData', JSON.stringify(staffData));
