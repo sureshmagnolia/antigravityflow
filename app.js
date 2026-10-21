@@ -18913,12 +18913,13 @@ if (btnSessionReschedule) {
 
                     moveKeyInStorage('examRoomAllotment', 'array');
                     moveKeyInStorage('examScribeAllotment', 'object');
+                    moveKeyInStorage('examScribeAllotmentV2', 'object');
                     moveKeyInStorage('examAbsenteeList', 'array');
                     moveKeyInStorage('examInvigilatorMapping', 'object');
                     moveKeyInStorage('examInvigilationSlots', 'object');
                     moveKeyInStorage('examQPCodes', 'object');
 
-                    // 3b. Move Scribe Vault Keys & IDB
+                    // 3b. Move Scribe Vault Keys & IDB (Preserving Physical Scribe Room)
                     try {
                         const oldVaultKey = `scrAllot_` + currentSession.replace(/\s/g, '_');
                         const newVaultKey = `scrAllot_` + newSessionKey.replace(/\s/g, '_');
@@ -18934,17 +18935,16 @@ if (btnSessionReschedule) {
                             localStorage.setItem(newDirty, dirtyVal);
                             localStorage.removeItem(oldDirty);
                         }
-                        if (typeof openExamDB === 'function') {
-                            const db = await openExamDB();
-                            const tx = db.transaction('scribeVault', 'readwrite');
-                            const store = tx.objectStore('scribeVault');
-                            const req = store.get(currentSession);
-                            req.onsuccess = () => {
-                                if (req.result) {
-                                    store.put(req.result, newSessionKey);
-                                    store.delete(currentSession);
+                        if (typeof window.getScribeAllotmentIDB === 'function' && typeof window.saveScribeAllotmentIDB === 'function') {
+                            const scrAllot = await window.getScribeAllotmentIDB(currentSession);
+                            if (scrAllot) {
+                                await window.saveScribeAllotmentIDB(newSessionKey, scrAllot);
+                                if (typeof openExamDB === 'function') {
+                                    const db = await openExamDB();
+                                    const tx = db.transaction('scribeVault', 'readwrite');
+                                    tx.objectStore('scribeVault').delete(currentSession);
                                 }
-                            };
+                            }
                         }
                     } catch (vaultErr) {
                         console.warn("Scribe vault migration error:", vaultErr);
