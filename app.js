@@ -12377,10 +12377,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
    
-    // --- NEW: Pre-splits the session student list into Part A and Part B ---
+    // --- NEW: Pre-splits the session student list into Part A and Part B (Course-Level Zero-Collision) ---
     // Call this whenever a new session is loaded OR strategy radio changes.
     function precomputeSessionParts(sessionKey, strategy) {
-            mixingActiveStrategy = strategy;
+        mixingActiveStrategy = strategy || 'none';
         mixingParts = {};  // Reset all per-stream data
 
         if (strategy === 'none' || !sessionKey) return;
@@ -12388,35 +12388,105 @@ window.real_populate_qp_code_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
 
         // Get all students for this session
-        const sessionStudents = window.getStudentsForSession(allStudentData, date, time);
+        const sessionStudents = (typeof window.getStudentsForSession === 'function')
+            ? window.getStudentsForSession(allStudentData, date, time)
+            : [];
+
+        if (!sessionStudents || sessionStudents.length === 0) return;
 
         // Get every distinct stream present in this session
-        const streams = [...new Set(sessionStudents.map(s => s.Stream || 'Regular'))];
+        const streams = [...new Set(sessionStudents.map(s => (s.Stream || s.stream || 'Regular').toString().trim()))];
 
-        // For EACH stream, build its own independent Part A and Part B
+        // For EACH stream, partition whole courses into Pool A and Pool B
         streams.forEach(stream => {
-            const streamStudents = sessionStudents
-                .filter(s => (s.Stream || 'Regular') === stream)
-                .sort((a, b) => {
-                    if (a.Course !== b.Course) return a.Course.localeCompare(b.Course);
-                    const rA = (getRegNo(a) || '').toString().trim();
-                    const rB = (getRegNo(b) || '').toString().trim();
-                    return rA.localeCompare(rB);
+            const targetStreamNormalized = stream.toLowerCase();
+            const streamStudents = sessionStudents.filter(s => {
+                const sStream = (s.Stream || s.stream || 'Regular').toString().trim().toLowerCase();
+                return sStream === targetStreamNormalized;
+            });
+
+            if (streamStudents.length === 0) return;
+
+            const courseMap = new Map();
+            streamStudents.forEach(s => {
+                const c = s.Course || s.course || 'Unknown';
+                if (!courseMap.has(c)) courseMap.set(c, []);
+                courseMap.get(c).push(s);
+            });
+
+            // Sort students within each course by register number
+            courseMap.forEach((list) => {
+                list.sort((a, b) => {
+                    const regA = (getRegNo(a) || '').toString().trim();
+                    const regB = (getRegNo(b) || '').toString().trim();
+                    const matchA = regA.match(/^([a-zA-Z\-_]*)(\d+)$/i);
+                    const matchB = regB.match(/^([a-zA-Z\-_]*)(\d+)$/i);
+                    if (matchA && matchB) {
+                        const prefixA = matchA[1].toUpperCase();
+                        const prefixB = matchB[1].toUpperCase();
+                        if (prefixA !== prefixB) return prefixB.localeCompare(prefixA);
+                        return parseInt(matchA[2], 10) - parseInt(matchB[2], 10);
+                    }
+                    return regA.localeCompare(regB, undefined, { numeric: true, sensitivity: 'base' });
                 });
+            });
+
+            const courseGroups = Array.from(courseMap.entries()).map(([course, list]) => ({
+                course,
+                students: list
+            }));
+
+            // Greedy bin packing (LPT): sort courses descending by student count
+            courseGroups.sort((a, b) => b.students.length - a.students.length);
 
             const total = streamStudents.length;
-            const splitAt = (strategy === 'ratio_2_1')
-                ? Math.round(total * (2 / 3))
-                : Math.round(total * 0.5); // ratio_1_1
+            const targetRatio = (strategy === 'ratio_2_1') ? (2 / 3) : 0.5;
+            const targetA = Math.round(total * targetRatio);
 
-            mixingParts[stream] = {
-                partA: streamStudents.slice(0, splitAt),
-                partB: streamStudents.slice(splitAt),
+            let groupsA = [], groupsB = [];
+            let countA = 0, countB = 0;
+
+            for (const group of courseGroups) {
+                if (countA + group.students.length <= targetA || countA === 0) {
+                    groupsA.push(group);
+                    countA += group.students.length;
+                } else if (countB === 0) {
+                    groupsB.push(group);
+                    countB += group.students.length;
+                } else {
+                    const diffIfA = Math.abs((countA + group.students.length) - targetA);
+                    const diffIfB = Math.abs(countA - targetA);
+                    if (diffIfA < diffIfB) {
+                        groupsA.push(group);
+                        countA += group.students.length;
+                    } else {
+                        groupsB.push(group);
+                        countB += group.students.length;
+                    }
+                }
+            }
+
+            // Keep courses alphabetically sorted within each pool for predictable exam hall flow
+            groupsA.sort((a, b) => a.course.localeCompare(b.course));
+            groupsB.sort((a, b) => a.course.localeCompare(b.course));
+
+            let poolA = [], poolB = [];
+            groupsA.forEach(g => poolA.push(...g.students));
+            groupsB.forEach(g => poolB.push(...g.students));
+
+            const streamData = {
+                poolA: poolA,
+                poolB: poolB,
+                partA: poolA,
+                partB: poolB,
                 pA: 0,
                 pB: 0
             };
 
-            console.log(`🎯 [${stream}] Pre-split: A=${mixingParts[stream].partA.length}, B=${mixingParts[stream].partB.length}`);
+            mixingParts[stream] = streamData;
+            mixingParts[targetStreamNormalized] = streamData;
+
+            console.log(`🎯 [${stream}] Course-Level Pre-split (${strategy}): Pool A=${poolA.length} (${groupsA.length} courses), Pool B=${poolB.length} (${groupsB.length} courses)`);
         });
 
     }
@@ -13176,9 +13246,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         capacity: parseInt(cb.getAttribute('data-cap')) || 30
     }));
     
-    // Shuffle ONLY if the Randomise checkbox is ticked
-    const isRandomize = document.getElementById('auto-allot-randomize-cb')?.checked;
-    if (isRandomize !== false) { // Defaults to true if missing
+    // Shuffle ONLY if the Randomise checkbox is explicitly ticked
+    const isRandomize = !!document.getElementById('auto-allot-randomize-cb')?.checked;
+    if (isRandomize) {
         selectedRooms.sort(() => Math.random() - 0.5); 
     }
         
@@ -13279,30 +13349,49 @@ window.real_populate_qp_code_session_dropdown = function () {
         
         const candidateCourses = [...new Set(candidates.map(s => s.Course || 'Unknown'))];
 
+        const activeStrategy = strategy || (typeof mixingActiveStrategy !== 'undefined' ? mixingActiveStrategy : 'none');
+        let streamPart = mixingParts[targetStream] || mixingParts[targetStreamNormalized];
+        if ((!streamPart || !streamPart.poolA) && (activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1')) {
+            if (typeof precomputeSessionParts === 'function' && currentSessionKey) {
+                precomputeSessionParts(currentSessionKey, activeStrategy);
+                streamPart = mixingParts[targetStream] || mixingParts[targetStreamNormalized];
+            }
+        }
+
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+
         if (candidates.length <= leftoverThreshold) {
-            newStudents = candidates.slice();
-        } else if (strategy === 'none' || candidateCourses.length <= 1) {
+            // Guard: Remaining students fit within room capacity + 3 grace
+            if ((activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1') && (unallottedPoolA.length > 0 || unallottedPoolB.length > 0)) {
+                // Scheme 2: Section 1 gets remaining Pool A, Section 2 gets remaining Pool B
+                newStudents = [...unallottedPoolA, ...unallottedPoolB];
+            } else {
+                newStudents = candidates.slice();
+            }
+            console.log(`💡 Leftover Guard (Silent): Allotting all ${newStudents.length} students to ${roomName}.`);
+        } else if (activeStrategy === 'none' || candidateCourses.length <= 1 || (!streamPart || (unallottedPoolA.length === 0 && unallottedPoolB.length === 0))) {
             newStudents = candidates.slice(0, limit);
-        } else if (strategy === 'ratio_1_1' || strategy === 'ratio_2_1') {
-            const ratio = (strategy === 'ratio_2_1') ? (2 / 3) : 0.5;
-            let takeA = Math.round(limit * ratio);
+        } else if (activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1') {
+            const ratio = (activeStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
+            let takeA = (activeStrategy === 'ratio_2_1') ? Math.round(limit * ratio) : Math.ceil(limit * 0.5);
             let takeB = limit - takeA;
 
-            const primaryCourse = candidateCourses[0];
-            const courseAStudents = candidates.filter(s => (s.Course || 'Unknown') === primaryCourse);
-            const courseBStudents = candidates.filter(s => (s.Course || 'Unknown') !== primaryCourse);
+            let sliceA = unallottedPoolA.slice(0, takeA);
+            let sliceB = unallottedPoolB.slice(0, takeB);
 
-            let sliceA = courseAStudents.slice(0, takeA);
-            let sliceB = courseBStudents.slice(0, takeB);
-
-            if (sliceB.length < takeB) {
-                const deficitB = takeB - sliceB.length;
-                sliceA = courseAStudents.slice(0, takeA + deficitB);
-            } else if (sliceA.length < takeA) {
+            // Handle deficit if one pool exhausts
+            if (sliceA.length < takeA) {
                 const deficitA = takeA - sliceA.length;
-                sliceB = courseBStudents.slice(0, takeB + deficitA);
+                sliceB = unallottedPoolB.slice(0, takeB + deficitA);
+            } else if (sliceB.length < takeB) {
+                const deficitB = takeB - sliceB.length;
+                sliceA = unallottedPoolA.slice(0, takeA + deficitB);
             }
 
+            // Scheme 2 (By Section / Column):
+            // Section 1 (Seats 1..sliceA.length) = Pool A (Outer 'U' / Column 1)
+            // Section 2 (Seats sliceA.length+1..total) = Pool B (Center row / Column 2)
             newStudents = [...sliceA, ...sliceB].slice(0, limit);
         } else {
             newStudents = candidates.slice(0, limit);
@@ -13311,9 +13400,18 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (newStudents.length === 0) return;
 
         const studentsWithSeats = newStudents.map((s, idx) => {
-            const studentObj = (typeof s === 'object') ? { ...s } : { RegisterNo: s };
-            studentObj.seat = idx + 1;
-            return studentObj;
+            if (typeof s === 'object') {
+                const reg = getRegNo(s);
+                return {
+                    'Register Number': reg,
+                    RegisterNo: reg,
+                    Name: s.Name || s.name || '',
+                    Course: s.Course || s.course || '',
+                    Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    seat: idx + 1
+                };
+            }
+            return { RegisterNo: s, 'Register Number': s, seat: idx + 1 };
         });
 
         currentSessionAllotment.push({ roomName: roomName, capacity: capacity, students: studentsWithSeats, stream: targetStream });
@@ -13679,33 +13777,49 @@ window.real_populate_qp_code_session_dropdown = function () {
         const activeStrategy = strategy || (typeof mixingActiveStrategy !== 'undefined' ? mixingActiveStrategy : 'none');
         const candidateCourses = [...new Set(candidates.map(s => s.Course || 'Unknown'))];
 
+        let streamPart = mixingParts[targetStream] || mixingParts[targetStreamNormalized];
+        if ((!streamPart || !streamPart.poolA) && (activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1')) {
+            if (typeof precomputeSessionParts === 'function' && currentSessionKey) {
+                precomputeSessionParts(currentSessionKey, activeStrategy);
+                streamPart = mixingParts[targetStream] || mixingParts[targetStreamNormalized];
+            }
+        }
+
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+
         if (candidates.length <= leftoverThreshold) {
-            newStudents = candidates.slice();
-            console.log(`💡 Leftover Guard: Allotting all ${candidates.length} students to this room.`);
-        } else if (activeStrategy === 'none' || candidateCourses.length <= 1) {
+            // Guard: Remaining students fit within room capacity + 3 grace
+            if ((activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1') && (unallottedPoolA.length > 0 || unallottedPoolB.length > 0)) {
+                // Scheme 2: Section 1 gets remaining Pool A, Section 2 gets remaining Pool B
+                newStudents = [...unallottedPoolA, ...unallottedPoolB];
+            } else {
+                newStudents = candidates.slice();
+            }
+            console.log(`💡 Leftover Guard: Allotting all ${newStudents.length} students to this room.`);
+        } else if (activeStrategy === 'none' || candidateCourses.length <= 1 || (!streamPart || (unallottedPoolA.length === 0 && unallottedPoolB.length === 0))) {
             // No mixing requested, or only 1 course remains among unallotted students
             newStudents = candidates.slice(0, limit);
         } else if (activeStrategy === 'ratio_1_1' || activeStrategy === 'ratio_2_1') {
             const ratio = (activeStrategy === 'ratio_2_1') ? (2 / 3) : 0.5;
-            let takeA = Math.round(limit * ratio);
+            let takeA = (activeStrategy === 'ratio_2_1') ? Math.round(limit * ratio) : Math.ceil(limit * 0.5);
             let takeB = limit - takeA;
 
-            const primaryCourse = candidateCourses[0];
-            const courseAStudents = candidates.filter(s => (s.Course || 'Unknown') === primaryCourse);
-            const courseBStudents = candidates.filter(s => (s.Course || 'Unknown') !== primaryCourse);
+            let sliceA = unallottedPoolA.slice(0, takeA);
+            let sliceB = unallottedPoolB.slice(0, takeB);
 
-            let sliceA = courseAStudents.slice(0, takeA);
-            let sliceB = courseBStudents.slice(0, takeB);
-
-            if (sliceB.length < takeB) {
-                const deficitB = takeB - sliceB.length;
-                sliceA = courseAStudents.slice(0, takeA + deficitB);
-            } else if (sliceA.length < takeA) {
+            // Handle deficit if one pool exhausts
+            if (sliceA.length < takeA) {
                 const deficitA = takeA - sliceA.length;
-                sliceB = courseBStudents.slice(0, takeB + deficitA);
+                sliceB = unallottedPoolB.slice(0, takeB + deficitA);
+            } else if (sliceB.length < takeB) {
+                const deficitB = takeB - sliceB.length;
+                sliceA = unallottedPoolA.slice(0, takeA + deficitB);
             }
 
-            // Continuous block seats (Course A then Course B), strictly capped at room capacity
+            // Scheme 2 (By Section / Column):
+            // Section 1 (Seats 1..sliceA.length) = Pool A (Outer 'U' / Column 1)
+            // Section 2 (Seats sliceA.length+1..total) = Pool B (Center row / Column 2)
             newStudents = [...sliceA, ...sliceB].slice(0, limit);
         } else {
             // Fallback standard fill
