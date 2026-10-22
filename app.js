@@ -24079,15 +24079,26 @@ async function runSystemHealthCheck() {
                 const targetStudents = allStudents.filter(s => targetDates.includes(s.Date));
                 const targetSessions = new Set(targetStudents.map(s => `${s.Date} | ${s.Time}`));
 
-                const allotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                const allotments = (typeof window.getFullRoomAllotments === 'function')
+                    ? await window.getFullRoomAllotments()
+                    : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 const qpCodes = JSON.parse(localStorage.getItem('examQPCodes') || '{}');
                 const invigilators = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
 
-                targetSessions.forEach(sessionKey => {
+                for (const sessionKey of targetSessions) {
                     const sessionName = `<span class="font-mono text-gray-500">${sessionKey}</span>`;
                     
-                    // CHECK 1: ALLOTMENT
-                    if (!allotments[sessionKey] || Object.keys(allotments[sessionKey]).length === 0) {
+                    // CHECK 1: ALLOTMENT (With IDB vault and whitespace normalization)
+                    let currentAllotment = allotments[sessionKey];
+                    if (!currentAllotment && sessionKey) {
+                        const cleanTarget = sessionKey.replace(/\s/g, '');
+                        const matchingKey = Object.keys(allotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+                        if (matchingKey) currentAllotment = allotments[matchingKey];
+                    }
+                    if ((!currentAllotment || currentAllotment.length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
+                        currentAllotment = await window.getRoomAllotmentIDB(sessionKey);
+                    }
+                    if (!currentAllotment || currentAllotment.length === 0) {
                         log('fail', 'Regular Allotment', `Missing for ${sessionName}`);
                     }
 
@@ -24098,8 +24109,8 @@ async function runSystemHealthCheck() {
                     
                     if (sessionScribes.length > 0) {
                         let allottedScribesCount = 0;
-                        if (allotments[sessionKey]) {
-                             Object.values(allotments[sessionKey]).forEach(room => {
+                        if (currentAllotment && Array.isArray(currentAllotment)) {
+                             currentAllotment.forEach(room => {
                                  if (room.students) {
                                      room.students.forEach(s => { 
                                          if (sessionScribes.includes(getRegNo(s))) allottedScribesCount++; 
@@ -24113,7 +24124,13 @@ async function runSystemHealthCheck() {
                     }
 
                     // CHECK 3: QP CODES
-                    if (!qpCodes[sessionKey] || Object.keys(qpCodes[sessionKey]).length === 0) {
+                    let sessionQPs = qpCodes[sessionKey];
+                    if (!sessionQPs && sessionKey) {
+                        const cleanTarget = sessionKey.replace(/\s/g, '');
+                        const matchingKey = Object.keys(qpCodes).find(k => k.replace(/\s/g, '') === cleanTarget);
+                        if (matchingKey) sessionQPs = qpCodes[matchingKey];
+                    }
+                    if (!sessionQPs || Object.keys(sessionQPs).length === 0) {
                         log('warn', 'QP Codes', `Missing QP Codes for ${sessionName}`);
                     }
 
@@ -24121,13 +24138,13 @@ async function runSystemHealthCheck() {
                     const currentUser = window.firebase?.auth?.currentUser;
                     if (currentUser) {
                         const sessionInvigilation = invigilators[sessionKey] || [];
-                        if (sessionInvigilation.length === 0 && allotments[sessionKey]) {
+                        if (sessionInvigilation.length === 0 && currentAllotment && currentAllotment.length > 0) {
                             log('warn', 'Staffing', `No invigilators assigned for ${sessionName}`);
-                        } else if (allotments[sessionKey]) {
+                        } else if (currentAllotment && currentAllotment.length > 0) {
                             log('ok', 'Staffing', `Invigilators assigned.`);
                         }
                     }
-                });
+                }
             }
         }
 
