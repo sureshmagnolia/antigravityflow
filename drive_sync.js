@@ -1079,6 +1079,11 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
                         await saveExamDataIDB(val);
                     }
                 } else {
+                    // 🛡️ [PEOPLE PRESERVATION]: In merge mode, defer slots and leaves to restoreInvigilationCloudData below
+                    if (isMerge && (key === 'examInvigilationSlots' || key === 'invigAdvanceUnavailability')) {
+                        continue;
+                    }
+
                     // CONFIG DATA (Staff, Rooms, Settings):
                     // Even in Merge mode, we treat Cloud as the "Truth" for these small files
                     const stringVal = (typeof val === 'object') ? JSON.stringify(val) : val;
@@ -1142,12 +1147,20 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
         window.isDriveRestoringData = false;
-        alert("✅ Restored & Synced successfully! Reloading to apply changes.");
+        if (typeof UiModal !== 'undefined') {
+            await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
+        } else {
+            alert("✅ Restored & Synced successfully! Reloading to apply changes.");
+        }
         location.reload();
 
     } catch (e) { 
         window.isDriveRestoringData = false;
-        alert("Execution Error: " + e.message); 
+        if (typeof UiModal !== 'undefined') {
+            await UiModal.alert("Execution Error", "Restore execution failed: " + e.message);
+        } else {
+            alert("Execution Error: " + e.message); 
+        }
     }
 
 }

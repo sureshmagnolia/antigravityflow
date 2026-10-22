@@ -1,7 +1,7 @@
 const UiModal = {
 
     // --- TEMPLATES ---
-    _overlayClass: "fixed inset-0 z-[100] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
+    _overlayClass: "fixed inset-0 z-[150] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity duration-200 opacity-0",
     _cardClass: "bg-white rounded-2xl shadow-2xl max-w-sm w-full transform scale-95 transition-all duration-200 overflow-hidden",
     _headerClass: "px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between",
     _titleClass: "text-lg font-bold text-gray-800",

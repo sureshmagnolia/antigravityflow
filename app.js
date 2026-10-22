@@ -234,11 +234,15 @@ function pruneLocalStorageAllotments(allAllotments, keepSessionKey = null) {
 }
 window.pruneLocalStorageAllotments = pruneLocalStorageAllotments;
 
+window._fullAllotmentsCache = null;
+
 async function ensureSessionInLocalStorage(sessionKey) {
     if (!sessionKey) return;
     try {
         let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         if (allAllotments[sessionKey] && Array.isArray(allAllotments[sessionKey]) && allAllotments[sessionKey].length > 0) {
+            window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+            window._fullAllotmentsCache[sessionKey] = allAllotments[sessionKey];
             return; // Already present in active window
         }
         if (typeof window.getRoomAllotmentIDB === 'function') {
@@ -246,6 +250,8 @@ async function ensureSessionInLocalStorage(sessionKey) {
             if (vaultedRooms && Array.isArray(vaultedRooms) && vaultedRooms.length > 0) {
                 allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 allAllotments[sessionKey] = vaultedRooms;
+                window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+                window._fullAllotmentsCache[sessionKey] = vaultedRooms;
                 const trimmed = window.pruneLocalStorageAllotments(allAllotments, sessionKey);
                 try {
                     localStorage.setItem('examRoomAllotment', JSON.stringify(trimmed));
@@ -260,6 +266,65 @@ async function ensureSessionInLocalStorage(sessionKey) {
     }
 }
 window.ensureSessionInLocalStorage = ensureSessionInLocalStorage;
+
+async function getFullRoomAllotments(sessionKey = null) {
+    let local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    if (sessionKey && sessionKey !== 'all') {
+        if (local[sessionKey] && Array.isArray(local[sessionKey]) && local[sessionKey].length > 0) {
+            window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+            window._fullAllotmentsCache[sessionKey] = local[sessionKey];
+            return local;
+        }
+        if (typeof window.getRoomAllotmentIDB === 'function') {
+            const vaulted = await window.getRoomAllotmentIDB(sessionKey);
+            if (vaulted && Array.isArray(vaulted) && vaulted.length > 0) {
+                local[sessionKey] = vaulted;
+                window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+                window._fullAllotmentsCache[sessionKey] = vaulted;
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(sessionKey);
+                }
+                return local;
+            }
+        }
+    } else {
+        // Full merged retrieval across IndexedDB Vault and localStorage
+        if (typeof window.getAllAllotmentsIDB === 'function') {
+            const vaulted = await window.getAllAllotmentsIDB();
+            const merged = { ...vaulted, ...local };
+            window._fullAllotmentsCache = merged;
+            return merged;
+        }
+    }
+    window._fullAllotmentsCache = local;
+    return local;
+}
+window.getFullRoomAllotments = getFullRoomAllotments;
+
+function getRoomAllotmentSync(sessionKey) {
+    if (!sessionKey) return [];
+    if (window._fullAllotmentsCache && window._fullAllotmentsCache[sessionKey]) {
+        return window._fullAllotmentsCache[sessionKey];
+    }
+    const cleanKey = sessionKey.replace(/\s/g, '');
+    if (window._fullAllotmentsCache) {
+        const match = Object.keys(window._fullAllotmentsCache).find(k => k.replace(/\s/g, '') === cleanKey);
+        if (match) return window._fullAllotmentsCache[match];
+    }
+    const local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    if (local[sessionKey]) return local[sessionKey];
+    const localMatch = Object.keys(local).find(k => k.replace(/\s/g, '') === cleanKey);
+    if (localMatch) return local[localMatch];
+
+    // Fallback to active in-memory allotment if currentSessionKey matches
+    if (typeof window !== 'undefined' && window.currentSessionKey && window.currentSessionKey.replace(/\s/g, '') === cleanKey) {
+        if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+            return currentSessionAllotment;
+        }
+    }
+    return [];
+}
+window.getRoomAllotmentSync = getRoomAllotmentSync;
 
 async function initTwoTierStorageShield() {
     try {
@@ -1065,6 +1130,17 @@ async function migrateFromLocalStorage() {
         };
     }
 
+    // --- Helper: Parse Session Key ("Date | Time") Safely ---
+    function parseSessionKey(sk) {
+        if (!sk || typeof sk !== 'string') return { date: '', time: '' };
+        const parts = sk.split('|').map(p => p.trim());
+        return {
+            date: parts[0] || '',
+            time: parts.slice(1).join(' | ') || ''
+        };
+    }
+    window.parseSessionKey = parseSessionKey;
+
     // --- Helper: Chronological Session Sort (Oldest First) ---
     function compareSessionStrings(a, b) {
         if (!a || !b) return 0;
@@ -1317,7 +1393,6 @@ function populateAllExamDropdowns() {
     // 2. Define all dropdowns to update
     const dropdowns = [
         { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
-        { id: 'session-new-exam-name', defaultText: '-- Select New Exam Name --' }, // Session Ops
         { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
         { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
         { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
@@ -1353,7 +1428,74 @@ function populateAllExamDropdowns() {
             }
         }
     });
+
+    // Refresh session ops dropdown if a session is currently chosen in editSessionSelect
+    if (typeof window.populateSessionOpsExamDropdown === 'function') {
+        const editSelect = document.getElementById('edit-session-select');
+        window.populateSessionOpsExamDropdown(editSelect ? editSelect.value : null);
+    }
 }
+
+// --- SESSION OPS EXAM DROPDOWN POPULATOR ---
+// Populates the dropdown with ONLY exam names available in the currently selected exam session
+window.populateSessionOpsExamDropdown = function(sessionKey, prefilteredStudents = null) {
+    const examSelect = document.getElementById('session-new-exam-name');
+    if (!examSelect) return;
+
+    const currentVal = examSelect.value;
+    examSelect.innerHTML = '';
+
+    if (!sessionKey) {
+        examSelect.innerHTML = '<option value="">-- Select a Session First --</option>';
+        return;
+    }
+
+    const [dateRaw, timeRaw] = sessionKey.split(' | ');
+    if (!dateRaw || !timeRaw) {
+        examSelect.innerHTML = '<option value="">-- Select a Session First --</option>';
+        return;
+    }
+
+    const sessionStudents = prefilteredStudents || (typeof window.getStudentsForSession === 'function'
+        ? window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim())
+        : (allStudentData || []).filter(s => {
+            if (!s) return false;
+            const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+            const targetDateNorm = dateRaw.trim().replace(/[./-]/g, '');
+            const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+            const targetTimeNorm = timeRaw.trim().toUpperCase();
+            let timeMatch = (sTimeNorm === targetTimeNorm);
+            if (!timeMatch && typeof normalizeTime === 'function') {
+                timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(targetTimeNorm));
+            }
+            return (sDateNorm === targetDateNorm) && timeMatch;
+        }));
+
+    const uniqueExamNames = [...new Set(sessionStudents.map(s => (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim()).filter(Boolean))].sort();
+
+    if (uniqueExamNames.length === 0) {
+        examSelect.innerHTML = '<option value="">-- All Students in Session (No Exam Tag) --</option>';
+    } else {
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = uniqueExamNames.length === 1 
+            ? `-- All Exams (${uniqueExamNames[0]}) --` 
+            : '-- All Exams in Session --';
+        examSelect.appendChild(defaultOpt);
+
+        uniqueExamNames.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            examSelect.appendChild(opt);
+        });
+
+        // Restore value if it is still present in the updated session list
+        if (currentVal && uniqueExamNames.includes(currentVal)) {
+            examSelect.value = currentVal;
+        }
+    }
+};
 
 
 
@@ -3844,12 +3986,18 @@ function generateDayWisePDF() {
         // --- 4. PREPARE DATA ---
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
-        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source with Vault support
+        const allAllotments = (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0)
+            ? window._fullAllotmentsCache
+            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         
         // FIX: Extract the session key securely from the UI select element!
         const sessionKey = reportsSessionSelect ? reportsSessionSelect.value : "";
-        const sessionAllotment = allAllotments[sessionKey] || [];
+        let sessionAllotment = allAllotments[sessionKey];
+        if (!sessionAllotment && typeof window.getRoomAllotmentSync === 'function') {
+            sessionAllotment = window.getRoomAllotmentSync(sessionKey);
+        }
+        sessionAllotment = sessionAllotment || [];
 
         
         const studentToRoomMap = {};
@@ -4879,9 +5027,16 @@ function generateQuestionPaperReportPDF() {
         
         if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
-        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const sessionAllotment = allAllotments[`${reportsSessionSelect.value}`] || [];
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source with Vault support
+        const allAllotments = (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0)
+            ? window._fullAllotmentsCache
+            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionKey = reportsSessionSelect ? reportsSessionSelect.value : "";
+        let sessionAllotment = allAllotments[sessionKey];
+        if (!sessionAllotment && typeof window.getRoomAllotmentSync === 'function') {
+            sessionAllotment = window.getRoomAllotmentSync(sessionKey);
+        }
+        sessionAllotment = sessionAllotment || [];
         
         const studentToRoomMap = {};
         sessionAllotment.forEach(room => {
@@ -5091,7 +5246,14 @@ function generateQPDistributionPDF() {
             if (headerGroup) {
                 const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "";
                 const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "";
-                const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+                let h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+
+                if (!h3 || h3.includes('undefined')) {
+                    const sel = document.getElementById('reports-session-select');
+                    if (sel && sel.value && !sel.value.includes('undefined')) {
+                        h3 = sel.value;
+                    }
+                }
 
                 doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                 doc.text(h1, PAGE_W/2, y, { align: 'center' });
@@ -5912,12 +6074,33 @@ if (toggleButton && sidebar) {
     // --- NEW: Helper to generate Room Serial Numbers (1, 2, 3...) ---
 
     // --- Helper: Generate Room Serial Numbers (Grouped by Stream) ---
-    function getRoomSerialMap(sessionKey) {
+    function getRoomSerialMap(sessionKey, optionalSource = null) {
         const serialMap = {};
         let counter = 1;
 
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-        const currentSessionAllotment = allAllotments[sessionKey] || [];
+        let allAllotments = optionalSource || (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0 ? window._fullAllotmentsCache : null);
+        if (!allAllotments) {
+            allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        }
+        let currentSessionAllotment = allAllotments[sessionKey];
+
+        // 🛡️ Fuzzy whitespace-agnostic matcher if exact match not found
+        if ((!currentSessionAllotment || currentSessionAllotment.length === 0) && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) currentSessionAllotment = allAllotments[matchingKey];
+        }
+
+        // In-memory fallback if currently active session
+        if ((!currentSessionAllotment || currentSessionAllotment.length === 0) && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            if (typeof window !== 'undefined' && window.currentSessionKey && window.currentSessionKey.replace(/\s/g, '') === cleanTarget) {
+                if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+                    currentSessionAllotment = currentSessionAllotment;
+                }
+            }
+        }
+        currentSessionAllotment = currentSessionAllotment ? [...currentSessionAllotment] : [];
 
         // 1. Group Regular/Distance Rooms
         // The 'stream' property is now saved in 'currentSessionAllotment'
@@ -5945,7 +6128,13 @@ if (toggleButton && sidebar) {
 
         // 2. Scribe Allotment (Always Last)
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const scribeMap = allScribeAllotments[sessionKey] || {};
+        let scribeMap = allScribeAllotments[sessionKey];
+        if (!scribeMap && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allScribeAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) scribeMap = allScribeAllotments[matchingKey];
+        }
+        scribeMap = scribeMap || {};
 
         const uniqueScribeRooms = new Set(Object.values(scribeMap));
         usedRegularRooms.forEach(r => uniqueScribeRooms.delete(r)); // Remove duplicates
@@ -6792,7 +6981,6 @@ if (toggleButton && sidebar) {
 
 
     // V68: Helper function to filter data based on selected report filter
-    // Helper function to filter data based on selected report filter
     function getFilteredReportData(reportType) {
         const data = allStudentData || [];
         if (data.length === 0) return [];
@@ -6804,7 +6992,11 @@ if (toggleButton && sidebar) {
             const sessionKey = reportsSessionSelect.value;
             if (sessionKey && sessionKey !== 'all') {
                 const [date, time] = sessionKey.split(' | ');
-                filteredData = filteredData.filter(s => s.Date === date && s.Time === time);
+                if (typeof window.getStudentsForSession === 'function') {
+                    filteredData = window.getStudentsForSession(filteredData, (date || '').trim(), (time || '').trim());
+                } else {
+                    filteredData = filteredData.filter(s => s.Date === date && s.Time === time);
+                }
             }
         }
 
@@ -6818,52 +7010,94 @@ if (toggleButton && sidebar) {
 
         return filteredData;
     }
-    function checkManualAllotment(sessionKey) {
+
+    async function checkManualAllotment(sessionKey) {
         if (!sessionKey || sessionKey === 'all') {
             alert('Please select a specific session to generate this report.');
             return false;
         }
 
         // 1. Get total unique students for the session
-        const [date, time] = sessionKey.split(' | ');
-        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const totalUniqueStudents = new Set(sessionStudentRecords.map(s => getRegNo(s))).size;
+        const [rawDate, rawTime] = sessionKey.split(' | ');
+        const date = (rawDate || '').trim();
+        const time = (rawTime || '').trim();
+
+        if (typeof window.fetchHeavyDataOnDemand === 'function') {
+            await window.fetchHeavyDataOnDemand(sessionKey);
+        }
+
+        let sessionStudentRecords = (typeof window.getStudentsForSession === 'function')
+            ? window.getStudentsForSession(allStudentData, date, time)
+            : allStudentData.filter(s => s.Date === date && s.Time === time);
+
+        if ((!sessionStudentRecords || sessionStudentRecords.length === 0) && allStudentData && allStudentData.length > 0) {
+            const dateNorm = date.replace(/[./-]/g, '');
+            const timeNorm = time.toUpperCase();
+            sessionStudentRecords = allStudentData.filter(s => {
+                const sD = (s.Date || '').toString().trim().replace(/[./-]/g, '');
+                const sT = (s.Time || '').toString().trim().toUpperCase();
+                return sD === dateNorm && (sT === timeNorm || (sT.includes('PM') && timeNorm.includes('PM')) || (sT.includes('AM') && timeNorm.includes('AM')));
+            });
+        }
+
+        const totalUniqueStudents = new Set((sessionStudentRecords || []).map(s => getRegNo(s)).filter(Boolean)).size;
 
         if (totalUniqueStudents === 0) {
             alert('No students found for this session.');
             return false;
         }
 
-        // 2. Get Manual Allotment (Regular)
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-        const manualAllotment = allAllotments[sessionKey] || [];
+        // 2. Ensure session is unvaulted in localStorage
+        if (typeof window.ensureSessionInLocalStorage === 'function') {
+            await window.ensureSessionInLocalStorage(sessionKey);
+        }
 
-        // 3. Get Scribe Allotment
+        // 3. Get Manual Allotment (Regular) with Vault fallback
+        let allAllotments = (typeof window.getFullRoomAllotments === 'function')
+            ? await window.getFullRoomAllotments(sessionKey)
+            : JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+
+        let manualAllotment = allAllotments[sessionKey];
+        if (!manualAllotment && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) manualAllotment = allAllotments[matchingKey];
+        }
+        if ((!manualAllotment || manualAllotment.length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
+            const vaulted = await window.getRoomAllotmentIDB(sessionKey);
+            if (vaulted && Array.isArray(vaulted)) manualAllotment = vaulted;
+        }
+        manualAllotment = manualAllotment || [];
+
+        // 4. Get Scribe Allotment
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const scribeMap = allScribeAllotments[sessionKey] || {};
+        let scribeMap = allScribeAllotments[sessionKey];
+        if (!scribeMap && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allScribeAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) scribeMap = allScribeAllotments[matchingKey];
+        }
+        scribeMap = scribeMap || {};
 
-        // 4. Count unique allotted students (Regular + Scribes)
+        // 5. Count unique allotted students (Regular + Scribes)
         const allottedRegNos = new Set();
 
-        // Add Regular Allotments (FIXED: Handles Objects vs Strings)
         manualAllotment.forEach(room => {
-            room.students.forEach(s => {
+            (room.students || []).forEach(s => {
                 const regNo = (typeof s === 'object') ? getRegNo(s) : s;
-                allottedRegNos.add(regNo);
+                if (regNo) allottedRegNos.add(regNo);
             });
         });
 
-        // Add Scribe Allotments
         Object.keys(scribeMap).forEach(regNo => {
-            allottedRegNos.add(regNo);
+            if (regNo) allottedRegNos.add(regNo);
         });
 
         const allottedStudentCount = allottedRegNos.size;
 
-        // 5. Compare counts
+        // 6. Compare counts
         if (allottedStudentCount < totalUniqueStudents) {
             const remaining = totalUniqueStudents - allottedStudentCount;
-            // Optional: Allow generating even if incomplete, but warn
             if (!confirm(`Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
                 return false;
             }
@@ -6875,7 +7109,7 @@ if (toggleButton && sidebar) {
     // --- 1. Event listener for the "Generate Room-wise Report" button (V10: Scribe Adjustments) ---
     generateReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateReportButton.disabled = true;
         generateReportButton.textContent = "Generating Report...";
@@ -6891,8 +7125,10 @@ if (toggleButton && sidebar) {
             getRoomCapacitiesFromStorage();
             loadQPCodes();
 
-            // 🛡️ UNIFIED PIPELINE (V8): Read actual database, don't simulate!
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V8): Read actual database with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -6922,11 +7158,15 @@ if (toggleButton && sidebar) {
             // Flatten saved allotment into student rows
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const isOfficialScribe = scribeRegNos.has(getRegNo(s));
                         final_student_list_for_report.push({
                             ...s,                      // Original Student Keys
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName, // Physical Room
                             seatNumber: s.seat || '?', // The STICKY SEAT
                             isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
@@ -6949,10 +7189,12 @@ if (toggleButton && sidebar) {
             loadQPCodes();
 
             final_student_list_for_report.forEach(student => {
-                const key = `${student.Date}_${student.Time}_${student['Room No']}`;
+                const sDate = student.Date || '';
+                const sTime = student.Time || '';
+                const key = `${sDate}_${sTime}_${student['Room No']}`;
                 if (!sessions[key]) {
                     sessions[key] = {
-                        Date: student.Date, Time: student.Time, Room: student['Room No'],
+                        Date: sDate, Time: sTime, Room: student['Room No'],
                         students: [], courseCounts: {}
                     };
                 }
@@ -7080,13 +7322,13 @@ if (toggleButton && sidebar) {
 
                     // --- SMART PRINT MANAGER: Capture JSON Data ---
                     const qpCodeForJson = (qpCode || "").replace(/^[A-Za-z]+/, ''); // Strip Alpha prefix
-                    const safeTime = session.Time.replace(/:/g, '-');
-                    const fileName = `${pageStream}_${session.Date}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
+                    const safeTime = (session.Time || '').replace(/:/g, '-');
+                    const fileName = `${pageStream}_${session.Date || 'Date'}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
 
                     lastGeneratedRoomWiseSummary.push({
                         stream: pageStream,
-                        date: session.Date,
-                        time: session.Time,
+                        date: session.Date || '',
+                        time: session.Time || '',
                         roomSerial: serialNo, // Room# (Serial Number)
                         qpCode: qpCodeForJson,
                         courseName: cName,
@@ -7333,7 +7575,7 @@ if (toggleButton && sidebar) {
     // --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
     generateDaywiseReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateDaywiseReportButton.disabled = true;
         generateDaywiseReportButton.textContent = "Generating...";
@@ -7342,11 +7584,13 @@ if (toggleButton && sidebar) {
         roomCsvDownloadContainer.innerHTML = "";
         await new Promise(resolve => setTimeout(resolve, 50));
         try {
-                       currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
 
-            // 🛡️ UNIFIED PIPELINE (V9): Direct database source
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V9): Direct database source with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -7370,10 +7614,14 @@ if (toggleButton && sidebar) {
             const baseData = [];
             sessionsToProcess.forEach(sk => {
                 const currentSessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 currentSessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         baseData.push({
                             ...s,
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName,
                             seatNumber: s.seat || '?',
                             Stream: room.stream || 'Regular'
@@ -7384,8 +7632,8 @@ if (toggleButton && sidebar) {
 
             // 🛡️ CHRONOLOGICAL SORT (Bulk Support)
             baseData.sort((a, b) => {
-                const sessionA = `${a.Date} | ${a.Time}`;
-                const sessionB = `${b.Date} | ${b.Time}`;
+                const sessionA = `${a.Date || ''} | ${a.Time || ''}`;
+                const sessionB = `${b.Date || ''} | ${b.Time || ''}`;
                 return compareSessionStrings(sessionA, sessionB);
             });
 
@@ -8696,7 +8944,7 @@ if (toggleButton && sidebar) {
     if (generateQpDistributionReportButton) {
         generateQpDistributionReportButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateQpDistributionReportButton.disabled = true;
             generateQpDistributionReportButton.textContent = "Generating...";
@@ -8710,8 +8958,10 @@ if (toggleButton && sidebar) {
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-            // 🛡️ UNIFIED PIPELINE (V8): Use actual database for Room-wise
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V8): Read actual database with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -8735,10 +8985,14 @@ if (toggleButton && sidebar) {
             const processed_rows_with_rooms = [];
             sessionsToProcess.forEach(sk => {
                 const currentSessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 currentSessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         processed_rows_with_rooms.push({
                             ...s,
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName,
                             seatNumber: s.seat || '?',
                             Stream: room.stream || 'Regular'
@@ -8758,7 +9012,9 @@ if (toggleButton && sidebar) {
 
                 // 1. Grouping Logic
                 for (const student of processed_rows_with_rooms) {
-                    const sessionKey = `${student.Date} | ${student.Time}`;
+                    const sDate = student.Date || '';
+                    const sTime = student.Time || '';
+                    const sessionKey = `${sDate} | ${sTime}`;
                     const roomName = student['Room No'];
                     const streamName = student.Stream || "Regular";
                     const paperKey = getQpKey(student.Course, streamName);
@@ -8768,8 +9024,8 @@ if (toggleButton && sidebar) {
 
                     if (!sessions[sessionKey]) {
                         sessions[sessionKey] = {
-                            Date: student.Date,
-                            Time: student.Time,
+                            Date: sDate,
+                            Time: sTime,
                             papers: {}
                         };
                     }
@@ -8801,15 +9057,15 @@ if (toggleButton && sidebar) {
 
                 for (const sessionKey of sortedSessionKeys) {
                     const session = sessions[sessionKey];
-                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
+                    const sessionKeyPipe = `${session.Date || ''} | ${session.Time || ''}`;
+                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe, allAllotments) || {};
 
                     allPagesHtml += `
                     <div class="print-page" style="padding: 5mm !important;">
                         <div class="print-header-group text-center mb-3 border-b-2 border-black pb-1">
                             <h1 class="text-lg font-bold uppercase leading-tight">${currentCollegeName}</h1>
                             <h2 class="text-base font-semibold">QP Distribution Summary</h2>
-                            <h3 class="text-sm">${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                            <h3 class="text-sm">${session.Date || ''} &nbsp;|&nbsp; ${session.Time || ''}</h3>
                         </div>
                 `;
 
@@ -8858,14 +9114,14 @@ if (toggleButton && sidebar) {
                             `;
 
                                 const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
-                                    const sA = roomSerialMap[a] || 999;
-                                    const sB = roomSerialMap[b] || 999;
+                                    const sA = roomSerialMap[a] || roomSerialMap[a.trim()] || 999;
+                                    const sB = roomSerialMap[b] || roomSerialMap[b.trim()] || 999;
                                     return sA - sB;
                                 });
 
                                 sortedRoomKeys.forEach(roomName => {
                                     const count = paper.rooms[roomName];
-                                    const roomInfo = currentRoomConfig[roomName] || {};
+                                    const roomInfo = currentRoomConfig[roomName] || currentRoomConfig[roomName.trim()] || {};
                                     let loc = roomInfo.location || "";
 
                                     // --- NEW TRUNCATION LOGIC (First 2 Words) ---
@@ -8876,7 +9132,17 @@ if (toggleButton && sidebar) {
                                         }
                                     }
                                     const displayLoc = loc ? `(${loc})` : "";
-                                    const serialNo = roomSerialMap[roomName] || '-';
+                                    const cleanRName = roomName ? roomName.trim() : '';
+                                    let serialNo = roomSerialMap[cleanRName] || roomSerialMap[roomName];
+                                    if (!serialNo && roomSerialMap) {
+                                        const lower = cleanRName.toLowerCase();
+                                        for (const k in roomSerialMap) {
+                                            if (k.toLowerCase() === lower) { serialNo = roomSerialMap[k]; break; }
+                                        }
+                                    }
+                                    if (!serialNo) {
+                                        serialNo = (cleanRName ? cleanRName.replace(/\D/g, '') : '') || '-';
+                                    }
 
                                     // --- BOX LAYOUT ---
                                     html += `
@@ -9248,7 +9514,7 @@ if (toggleButton && sidebar) {
     // *** UPDATED: Event listener for "Generate Scribe Report" (Stream Label Added) ***
     generateScribeReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateScribeReportButton.disabled = true;
         generateScribeReportButton.textContent = "Generating...";
@@ -9265,8 +9531,10 @@ if (toggleButton && sidebar) {
             loadGlobalScribeList();
             const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
 
-            // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -9292,18 +9560,26 @@ if (toggleButton && sidebar) {
 
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const reg = getRegNo(s);
                         if (reg) {
-                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            const studentDate = s.Date || skDate;
+                            const studentTime = s.Time || skTime;
+                            const lookupKey = `${studentDate}|${studentTime}|${reg}`;
                             originalRoomMap[lookupKey] = { 
                                 room: room.roomName, 
                                 seat: s.seat || '?' 
                             };
                             
                             if (scribeRegNos.has(reg)) {
-                                allScribeStudents.push(s);
+                                allScribeStudents.push({
+                                    ...s,
+                                    Date: studentDate,
+                                    Time: studentTime
+                                });
                             }
                         }
                     });
@@ -9482,17 +9758,25 @@ if (toggleButton && sidebar) {
 
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const reg = getRegNo(s);
                         if (reg) {
-                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            const studentDate = s.Date || skDate;
+                            const studentTime = s.Time || skTime;
+                            const lookupKey = `${studentDate}|${studentTime}|${reg}`;
                             originalRoomMap[lookupKey] = { 
                                 room: room.roomName, 
                                 seat: s.seat || '?' 
                             };
                             if (scribeRegNos.has(reg)) {
-                                allScribeStudents.push(s);
+                                allScribeStudents.push({
+                                    ...s,
+                                    Date: studentDate,
+                                    Time: studentTime
+                                });
                             }
                         }
                     });
@@ -9785,9 +10069,11 @@ async function syncToPrintManager() {
 
         // 1. Group the data exactly like the visual report
         filteredData.forEach(item => {
-            const key = `${item.Date}_${item.Time}`;
+            const sDate = item.Date || '';
+            const sTime = item.Time || '';
+            const key = `${sDate}_${sTime}`;
             const stream = item.Stream || "Regular";
-            if (!sessions[key]) sessions[key] = { Date: item.Date, Time: item.Time, streams: {} };
+            if (!sessions[key]) sessions[key] = { Date: sDate, Time: sTime, streams: {} };
             if (!sessions[key].streams[stream]) sessions[key].streams[stream] = {};
             const courseKey = item.Course;
             if (!sessions[key].streams[stream][courseKey]) sessions[key].streams[stream][courseKey] = 0;
@@ -9798,7 +10084,7 @@ async function syncToPrintManager() {
         Object.values(sessions).forEach(session => {
             Object.entries(session.streams).forEach(([streamName, courses]) => {
                 Object.entries(courses).forEach(([courseName, count]) => {
-                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                    const sessionKeyPipe = `${session.Date || ''} | ${session.Time || ''}`;
                     const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                     const paperKey = getQpKey(courseName, streamName);
                     const qpCodeRaw = sessionQPCodes[paperKey] || '';
@@ -9807,8 +10093,8 @@ async function syncToPrintManager() {
                     const qpCode = qpCodeRaw.replace(/^[A-Za-z]+/, '');
                     
                     // Sanitize components for filename (Pattern: Stream_Date_Time_QP Code_Course Name.pdf)
-                    const safeTime = session.Time.replace(/:/g, '-');
-                    const fileName = `${streamName}_${session.Date}_${safeTime}_${qpCode}_${courseName}.pdf`;
+                    const safeTime = (session.Time || '').replace(/:/g, '-');
+                    const fileName = `${streamName}_${session.Date || ''}_${safeTime}_${qpCode}_${courseName}.pdf`;
 
                     exportData.push({
                         stream: streamName,
@@ -9899,6 +10185,21 @@ async function syncToPrintManager() {
 
         // 4. Clean up previous reports
         if (typeof clearReport === 'function') clearReport();
+
+        // 4b. Sync active session to Reports dropdown when opening Reports tab
+        if (viewToShow === viewReports) {
+            const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
+                ? window.currentSessionKey 
+                : ((typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : null);
+            if (activeSession && typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect) {
+                if ([...reportsSessionSelect.options].some(o => o.value === activeSession)) {
+                    reportsSessionSelect.value = activeSession;
+                    if (typeof window.ensureSessionInLocalStorage === 'function') {
+                        window.ensureSessionInLocalStorage(activeSession);
+                    }
+                }
+            }
+        }
 
         // 5. Save the active tab
         if (viewToShow && viewToShow.id && buttonToActivate && buttonToActivate.id) {
@@ -10541,6 +10842,9 @@ window.real_populate_session_dropdown = function () {
         sessionSelect.addEventListener('change', async () => {
         const savedSession = sessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+        if (typeof window.ensureSessionInLocalStorage === 'function' && savedSession) {
+            await window.ensureSessionInLocalStorage(savedSession);
+        }
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
@@ -11288,19 +11592,52 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
     // --- V68: Report Filter Logic ---
-    filterSessionRadio.addEventListener('change', () => {
+    filterSessionRadio.addEventListener('change', async () => {
         if (filterSessionRadio.checked) {
             reportsSessionDropdownContainer.classList.remove('hidden');
-            reportsSessionSelect.value = reportsSessionSelect.options[1]?.value || ""; // Default to first session
+            const currentVal = reportsSessionSelect ? reportsSessionSelect.value : "";
+            const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
+                ? window.currentSessionKey 
+                : ((typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : null);
+            
+            if (currentVal && currentVal !== 'all' && [...(reportsSessionSelect?.options || [])].some(o => o.value === currentVal)) {
+                // Keep current selection
+            } else if (activeSession && [...(reportsSessionSelect?.options || [])].some(o => o.value === activeSession)) {
+                reportsSessionSelect.value = activeSession;
+            } else {
+                reportsSessionSelect.value = reportsSessionSelect?.options[1]?.value || "";
+            }
+
+            if (reportsSessionSelect && reportsSessionSelect.value && reportsSessionSelect.value !== 'all') {
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(reportsSessionSelect.value);
+                }
+            }
         }
     });
 
     filterAllRadio.addEventListener('change', () => {
         if (filterAllRadio.checked) {
             reportsSessionDropdownContainer.classList.add('hidden');
-            reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+            if (reportsSessionSelect) {
+                reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+            }
         }
     });
+
+    if (reportsSessionSelect) {
+        reportsSessionSelect.addEventListener('change', async () => {
+            const sk = reportsSessionSelect.value;
+            if (sk && sk !== 'all') {
+                if (typeof window.fetchHeavyDataOnDemand === 'function') {
+                    await window.fetchHeavyDataOnDemand(sk);
+                }
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(sk);
+                }
+            }
+        });
+    }
 
     // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 
@@ -11308,7 +11645,10 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
-            if (confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.")) {
+            const wantBackup = (typeof UiModal !== 'undefined')
+                ? await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?")
+                : confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.");
+            if (wantBackup) {
                 // Trigger Downloads
                 const csvBtn = document.getElementById('master-download-csv-btn');
                 const jsonBtn = document.getElementById('backup-data-button');
@@ -11321,7 +11661,9 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             // ---------------------
 
-            const confirmReset = confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
+            const confirmReset = (typeof UiModal !== 'undefined')
+                ? await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)")
+                : confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
             
             if (confirmReset) {
                 // 1. Clear Local Storage
@@ -11399,7 +11741,11 @@ window.real_populate_qp_code_session_dropdown = function () {
                     window.triggerDriveAutoSync(true); // Sync immediately
                 }
                 
-                alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                if (typeof UiModal !== 'undefined') {
+                    await UiModal.alert('✅ Cleanup Successful!', 'All student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                } else {
+                    alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                }
                 window.location.reload();
             }
         });
@@ -11433,59 +11779,18 @@ window.real_populate_qp_code_session_dropdown = function () {
                 return;
             }
 
-            if (!confirm('Are you sure you want to restore? This will OVERWRITE all current data.')) {
-                return;
-            }
-
             const reader = new FileReader();
-               reader.onload = async (event) => { //
+            reader.onload = async (event) => {
                 try {
-
-
-                                        const jsonString = event.target.result;
-                    const restoredData = JSON.parse(jsonString);
-
-                    // Ask user for Restore Mode
-                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported file's data with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
-
-                    if (!isMerge) {
-                        localStorage.clear();
-                        await saveExamDataIDB([]);
+                    const restoredData = JSON.parse(event.target.result);
+                    if (typeof window.openRestoreSequenceModal === 'function') {
+                        window.openRestoreSequenceModal(restoredData, file.name);
                     }
-
-                    // Restore data with Interception
-                    for (const key in restoredData) {
-                        if (Object.hasOwnProperty.call(restoredData, key)) {
-                            if (key === 'examBaseData') {
-                                const importedStudents = restoredData[key];
-                                if (isMerge) {
-                                    const existingData = await loadExamDataIDB() || [];
-                                    const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
-                                    const existingKeys = new Set(existingData.map(getRowKey));
-                                    
-                                    const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
-                                    await saveExamDataIDB([...existingData, ...newUniqueData]);
-                                } else {
-                                    await saveExamDataIDB(importedStudents);
-                                }
-                    
-                            } else if (key !== 'examData_v2') {
-                                // Restore everything else normally (except stale v2 backups)
-                                localStorage.setItem(key, restoredData[key]);
-                            }
-                        }
-                    }
-
-
-                    alert('Restore successful! Syncing all sessions to V2 Cloud...');
-                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
-                    localStorage.removeItem('searchIndex');
-                    location.reload();
-                    
-
                 } catch (e) {
                     console.error("Error parsing restore file:", e);
-                    restoreStatus.textContent = 'Error: The selected file is not a valid backup.';
+                    if (typeof window.showRestoreErrorModal === 'function') {
+                        window.showRestoreErrorModal("Invalid Backup File", "The selected file is not a valid JSON backup: " + e.message);
+                    }
                 }
             };
             reader.onerror = () => {
@@ -11833,7 +12138,13 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const allocatedStudents = [];
                     sessionAllotment.forEach(room => {
                         (room.students || []).forEach(s => {
-                            allocatedStudents.push({ ...s, 'Room No': room.roomName, seatNumber: s.seat || '?' });
+                            allocatedStudents.push({ 
+                                ...s, 
+                                Date: s.Date || date,
+                                Time: s.Time || time,
+                                'Room No': room.roomName, 
+                                seatNumber: s.seat || '?' 
+                            });
                         });
                     });
 
@@ -13467,7 +13778,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         allotmentSessionSelect.value = savedSession;
-
+        window.currentSessionKey = savedSession;
+        if (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && savedSession) {
+            if ([...reportsSessionSelect.options].some(o => o.value === savedSession)) {
+                reportsSessionSelect.value = savedSession;
+            }
+        }
 
             const sessionKey = allotmentSessionSelect.value;
 
@@ -14471,8 +14787,10 @@ window.real_disable_all_report_buttons = function (disabled) {
             const [dateRaw, timeRaw] = currentEditSession.split(' | ');
             const sessionStudents = window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim());
 
-
-
+            // --- Populate Session Ops Exam Dropdown with ONLY exams in this session ---
+            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                window.populateSessionOpsExamDropdown(currentEditSession, sessionStudents);
+            }
 
             // --- NEW: Update and Show Badge Count ---
             if (opsCountBadge) {
@@ -14518,6 +14836,9 @@ window.real_disable_all_report_buttons = function (disabled) {
 
             editCourseSelectContainer.classList.remove('hidden');
         } else {
+            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                window.populateSessionOpsExamDropdown(null);
+            }
             editCourseSelectContainer.classList.add('hidden');
             if (toggleEditDataLockBtn) toggleEditDataLockBtn.classList.add('hidden');
         }
@@ -15554,7 +15875,7 @@ Are you sure you want to update these records?
     if (generateStickerButton) {
         generateStickerButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateStickerButton.disabled = true;
             generateStickerButton.textContent = "Generating Stickers...";
@@ -15568,8 +15889,10 @@ Are you sure you want to update these records?
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-                // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers
-                const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers with Vault support
+                const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                    ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                    : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 
                 let sessionsToProcess = [];
                 if (filterSessionRadio.checked) {
@@ -15593,10 +15916,14 @@ Are you sure you want to update these records?
                 const final_student_list_for_stickers = [];
                 sessionsToProcess.forEach(sk => {
                     const currentSessionAllotment = allAllotments[sk] || [];
+                    const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                     currentSessionAllotment.forEach(room => {
                         (room.students || []).forEach(s => {
                             final_student_list_for_stickers.push({
                                 ...s,
+                                Date: s.Date || skDate,
+                                Time: s.Time || skTime,
                                 'Room No': room.roomName,
                                 seatNumber: s.seat || '?',
                                 Stream: room.stream || 'Regular'
@@ -15618,21 +15945,22 @@ Are you sure you want to update these records?
                 // 1. Group by Session -> Room
                 const sessions = {};
                 final_student_list_for_stickers.forEach(student => {
-
+                    const sDate = student.Date || '';
+                    const sTime = student.Time || '';
                     let roomName = student['Room No'];
                     let isScribe = false;
                     if (student.isScribe) {
-                        const sessionKeyPipe = `${student.Date} | ${student.Time}`;
+                        const sessionKeyPipe = `${sDate} | ${sTime}`;
                         const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[getRegNo(student)];
                         if (scribeRoom) {
                             roomName = scribeRoom;
                             isScribe = true;
                         }
                     }
-                    const key = `${student.Date}_${student.Time}_${roomName}`;
+                    const key = `${sDate}_${sTime}_${roomName}`;
                     if (!sessions[key]) {
                         sessions[key] = {
-                            Date: student.Date, Time: student.Time, Room: roomName,
+                            Date: sDate, Time: sTime, Room: roomName,
                             students: []
                         };
                     }
@@ -17242,7 +17570,7 @@ window.handlePythonExtraction = async function (jsonString) {
     if (generateRoomSummaryButton) {
         generateRoomSummaryButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateRoomSummaryButton.disabled = true;
             generateRoomSummaryButton.textContent = "Generating...";
@@ -17255,8 +17583,10 @@ window.handlePythonExtraction = async function (jsonString) {
                 currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
                 getRoomCapacitiesFromStorage(); // Ensure config is loaded
 
-                // 🛡️ UNIFIED PIPELINE (V13): Bulk Session Handling
-                const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+                // 🛡️ UNIFIED PIPELINE (V13): Bulk Session Handling with Vault support
+                const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                    ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                    : JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
                 
                 let sessionsToProcess = [];
@@ -17627,153 +17957,327 @@ window.handlePythonExtraction = async function (jsonString) {
     const restoreSettingsBtn = document.getElementById('restore-settings-btn');
     const restoreSettingsInput = document.getElementById('restore-settings-input');
 
-    // B. NUKE IT ALL (Master Reset - Selective Wipe)
+    // ==========================================
+    // ☢️ NUKE IT ALL SEQUENTIAL LAUNCH MODAL LOGIC
+    // ==========================================
+
+    let nukeCurrentPayloadMode = 'DATA'; // Default payload mode
+
+    window.openNukeSequenceModal = function() {
+        nukeCurrentPayloadMode = 'DATA';
+        window.nukeSelectPayload('DATA');
+        window.nukeGoToStep(1);
+
+        const input = document.getElementById('nuke-auth-input');
+        if (input) input.value = '';
+        const err = document.getElementById('nuke-auth-error');
+        if (err) err.classList.add('hidden');
+        const statusMsg = document.getElementById('nuke-backup-status-msg');
+        if (statusMsg) statusMsg.classList.add('hidden');
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('nuke-sequence-modal');
+        } else {
+            const m = document.getElementById('nuke-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeNukeModal = function() {
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('nuke-sequence-modal');
+        } else {
+            const m = document.getElementById('nuke-sequence-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.nukeGoToStep = function(stepNum) {
+        const stepBackup = document.getElementById('nuke-step-backup');
+        const stepWarning = document.getElementById('nuke-step-warning');
+        const stepPayload = document.getElementById('nuke-step-payload');
+        const stepAuth = document.getElementById('nuke-step-auth');
+        const stepExec = document.getElementById('nuke-step-executing');
+        const stepComplete = document.getElementById('nuke-step-complete');
+
+        const title = document.getElementById('nuke-modal-title');
+        const subtitle = document.getElementById('nuke-modal-subtitle');
+        const badge = document.getElementById('nuke-modal-badge');
+
+        const allSteps = [stepBackup, stepWarning, stepPayload, stepAuth, stepExec, stepComplete];
+        allSteps.forEach(s => { if (s) s.classList.add('hidden'); });
+
+        switch (stepNum) {
+            case 1:
+                if (stepBackup) stepBackup.classList.remove('hidden');
+                if (title) title.textContent = "Nuke It All Protocol";
+                if (subtitle) subtitle.textContent = "Step 1 of 4: Safety Backup";
+                if (badge) badge.textContent = "🛡️";
+                break;
+            case 2:
+                if (stepWarning) stepWarning.classList.remove('hidden');
+                if (title) title.textContent = "Nuclear Launch Detected";
+                if (subtitle) subtitle.textContent = "Step 2 of 4: Destruction Authorization";
+                if (badge) badge.textContent = "⚠️";
+                break;
+            case 3:
+                if (stepPayload) stepPayload.classList.remove('hidden');
+                if (title) title.textContent = "Select Payload Yield";
+                if (subtitle) subtitle.textContent = "Step 3 of 4: Choose Scope";
+                if (badge) badge.textContent = "☢️";
+                break;
+            case 4:
+                if (stepAuth) stepAuth.classList.remove('hidden');
+                if (title) title.textContent = "Security Authorization";
+                if (subtitle) subtitle.textContent = "Step 4 of 4: Enter Launch Code";
+                if (badge) badge.textContent = "☠️";
+                const targetLabel = document.getElementById('nuke-auth-target-label');
+                if (targetLabel) {
+                    targetLabel.textContent = (nukeCurrentPayloadMode === 'FULL') ? "FULL WIPE (Master Reset)" : "DATA WIPE (Selective)";
+                    targetLabel.className = (nukeCurrentPayloadMode === 'FULL') ? "underline uppercase text-red-600 font-bold" : "underline uppercase text-orange-600 font-bold";
+                }
+                const input = document.getElementById('nuke-auth-input');
+                if (input) {
+                    input.value = '';
+                    setTimeout(() => input.focus(), 150);
+                }
+                const err = document.getElementById('nuke-auth-error');
+                if (err) err.classList.add('hidden');
+                break;
+            case 5:
+                if (stepExec) stepExec.classList.remove('hidden');
+                if (title) title.textContent = "Missiles Fired";
+                if (subtitle) subtitle.textContent = "Purging Databases in Real-Time";
+                if (badge) badge.textContent = "🚀";
+                break;
+            case 6:
+                if (stepComplete) stepComplete.classList.remove('hidden');
+                if (title) title.textContent = "Strike Outcome";
+                if (subtitle) subtitle.textContent = "Operations Finalized";
+                if (badge) badge.textContent = "💥";
+                break;
+        }
+    };
+
+    window.nukeSelectPayload = function(mode) {
+        nukeCurrentPayloadMode = mode;
+        const optData = document.getElementById('nuke-opt-data');
+        const optFull = document.getElementById('nuke-opt-full');
+        const badgeData = document.getElementById('nuke-badge-data');
+        const badgeFull = document.getElementById('nuke-badge-full');
+
+        if (mode === 'DATA') {
+            if (optData) {
+                optData.className = "cursor-pointer p-4 rounded-2xl border-2 border-orange-400 bg-orange-50/70 hover:bg-orange-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-orange-500/30";
+            }
+            if (badgeData) badgeData.classList.remove('hidden');
+            if (optFull) {
+                optFull.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-red-50 hover:border-red-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeFull) badgeFull.classList.add('hidden');
+        } else {
+            if (optFull) {
+                optFull.className = "cursor-pointer p-4 rounded-2xl border-2 border-red-500 bg-red-50/70 hover:bg-red-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-red-500/30";
+            }
+            if (badgeFull) badgeFull.classList.remove('hidden');
+            if (optData) {
+                optData.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-orange-50 hover:border-orange-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeData) badgeData.classList.add('hidden');
+        }
+    };
+
+    window.nukeDownloadBackupAndProceed = async function() {
+        const statusMsg = document.getElementById('nuke-backup-status-msg');
+        const downloadBtn = document.getElementById('btn-nuke-backup-download');
+        if (statusMsg) statusMsg.classList.remove('hidden');
+        if (downloadBtn) {
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        try {
+            await triggerSafetyBackup();
+        } catch (backupErr) {
+            console.warn("Safety backup error:", backupErr);
+        }
+
+        if (statusMsg) statusMsg.classList.add('hidden');
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        window.nukeGoToStep(2);
+    };
+
+    window.nukeExecuteMissiles = async function() {
+        const input = document.getElementById('nuke-auth-input');
+        const err = document.getElementById('nuke-auth-error');
+        const entered = (input ? input.value : '').trim().toUpperCase();
+
+        if (entered !== 'DELETE') {
+            if (err) {
+                err.classList.remove('hidden');
+                err.textContent = "🚫 ACCESS DENIED: Incorrect launch code. Type DELETE exactly to authorize.";
+            }
+            if (input) {
+                input.focus();
+                input.classList.add('ring-2', 'ring-red-500');
+            }
+            return;
+        }
+
+        if (err) err.classList.add('hidden');
+
+        // Transition to Step 5 (Executing)
+        window.nukeGoToStep(5);
+
+        const mode = nukeCurrentPayloadMode;
+
+        try {
+            const { db, doc, writeBatch, updateDoc, collection, getDocs, deleteDoc } = window.firebase;
+
+            // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
+            const dataKeys = [
+                'examBaseData',        // Students
+                'examRoomAllotment',   // Seating
+                'examScribeAllotment', // Scribe Mapping
+                'examAbsenteeList',    // Absentees
+                'examQPCodes',         // QP Codes
+                'examScribeList'       // Scribe List
+            ];
+
+            const settingsKeys = [
+                'examRoomConfig',      // Rooms
+                'examStreamsConfig',   // Streams
+                'examSessionNames',    // Exam Names
+                'examRulesConfig',     // Exam Schedule
+                'examCollegeName'      // College Name
+            ];
+
+            let keysToWipe = [...dataKeys];
+            if (mode === 'FULL') {
+                keysToWipe = [...dataKeys, ...settingsKeys];
+            }
+
+            // --- A. LOCAL WIPE (Browser) ---
+            keysToWipe.forEach(key => localStorage.removeItem(key));
+            localStorage.setItem('examAllKnownSessions', '[]');
+
+            // Wipe the student database (IndexedDB)
+            if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]);
+
+            // --- B. CLOUD WIPE (Firebase) ---
+            if (currentCollegeId) {
+                const batch = writeBatch(db);
+                const mainRef = doc(db, "colleges", currentCollegeId);
+                const cid = currentCollegeId;
+
+                const collectionsToDelete = ['operations', 'allocation'];
+                if (mode === 'FULL') {
+                    collectionsToDelete.push('settings');
+                    collectionsToDelete.push('staff');
+                }
+
+                collectionsToDelete.forEach(type => {
+                    batch.delete(doc(db, "colleges", cid, "system_data", type));
+                });
+
+                const nukeTs = new Date().toISOString();
+                const updatePayload = {
+                    lastUpdated: nukeTs,
+                    lastWipeEvent: nukeTs
+                };
+                localStorage.setItem('lastWipeEvent', nukeTs);
+                localStorage.setItem('lastUpdated', nukeTs);
+
+                keysToWipe.forEach(key => {
+                    if (key === 'examCollegeName') updatePayload[key] = "University of Calicut";
+                    else if (key === 'examStreamsConfig') updatePayload[key] = '["Regular"]';
+                    else if (key.includes('List') || key.includes('Config')) updatePayload[key] = "[]";
+                    else updatePayload[key] = "{}";
+                });
+
+                batch.update(mainRef, updatePayload);
+
+                const statusEl = document.getElementById('nuke-executing-status');
+                if (statusEl) statusEl.textContent = "Vaporizing live session databases...";
+
+                const sessionsColRef = collection(db, "colleges", currentCollegeId, "sessions");
+                const studentsColRef = collection(db, "colleges", currentCollegeId, "session_students");
+
+                const sSnap = await getDocs(sessionsColRef);
+                for (const sDoc of sSnap.docs) { await deleteDoc(sDoc.ref); }
+
+                const stuSnap = await getDocs(studentsColRef);
+                for (const stuDoc of stuSnap.docs) { await deleteDoc(stuDoc.ref); }
+
+                await batch.commit();
+            }
+
+            // Transition to Step 6 (Completion)
+            window.nukeGoToStep(6);
+
+            const iconBox = document.getElementById('nuke-complete-icon-box');
+            const compTitle = document.getElementById('nuke-complete-title');
+            const compMsg = document.getElementById('nuke-complete-message');
+            const reloadBtn = document.getElementById('btn-nuke-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "💥";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-green-200";
+            }
+
+            if (mode === 'FULL') {
+                if (compTitle) compTitle.textContent = "💥 KABOOM! MASTER RESET COMPLETE";
+                if (compMsg) compMsg.textContent = "Exam Configuration, Student Data, and Room Settings wiped from Browser and Cloud.\nInvigilation Module & Staff data are SAFE.";
+            } else {
+                if (compTitle) compTitle.textContent = "💥 TACTICAL STRIKE SUCCESSFUL";
+                if (compMsg) compMsg.textContent = "Student Database and Seating Allotments have been purged from Browser and Cloud.\nSettings & Invigilators remain intact.";
+            }
+
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>🔄 Reload System Now</span>";
+                reloadBtn.onclick = () => window.location.reload();
+            }
+
+        } catch (e) {
+            console.error("Nuke failed:", e);
+            window.nukeGoToStep(6);
+
+            const iconBox = document.getElementById('nuke-complete-icon-box');
+            const compTitle = document.getElementById('nuke-complete-title');
+            const compMsg = document.getElementById('nuke-complete-message');
+            const reloadBtn = document.getElementById('btn-nuke-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "⚠️";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-red-100 text-red-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-red-200";
+            }
+            if (compTitle) compTitle.textContent = "⚠️ LAUNCH FAILURE";
+            if (compMsg) compMsg.textContent = "An error occurred during execution: " + e.message;
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>Close Modal & Review</span>";
+                reloadBtn.onclick = () => window.closeNukeModal();
+            }
+        }
+    };
+
+    // Attach key listener for auth input Enter key
+    const nukeAuthInput = document.getElementById('nuke-auth-input');
+    if (nukeAuthInput) {
+        nukeAuthInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                window.nukeExecuteMissiles();
+            }
+        });
+    }
+
+    // B. NUKE IT ALL (Master Reset - Trigger Modal)
     if (nukeBtn) {
-        nukeBtn.addEventListener('click', async () => {
-            // 1. Safety Backup Prompt
-            if (confirm("🛡️ CRITICAL SAFETY CHECK 🛡️\n\nBefore you destroy data...\nWould you like to download a FINAL BACKUP (CSV + JSON)?\n\n• Click OK to Backup first.\n• Click Cancel to proceed without backup.")) {
-                await triggerSafetyBackup();
-            }
-
-            // 2. Level 1 Warning
-            if (!confirm("⚠ NUCLEAR LAUNCH DETECTED ⚠\n\nYou are initiating a DESTRUCTIVE sequence for this College Database.\n\nAre you sure you want to proceed?")) {
-                return;
-            }
-
-            // 3. Payload Selection
-            const choice = prompt(
-                "☢️ SELECT PAYLOAD YIELD ☢️\n\n" +
-                "Type 'DATA' to wipe Students & Allotments (Keeps Rooms/Settings)\n" +
-                "Type 'FULL' to wipe All Exam Data, Rooms & College Name (Keeps Invigilators)\n\n" +
-                "Enter payload type below:"
-            );
-
-            if (!choice) return;
-            const mode = choice.trim().toUpperCase();
-
-            if (mode !== 'DATA' && mode !== 'FULL') {
-                alert("🚫 LAUNCH ABORTED 🚫\n\nInvalid payload type.\nSystem returning to safe mode.");
-                return;
-            }
-
-            // 4. Final Security Check
-            const confirmCode = prompt(`⚠ FINAL SECURITY CHECK ⚠\n\nTo authorize this ${mode} reset, type 'DELETE' in the box below:`);
-
-            if (confirmCode !== 'DELETE') {
-                alert("🚫 ACCESS DENIED 🚫\n\nIncorrect launch code.\nThe nuclear payload has been disarmed.");
-                return;
-            }
-
-            // 5. EXECUTION
-            nukeBtn.textContent = "🚀 MISSILES FIRED...";
-            nukeBtn.disabled = true;
-
-            try {
-                const { db, doc, writeBatch, updateDoc, collection, getDocs, deleteDoc } = window.firebase;
-
-                
-                // --- DEFINE TARGET LISTS FOR LOCAL STORAGE ---
-                // List 1: Student Data & Operations (Target of DATA mode)
-                const dataKeys = [
-                    'examBaseData',        // Students
-                    'examRoomAllotment',   // Seating
-                    'examScribeAllotment', // Scribe Mapping
-                    'examAbsenteeList',    // Absentees
-                    'examQPCodes',         // QP Codes
-                    'examScribeList'       // Scribe List
-                ];
-
-                // List 2: Infrastructure & Settings (Target of FULL mode)
-                const settingsKeys = [
-                    'examRoomConfig',      // Rooms
-                    'examStreamsConfig',   // Streams
-                    'examSessionNames',    // Exam Names
-                    'examRulesConfig',     // Exam Schedule
-                    'examCollegeName'      // College Name
-                ];
-
-                // Determine what to wipe locally
-                let keysToWipe = [...dataKeys]; // DATA mode always wipes data
-                if (mode === 'FULL') {
-                    keysToWipe = [...dataKeys, ...settingsKeys]; // FULL adds settings
-                }
-
-                // --- A. LOCAL WIPE (Browser) ---
-                keysToWipe.forEach(key => localStorage.removeItem(key));
-                                // ✅ ADDED: Wipe the student database (IndexedDB)
-                if (typeof saveExamDataIDB === 'function') await saveExamDataIDB([]); 
-
-
-                // --- B. CLOUD WIPE (Firebase) ---
-                if (currentCollegeId) {
-                    const batch = writeBatch(db);
-                    const mainRef = doc(db, "colleges", currentCollegeId);
-                    const cid = currentCollegeId;
-
-                    // 1. Delete Sub-Collections based on Mode
-                    // 🛡️ [AUDIT FIX]: Removed 'slots' to ensure app.js never touches Invigilation data
-                    const collectionsToDelete = ['operations', 'allocation']; // Always wipe these
-                    
-                    if (mode === 'FULL') {
-                        collectionsToDelete.push('settings'); // Wipe settings too
-                        collectionsToDelete.push('staff');    // Wipe staff too (optional, usually kept safe, but FULL implies deep clean)
-                    }
-
-                    collectionsToDelete.forEach(type => {
-                        batch.delete(doc(db, "colleges", cid, "system_data", type));
-                    });
-
-                    const nukeTs = new Date().toISOString();
-                    // 2. Prepare Update Object (Reset fields in main doc)
-                    const updatePayload = {
-                        lastUpdated: nukeTs,
-                        lastWipeEvent: nukeTs
-                    };
-                    localStorage.setItem('lastWipeEvent', nukeTs);
-                    localStorage.setItem('lastUpdated', nukeTs);
-
-                    keysToWipe.forEach(key => {
-                        // Reset to sensible defaults based on key type
-                        if (key === 'examCollegeName') updatePayload[key] = "University of Calicut";
-                        else if (key === 'examStreamsConfig') updatePayload[key] = '["Regular"]';
-                        else if (key.includes('List') || key.includes('Config')) updatePayload[key] = "[]"; // Arrays
-                        else updatePayload[key] = "{}"; // Objects/Maps
-                    });
-
-                    // Update Main Document (Selective Erase)
-                    batch.update(mainRef, updatePayload);
-
-                    // --- 🔥 NEW: V2 DESTRUCTION LOGIC 🔥 ---
-                    updateSyncStatus("Vaporizing live session databases...", "neutral");
-                    const sessionsColRef = collection(db, "colleges", currentCollegeId, "sessions");
-                    const studentsColRef = collection(db, "colleges", currentCollegeId, "session_students");
-                    
-                    // Nuke all 59+ sessions (Outside the batch to prevent 500-limit errors)
-                    const sSnap = await getDocs(sessionsColRef);
-                    for (const sDoc of sSnap.docs) { await deleteDoc(sDoc.ref); }
-                    
-                    const stuSnap = await getDocs(studentsColRef);
-                    for (const stuDoc of stuSnap.docs) { await deleteDoc(stuDoc.ref); }
-                    // ----------------------------------------
-
-
-                    await batch.commit();
-                }
-
-                if (mode === 'FULL') {
-                    alert("💥 KABOOM! 💥\n\nExam Configuration & Student Data wiped.\nInvigilation Module & Staff data are SAFE.");
-                } else {
-                    alert("💥 TACTICAL STRIKE SUCCESSFUL 💥\n\nStudent Data wiped.\nSettings & Invigilators remain intact.");
-                }
-
-                window.location.reload();
-
-            } catch (e) {
-                console.error("Nuke failed:", e);
-                alert("⚠️ LAUNCH FAILURE ⚠️\n\nAn error occurred: " + e.message);
-                nukeBtn.textContent = "☢️ NUKE IT ALL";
-                nukeBtn.disabled = false;
-            }
+        nukeBtn.addEventListener('click', () => {
+            window.openNukeSequenceModal();
         });
     }
 
@@ -17809,10 +18313,14 @@ window.handlePythonExtraction = async function (jsonString) {
 
     // 3. RESTORE SETTINGS ONLY
     if (restoreSettingsBtn && restoreSettingsInput) {
-        restoreSettingsBtn.addEventListener('click', () => {
+        restoreSettingsBtn.addEventListener('click', async () => {
             const file = restoreSettingsInput.files[0];
             if (!file) {
-                alert("Please select a Settings JSON file first.");
+                if (typeof UiModal !== 'undefined') {
+                    await UiModal.alert("No File Selected", "Please select a Settings JSON file first.");
+                } else {
+                    alert("Please select a Settings JSON file first.");
+                }
                 return;
             }
 
@@ -17828,7 +18336,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         STREAM_CONFIG_KEY,
                         COLLEGE_NAME_KEY,
                         SCRIBE_LIST_KEY,
-                        EXAM_RULES_KEY   // <--- ADD THIS LINE
+                        EXAM_RULES_KEY
                     ];
 
                     validKeys.forEach(key => {
@@ -17839,32 +18347,41 @@ window.handlePythonExtraction = async function (jsonString) {
                     });
 
                     if (loadedCount > 0) {
-                        alert(`Successfully restored settings configurations.\n\nSyncing to cloud...`);
-
                         // Update Runtime Variables
                         if (typeof loadRoomConfig === 'function') loadRoomConfig();
                         if (typeof loadStreamConfig === 'function') loadStreamConfig();
                         if (typeof loadGlobalScribeList === 'function') loadGlobalScribeList();
-                     
-                    if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
+                        if (typeof renderExamNameSettings === 'function') renderExamNameSettings();
 
-                    // Sync to Cloud
-                    if (typeof syncDataToCloud === 'function') {
-                        await syncDataToCloud('settings');
-                        await syncDataToCloud('allocation');
-                        await syncDataToCloud('ops');
-                    }
+                        // Sync to Cloud
+                        if (typeof syncDataToCloud === 'function') {
+                            await syncDataToCloud('settings');
+                            await syncDataToCloud('allocation');
+                            await syncDataToCloud('ops');
+                        }
 
-                    alert("Settings updated and synced!");
+                        if (typeof UiModal !== 'undefined') {
+                            await UiModal.alert("Settings Restored", "✅ Settings configurations restored and synchronized with Cloud!\n\nReloading to apply changes.");
+                        } else {
+                            alert("Settings updated and synced!");
+                        }
+                        window.location.reload();
 
                     } else {
-                        alert("No valid settings found in this file.");
+                        if (typeof UiModal !== 'undefined') {
+                            await UiModal.alert("No Valid Settings", "No valid settings configurations were found in this file.");
+                        } else {
+                            alert("No valid settings found in this file.");
+                        }
                     }
-
 
                 } catch (err) {
                     console.error(err);
-                    alert("Error parsing settings file: " + err.message);
+                    if (typeof UiModal !== 'undefined') {
+                        await UiModal.alert("Invalid File", "Error parsing settings file: " + err.message);
+                    } else {
+                        alert("Error parsing settings file: " + err.message);
+                    }
                 }
             };
             reader.readAsText(file);
@@ -18784,19 +19301,38 @@ function updateSessionOpsLockUI() {
         }
     }
 
-if (btnSessionReschedule) {
+    // 1b. Update Count Badge when selecting a specific Exam in Session Ops
+    if (sessionExamNameInput) {
+        sessionExamNameInput.addEventListener('change', () => {
+            const selectedExam = sessionExamNameInput.value.trim();
+            const opsCountBadge = document.getElementById('session-ops-count-badge');
+            const currentSession = editSessionSelect ? editSessionSelect.value : null;
+            if (!opsCountBadge || !currentSession) return;
+            const [dateRaw, timeRaw] = currentSession.split(' | ');
+            const sessionStudents = typeof window.getStudentsForSession === 'function'
+                ? window.getStudentsForSession(allStudentData, dateRaw.trim(), timeRaw.trim())
+                : [];
+            if (!selectedExam) {
+                opsCountBadge.textContent = `${sessionStudents.length} Students`;
+            } else {
+                const count = sessionStudents.filter(s => (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim() === selectedExam).length;
+                opsCountBadge.textContent = `${count} Students (${selectedExam})`;
+            }
+        });
+    }
+
+    if (btnSessionReschedule) {
         btnSessionReschedule.addEventListener('click', async () => {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
-            const newExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : ""; // Capture Name
+            const targetExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : "";
             const currentSession = editSessionSelect.value;
 
             if (!currentSession) return alert("No session selected.");
 
-
-                        // Validation: Must have AT LEAST ONE field changed
-            if (!rawDate && !rawTime && !newExamName) {
-                return alert("Please enter a New Date, a New Time, OR a New Exam Name to apply changes.");
+            // Validation: Must enter at least New Date or New Time to reschedule
+            if (!rawDate && !rawTime) {
+                return alert("Please enter a New Date, a New Time, or both to reschedule.");
             }
 
             // A. Determine New Date/Time (Support changing Date or Time independently)
@@ -18811,7 +19347,6 @@ if (btnSessionReschedule) {
             if (rawDate) {
                 const [y, m, d] = rawDate.split('-');
                 newDate = `${d}.${m}.${y}`;
-
             } else {
                 newDate = oldDate;
             }
@@ -18826,91 +19361,203 @@ if (btnSessionReschedule) {
                     hours = hours % 12;
                     hours = hours ? hours : 12;
                     newTime = `${String(hours).padStart(2, '0')}:${min} ${ampm}`;
-
                 }
             } else {
                 newTime = oldTime;
             }
 
             const newSessionKey = `${newDate} | ${newTime}`;
-            if (newSessionKey !== currentSession) isMove = true;
-
-            
+            if (newSessionKey === currentSession) {
+                return alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
+            }
+            isMove = true;
 
             // B. Confirmation Message
-            let changesMsg = "";
-            if (isMove) changesMsg += `• Move to: ${newSessionKey}\n`;
-            if (newExamName) changesMsg += `• Rename Exam to: "${newExamName}"\n`;
+            let changesMsg = `• Move to: ${newSessionKey}\n`;
+            if (targetExamName) {
+                changesMsg += `• Target Exam: "${targetExamName}" (Only students of this exam will be rescheduled)\n`;
+            } else {
+                changesMsg += `• Target Exam: All Exams in Session (Entire session will be rescheduled)\n`;
+            }
 
-            const msg = `⚠️ CONFIRM SESSION UPDATE ⚠️\n\nTarget: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
+            const msg = `⚠️ CONFIRM SESSION RESCHEDULE ⚠️\n\nCurrent Session: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
             if (!confirm(msg)) return;
             
             // Safety check for moves
-            if (isMove) {
-                const check = prompt("Type 'CHANGE' to confirm moving this session:");
-                if (check !== 'CHANGE') return alert("Cancelled.");
-            }
+            const check = prompt("Type 'CHANGE' to confirm moving this session:");
+            if (check !== 'CHANGE') return alert("Cancelled.");
 
             try {
                 // 1. Update Students (Memory)
                 let studentCount = 0;
-                const [oldDate, oldTime] = currentSession.split(' | ');
+                const [targetDateRaw, targetTimeRaw] = currentSession.split('|').map(p => p.trim());
+                const dateRawNorm = (targetDateRaw || "").replace(/[./-]/g, '');
+                const timeRawNorm = (targetTimeRaw || "").toUpperCase();
 
                 allStudentData.forEach(s => {
-                    if (s.Date === oldDate.trim() && s.Time === oldTime.trim()) {
-                        // Update Date/Time if moving
-                        if (isMove) {
-                            s.Date = newDate;
-                            s.Time = newTime;
+                    if (!s) return;
+                    const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                    const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                    
+                    const dateMatch = (sDateNorm === dateRawNorm);
+                    let timeMatch = (sTimeNorm === timeRawNorm);
+                    if (!timeMatch && typeof normalizeTime === 'function') {
+                        timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                    }
+
+                    if (dateMatch && timeMatch) {
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || "").toString().trim();
+                        // If a specific exam was selected, only reschedule students matching that exam
+                        if (targetExamName && sExam !== targetExamName) {
+                            return;
                         }
-                        // Update Exam Name if provided
-                        if (newExamName) {
-                            s['Exam Name'] = newExamName;
-                        }
+
+                        // Update Date/Time (keep existing Exam Name intact)
+                        s.Date = newDate;
+                        s.Time = newTime;
                         studentCount++;
                     }
                 });
 
-                // Save to Local Storage
-                
+                if (studentCount === 0) {
+                    return alert(targetExamName 
+                        ? `No students found for exam "${targetExamName}" in this session.`
+                        : "No students found in this session to reschedule.");
+                }
 
-                // 2. Move Auxiliary Data (ONLY IF MOVING)
+                // 2. Persist updated students to IndexedDB & LocalStorage
+                await saveExamDataIDB(allStudentData);
+
+                // 3. Check remaining students in old session
+                const remainingInOldSession = allStudentData.filter(s => {
+                    if (!s) return false;
+                    const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                    const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                    let timeMatch = (sTimeNorm === timeRawNorm);
+                    if (!timeMatch && typeof normalizeTime === 'function') {
+                        timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                    }
+                    return (sDateNorm === dateRawNorm) && timeMatch;
+                }).length;
+
+                // 4. Move Auxiliary Data & Storage Keys (ONLY IF MOVING)
                 if (isMove) {
                     const moveKeyInStorage = (storageKey, type) => {
                         const raw = localStorage.getItem(storageKey);
                         if (!raw) return;
-                        const data = JSON.parse(raw);
-                        if (data[currentSession]) {
-                            if (data[newSessionKey]) {
-                                // Merge
-                                if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
-                                else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
-                            } else {
-                                // Move
-                                data[newSessionKey] = data[currentSession];
+                        try {
+                            const data = JSON.parse(raw);
+                            if (data[currentSession]) {
+                                if (data[newSessionKey]) {
+                                    // Merge
+                                    if (type === 'array') data[newSessionKey] = [...data[newSessionKey], ...data[currentSession]];
+                                    else if (type === 'object') data[newSessionKey] = { ...data[newSessionKey], ...data[currentSession] };
+                                } else {
+                                    // Move/Copy
+                                    data[newSessionKey] = data[currentSession];
+                                }
+                                if (remainingInOldSession === 0) {
+                                    delete data[currentSession];
+                                }
+                                localStorage.setItem(storageKey, JSON.stringify(data));
                             }
-                            delete data[currentSession];
-                            localStorage.setItem(storageKey, JSON.stringify(data));
+                        } catch (err) {
+                            console.error(`Error moving ${storageKey}:`, err);
                         }
                     };
 
                     moveKeyInStorage('examRoomAllotment', 'array');
                     moveKeyInStorage('examScribeAllotment', 'object');
+                    moveKeyInStorage('examScribeAllotmentV2', 'object');
                     moveKeyInStorage('examAbsenteeList', 'array');
                     moveKeyInStorage('examInvigilatorMapping', 'object');
                     moveKeyInStorage('examInvigilationSlots', 'object');
                     moveKeyInStorage('examQPCodes', 'object');
+
+                    // 4b. Move Scribe Vault Keys & IDB (Preserving Physical Scribe Room)
+                    try {
+                        const oldVaultKey = `scrAllot_` + currentSession.replace(/\s/g, '_');
+                        const newVaultKey = `scrAllot_` + newSessionKey.replace(/\s/g, '_');
+                        const oldVaultData = localStorage.getItem(oldVaultKey);
+                        if (oldVaultData) {
+                            localStorage.setItem(newVaultKey, oldVaultData);
+                            if (remainingInOldSession === 0) {
+                                localStorage.removeItem(oldVaultKey);
+                            }
+                        }
+                        const oldDirty = `hasUnsavedScribes_` + currentSession.replace(/\s/g, '_');
+                        const newDirty = `hasUnsavedScribes_` + newSessionKey.replace(/\s/g, '_');
+                        const dirtyVal = localStorage.getItem(oldDirty);
+                        if (dirtyVal) {
+                            localStorage.setItem(newDirty, dirtyVal);
+                            if (remainingInOldSession === 0) {
+                                localStorage.removeItem(oldDirty);
+                            }
+                        }
+                        if (typeof window.getScribeAllotmentIDB === 'function' && typeof window.saveScribeAllotmentIDB === 'function') {
+                            const scrAllot = await window.getScribeAllotmentIDB(currentSession);
+                            if (scrAllot) {
+                                await window.saveScribeAllotmentIDB(newSessionKey, scrAllot);
+                                if (remainingInOldSession === 0 && typeof openExamDB === 'function') {
+                                    const db = await openExamDB();
+                                    const tx = db.transaction('scribeVault', 'readwrite');
+                                    tx.objectStore('scribeVault').delete(currentSession);
+                                }
+                            }
+                        }
+                    } catch (vaultErr) {
+                        console.warn("Scribe vault migration error:", vaultErr);
+                    }
+
+                    // 4c. Move Room Allotment IDB (allotmentVault)
+                    try {
+                        if (typeof window.getRoomAllotmentIDB === 'function' && typeof window.saveRoomAllotmentIDB === 'function') {
+                            const roomAllot = await window.getRoomAllotmentIDB(currentSession);
+                            if (roomAllot) {
+                                await window.saveRoomAllotmentIDB(newSessionKey, roomAllot);
+                                if (remainingInOldSession === 0 && typeof window.deleteRoomAllotmentIDB === 'function') {
+                                    await window.deleteRoomAllotmentIDB(currentSession);
+                                }
+                            }
+                        }
+                    } catch (allotErr) {
+                        console.warn("Room IDB vault migration error:", allotErr);
+                    }
+
+                    // 4d. Update Master Registry for Calendar & Selectors
+                    try {
+                        let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
+                        if (remainingInOldSession === 0) {
+                            known = known.filter(k => k !== currentSession);
+                        }
+                        if (!known.includes(newSessionKey)) {
+                            known.push(newSessionKey);
+                        }
+                        localStorage.setItem('examAllKnownSessions', JSON.stringify(known));
+                    } catch (regErr) {
+                        console.warn("Registry update error:", regErr);
+                    }
+
+                    // 4e. Sync invigilation slots if available
+                    if (typeof window.syncSlotsToCloud === 'function') {
+                        try {
+                            await window.syncSlotsToCloud("FORCE_OVERWRITE");
+                        } catch (slotErr) {
+                            console.warn("Slot sync failed:", slotErr);
+                        }
+                    }
                 }
 
-                alert(`✅ Successfully Updated ${studentCount} records.\nSyncing to Cloud...`);
+                alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
 
-                // 3. Cloud Sync
-                // Sync the OLD session (to clear it if moved, or update it if just renamed)
-                await syncSessionToCloud(currentSession);
-                
-                // If moved, also sync the NEW session
-                if (isMove) {
+                // 5. Cloud Sync
+                if (remainingInOldSession === 0 && typeof deleteSessionFromCloud === 'function') {
+                    await deleteSessionFromCloud(currentSession);
+                } else if (typeof syncSessionToCloud === 'function') {
+                    await syncSessionToCloud(currentSession);
+                }
+                if (typeof syncSessionToCloud === 'function') {
                     await syncSessionToCloud(newSessionKey);
                 }
 
@@ -18918,10 +19565,10 @@ if (btnSessionReschedule) {
 
             } catch (e) {
                 console.error(e);
-                alert("Error during update: " + e.message);
+                alert("Error during reschedule: " + e.message);
             }
         });
-}
+    }
 
 // 3. Delete Logic (Wipes Students + Associated Data)
     if (btnSessionDelete) {
@@ -21430,38 +22077,69 @@ if (displayLoc) {
     }
 
 // ==========================================
-    // ☢️ CINEMATIC DANGER ZONE LOGIC
+    // ☢️ CINEMATIC DANGER ZONE GATEKEEPER MODAL LOGIC
     // ==========================================
     
+    window.openDangerGatekeeper = function() {
+        const step1 = document.getElementById('danger-gatekeeper-step1');
+        const step2 = document.getElementById('danger-gatekeeper-step2');
+        const badge = document.getElementById('danger-gatekeeper-badge');
+        const title = document.getElementById('danger-gatekeeper-title');
+        const subtitle = document.getElementById('danger-gatekeeper-subtitle');
+
+        if (step1) step1.classList.remove('hidden');
+        if (step2) step2.classList.add('hidden');
+        if (badge) badge.innerHTML = '⚠️';
+        if (title) title.textContent = 'Danger Zone Gatekeeper';
+        if (subtitle) subtitle.textContent = 'Security Warning Level 1';
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('danger-gatekeeper-modal');
+        } else {
+            const m = document.getElementById('danger-gatekeeper-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeDangerGatekeeper = function() {
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('danger-gatekeeper-modal');
+        } else {
+            const m = document.getElementById('danger-gatekeeper-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.proceedDangerGatekeeperStep2 = function() {
+        const step1 = document.getElementById('danger-gatekeeper-step1');
+        const step2 = document.getElementById('danger-gatekeeper-step2');
+        const badge = document.getElementById('danger-gatekeeper-badge');
+        const title = document.getElementById('danger-gatekeeper-title');
+        const subtitle = document.getElementById('danger-gatekeeper-subtitle');
+
+        if (step1) step1.classList.add('hidden');
+        if (step2) step2.classList.remove('hidden');
+        if (badge) badge.innerHTML = '☢️';
+        if (title) title.textContent = 'Access Granted... With A Warning';
+        if (subtitle) subtitle.textContent = 'Final Security Warning';
+    };
+
+    window.confirmEnterDangerZone = function() {
+        window.closeDangerGatekeeper();
+        if (typeof window.openModal === 'function') {
+            window.openModal('danger-zone-modal');
+        } else {
+            const dz = document.getElementById('danger-zone-modal');
+            if (dz) dz.classList.remove('hidden');
+        }
+    };
+
     const btnEnterDanger = document.getElementById('btn-enter-danger-zone');
     
     if (btnEnterDanger) {
-        btnEnterDanger.addEventListener('click', async () => {
-            // 🎬 Cinematic Alert 1: The Gatekeeper
-            // Using standard confirm/alert for now, but phrasing it dramatically
-            
-            const step1 = confirm(
-                "⚠️ HOLD IT RIGHT THERE! ⚠️\n\n" +
-                "You are approaching the DANGER ZONE.\n" +
-                "Here lie the buttons of destruction, master resets, and the void.\n\n" +
-                "Do you have the courage to proceed?"
-            );
-
-            if (!step1) return;
-
-            // 🎬 Cinematic Alert 2: The Final Warning
-            // We use a small timeout to make it feel like a "system check"
-            await new Promise(r => setTimeout(r, 300));
-            
-            alert(
-                "☢️ ACCESS GRANTED... WITH A WARNING ☢️\n\n" +
-                "Some actions inside CANNOT be undone.\n" +
-                "We are not responsible for lost data, tears, or accidental timeline disruptions.\n\n" +
-                "YOU HAVE BEEN WARNED."
-            );
-
-            // Open the Modal
-            window.openModal('danger-zone-modal');
+        btnEnterDanger.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.openDangerGatekeeper();
         });
     }
 
@@ -21533,12 +22211,509 @@ if (displayLoc) {
         });
     }
 
+    // ==========================================
+    // 📥 RESTORE SEQUENTIAL LAUNCH MODAL LOGIC
+    // ==========================================
+
+    let restorePendingData = null;
+    let restorePendingFileName = "";
+    let restoreIsMergeMode = true;
+
+    window.openRestoreSequenceModal = function(data, fileName) {
+        restorePendingData = data;
+        restorePendingFileName = fileName || "ExamFlow_Backup.json";
+        restoreIsMergeMode = true;
+        window.restoreSelectMode(true);
+
+        const fileNameEl = document.getElementById('restore-file-name');
+        if (fileNameEl) fileNameEl.textContent = restorePendingFileName;
+
+        const summaryEl = document.getElementById('restore-file-summary');
+        if (summaryEl && data) {
+            const studentCount = Array.isArray(data.examBaseData) ? data.examBaseData.length : 0;
+            const keysCount = Object.keys(data).length;
+            summaryEl.textContent = `${studentCount} student records • ${keysCount} system data modules ready`;
+        }
+
+        // Show step 1 (choose), hide others
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.remove('hidden');
+        if (stepExec) stepExec.classList.add('hidden');
+        if (stepComplete) stepComplete.classList.add('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restore Protocol";
+        if (subtitle) subtitle.textContent = "Select Restore Strategy";
+        if (badge) badge.textContent = "📥";
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.closeRestoreModal = function() {
+        restorePendingData = null;
+        restorePendingFileName = "";
+        const input = document.getElementById('restore-file-input');
+        if (input) input.value = '';
+
+        if (typeof window.closeModal === 'function') {
+            window.closeModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.add('hidden');
+        }
+    };
+
+    window.restoreSelectMode = function(isMerge) {
+        restoreIsMergeMode = isMerge;
+        const optMerge = document.getElementById('restore-opt-merge');
+        const optReplace = document.getElementById('restore-opt-replace');
+        const badgeMerge = document.getElementById('restore-badge-merge');
+        const badgeReplace = document.getElementById('restore-badge-replace');
+
+        if (isMerge) {
+            if (optMerge) {
+                optMerge.className = "cursor-pointer p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50/70 hover:bg-emerald-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-emerald-500/30";
+            }
+            if (badgeMerge) badgeMerge.classList.remove('hidden');
+            if (optReplace) {
+                optReplace.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-red-50 hover:border-red-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeReplace) badgeReplace.classList.add('hidden');
+        } else {
+            if (optReplace) {
+                optReplace.className = "cursor-pointer p-4 rounded-2xl border-2 border-rose-500 bg-rose-50/70 hover:bg-red-50 transition-all flex items-start gap-3 relative shadow-sm ring-2 ring-rose-500/30";
+            }
+            if (badgeReplace) badgeReplace.classList.remove('hidden');
+            if (optMerge) {
+                optMerge.className = "cursor-pointer p-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all flex items-start gap-3 relative shadow-sm";
+            }
+            if (badgeMerge) badgeMerge.classList.add('hidden');
+        }
+    };
+
+    window.showRestoreErrorModal = function(titleText, msgText) {
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.add('hidden');
+        if (stepExec) stepExec.classList.add('hidden');
+        if (stepComplete) stepComplete.classList.remove('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restore Protocol";
+        if (subtitle) subtitle.textContent = "Error Encountered";
+        if (badge) badge.textContent = "❌";
+
+        const iconBox = document.getElementById('restore-complete-icon-box');
+        const compTitle = document.getElementById('restore-complete-title');
+        const compMsg = document.getElementById('restore-complete-message');
+        const reloadBtn = document.getElementById('btn-restore-complete-reload');
+
+        if (iconBox) {
+            iconBox.textContent = "❌";
+            iconBox.className = "w-16 h-16 rounded-3xl bg-red-100 text-red-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-red-200";
+        }
+        if (compTitle) compTitle.textContent = titleText || "Restore Failed";
+        if (compMsg) compMsg.textContent = msgText || "An error occurred during restore.";
+        if (reloadBtn) {
+            reloadBtn.innerHTML = "<span>Close & Try Again</span>";
+            reloadBtn.onclick = () => window.closeRestoreModal();
+        }
+
+        if (typeof window.openModal === 'function') {
+            window.openModal('restore-sequence-modal');
+        } else {
+            const m = document.getElementById('restore-sequence-modal');
+            if (m) m.classList.remove('hidden');
+        }
+    };
+
+    window.executeRestoreModalAction = async function() {
+        if (!restorePendingData) return;
+
+        const data = restorePendingData;
+        const isMerge = restoreIsMergeMode;
+
+        // Transition to Step 2 (Executing)
+        const stepChoose = document.getElementById('restore-step-choose');
+        const stepExec = document.getElementById('restore-step-executing');
+        const stepComplete = document.getElementById('restore-step-complete');
+
+        if (stepChoose) stepChoose.classList.add('hidden');
+        if (stepExec) stepExec.classList.remove('hidden');
+        if (stepComplete) stepComplete.classList.add('hidden');
+
+        const title = document.getElementById('restore-modal-title');
+        const subtitle = document.getElementById('restore-modal-subtitle');
+        const badge = document.getElementById('restore-modal-badge');
+
+        if (title) title.textContent = "Restoring Database";
+        if (subtitle) subtitle.textContent = isMerge ? "Merging Data Modules" : "Replacing Active Database";
+        if (badge) badge.textContent = "⚙️";
+
+        try {
+            if (!isMerge) {
+                localStorage.clear();
+                await saveExamDataIDB([]);
+            }
+
+            // Restore & Sync securely
+            let count = 0;
+            for (const key of Object.keys(data)) {
+                if (key === 'examBaseData') {
+                    const importedStudents = data[key];
+                    if (isMerge) {
+                        const existingData = await loadExamDataIDB() || [];
+                        const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
+                        const existingKeys = new Set(existingData.map(getRowKey));
+                        
+                        const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
+                        await saveExamDataIDB([...existingData, ...newUniqueData]);
+                    } else {
+                        await saveExamDataIDB(importedStudents);
+                    }
+                    count++;
+                    
+                } else if (key === 'examRoomAllotment') {
+                    const rawVal = data[key];
+                    const parsed = (typeof rawVal === 'string') ? JSON.parse(rawVal || '{}') : rawVal;
+                    if (parsed && typeof parsed === 'object') {
+                        for (const sk in parsed) {
+                            if (Array.isArray(parsed[sk])) {
+                                await window.saveRoomAllotmentIDB(sk, parsed[sk]);
+                            }
+                        }
+                        const pruned = (typeof window.pruneLocalStorageAllotments === 'function') ? window.pruneLocalStorageAllotments(parsed) : parsed;
+                        localStorage.setItem(key, JSON.stringify(pruned));
+                    }
+                    count++;
+                } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
+                    if (key !== 'examData_v2') {
+                        const val = data[key];
+                        
+                        // 🛡️ [PEOPLE PRESERVATION]: Deep-merge Invigilation Slots in Merge Mode
+                        if (isMerge && key === 'examInvigilationSlots') {
+                            const importedSlots = (typeof val === 'string') ? JSON.parse(val || '{}') : (val || {});
+                            const existingRaw = localStorage.getItem('examInvigilationSlots');
+                            const existingSlots = existingRaw ? JSON.parse(existingRaw) : {};
+                            
+                            Object.keys(importedSlots).forEach(k => {
+                                if (existingSlots[k]) {
+                                    // 1. Union assigned invigilators (preserves volunteers & existing assignments)
+                                    const exAssigned = existingSlots[k].assigned || [];
+                                    const impAssigned = importedSlots[k].assigned || [];
+                                    existingSlots[k].assigned = [...new Set([...exAssigned, ...impAssigned])];
+
+                                    // 2. Merge assignment metadata (preserve VOLUNTEER, AUTO, ADMIN badges)
+                                    if (importedSlots[k].assignmentMeta || existingSlots[k].assignmentMeta) {
+                                        existingSlots[k].assignmentMeta = {
+                                            ...(importedSlots[k].assignmentMeta || {}),
+                                            ...(existingSlots[k].assignmentMeta || {}) // Live state takes precedence
+                                        };
+                                    }
+
+                                    // 3. Merge unavailability / inconveniences without losing details
+                                    const exUnav = (existingSlots[k].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                    const impUnav = (importedSlots[k].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                    const uniqueUnavEmails = [...new Set([...exUnav, ...impUnav])];
+                                    existingSlots[k].unavailable = uniqueUnavEmails.map(email => {
+                                        const exObj = (existingSlots[k].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                        const impObj = (importedSlots[k].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                        return exObj || impObj || email;
+                                    });
+
+                                    // 4. Merge exchange requests
+                                    existingSlots[k].exchangeRequests = [...new Set([
+                                        ...(existingSlots[k].exchangeRequests || []),
+                                        ...(importedSlots[k].exchangeRequests || [])
+                                    ])];
+
+                                    // 5. Merge legacy volunteers array if present
+                                    if (importedSlots[k].volunteers && Array.isArray(importedSlots[k].volunteers)) {
+                                        if (!existingSlots[k].volunteers) existingSlots[k].volunteers = [];
+                                        importedSlots[k].volunteers.forEach(v => {
+                                            if (!existingSlots[k].volunteers.includes(v)) existingSlots[k].volunteers.push(v);
+                                        });
+                                    }
+                                } else {
+                                    existingSlots[k] = importedSlots[k];
+                                }
+                            });
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(existingSlots));
+                            localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+
+                        // 🛡️ [PEOPLE PRESERVATION]: Deep-merge Advance Unavailability in Merge Mode
+                        } else if (isMerge && key === 'invigAdvanceUnavailability') {
+                            const importedUnav = (typeof val === 'string') ? JSON.parse(val || '{}') : (val || {});
+                            const existingRaw = localStorage.getItem('invigAdvanceUnavailability');
+                            const existingUnav = existingRaw ? JSON.parse(existingRaw) : {};
+
+                            Object.keys(importedUnav).forEach(date => {
+                                if (!existingUnav[date]) {
+                                    existingUnav[date] = importedUnav[date];
+                                } else {
+                                    ['FN', 'AN'].forEach(sess => {
+                                        const exList = existingUnav[date][sess] || [];
+                                        const impList = importedUnav[date][sess] || [];
+                                        const exEmails = exList.map(u => typeof u === 'string' ? u : u.email);
+                                        const merged = [...exList];
+                                        impList.forEach(u => {
+                                            const email = typeof u === 'string' ? u : u.email;
+                                            if (!exEmails.includes(email)) merged.push(u);
+                                        });
+                                        existingUnav[date][sess] = merged;
+                                    });
+                                }
+                            });
+                            localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(existingUnav));
+
+                        } else {
+                            localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
+                            if (key === 'examInvigilationSlots') {
+                                localStorage.setItem('pendingInvigilationRestoreSync', 'true');
+                            }
+                        }
+                    }
+                    count++;
+                }
+            }
+
+            // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
+            if (window.currentCollegeId && navigator.onLine && count > 0) {
+                updateSyncStatus("Restoring Cloud...", "neutral");
+                const { db, doc, setDoc, getDoc, writeBatch } = window.firebase;
+                const cid = window.currentCollegeId;
+
+                // 1. Sync settings
+                const settingsKeys = [
+                    'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
+                    'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
+                    'examAllKnownSessions', 'examMixingStrategy'
+                ];
+                const settingsData = {};
+                settingsKeys.forEach(k => {
+                    const val = localStorage.getItem(k);
+                    if (val !== null) settingsData[k] = val;
+                });
+                settingsData.lastUpdated = new Date().toISOString();
+                if (Object.keys(settingsData).length > 1) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "settings"), settingsData, { merge: true });
+                }
+
+                // 2. Sync operations
+                const opsData = {};
+                const valSessions = localStorage.getItem('examAllKnownSessions');
+                if (valSessions !== null) opsData['examAllKnownSessions'] = valSessions;
+                if (Object.keys(opsData).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "operations"), opsData, { merge: true });
+                }
+
+                // 3. Sync allocation
+                const allocData = {};
+                const valScribe = localStorage.getItem('examScribeList');
+                if (valScribe !== null) allocData['examScribeList'] = valScribe;
+                if (Object.keys(allocData).length > 0) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), allocData, { merge: true });
+                }
+
+                // 4. Sync staff
+                const localStaff = localStorage.getItem('examStaffData');
+                const localMap = localStorage.getItem('examInvigilatorMapping');
+                const staffDataPayload = {};
+                if (localStaff) staffDataPayload.examStaffData = localStaff;
+                if (localMap) staffDataPayload.examInvigilatorMapping = localMap;
+                staffDataPayload.lastUpdated = new Date().toISOString();
+                if (Object.keys(staffDataPayload).length > 1) {
+                    await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
+                }
+
+                // 5. Sync invigilation slots (daily shards) with People Preservation
+                const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
+                if (localSlotsRaw) {
+                    let slotsObj = {};
+                    try { slotsObj = JSON.parse(localSlotsRaw); } catch(e) {}
+                    if (slotsObj && typeof slotsObj === 'object' && Object.keys(slotsObj).length > 0) {
+                        const shards = {};
+                        const getShardId = (key) => {
+                            try {
+                                const [dRaw] = key.split(' | ');
+                                const dStr = dRaw.replace(/-/g, '.');
+                                const parts = dStr.split('.');
+                                if (parts.length < 3) return "unknown";
+                                return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                            } catch (e) { return "unknown"; }
+                        };
+                        
+                        Object.keys(slotsObj).forEach(k => {
+                            const sid = getShardId(k);
+                            if (!shards[sid]) shards[sid] = {};
+                            shards[sid][k] = slotsObj[k];
+                        });
+                        
+                        const shardIds = Object.keys(shards);
+                        const CHUNK_SIZE = 450;
+                        for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
+                            const batch = writeBatch(db);
+                            const chunk = shardIds.slice(i, i + CHUNK_SIZE);
+                            for (const sid of chunk) {
+                                const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
+                                let finalShardData = shards[sid] || {};
+
+                                // 🛡️ Cloud Merge: Ensure active cloud volunteering and inconveniences are preserved
+                                if (isMerge) {
+                                    try {
+                                        const cloudSnap = await getDoc(shardRef);
+                                        if (cloudSnap.exists()) {
+                                            const cloudShard = JSON.parse(cloudSnap.data().data || '{}');
+                                            Object.keys(cloudShard).forEach(sk => {
+                                                const cSlot = cloudShard[sk];
+                                                if (finalShardData[sk]) {
+                                                    // Union assignments
+                                                    const lAssigned = finalShardData[sk].assigned || [];
+                                                    const cAssigned = cSlot.assigned || [];
+                                                    finalShardData[sk].assigned = [...new Set([...lAssigned, ...cAssigned])];
+
+                                                    // Merge metadata (preserves VOLUNTEER status)
+                                                    if (cSlot.assignmentMeta || finalShardData[sk].assignmentMeta) {
+                                                        finalShardData[sk].assignmentMeta = {
+                                                            ...(cSlot.assignmentMeta || {}),
+                                                            ...(finalShardData[sk].assignmentMeta || {})
+                                                        };
+                                                    }
+
+                                                    // Union inconveniences
+                                                    const lUnav = (finalShardData[sk].unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                                    const cUnav = (cSlot.unavailable || []).map(u => typeof u === 'string' ? u : u.email);
+                                                    const uniqueUnav = [...new Set([...lUnav, ...cUnav])];
+                                                    finalShardData[sk].unavailable = uniqueUnav.map(email => {
+                                                        const cObj = (cSlot.unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                                        const lObj = (finalShardData[sk].unavailable || []).find(u => (typeof u === 'string' ? u : u.email) === email);
+                                                        return cObj || lObj || email;
+                                                    });
+
+                                                    // Union exchanges
+                                                    finalShardData[sk].exchangeRequests = [...new Set([
+                                                        ...(finalShardData[sk].exchangeRequests || []),
+                                                        ...(cSlot.exchangeRequests || [])
+                                                    ])];
+                                                } else {
+                                                    // Preserve slot from cloud if missing from backup
+                                                    finalShardData[sk] = cSlot;
+                                                }
+                                            });
+                                        }
+                                    } catch (cloudErr) {
+                                        console.warn("Restore cloud shard merge note:", sid, cloudErr);
+                                    }
+                                }
+
+                                if (isMerge) {
+                                    Object.assign(slotsObj, finalShardData);
+                                }
+
+                                batch.set(shardRef, { data: JSON.stringify(finalShardData), lastUpdated: new Date() });
+                            }
+                            await batch.commit();
+                        }
+
+                        if (isMerge) {
+                            localStorage.setItem('examInvigilationSlots', JSON.stringify(slotsObj));
+                        }
+                    }
+                }
+
+                // 6. Sync advanced unavailability with People Preservation
+                const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
+                if (localUnavRaw) {
+                    const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
+                    let finalUnav = JSON.parse(localUnavRaw || '{}');
+
+                    if (isMerge) {
+                        try {
+                            const cloudSnap = await getDoc(slotsRef);
+                            if (cloudSnap.exists()) {
+                                const cloudUnav = JSON.parse(cloudSnap.data().invigAdvanceUnavailability || '{}');
+                                Object.keys(cloudUnav).forEach(d => {
+                                    if (!finalUnav[d]) {
+                                        finalUnav[d] = cloudUnav[d];
+                                    } else {
+                                        ['FN', 'AN'].forEach(sess => {
+                                            const cList = cloudUnav[d][sess] || [];
+                                            const lList = finalUnav[d][sess] || [];
+                                            const lEmails = lList.map(u => typeof u === 'string' ? u : u.email);
+                                            cList.forEach(cu => {
+                                                const cEmail = typeof cu === 'string' ? cu : cu.email;
+                                                if (!lEmails.includes(cEmail)) lList.push(cu);
+                                            });
+                                            finalUnav[d][sess] = lList;
+                                        });
+                                    }
+                                });
+                            }
+                        } catch (cloudUnavErr) {
+                            console.warn("Advance unavailability cloud merge note:", cloudUnavErr);
+                        }
+                    }
+
+                    await setDoc(slotsRef, { 
+                        invigAdvanceUnavailability: JSON.stringify(finalUnav) 
+                    }, { merge: true });
+                    localStorage.setItem('invigAdvanceUnavailability', JSON.stringify(finalUnav));
+                }
+            }
+
+            localStorage.setItem('pendingDriveRestoreSync', 'true');
+
+            // Transition to Step 3 (Outcome)
+            if (stepExec) stepExec.classList.add('hidden');
+            if (stepComplete) stepComplete.classList.remove('hidden');
+
+            if (title) title.textContent = "Recovery Successful";
+            if (subtitle) subtitle.textContent = "System Restored & Synchronized";
+            if (badge) badge.textContent = "✅";
+
+            const iconBox = document.getElementById('restore-complete-icon-box');
+            const compTitle = document.getElementById('restore-complete-title');
+            const compMsg = document.getElementById('restore-complete-message');
+            const reloadBtn = document.getElementById('btn-restore-complete-reload');
+
+            if (iconBox) {
+                iconBox.textContent = "✅";
+                iconBox.className = "w-16 h-16 rounded-3xl bg-green-100 text-green-600 mx-auto flex items-center justify-center text-3xl shadow-inner border border-green-200";
+            }
+            if (compTitle) compTitle.textContent = "Recovery Successful!";
+            if (compMsg) compMsg.textContent = `Restored ${count} data modules (${isMerge ? 'Merged safely with active data' : 'Replaced active database cleanly'}). Cloud synchronization finalized.`;
+            if (reloadBtn) {
+                reloadBtn.innerHTML = "<span>🔄 Reload Application Now</span>";
+                reloadBtn.onclick = () => window.location.reload();
+            }
+
+        } catch (err) {
+            console.error("Full Restore Error:", err);
+            window.showRestoreErrorModal("Restore Failed", "An error occurred during restore: " + err.message);
+        }
+    };
+
     // 2. FULL RESTORE (Upload JSON)
-    // We attach the listener directly to the file input that the button clicks
+    // Attach the listener directly to the file input that the button clicks
     const fullRestoreInput = document.getElementById('restore-file-input');
     
     if (fullRestoreInput) {
-        // Remove old listeners
         const newInput = fullRestoreInput.cloneNode(true);
         fullRestoreInput.parentNode.replaceChild(newInput, fullRestoreInput);
 
@@ -21555,167 +22730,14 @@ if (displayLoc) {
                         throw new Error("Invalid or empty backup file.");
                     }
 
-                    // Ask user for Restore Mode
-                    const isMerge = confirm("RESTORE MODE:\n\nClick [OK] to MERGE the imported backup with your existing data.\nClick [Cancel] to REPLACE entirely (wiping all existing local data first).");
-
-                    if (!isMerge) {
-                        localStorage.clear();
-                        await saveExamDataIDB([]);
-                    }
-
-                    // Restore & Sync securely
-                    let count = 0;
-                    for (const key of Object.keys(data)) {
-                        if (key === 'examBaseData') {
-                            const importedStudents = data[key];
-                            if (isMerge) {
-                                const existingData = await loadExamDataIDB() || [];
-                                const getRowKey = r => `${r.Date || ""} | ${r.Time || ""} | ${getRegNo(r) || ""} | ${r.Stream || "REGULAR"}`.toUpperCase();
-                                const existingKeys = new Set(existingData.map(getRowKey));
-                                
-                                const newUniqueData = importedStudents.filter(student => !existingKeys.has(getRowKey(student)));
-                                await saveExamDataIDB([...existingData, ...newUniqueData]);
-                            } else {
-                                await saveExamDataIDB(importedStudents);
-                            }
-                            count++;
-                            
-                        } else if (key === 'examRoomAllotment') {
-                            const rawVal = data[key];
-                            const parsed = (typeof rawVal === 'string') ? JSON.parse(rawVal || '{}') : rawVal;
-                            if (parsed && typeof parsed === 'object') {
-                                for (const sk in parsed) {
-                                    if (Array.isArray(parsed[sk])) {
-                                        await window.saveRoomAllotmentIDB(sk, parsed[sk]);
-                                    }
-                                }
-                                const pruned = (typeof window.pruneLocalStorageAllotments === 'function') ? window.pruneLocalStorageAllotments(parsed) : parsed;
-                                localStorage.setItem(key, JSON.stringify(pruned));
-                            }
-                            count++;
-                        } else if ((typeof ALL_DATA_KEYS !== 'undefined' && ALL_DATA_KEYS.includes(key)) || key.startsWith('exam') || key.startsWith('invig')) {
-                            // Skip stale v2 backups, restore everything else
-                            if (key !== 'examData_v2') {
-                                const val = data[key];
-                                localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : val);
-                                
-                                // Keep flag just in case
-                                if (key === 'examInvigilationSlots') {
-                                    localStorage.setItem('pendingInvigilationRestoreSync', 'true');
-                                }
-                            }
-                            count++;
-                        }
-                    }
-
-                    // Sync to Cloud (if online) directly to avoid isSyncing queue locks and race conditions
-                    if (window.currentCollegeId && navigator.onLine && count > 0) {
-                        updateSyncStatus("Restoring Cloud...", "neutral");
-                        const { db, doc, setDoc, writeBatch } = window.firebase;
-                        const cid = window.currentCollegeId;
-
-                        // 1. Sync settings
-                        const settingsKeys = [
-                            'examCollegeName', 'examRoomConfig', 'examStreamsConfig',
-                            'examSessionNames', 'examRulesConfig', 'examRemunerationConfig',
-                            'examAllKnownSessions', 'examMixingStrategy'
-                        ];
-                        const settingsData = {};
-                        settingsKeys.forEach(k => {
-                            const val = localStorage.getItem(k);
-                            if (val !== null) settingsData[k] = val;
-                        });
-                        settingsData.lastUpdated = new Date().toISOString();
-                        if (Object.keys(settingsData).length > 1) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "settings"), settingsData, { merge: true });
-                        }
-
-                        // 2. Sync operations
-                        const opsData = {};
-                        const valSessions = localStorage.getItem('examAllKnownSessions');
-                        if (valSessions !== null) opsData['examAllKnownSessions'] = valSessions;
-                        if (Object.keys(opsData).length > 0) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "operations"), opsData, { merge: true });
-                        }
-
-                        // 3. Sync allocation
-                        const allocData = {};
-                        const valScribe = localStorage.getItem('examScribeList');
-                        if (valScribe !== null) allocData['examScribeList'] = valScribe;
-                        if (Object.keys(allocData).length > 0) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "allocation"), allocData, { merge: true });
-                        }
-
-                        // 4. Sync staff
-                        const localStaff = localStorage.getItem('examStaffData');
-                        const localMap = localStorage.getItem('examInvigilatorMapping');
-                        const staffDataPayload = {};
-                        if (localStaff) staffDataPayload.examStaffData = localStaff;
-                        if (localMap) staffDataPayload.examInvigilatorMapping = localMap;
-                        staffDataPayload.lastUpdated = new Date().toISOString();
-                        if (Object.keys(staffDataPayload).length > 1) {
-                            await setDoc(doc(db, "colleges", cid, "system_data", "staff"), staffDataPayload, { merge: true });
-                        }
-
-                        // 5. Sync invigilation slots (daily shards)
-                        const localSlotsRaw = localStorage.getItem('examInvigilationSlots');
-                        if (localSlotsRaw) {
-                            let slotsObj = {};
-                            try { slotsObj = JSON.parse(localSlotsRaw); } catch(e) {}
-                            if (slotsObj && typeof slotsObj === 'object' && Object.keys(slotsObj).length > 0) {
-                                const shards = {};
-                                const getShardId = (key) => {
-                                    try {
-                                        const [dRaw] = key.split(' | ');
-                                        const dStr = dRaw.replace(/-/g, '.');
-                                        const parts = dStr.split('.');
-                                        if (parts.length < 3) return "unknown";
-                                        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                                    } catch (e) { return "unknown"; }
-                                };
-                                
-                                Object.keys(slotsObj).forEach(k => {
-                                    const sid = getShardId(k);
-                                    if (!shards[sid]) shards[sid] = {};
-                                    shards[sid][k] = slotsObj[k];
-                                });
-                                
-                                const shardIds = Object.keys(shards);
-                                const CHUNK_SIZE = 450;
-                                for (let i = 0; i < shardIds.length; i += CHUNK_SIZE) {
-                                    const batch = writeBatch(db);
-                                    const chunk = shardIds.slice(i, i + CHUNK_SIZE);
-                                    chunk.forEach(sid => {
-                                        const shardRef = doc(db, "colleges", cid, "slots_daily", sid);
-                                        batch.set(shardRef, { data: JSON.stringify(shards[sid]), lastUpdated: new Date() });
-                                    });
-                                    await batch.commit();
-                                }
-                            }
-                        }
-
-                        // 6. Sync advanced unavailability
-                        const localUnavRaw = localStorage.getItem('invigAdvanceUnavailability');
-                        if (localUnavRaw) {
-                            const slotsRef = doc(db, "colleges", cid, "system_data", "slots");
-                            await setDoc(slotsRef, { 
-                                invigAdvanceUnavailability: localUnavRaw 
-                            }, { merge: true });
-                        }
-                    }
-                    localStorage.setItem('pendingDriveRestoreSync', 'true'); // 🚨 CRITICAL FLAG
-                    alert(`✅ Recovery Successful!\n\nRestored ${count} data modules.\nThe app will now reload.`);
-                    window.location.reload();
+                    window.openRestoreSequenceModal(data, file.name);
 
                 } catch (err) {
                     console.error("Full Restore Error:", err);
-                    alert("❌ Restore Failed!\n\nThe file appears to be corrupt or invalid.\n" + err.message);
+                    window.showRestoreErrorModal("Invalid Backup File", "The selected file is not a valid JSON backup: " + err.message);
                 }
             };
             reader.readAsText(file);
-            
-            // Reset input so same file can be selected again
-            newInput.value = '';
         });
     }
 
