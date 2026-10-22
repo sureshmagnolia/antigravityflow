@@ -13246,9 +13246,9 @@ window.real_populate_qp_code_session_dropdown = function () {
         capacity: parseInt(cb.getAttribute('data-cap')) || 30
     }));
     
-    // Shuffle ONLY if the Randomise checkbox is ticked
-    const isRandomize = document.getElementById('auto-allot-randomize-cb')?.checked;
-    if (isRandomize !== false) { // Defaults to true if missing
+    // Shuffle ONLY if the Randomise checkbox is explicitly ticked
+    const isRandomize = !!document.getElementById('auto-allot-randomize-cb')?.checked;
+    if (isRandomize) {
         selectedRooms.sort(() => Math.random() - 0.5); 
     }
         
