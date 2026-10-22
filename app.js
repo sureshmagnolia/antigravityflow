@@ -234,11 +234,15 @@ function pruneLocalStorageAllotments(allAllotments, keepSessionKey = null) {
 }
 window.pruneLocalStorageAllotments = pruneLocalStorageAllotments;
 
+window._fullAllotmentsCache = null;
+
 async function ensureSessionInLocalStorage(sessionKey) {
     if (!sessionKey) return;
     try {
         let allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         if (allAllotments[sessionKey] && Array.isArray(allAllotments[sessionKey]) && allAllotments[sessionKey].length > 0) {
+            window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+            window._fullAllotmentsCache[sessionKey] = allAllotments[sessionKey];
             return; // Already present in active window
         }
         if (typeof window.getRoomAllotmentIDB === 'function') {
@@ -246,6 +250,8 @@ async function ensureSessionInLocalStorage(sessionKey) {
             if (vaultedRooms && Array.isArray(vaultedRooms) && vaultedRooms.length > 0) {
                 allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 allAllotments[sessionKey] = vaultedRooms;
+                window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+                window._fullAllotmentsCache[sessionKey] = vaultedRooms;
                 const trimmed = window.pruneLocalStorageAllotments(allAllotments, sessionKey);
                 try {
                     localStorage.setItem('examRoomAllotment', JSON.stringify(trimmed));
@@ -260,6 +266,65 @@ async function ensureSessionInLocalStorage(sessionKey) {
     }
 }
 window.ensureSessionInLocalStorage = ensureSessionInLocalStorage;
+
+async function getFullRoomAllotments(sessionKey = null) {
+    let local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    if (sessionKey && sessionKey !== 'all') {
+        if (local[sessionKey] && Array.isArray(local[sessionKey]) && local[sessionKey].length > 0) {
+            window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+            window._fullAllotmentsCache[sessionKey] = local[sessionKey];
+            return local;
+        }
+        if (typeof window.getRoomAllotmentIDB === 'function') {
+            const vaulted = await window.getRoomAllotmentIDB(sessionKey);
+            if (vaulted && Array.isArray(vaulted) && vaulted.length > 0) {
+                local[sessionKey] = vaulted;
+                window._fullAllotmentsCache = window._fullAllotmentsCache || {};
+                window._fullAllotmentsCache[sessionKey] = vaulted;
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(sessionKey);
+                }
+                return local;
+            }
+        }
+    } else {
+        // Full merged retrieval across IndexedDB Vault and localStorage
+        if (typeof window.getAllAllotmentsIDB === 'function') {
+            const vaulted = await window.getAllAllotmentsIDB();
+            const merged = { ...vaulted, ...local };
+            window._fullAllotmentsCache = merged;
+            return merged;
+        }
+    }
+    window._fullAllotmentsCache = local;
+    return local;
+}
+window.getFullRoomAllotments = getFullRoomAllotments;
+
+function getRoomAllotmentSync(sessionKey) {
+    if (!sessionKey) return [];
+    if (window._fullAllotmentsCache && window._fullAllotmentsCache[sessionKey]) {
+        return window._fullAllotmentsCache[sessionKey];
+    }
+    const cleanKey = sessionKey.replace(/\s/g, '');
+    if (window._fullAllotmentsCache) {
+        const match = Object.keys(window._fullAllotmentsCache).find(k => k.replace(/\s/g, '') === cleanKey);
+        if (match) return window._fullAllotmentsCache[match];
+    }
+    const local = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+    if (local[sessionKey]) return local[sessionKey];
+    const localMatch = Object.keys(local).find(k => k.replace(/\s/g, '') === cleanKey);
+    if (localMatch) return local[localMatch];
+
+    // Fallback to active in-memory allotment if currentSessionKey matches
+    if (typeof window !== 'undefined' && window.currentSessionKey && window.currentSessionKey.replace(/\s/g, '') === cleanKey) {
+        if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+            return currentSessionAllotment;
+        }
+    }
+    return [];
+}
+window.getRoomAllotmentSync = getRoomAllotmentSync;
 
 async function initTwoTierStorageShield() {
     try {
@@ -3921,12 +3986,18 @@ function generateDayWisePDF() {
         // --- 4. PREPARE DATA ---
         const reportType = 'day-wise';
         const rawData = getFilteredReportData(reportType); 
-        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source with Vault support
+        const allAllotments = (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0)
+            ? window._fullAllotmentsCache
+            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
         
         // FIX: Extract the session key securely from the UI select element!
         const sessionKey = reportsSessionSelect ? reportsSessionSelect.value : "";
-        const sessionAllotment = allAllotments[sessionKey] || [];
+        let sessionAllotment = allAllotments[sessionKey];
+        if (!sessionAllotment && typeof window.getRoomAllotmentSync === 'function') {
+            sessionAllotment = window.getRoomAllotmentSync(sessionKey);
+        }
+        sessionAllotment = sessionAllotment || [];
 
         
         const studentToRoomMap = {};
@@ -4956,9 +5027,16 @@ function generateQuestionPaperReportPDF() {
         
         if (!rawData || rawData.length === 0) throw new Error("No data found.");
 
-        // 🛡️ UNIFIED PIPELINE (V12): Direct database source
-        const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
-        const sessionAllotment = allAllotments[`${reportsSessionSelect.value}`] || [];
+        // 🛡️ UNIFIED PIPELINE (V12): Direct database source with Vault support
+        const allAllotments = (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0)
+            ? window._fullAllotmentsCache
+            : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+        const sessionKey = reportsSessionSelect ? reportsSessionSelect.value : "";
+        let sessionAllotment = allAllotments[sessionKey];
+        if (!sessionAllotment && typeof window.getRoomAllotmentSync === 'function') {
+            sessionAllotment = window.getRoomAllotmentSync(sessionKey);
+        }
+        sessionAllotment = sessionAllotment || [];
         
         const studentToRoomMap = {};
         sessionAllotment.forEach(room => {
@@ -5996,20 +6074,33 @@ if (toggleButton && sidebar) {
     // --- NEW: Helper to generate Room Serial Numbers (1, 2, 3...) ---
 
     // --- Helper: Generate Room Serial Numbers (Grouped by Stream) ---
-    function getRoomSerialMap(sessionKey) {
+    function getRoomSerialMap(sessionKey, optionalSource = null) {
         const serialMap = {};
         let counter = 1;
 
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        let allAllotments = optionalSource || (window._fullAllotmentsCache && Object.keys(window._fullAllotmentsCache).length > 0 ? window._fullAllotmentsCache : null);
+        if (!allAllotments) {
+            allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+        }
         let currentSessionAllotment = allAllotments[sessionKey];
 
         // 🛡️ Fuzzy whitespace-agnostic matcher if exact match not found
-        if (!currentSessionAllotment && sessionKey) {
+        if ((!currentSessionAllotment || currentSessionAllotment.length === 0) && sessionKey) {
             const cleanTarget = sessionKey.replace(/\s/g, '');
             const matchingKey = Object.keys(allAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
             if (matchingKey) currentSessionAllotment = allAllotments[matchingKey];
         }
-        currentSessionAllotment = currentSessionAllotment || [];
+
+        // In-memory fallback if currently active session
+        if ((!currentSessionAllotment || currentSessionAllotment.length === 0) && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            if (typeof window !== 'undefined' && window.currentSessionKey && window.currentSessionKey.replace(/\s/g, '') === cleanTarget) {
+                if (typeof currentSessionAllotment !== 'undefined' && Array.isArray(currentSessionAllotment) && currentSessionAllotment.length > 0) {
+                    currentSessionAllotment = currentSessionAllotment;
+                }
+            }
+        }
+        currentSessionAllotment = currentSessionAllotment ? [...currentSessionAllotment] : [];
 
         // 1. Group Regular/Distance Rooms
         // The 'stream' property is now saved in 'currentSessionAllotment'
@@ -6890,7 +6981,6 @@ if (toggleButton && sidebar) {
 
 
     // V68: Helper function to filter data based on selected report filter
-    // Helper function to filter data based on selected report filter
     function getFilteredReportData(reportType) {
         const data = allStudentData || [];
         if (data.length === 0) return [];
@@ -6902,7 +6992,11 @@ if (toggleButton && sidebar) {
             const sessionKey = reportsSessionSelect.value;
             if (sessionKey && sessionKey !== 'all') {
                 const [date, time] = sessionKey.split(' | ');
-                filteredData = filteredData.filter(s => s.Date === date && s.Time === time);
+                if (typeof window.getStudentsForSession === 'function') {
+                    filteredData = window.getStudentsForSession(filteredData, (date || '').trim(), (time || '').trim());
+                } else {
+                    filteredData = filteredData.filter(s => s.Date === date && s.Time === time);
+                }
             }
         }
 
@@ -6916,52 +7010,94 @@ if (toggleButton && sidebar) {
 
         return filteredData;
     }
-    function checkManualAllotment(sessionKey) {
+
+    async function checkManualAllotment(sessionKey) {
         if (!sessionKey || sessionKey === 'all') {
             alert('Please select a specific session to generate this report.');
             return false;
         }
 
         // 1. Get total unique students for the session
-        const [date, time] = sessionKey.split(' | ');
-        const sessionStudentRecords = allStudentData.filter(s => s.Date === date && s.Time === time);
-        const totalUniqueStudents = new Set(sessionStudentRecords.map(s => getRegNo(s))).size;
+        const [rawDate, rawTime] = sessionKey.split(' | ');
+        const date = (rawDate || '').trim();
+        const time = (rawTime || '').trim();
+
+        if (typeof window.fetchHeavyDataOnDemand === 'function') {
+            await window.fetchHeavyDataOnDemand(sessionKey);
+        }
+
+        let sessionStudentRecords = (typeof window.getStudentsForSession === 'function')
+            ? window.getStudentsForSession(allStudentData, date, time)
+            : allStudentData.filter(s => s.Date === date && s.Time === time);
+
+        if ((!sessionStudentRecords || sessionStudentRecords.length === 0) && allStudentData && allStudentData.length > 0) {
+            const dateNorm = date.replace(/[./-]/g, '');
+            const timeNorm = time.toUpperCase();
+            sessionStudentRecords = allStudentData.filter(s => {
+                const sD = (s.Date || '').toString().trim().replace(/[./-]/g, '');
+                const sT = (s.Time || '').toString().trim().toUpperCase();
+                return sD === dateNorm && (sT === timeNorm || (sT.includes('PM') && timeNorm.includes('PM')) || (sT.includes('AM') && timeNorm.includes('AM')));
+            });
+        }
+
+        const totalUniqueStudents = new Set((sessionStudentRecords || []).map(s => getRegNo(s)).filter(Boolean)).size;
 
         if (totalUniqueStudents === 0) {
             alert('No students found for this session.');
             return false;
         }
 
-        // 2. Get Manual Allotment (Regular)
-        const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-        const manualAllotment = allAllotments[sessionKey] || [];
+        // 2. Ensure session is unvaulted in localStorage
+        if (typeof window.ensureSessionInLocalStorage === 'function') {
+            await window.ensureSessionInLocalStorage(sessionKey);
+        }
 
-        // 3. Get Scribe Allotment
+        // 3. Get Manual Allotment (Regular) with Vault fallback
+        let allAllotments = (typeof window.getFullRoomAllotments === 'function')
+            ? await window.getFullRoomAllotments(sessionKey)
+            : JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+
+        let manualAllotment = allAllotments[sessionKey];
+        if (!manualAllotment && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) manualAllotment = allAllotments[matchingKey];
+        }
+        if ((!manualAllotment || manualAllotment.length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
+            const vaulted = await window.getRoomAllotmentIDB(sessionKey);
+            if (vaulted && Array.isArray(vaulted)) manualAllotment = vaulted;
+        }
+        manualAllotment = manualAllotment || [];
+
+        // 4. Get Scribe Allotment
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const scribeMap = allScribeAllotments[sessionKey] || {};
+        let scribeMap = allScribeAllotments[sessionKey];
+        if (!scribeMap && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allScribeAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) scribeMap = allScribeAllotments[matchingKey];
+        }
+        scribeMap = scribeMap || {};
 
-        // 4. Count unique allotted students (Regular + Scribes)
+        // 5. Count unique allotted students (Regular + Scribes)
         const allottedRegNos = new Set();
 
-        // Add Regular Allotments (FIXED: Handles Objects vs Strings)
         manualAllotment.forEach(room => {
-            room.students.forEach(s => {
+            (room.students || []).forEach(s => {
                 const regNo = (typeof s === 'object') ? getRegNo(s) : s;
-                allottedRegNos.add(regNo);
+                if (regNo) allottedRegNos.add(regNo);
             });
         });
 
-        // Add Scribe Allotments
         Object.keys(scribeMap).forEach(regNo => {
-            allottedRegNos.add(regNo);
+            if (regNo) allottedRegNos.add(regNo);
         });
 
         const allottedStudentCount = allottedRegNos.size;
 
-        // 5. Compare counts
+        // 6. Compare counts
         if (allottedStudentCount < totalUniqueStudents) {
             const remaining = totalUniqueStudents - allottedStudentCount;
-            // Optional: Allow generating even if incomplete, but warn
             if (!confirm(`Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
                 return false;
             }
@@ -6973,7 +7109,7 @@ if (toggleButton && sidebar) {
     // --- 1. Event listener for the "Generate Room-wise Report" button (V10: Scribe Adjustments) ---
     generateReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateReportButton.disabled = true;
         generateReportButton.textContent = "Generating Report...";
@@ -6989,8 +7125,10 @@ if (toggleButton && sidebar) {
             getRoomCapacitiesFromStorage();
             loadQPCodes();
 
-            // 🛡️ UNIFIED PIPELINE (V8): Read actual database, don't simulate!
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V8): Read actual database with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -7437,7 +7575,7 @@ if (toggleButton && sidebar) {
     // --- (V30 Optimized) Event listener for the "Day-wise Student List" (Compact Report) ---
     generateDaywiseReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateDaywiseReportButton.disabled = true;
         generateDaywiseReportButton.textContent = "Generating...";
@@ -7446,11 +7584,13 @@ if (toggleButton && sidebar) {
         roomCsvDownloadContainer.innerHTML = "";
         await new Promise(resolve => setTimeout(resolve, 50));
         try {
-                       currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
+            currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
             getRoomCapacitiesFromStorage();
 
-            // 🛡️ UNIFIED PIPELINE (V9): Direct database source
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V9): Direct database source with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -8804,7 +8944,7 @@ if (toggleButton && sidebar) {
     if (generateQpDistributionReportButton) {
         generateQpDistributionReportButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateQpDistributionReportButton.disabled = true;
             generateQpDistributionReportButton.textContent = "Generating...";
@@ -8818,8 +8958,10 @@ if (toggleButton && sidebar) {
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-            // 🛡️ UNIFIED PIPELINE (V8): Use actual database for Room-wise
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V8): Read actual database with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -8916,7 +9058,7 @@ if (toggleButton && sidebar) {
                 for (const sessionKey of sortedSessionKeys) {
                     const session = sessions[sessionKey];
                     const sessionKeyPipe = `${session.Date || ''} | ${session.Time || ''}`;
-                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe) || {};
+                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe, allAllotments) || {};
 
                     allPagesHtml += `
                     <div class="print-page" style="padding: 5mm !important;">
@@ -8972,14 +9114,14 @@ if (toggleButton && sidebar) {
                             `;
 
                                 const sortedRoomKeys = Object.keys(paper.rooms).sort((a, b) => {
-                                    const sA = roomSerialMap[a] || 999;
-                                    const sB = roomSerialMap[b] || 999;
+                                    const sA = roomSerialMap[a] || roomSerialMap[a.trim()] || 999;
+                                    const sB = roomSerialMap[b] || roomSerialMap[b.trim()] || 999;
                                     return sA - sB;
                                 });
 
                                 sortedRoomKeys.forEach(roomName => {
                                     const count = paper.rooms[roomName];
-                                    const roomInfo = currentRoomConfig[roomName] || {};
+                                    const roomInfo = currentRoomConfig[roomName] || currentRoomConfig[roomName.trim()] || {};
                                     let loc = roomInfo.location || "";
 
                                     // --- NEW TRUNCATION LOGIC (First 2 Words) ---
@@ -8990,7 +9132,17 @@ if (toggleButton && sidebar) {
                                         }
                                     }
                                     const displayLoc = loc ? `(${loc})` : "";
-                                    const serialNo = roomSerialMap[roomName] || (roomName ? roomName.replace(/\D/g, '') : '') || '-';
+                                    const cleanRName = roomName ? roomName.trim() : '';
+                                    let serialNo = roomSerialMap[cleanRName] || roomSerialMap[roomName];
+                                    if (!serialNo && roomSerialMap) {
+                                        const lower = cleanRName.toLowerCase();
+                                        for (const k in roomSerialMap) {
+                                            if (k.toLowerCase() === lower) { serialNo = roomSerialMap[k]; break; }
+                                        }
+                                    }
+                                    if (!serialNo) {
+                                        serialNo = (cleanRName ? cleanRName.replace(/\D/g, '') : '') || '-';
+                                    }
 
                                     // --- BOX LAYOUT ---
                                     html += `
@@ -9362,7 +9514,7 @@ if (toggleButton && sidebar) {
     // *** UPDATED: Event listener for "Generate Scribe Report" (Stream Label Added) ***
     generateScribeReportButton.addEventListener('click', async () => {
         const sessionKey = reportsSessionSelect.value;
-        if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+        if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
         generateScribeReportButton.disabled = true;
         generateScribeReportButton.textContent = "Generating...";
@@ -9379,8 +9531,10 @@ if (toggleButton && sidebar) {
             loadGlobalScribeList();
             const scribeRegNos = new Set(globalScribeList.map(s => s.regNo));
 
-            // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats
-            const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+            // 🛡️ UNIFIED PIPELINE (V7): Map the actual database rooms/seats with Vault support
+            const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
             
             let sessionsToProcess = [];
             if (filterSessionRadio.checked) {
@@ -9915,9 +10069,11 @@ async function syncToPrintManager() {
 
         // 1. Group the data exactly like the visual report
         filteredData.forEach(item => {
-            const key = `${item.Date}_${item.Time}`;
+            const sDate = item.Date || '';
+            const sTime = item.Time || '';
+            const key = `${sDate}_${sTime}`;
             const stream = item.Stream || "Regular";
-            if (!sessions[key]) sessions[key] = { Date: item.Date, Time: item.Time, streams: {} };
+            if (!sessions[key]) sessions[key] = { Date: sDate, Time: sTime, streams: {} };
             if (!sessions[key].streams[stream]) sessions[key].streams[stream] = {};
             const courseKey = item.Course;
             if (!sessions[key].streams[stream][courseKey]) sessions[key].streams[stream][courseKey] = 0;
@@ -9928,7 +10084,7 @@ async function syncToPrintManager() {
         Object.values(sessions).forEach(session => {
             Object.entries(session.streams).forEach(([streamName, courses]) => {
                 Object.entries(courses).forEach(([courseName, count]) => {
-                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
+                    const sessionKeyPipe = `${session.Date || ''} | ${session.Time || ''}`;
                     const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                     const paperKey = getQpKey(courseName, streamName);
                     const qpCodeRaw = sessionQPCodes[paperKey] || '';
@@ -9937,8 +10093,8 @@ async function syncToPrintManager() {
                     const qpCode = qpCodeRaw.replace(/^[A-Za-z]+/, '');
                     
                     // Sanitize components for filename (Pattern: Stream_Date_Time_QP Code_Course Name.pdf)
-                    const safeTime = session.Time.replace(/:/g, '-');
-                    const fileName = `${streamName}_${session.Date}_${safeTime}_${qpCode}_${courseName}.pdf`;
+                    const safeTime = (session.Time || '').replace(/:/g, '-');
+                    const fileName = `${streamName}_${session.Date || ''}_${safeTime}_${qpCode}_${courseName}.pdf`;
 
                     exportData.push({
                         stream: streamName,
@@ -10029,6 +10185,21 @@ async function syncToPrintManager() {
 
         // 4. Clean up previous reports
         if (typeof clearReport === 'function') clearReport();
+
+        // 4b. Sync active session to Reports dropdown when opening Reports tab
+        if (viewToShow === viewReports) {
+            const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
+                ? window.currentSessionKey 
+                : ((typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : null);
+            if (activeSession && typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect) {
+                if ([...reportsSessionSelect.options].some(o => o.value === activeSession)) {
+                    reportsSessionSelect.value = activeSession;
+                    if (typeof window.ensureSessionInLocalStorage === 'function') {
+                        window.ensureSessionInLocalStorage(activeSession);
+                    }
+                }
+            }
+        }
 
         // 5. Save the active tab
         if (viewToShow && viewToShow.id && buttonToActivate && buttonToActivate.id) {
@@ -10671,6 +10842,9 @@ window.real_populate_session_dropdown = function () {
         sessionSelect.addEventListener('change', async () => {
         const savedSession = sessionSelect.value;
         await window.fetchHeavyDataOnDemand(savedSession);
+        if (typeof window.ensureSessionInLocalStorage === 'function' && savedSession) {
+            await window.ensureSessionInLocalStorage(savedSession);
+        }
 
         // Sync local list from store
         if (typeof jsonDataStore !== 'undefined') {
@@ -11418,19 +11592,52 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
     // --- V68: Report Filter Logic ---
-    filterSessionRadio.addEventListener('change', () => {
+    filterSessionRadio.addEventListener('change', async () => {
         if (filterSessionRadio.checked) {
             reportsSessionDropdownContainer.classList.remove('hidden');
-            reportsSessionSelect.value = reportsSessionSelect.options[1]?.value || ""; // Default to first session
+            const currentVal = reportsSessionSelect ? reportsSessionSelect.value : "";
+            const activeSession = (typeof window !== 'undefined' && window.currentSessionKey) 
+                ? window.currentSessionKey 
+                : ((typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect) ? allotmentSessionSelect.value : null);
+            
+            if (currentVal && currentVal !== 'all' && [...(reportsSessionSelect?.options || [])].some(o => o.value === currentVal)) {
+                // Keep current selection
+            } else if (activeSession && [...(reportsSessionSelect?.options || [])].some(o => o.value === activeSession)) {
+                reportsSessionSelect.value = activeSession;
+            } else {
+                reportsSessionSelect.value = reportsSessionSelect?.options[1]?.value || "";
+            }
+
+            if (reportsSessionSelect && reportsSessionSelect.value && reportsSessionSelect.value !== 'all') {
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(reportsSessionSelect.value);
+                }
+            }
         }
     });
 
     filterAllRadio.addEventListener('change', () => {
         if (filterAllRadio.checked) {
             reportsSessionDropdownContainer.classList.add('hidden');
-            reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+            if (reportsSessionSelect) {
+                reportsSessionSelect.value = reportsSessionSelect.options[0]?.value || "all"; // Reset to All
+            }
         }
     });
+
+    if (reportsSessionSelect) {
+        reportsSessionSelect.addEventListener('change', async () => {
+            const sk = reportsSessionSelect.value;
+            if (sk && sk !== 'all') {
+                if (typeof window.fetchHeavyDataOnDemand === 'function') {
+                    await window.fetchHeavyDataOnDemand(sk);
+                }
+                if (typeof window.ensureSessionInLocalStorage === 'function') {
+                    await window.ensureSessionInLocalStorage(sk);
+                }
+            }
+        });
+    }
 
     // --- NEW/MODIFIED RESET LOGIC (in Settings) ---
 
@@ -13571,7 +13778,12 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         allotmentSessionSelect.value = savedSession;
-
+        window.currentSessionKey = savedSession;
+        if (typeof reportsSessionSelect !== 'undefined' && reportsSessionSelect && savedSession) {
+            if ([...reportsSessionSelect.options].some(o => o.value === savedSession)) {
+                reportsSessionSelect.value = savedSession;
+            }
+        }
 
             const sessionKey = allotmentSessionSelect.value;
 
@@ -15663,7 +15875,7 @@ Are you sure you want to update these records?
     if (generateStickerButton) {
         generateStickerButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateStickerButton.disabled = true;
             generateStickerButton.textContent = "Generating Stickers...";
@@ -15677,8 +15889,10 @@ Are you sure you want to update these records?
                 getRoomCapacitiesFromStorage();
                 loadQPCodes();
 
-                // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers
-                const allAllotments = JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
+                // 🛡️ UNIFIED PIPELINE (V7): Use actual database for Stickers with Vault support
+                const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                    ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                    : JSON.parse(localStorage.getItem('examRoomAllotment') || '{}');
                 
                 let sessionsToProcess = [];
                 if (filterSessionRadio.checked) {
@@ -17356,7 +17570,7 @@ window.handlePythonExtraction = async function (jsonString) {
     if (generateRoomSummaryButton) {
         generateRoomSummaryButton.addEventListener('click', async () => {
             const sessionKey = reportsSessionSelect.value;
-            if (filterSessionRadio.checked && !checkManualAllotment(sessionKey)) { return; }
+            if (filterSessionRadio.checked && !await checkManualAllotment(sessionKey)) { return; }
 
             generateRoomSummaryButton.disabled = true;
             generateRoomSummaryButton.textContent = "Generating...";
@@ -17369,8 +17583,10 @@ window.handlePythonExtraction = async function (jsonString) {
                 currentCollegeName = localStorage.getItem(COLLEGE_NAME_KEY) || "University of Calicut";
                 getRoomCapacitiesFromStorage(); // Ensure config is loaded
 
-                // 🛡️ UNIFIED PIPELINE (V13): Bulk Session Handling
-                const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
+                // 🛡️ UNIFIED PIPELINE (V13): Bulk Session Handling with Vault support
+                const allAllotments = (typeof window.getFullRoomAllotments === 'function')
+                    ? await window.getFullRoomAllotments(filterSessionRadio.checked ? sessionKey : null)
+                    : JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
                 const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
                 
                 let sessionsToProcess = [];
