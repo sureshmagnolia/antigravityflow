@@ -1065,6 +1065,17 @@ async function migrateFromLocalStorage() {
         };
     }
 
+    // --- Helper: Parse Session Key ("Date | Time") Safely ---
+    function parseSessionKey(sk) {
+        if (!sk || typeof sk !== 'string') return { date: '', time: '' };
+        const parts = sk.split('|').map(p => p.trim());
+        return {
+            date: parts[0] || '',
+            time: parts.slice(1).join(' | ') || ''
+        };
+    }
+    window.parseSessionKey = parseSessionKey;
+
     // --- Helper: Chronological Session Sort (Oldest First) ---
     function compareSessionStrings(a, b) {
         if (!a || !b) return 0;
@@ -5157,7 +5168,14 @@ function generateQPDistributionPDF() {
             if (headerGroup) {
                 const h1 = headerGroup.querySelector('h1')?.innerText.trim() || "";
                 const h2 = headerGroup.querySelector('h2')?.innerText.trim() || "";
-                const h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+                let h3 = headerGroup.querySelector('h3')?.innerText.trim() || "";
+
+                if (!h3 || h3.includes('undefined')) {
+                    const sel = document.getElementById('reports-session-select');
+                    if (sel && sel.value && !sel.value.includes('undefined')) {
+                        h3 = sel.value;
+                    }
+                }
 
                 doc.setFontSize(14); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
                 doc.text(h1, PAGE_W/2, y, { align: 'center' });
@@ -5983,7 +6001,15 @@ if (toggleButton && sidebar) {
         let counter = 1;
 
         const allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
-        const currentSessionAllotment = allAllotments[sessionKey] || [];
+        let currentSessionAllotment = allAllotments[sessionKey];
+
+        // 🛡️ Fuzzy whitespace-agnostic matcher if exact match not found
+        if (!currentSessionAllotment && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) currentSessionAllotment = allAllotments[matchingKey];
+        }
+        currentSessionAllotment = currentSessionAllotment || [];
 
         // 1. Group Regular/Distance Rooms
         // The 'stream' property is now saved in 'currentSessionAllotment'
@@ -6011,7 +6037,13 @@ if (toggleButton && sidebar) {
 
         // 2. Scribe Allotment (Always Last)
         const allScribeAllotments = JSON.parse(localStorage.getItem(SCRIBE_ALLOTMENT_KEY) || '{}');
-        const scribeMap = allScribeAllotments[sessionKey] || {};
+        let scribeMap = allScribeAllotments[sessionKey];
+        if (!scribeMap && sessionKey) {
+            const cleanTarget = sessionKey.replace(/\s/g, '');
+            const matchingKey = Object.keys(allScribeAllotments).find(k => k.replace(/\s/g, '') === cleanTarget);
+            if (matchingKey) scribeMap = allScribeAllotments[matchingKey];
+        }
+        scribeMap = scribeMap || {};
 
         const uniqueScribeRooms = new Set(Object.values(scribeMap));
         usedRegularRooms.forEach(r => uniqueScribeRooms.delete(r)); // Remove duplicates
@@ -6988,11 +7020,15 @@ if (toggleButton && sidebar) {
             // Flatten saved allotment into student rows
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const isOfficialScribe = scribeRegNos.has(getRegNo(s));
                         final_student_list_for_report.push({
                             ...s,                      // Original Student Keys
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName, // Physical Room
                             seatNumber: s.seat || '?', // The STICKY SEAT
                             isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
@@ -7015,10 +7051,12 @@ if (toggleButton && sidebar) {
             loadQPCodes();
 
             final_student_list_for_report.forEach(student => {
-                const key = `${student.Date}_${student.Time}_${student['Room No']}`;
+                const sDate = student.Date || '';
+                const sTime = student.Time || '';
+                const key = `${sDate}_${sTime}_${student['Room No']}`;
                 if (!sessions[key]) {
                     sessions[key] = {
-                        Date: student.Date, Time: student.Time, Room: student['Room No'],
+                        Date: sDate, Time: sTime, Room: student['Room No'],
                         students: [], courseCounts: {}
                     };
                 }
@@ -7146,13 +7184,13 @@ if (toggleButton && sidebar) {
 
                     // --- SMART PRINT MANAGER: Capture JSON Data ---
                     const qpCodeForJson = (qpCode || "").replace(/^[A-Za-z]+/, ''); // Strip Alpha prefix
-                    const safeTime = session.Time.replace(/:/g, '-');
-                    const fileName = `${pageStream}_${session.Date}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
+                    const safeTime = (session.Time || '').replace(/:/g, '-');
+                    const fileName = `${pageStream}_${session.Date || 'Date'}_${safeTime}_${qpCodeForJson}_${cName}.pdf`;
 
                     lastGeneratedRoomWiseSummary.push({
                         stream: pageStream,
-                        date: session.Date,
-                        time: session.Time,
+                        date: session.Date || '',
+                        time: session.Time || '',
                         roomSerial: serialNo, // Room# (Serial Number)
                         qpCode: qpCodeForJson,
                         courseName: cName,
@@ -7436,10 +7474,14 @@ if (toggleButton && sidebar) {
             const baseData = [];
             sessionsToProcess.forEach(sk => {
                 const currentSessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 currentSessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         baseData.push({
                             ...s,
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName,
                             seatNumber: s.seat || '?',
                             Stream: room.stream || 'Regular'
@@ -7450,8 +7492,8 @@ if (toggleButton && sidebar) {
 
             // 🛡️ CHRONOLOGICAL SORT (Bulk Support)
             baseData.sort((a, b) => {
-                const sessionA = `${a.Date} | ${a.Time}`;
-                const sessionB = `${b.Date} | ${b.Time}`;
+                const sessionA = `${a.Date || ''} | ${a.Time || ''}`;
+                const sessionB = `${b.Date || ''} | ${b.Time || ''}`;
                 return compareSessionStrings(sessionA, sessionB);
             });
 
@@ -8801,10 +8843,14 @@ if (toggleButton && sidebar) {
             const processed_rows_with_rooms = [];
             sessionsToProcess.forEach(sk => {
                 const currentSessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 currentSessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         processed_rows_with_rooms.push({
                             ...s,
+                            Date: s.Date || skDate,
+                            Time: s.Time || skTime,
                             'Room No': room.roomName,
                             seatNumber: s.seat || '?',
                             Stream: room.stream || 'Regular'
@@ -8824,7 +8870,9 @@ if (toggleButton && sidebar) {
 
                 // 1. Grouping Logic
                 for (const student of processed_rows_with_rooms) {
-                    const sessionKey = `${student.Date} | ${student.Time}`;
+                    const sDate = student.Date || '';
+                    const sTime = student.Time || '';
+                    const sessionKey = `${sDate} | ${sTime}`;
                     const roomName = student['Room No'];
                     const streamName = student.Stream || "Regular";
                     const paperKey = getQpKey(student.Course, streamName);
@@ -8834,8 +8882,8 @@ if (toggleButton && sidebar) {
 
                     if (!sessions[sessionKey]) {
                         sessions[sessionKey] = {
-                            Date: student.Date,
-                            Time: student.Time,
+                            Date: sDate,
+                            Time: sTime,
                             papers: {}
                         };
                     }
@@ -8867,15 +8915,15 @@ if (toggleButton && sidebar) {
 
                 for (const sessionKey of sortedSessionKeys) {
                     const session = sessions[sessionKey];
-                    const sessionKeyPipe = `${session.Date} | ${session.Time}`;
-                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe);
+                    const sessionKeyPipe = `${session.Date || ''} | ${session.Time || ''}`;
+                    const roomSerialMap = getRoomSerialMap(sessionKeyPipe) || {};
 
                     allPagesHtml += `
                     <div class="print-page" style="padding: 5mm !important;">
                         <div class="print-header-group text-center mb-3 border-b-2 border-black pb-1">
                             <h1 class="text-lg font-bold uppercase leading-tight">${currentCollegeName}</h1>
                             <h2 class="text-base font-semibold">QP Distribution Summary</h2>
-                            <h3 class="text-sm">${session.Date} &nbsp;|&nbsp; ${session.Time}</h3>
+                            <h3 class="text-sm">${session.Date || ''} &nbsp;|&nbsp; ${session.Time || ''}</h3>
                         </div>
                 `;
 
@@ -8942,7 +8990,7 @@ if (toggleButton && sidebar) {
                                         }
                                     }
                                     const displayLoc = loc ? `(${loc})` : "";
-                                    const serialNo = roomSerialMap[roomName] || '-';
+                                    const serialNo = roomSerialMap[roomName] || (roomName ? roomName.replace(/\D/g, '') : '') || '-';
 
                                     // --- BOX LAYOUT ---
                                     html += `
@@ -9358,18 +9406,26 @@ if (toggleButton && sidebar) {
 
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const reg = getRegNo(s);
                         if (reg) {
-                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            const studentDate = s.Date || skDate;
+                            const studentTime = s.Time || skTime;
+                            const lookupKey = `${studentDate}|${studentTime}|${reg}`;
                             originalRoomMap[lookupKey] = { 
                                 room: room.roomName, 
                                 seat: s.seat || '?' 
                             };
                             
                             if (scribeRegNos.has(reg)) {
-                                allScribeStudents.push(s);
+                                allScribeStudents.push({
+                                    ...s,
+                                    Date: studentDate,
+                                    Time: studentTime
+                                });
                             }
                         }
                     });
@@ -9548,17 +9604,25 @@ if (toggleButton && sidebar) {
 
             sessionsToProcess.forEach(sk => {
                 const sessionAllotment = allAllotments[sk] || [];
+                const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const reg = getRegNo(s);
                         if (reg) {
-                            const lookupKey = `${s.Date}|${s.Time}|${reg}`;
+                            const studentDate = s.Date || skDate;
+                            const studentTime = s.Time || skTime;
+                            const lookupKey = `${studentDate}|${studentTime}|${reg}`;
                             originalRoomMap[lookupKey] = { 
                                 room: room.roomName, 
                                 seat: s.seat || '?' 
                             };
                             if (scribeRegNos.has(reg)) {
-                                allScribeStudents.push(s);
+                                allScribeStudents.push({
+                                    ...s,
+                                    Date: studentDate,
+                                    Time: studentTime
+                                });
                             }
                         }
                     });
@@ -11867,7 +11931,13 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const allocatedStudents = [];
                     sessionAllotment.forEach(room => {
                         (room.students || []).forEach(s => {
-                            allocatedStudents.push({ ...s, 'Room No': room.roomName, seatNumber: s.seat || '?' });
+                            allocatedStudents.push({ 
+                                ...s, 
+                                Date: s.Date || date,
+                                Time: s.Time || time,
+                                'Room No': room.roomName, 
+                                seatNumber: s.seat || '?' 
+                            });
                         });
                     });
 
@@ -15632,10 +15702,14 @@ Are you sure you want to update these records?
                 const final_student_list_for_stickers = [];
                 sessionsToProcess.forEach(sk => {
                     const currentSessionAllotment = allAllotments[sk] || [];
+                    const { date: skDate, time: skTime } = parseSessionKey(sk);
+
                     currentSessionAllotment.forEach(room => {
                         (room.students || []).forEach(s => {
                             final_student_list_for_stickers.push({
                                 ...s,
+                                Date: s.Date || skDate,
+                                Time: s.Time || skTime,
                                 'Room No': room.roomName,
                                 seatNumber: s.seat || '?',
                                 Stream: room.stream || 'Regular'
@@ -15657,21 +15731,22 @@ Are you sure you want to update these records?
                 // 1. Group by Session -> Room
                 const sessions = {};
                 final_student_list_for_stickers.forEach(student => {
-
+                    const sDate = student.Date || '';
+                    const sTime = student.Time || '';
                     let roomName = student['Room No'];
                     let isScribe = false;
                     if (student.isScribe) {
-                        const sessionKeyPipe = `${student.Date} | ${student.Time}`;
+                        const sessionKeyPipe = `${sDate} | ${sTime}`;
                         const scribeRoom = allScribeAllotments[sessionKeyPipe]?.[getRegNo(student)];
                         if (scribeRoom) {
                             roomName = scribeRoom;
                             isScribe = true;
                         }
                     }
-                    const key = `${student.Date}_${student.Time}_${roomName}`;
+                    const key = `${sDate}_${sTime}_${roomName}`;
                     if (!sessions[key]) {
                         sessions[key] = {
-                            Date: student.Date, Time: student.Time, Room: roomName,
+                            Date: sDate, Time: sTime, Room: roomName,
                             students: []
                         };
                     }
