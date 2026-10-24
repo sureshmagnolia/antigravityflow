@@ -1058,6 +1058,51 @@
     </div>
 </div>
 
+<div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 shadow-sm transition-all" id="bulk-rename-wrapper">
+    <div class="flex justify-between items-center mb-3">
+        <h3 class="text-sm font-bold text-amber-900 uppercase flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Rename Exam Across Database
+        </h3>
+        
+        <button id="btn-toggle-rename-lock" onclick="window.toggleExamRenameLock()" class="text-xs flex items-center gap-1 bg-white text-gray-500 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 transition shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span>Locked</span>
+        </button>
+    </div>
+    
+    <div id="bulk-rename-controls" class="flex flex-col sm:flex-row gap-3 items-end opacity-50 pointer-events-none transition-all">
+        <div class="flex-1 w-full">
+            <label class="block text-[10px] font-bold text-gray-600 uppercase mb-1">
+                Current Exam Name (in Database)
+                <span id="rename-source-count-badge" class="ml-1 text-[9px] font-semibold text-amber-700"></span>
+            </label>
+            <select id="edit-rename-source-exam" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-amber-500 focus:ring-amber-500 bg-gray-100" disabled>
+                <option value="">-- Locked --</option>
+            </select>
+        </div>
+        <div class="flex-1 w-full">
+            <label class="block text-[10px] font-bold text-gray-600 uppercase mb-1">Rename To (Master Exam in Settings)</label>
+            <select id="edit-rename-target-exam" class="block w-full p-2 border border-gray-300 rounded text-sm focus:border-amber-500 focus:ring-amber-500 bg-gray-100" disabled>
+                <option value="">-- Locked --</option>
+            </select>
+        </div>
+        <button id="btn-edit-bulk-rename" onclick="window.executeGlobalExamRename()" class="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded text-sm font-bold shadow-sm transition flex items-center justify-center gap-2 whitespace-nowrap" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Rename Across All Sessions
+        </button>
+    </div>
+    <p class="text-[10px] text-amber-800 mt-2 font-medium">
+        💡 This will update all student records tagged with the selected exam name across all sessions in the database in one operation.
+    </p>
+</div>
+
                         <div class="mb-4">
                             <label for="edit-session-select" class="block text-sm font-medium text-gray-700 mb-1">Select
                                 Exam Session:</label>
@@ -1116,13 +1161,6 @@
                                                 <option value="">-- Select a Session First --</option>
                                             </select>
                                         </div>
-                                        <div class="col-span-2 md:flex-1">
-                                            <label class="block text-[9px] font-bold text-indigo-600 uppercase mb-0.5 ml-1">Change Exam To</label>
-                                            <select id="session-change-exam-to" disabled
-                                                class="w-full p-1.5 h-8 text-xs border border-indigo-200 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-indigo-50/40 text-gray-800 font-medium">
-                                                <option value="">-- Keep Current Exam --</option>
-                                            </select>
-                                        </div>
                                         <div class="md:w-32">
                                             <label
                                                 class="block text-[9px] font-bold text-gray-400 uppercase mb-0.5 ml-1">New
@@ -1147,7 +1185,7 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                             </svg>
-                                            Update / Move
+                                            Move
                                         </button>
                                     </div>
 
