@@ -93,10 +93,10 @@
 
 
     <header
-        class="bg-white/80 backdrop-blur border-b border-white/20 py-2 px-3 md:p-4 flex justify-between items-center shadow-sm z-50 shrink-0 h-14 md:h-auto transition-all relative md:sticky md:top-0">
-        <div class="flex items-center gap-2 md:gap-3 overflow-hidden">
-            <div class="bg-indigo-50 p-1.5 md:p-2 rounded-lg shadow-sm shrink-0 flex items-center justify-center">
-                <svg class="h-10 w-10 md:h-12 md:w-12 magnolia-logo-svg drop-shadow-sm cursor-pointer" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        class="bg-white/90 backdrop-blur border-b border-gray-200/60 py-1.5 sm:py-2 px-2 sm:px-4 flex justify-between items-center shadow-2xs z-50 shrink-0 min-h-[48px] sm:min-h-[52px] md:min-h-[56px] transition-all relative md:sticky md:top-0 w-full max-w-full overflow-hidden box-border">
+        <div class="flex items-center gap-1 sm:gap-2 overflow-hidden min-w-0 shrink">
+            <div class="bg-indigo-50 p-1 sm:p-1.5 md:p-2 rounded-lg shadow-2xs shrink-0 flex items-center justify-center">
+                <svg class="h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10 magnolia-logo-svg drop-shadow-xs cursor-pointer" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
                     <defs>
                         <linearGradient id="invigLogoCenterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" style="stop-color:#FFDF00" />
@@ -119,20 +119,19 @@
                 </svg>
             </div>
             <div class="flex flex-col justify-center min-w-0">
-                <h1 class="text-sm md:text-lg font-bold text-gray-900 leading-tight truncate">Invigilation Portal <span
-                        class="text-indigo-600">24.0</span></h1>
+                <h1 class="text-xs sm:text-sm md:text-lg font-bold text-gray-900 leading-tight truncate">
+                    <span class="hidden min-[420px]:inline">Invigilation </span>Portal <span class="text-indigo-600">24.0</span>
+                </h1>
                 <p id="header-college-name"
-                    class="text-[10px] md:text-xs text-gray-500 font-medium truncate max-w-[140px] sm:max-w-md">Exam
-                    Wing</p>
+                    class="text-[9px] sm:text-[10px] md:text-xs text-gray-500 font-medium truncate max-w-[55px] min-[420px]:max-w-[100px] sm:max-w-xs md:max-w-md">Exam Wing</p>
             </div>
         </div>
 
-
-        <div id="auth-section" class="hidden flex items-center gap-2 md:gap-4 shrink-0">
+        <div id="auth-section" class="hidden flex items-center gap-1 sm:gap-1.5 md:gap-2.5 shrink min-w-0 ml-auto">
             <button onclick="openModal('help-modal')"
-                class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm"
+                class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 p-1 sm:p-1.5 md:px-2.5 md:py-1.5 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-2xs shrink-0"
                 title="User Guide / സഹായം">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0 1 18 0z" />
                 </svg>
@@ -140,58 +139,64 @@
             </button>
 
             <button id="btn-hod-monitor" onclick="openHodMonitorModal()"
-                class="hidden bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-200 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="hidden bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-200 p-1 sm:p-1.5 md:px-2.5 md:py-1.5 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-2xs shrink-0"
+                title="HoD Monitor">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                <span class="hidden md:inline">HoD Monitor</span>
+                <span class="hidden lg:inline">HoD Monitor</span>
             </button>
 
             <!-- Principal / Executive Monitor Button -->
             <button id="btn-principal-monitor" onclick="openPrincipalMonitorModal()"
-                class="hidden bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm"
+                class="hidden bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 p-1 sm:p-1.5 md:px-2.5 md:py-1.5 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-2xs shrink-0"
                 title="Principal / Executive Faculty Monitor">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
-                <span class="hidden md:inline">Principal Monitor</span>
+                <span class="hidden lg:inline">Principal Monitor</span>
             </button>
 
             <!-- Super Admin Switch College Button -->
             <button id="btn-super-admin-switch"
-                class="hidden bg-amber-500 hover:bg-amber-600 text-white p-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-sm border border-amber-400"
+                class="hidden bg-amber-500 hover:bg-amber-600 text-white p-1 sm:p-1.5 md:px-2.5 md:py-1.5 rounded-md text-xs md:text-sm font-bold transition flex items-center gap-1 shadow-2xs border border-amber-400 shrink-0"
                 title="Super Admin: Switch College">
                 <span>👑</span>
-                <span class="hidden md:inline">Switch College</span>
+                <span class="hidden lg:inline">Switch College</span>
             </button>
 
-            <div class="text-right flex flex-col justify-center">
+            <div class="text-right flex flex-col justify-center min-w-0" id="user-info-container">
                 <div id="user-name"
-                    class="hidden sm:block text-xs md:text-sm font-bold text-gray-800 truncate max-w-[100px]">User</div>
-                <div class="flex items-center justify-end gap-1.5">
+                    class="hidden lg:block text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px] lg:max-w-[130px]">User</div>
+                <div class="flex items-center justify-end gap-1">
                     <div id="user-role"
-                        class="hidden md:block text-[10px] md:text-xs text-indigo-600 font-bold uppercase tracking-wider">
+                        class="hidden xl:block text-[10px] md:text-xs text-indigo-600 font-bold uppercase tracking-wider">
                         Role</div>
                     <div id="sync-status"
-                        class="text-[9px] md:text-[10px] font-bold text-gray-400 flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> <span
-                            class="hidden sm:inline">Sync</span>
+                        class="text-[9px] md:text-[10px] font-bold text-gray-400 flex items-center gap-1 shrink-0"
+                        title="Cloud Sync Status">
+                        <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span><span
+                            class="hidden md:inline">Sync</span>
                     </div>
                 </div>
             </div>
 
             <button id="logout-btn"
-                class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 md:px-3 md:py-2 rounded-md text-xs md:text-sm font-bold transition border border-gray-200">
-                Logout
+                class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 rounded-md text-xs sm:text-sm font-bold transition border border-gray-200 shrink-0 flex items-center gap-1 shadow-2xs"
+                title="Logout">
+                <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
             </button>
         </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto p-6 relative">
+    <main class="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 relative max-w-full overflow-x-hidden">
 
         <div id="view-login" class="absolute inset-0 flex items-center justify-center bg-gray-50 z-50">
             <div class="bg-white p-8 rounded-xl shadow-xl text-center max-w-md w-full border border-gray-200">
@@ -208,16 +213,13 @@
             <div id="admin-today-container" class="mb-6 hidden"></div>
 
             <div class="flex p-1 space-x-1 bg-gray-100 rounded-xl mb-6 select-none">
-                <button id="tab-btn-staff" onclick="switchAdminTab('staff')"
-                    class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center">
+                <button id="tab-btn-staff" onclick="switchAdminTab('staff')" class="flex-1 py-2 px-1 sm:px-2 text-xs md:text-sm font-bold rounded-lg transition shadow bg-white text-indigo-600 text-center truncate">
                     Staff
                 </button>
-                <button id="tab-btn-slots" onclick="switchAdminTab('slots')"
-                    class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center">
+                <button id="tab-btn-slots" onclick="switchAdminTab('slots')" class="flex-1 py-2 px-1 sm:px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center truncate">
                     Duty Allocation
                 </button>
-                <button id="tab-btn-attendance" onclick="switchAdminTab('attendance')"
-                    class="flex-1 py-2 px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center">
+                <button id="tab-btn-attendance" onclick="switchAdminTab('attendance')" class="flex-1 py-2 px-1 sm:px-2 text-xs md:text-sm font-bold rounded-lg transition text-gray-500 hover:bg-gray-200 text-center truncate">
                     Attendance
                 </button>
             </div>
@@ -242,8 +244,7 @@
                         class="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg shadow-sm hover:bg-indigo-700 font-medium text-sm flex justify-center gap-2">
                         <span>+</span> Add Staff
                     </button>
-                    <button id="btn-sync-perms" onclick="syncAllStaffPermissions()"
-                        class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold px-4 py-2 rounded shadow-md flex items-center gap-2 transition">
+                    <button id="btn-sync-perms" onclick="syncAllStaffPermissions()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold px-4 py-2.5 rounded-lg shadow-sm flex items-center justify-center gap-2 transition">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-4 h-4">
                             <path stroke-linecap="round" stroke-linejoin="round"

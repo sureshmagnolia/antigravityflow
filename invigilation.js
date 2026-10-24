@@ -688,6 +688,7 @@ function applyCollegeConfig(data, mode, triggerRender) {
 function initAdminDashboard() {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = currentUser.displayName;
+    if (ui.userName && ui.userName.parentElement) ui.userName.parentElement.title = "Logged in as: " + (currentUser.displayName || currentUser.email);
     ui.userRole.textContent = (currentUser && currentUser.email === SUPER_ADMIN_EMAIL) ? "SUPER ADMIN" : "ADMIN";
     document.getElementById('auth-section').classList.remove('hidden');
     updateHeaderButtons('admin');
@@ -984,6 +985,7 @@ function calculateStaffTarget(staff, referenceDate = null) {
 function initStaffDashboard(me) {
     ui.headerName.textContent = collegeData.examCollegeName;
     ui.userName.textContent = me.name;
+    if (ui.userName && ui.userName.parentElement) ui.userName.parentElement.title = "Logged in as: " + me.name;
     ui.userRole.textContent = isAdmin ? "ADMIN (View as Staff)" : "INVIGILATOR";
     document.getElementById('auth-section').classList.remove('hidden');
 
@@ -2422,8 +2424,11 @@ function updateHeaderButtons(currentView) {
     if (isAdmin) {
         const btn = document.createElement('button');
         btn.id = 'switch-view-btn';
-        btn.className = "bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded text-sm font-bold hover:bg-indigo-200 transition";
-        btn.innerHTML = (currentView === 'admin') ? `Switch to My Duties` : `Back to Admin`;
+        btn.className = "bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-1 sm:px-2.5 sm:py-1.5 md:px-3 md:py-2 rounded text-xs sm:text-sm font-bold hover:bg-indigo-200 transition shrink-0 whitespace-nowrap flex items-center gap-1 shadow-2xs";
+        btn.title = (currentView === 'admin') ? "Switch to My Duties" : "Back to Admin Dashboard";
+        btn.innerHTML = (currentView === 'admin') 
+            ? `<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg><span class="hidden sm:inline">Switch to </span><span class="hidden min-[400px]:inline">My </span>Duties` 
+            : `<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg><span class="hidden sm:inline">Back to </span>Admin`;
         btn.onclick = (currentView === 'admin') ? switchToStaffView : initAdminDashboard;
         container.insertBefore(btn, document.getElementById('logout-btn'));
     }
@@ -8715,8 +8720,9 @@ function updateSyncStatus(msg, type) {
         textClass = "text-blue-600";
     }
 
-    el.className = `text-[10px] font-bold ${textClass} flex items-center gap-1`;
-    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span> ${msg}`;
+    el.className = `text-[9px] md:text-[10px] font-bold ${textClass} flex items-center gap-1 shrink-0`;
+    el.title = `Cloud Sync: ${msg}`;
+    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${color}"></span><span class="hidden md:inline">${msg}</span>`;
 }
 
 // ==========================================
@@ -11399,7 +11405,7 @@ function updateLiveStaffWidget(count) {
     if (!widget) {
         widget = document.createElement('div');
         widget.id = 'live-staff-widget';
-        widget.className = "fixed bottom-4 left-4 bg-white/95 backdrop-blur border border-green-200 shadow-lg rounded-full px-4 py-2 flex items-center gap-2 z-50 cursor-pointer hover:scale-105 transition-transform group";
+        widget.className = "fixed bottom-3 left-3 sm:bottom-4 sm:left-4 bg-white/95 backdrop-blur border border-green-200 shadow-md rounded-full px-2.5 py-1 sm:px-4 sm:py-2 flex items-center gap-1.5 sm:gap-2 z-40 cursor-pointer hover:scale-105 transition-transform group text-xs";
         widget.onclick = showLiveStaffModal;
         document.body.appendChild(widget);
     }
