@@ -1395,6 +1395,7 @@ function populateAllExamDropdowns() {
         { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
         { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
         { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
+        { id: 'session-change-exam-to', defaultText: '-- Keep Current Exam --' }, // Session Ops Change Exam To
         { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
     ];
 
@@ -5792,20 +5793,22 @@ if (toggleButton && sidebar) {
 
         const saveBtn = document.getElementById('save-rule-btn');
         if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
+            saveBtn.addEventListener('click', async () => {
                 const name = document.getElementById('rule-name').value.trim();
 
-                if (!name) { UiModal.alert("Please enter an Exam Name."); return; }
+                if (!name) { await UiModal.alert("Please enter an Exam Name."); return; }
 
                 // Check Duplicates
                 const isDuplicate = currentExamRules.some(r => r.examName.toLowerCase() === name.toLowerCase() && r.id !== editingRuleId);
-                if (isDuplicate) { UiModal.alert("This Exam Name already exists."); return; }
+                if (isDuplicate) { await UiModal.alert("This Exam Name already exists."); return; }
 
+                let oldExamName = null;
                 // Save Data
                 if (editingRuleId) {
                     // Update Existing
                     const ruleIndex = currentExamRules.findIndex(r => r.id === editingRuleId);
                     if (ruleIndex !== -1) {
+                        oldExamName = currentExamRules[ruleIndex].examName;
                         currentExamRules[ruleIndex] = { ...currentExamRules[ruleIndex], examName: name };
                     }
                     editingRuleId = null;
@@ -5816,7 +5819,7 @@ if (toggleButton && sidebar) {
                 }
 
                 localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
-                populateAllExamDropdowns(); // <--- ADD THIS LINE to refresh all dropdowns instantly
+                populateAllExamDropdowns(); // Refresh all dropdowns instantly
                 isAddingExamSchedule = false;
                 renderExamRulesInModal();
                 renderExamNameSettings();
@@ -5825,6 +5828,56 @@ if (toggleButton && sidebar) {
                 if (typeof populateUploadExamDropdown === 'function') populateUploadExamDropdown();
                 
                 if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
+
+                // 🔄 AUTO-CASCADE RENAME TO STUDENT RECORDS IN DATABASE
+                if (oldExamName && oldExamName !== name) {
+                    let students = allStudentData;
+                    if ((!students || students.length === 0) && typeof loadExamDataIDB === 'function') {
+                        try {
+                            students = (await loadExamDataIDB()) || [];
+                            allStudentData = students;
+                        } catch (loadErr) {
+                            console.warn("Could not load student data for cascade check:", loadErr);
+                        }
+                    }
+
+                    const matchingStudents = (students || []).filter(s => {
+                        if (!s) return false;
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                        return sExam === oldExamName;
+                    });
+
+                    if (matchingStudents.length > 0) {
+                        const cascadeConfirm = await UiModal.confirm(
+                            "Cascade Exam Rename",
+                            `Found ${matchingStudents.length} student record(s) currently tagged with:\n"${oldExamName}"\n\nDo you want to automatically cascade this rename and update all ${matchingStudents.length} student record(s) to:\n"${name}"\nacross the database?`
+                        );
+
+                        if (cascadeConfirm) {
+                            matchingStudents.forEach(s => {
+                                s['Exam Name'] = name;
+                                if (s.examName !== undefined) s.examName = name;
+                                if (s.ExamName !== undefined) s.ExamName = name;
+                            });
+
+                            if (typeof saveExamDataIDB === 'function') {
+                                await saveExamDataIDB(allStudentData);
+                            }
+                            if (typeof syncDataToCloud === 'function') {
+                                await syncDataToCloud('baseData');
+                            }
+                            UiModal.toast(`✅ Renamed ${matchingStudents.length} student records to "${name}".`);
+
+                            // Refresh Session Ops if a session is currently selected
+                            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                                const editSelect = document.getElementById('edit-session-select');
+                                if (editSelect && editSelect.value) {
+                                    window.populateSessionOpsExamDropdown(editSelect.value);
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
     }    
@@ -14902,6 +14955,8 @@ window.real_disable_all_report_buttons = function (disabled) {
             if (typeof window.populateSessionOpsExamDropdown === 'function') {
                 window.populateSessionOpsExamDropdown(currentEditSession, sessionStudents);
             }
+            const changeExamSelect = document.getElementById('session-change-exam-to');
+            if (changeExamSelect) changeExamSelect.value = '';
 
             // --- NEW: Update and Show Badge Count ---
             if (opsCountBadge) {
@@ -19375,7 +19430,8 @@ async function loadInitialData() {
     const btnSessionLock = document.getElementById('btn-session-ops-lock');
     const sessionOpsControls = document.getElementById('session-ops-controls');
     const sessionDateInput = document.getElementById('session-new-date');
-    const sessionExamNameInput = document.getElementById('session-new-exam-name'); // <--- ADD THIS
+    const sessionExamNameInput = document.getElementById('session-new-exam-name'); // Target Exam in Session
+    const sessionChangeExamToInput = document.getElementById('session-change-exam-to'); // Change Exam To
     const sessionTimeInput = document.getElementById('session-new-time');
     const btnSessionReschedule = document.getElementById('btn-session-reschedule');
     const btnSessionDelete = document.getElementById('btn-session-delete');
@@ -19391,8 +19447,8 @@ async function loadInitialData() {
 function updateSessionOpsLockUI() {
         if (!btnSessionLock || !sessionOpsControls) return;
         
-        // Include the new input in the list
-        const controls = [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete, sessionExamNameInput];
+        // Include the new inputs in the list
+        const controls = [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete, sessionExamNameInput, sessionChangeExamToInput];
 
         if (isSessionOpsLocked) {
             // LOCKED STATE
@@ -19437,16 +19493,136 @@ function updateSessionOpsLockUI() {
             const rawDate = sessionDateInput.value;
             const rawTime = sessionTimeInput.value;
             const targetExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : "";
+            const newExamName = sessionChangeExamToInput ? sessionChangeExamToInput.value.trim() : "";
             const currentSession = editSessionSelect.value;
 
             if (!currentSession) return await UiModal.alert("No session selected.");
 
-            // Validation: Must enter at least New Date or New Time to reschedule
-            if (!rawDate && !rawTime) {
-                return await UiModal.alert("Please enter a New Date, a New Time, or both to reschedule.");
+            // Validation: Must enter at least New Date, New Time, or select New Exam Name
+            if (!rawDate && !rawTime && !newExamName) {
+                return await UiModal.alert("Please enter a New Date, New Time, or select an Exam to change.");
             }
 
-            // A. Determine New Date/Time (Support changing Date or Time independently)
+            const [targetDateRaw, targetTimeRaw] = currentSession.split('|').map(p => p.trim());
+            const dateRawNorm = (targetDateRaw || "").replace(/[./-]/g, '');
+            const timeRawNorm = (targetTimeRaw || "").toUpperCase();
+
+            // Find students in current session
+            const sessionStudents = (allStudentData || []).filter(s => {
+                if (!s) return false;
+                const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                let timeMatch = (sTimeNorm === timeRawNorm);
+                if (!timeMatch && typeof normalizeTime === 'function') {
+                    timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                }
+                return (sDateNorm === dateRawNorm) && timeMatch;
+            });
+
+            const targetStudents = targetExamName
+                ? sessionStudents.filter(s => (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim() === targetExamName)
+                : sessionStudents;
+
+            if (targetStudents.length === 0) {
+                return await UiModal.alert(targetExamName 
+                    ? `No students found for exam "${targetExamName}" in this session.`
+                    : "No students found in this session.");
+            }
+
+            // ========================================================
+            // OPTION A: ONLY Changing Exam Name (no Date or Time move)
+            // ========================================================
+            if (!rawDate && !rawTime && newExamName) {
+                if (targetExamName && targetExamName === newExamName) {
+                    return await UiModal.alert("The selected New Exam is identical to the current exam.");
+                }
+
+                const confirmMsg = targetExamName
+                    ? `Change exam name for ${targetStudents.length} student(s) in session "${currentSession}"\n\n• Current Exam: "${targetExamName}"\n• Change To: "${newExamName}"\n\nProceed?`
+                    : `Change exam name for ALL ${targetStudents.length} student(s) in session "${currentSession}"\n\n• Change To: "${newExamName}"\n\nProceed?`;
+
+                if (!await UiModal.confirm('Confirm Exam Name Update', confirmMsg)) return;
+
+                // Check if other sessions also have targetExamName (if specific exam targeted)
+                let cascadeToOtherSessions = false;
+                if (targetExamName) {
+                    const otherStudentsWithExam = (allStudentData || []).filter(s => {
+                        if (!s) return false;
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                        if (sExam !== targetExamName) return false;
+                        const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                        const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                        let timeMatch = (sTimeNorm === timeRawNorm);
+                        if (!timeMatch && typeof normalizeTime === 'function') {
+                            timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                        }
+                        const inCurrent = (sDateNorm === dateRawNorm) && timeMatch;
+                        return !inCurrent;
+                    });
+
+                    if (otherStudentsWithExam.length > 0) {
+                        const otherSessionSet = new Set(otherStudentsWithExam.map(s => `${s.Date} | ${s.Time}`));
+                        const cascadeMsg = `Found ${otherStudentsWithExam.length} other student(s) across ${otherSessionSet.size} other session(s) still tagged with "${targetExamName}".\n\nWould you like to cascade this change to rename those records to "${newExamName}" as well?`;
+                        cascadeToOtherSessions = await UiModal.confirm('Cascade to Other Sessions', cascadeMsg);
+                    }
+                }
+
+                try {
+                    let updatedCount = 0;
+                    const affectedSessions = new Set();
+                    affectedSessions.add(currentSession);
+
+                    allStudentData.forEach(s => {
+                        if (!s) return;
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                        const sDateNorm = (s.Date || "").toString().trim().replace(/[./-]/g, '');
+                        const sTimeNorm = (s.Time || "").toString().trim().toUpperCase();
+                        let timeMatch = (sTimeNorm === timeRawNorm);
+                        if (!timeMatch && typeof normalizeTime === 'function') {
+                            timeMatch = (normalizeTime(sTimeNorm) === normalizeTime(timeRawNorm));
+                        }
+                        const inCurrent = (sDateNorm === dateRawNorm) && timeMatch;
+
+                        let shouldUpdate = false;
+                        if (inCurrent) {
+                            if (!targetExamName || sExam === targetExamName) {
+                                shouldUpdate = true;
+                            }
+                        } else if (cascadeToOtherSessions && targetExamName && sExam === targetExamName) {
+                            shouldUpdate = true;
+                            affectedSessions.add(`${s.Date} | ${s.Time}`);
+                        }
+
+                        if (shouldUpdate) {
+                            s['Exam Name'] = newExamName;
+                            if (s.examName !== undefined) s.examName = newExamName;
+                            if (s.ExamName !== undefined) s.ExamName = newExamName;
+                            updatedCount++;
+                        }
+                    });
+
+                    await saveExamDataIDB(allStudentData);
+                    if (typeof syncDataToCloud === 'function') {
+                        await syncDataToCloud('baseData');
+                    }
+                    for (const sess of affectedSessions) {
+                        if (typeof syncSessionToCloud === 'function') {
+                            await syncSessionToCloud(sess);
+                        }
+                    }
+
+                    await UiModal.alert(`✅ Successfully updated ${updatedCount} student record(s) to "${newExamName}".\nSynced to Cloud.`);
+                    window.location.reload();
+                    return;
+                } catch (e) {
+                    console.error("Error during exam name change:", e);
+                    return await UiModal.alert("Error during exam name update: " + e.message);
+                }
+            }
+
+            // ========================================================
+            // OPTION B: Date/Time Reschedule (with optional Exam Name change)
+            // ========================================================
             let newDate = "";
             let newTime = "";
             let isMove = false; // Tracks if we are changing the session key
@@ -19478,17 +19654,23 @@ function updateSessionOpsLockUI() {
             }
 
             const newSessionKey = `${newDate} | ${newTime}`;
-            if (newSessionKey === currentSession) {
-                return await UiModal.alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
+            if (newSessionKey === currentSession && !newExamName) {
+                return await UiModal.alert("The selected New Date and Time are identical to the current session. Please choose a different date, time, or exam.");
             }
-            isMove = true;
+            isMove = (newSessionKey !== currentSession);
 
             // B. Confirmation Message
-            let changesMsg = `• Move to: ${newSessionKey}\n`;
+            let changesMsg = "";
+            if (isMove) {
+                changesMsg += `• Move to: ${newSessionKey}\n`;
+            }
             if (targetExamName) {
                 changesMsg += `• Target Exam: "${targetExamName}" (Only students of this exam will be rescheduled)\n`;
             } else {
                 changesMsg += `• Target Exam: All Exams in Session (Entire session will be rescheduled)\n`;
+            }
+            if (newExamName) {
+                changesMsg += `• Change Exam Name to: "${newExamName}"\n`;
             }
 
             const msg = `⚠️ CONFIRM SESSION RESCHEDULE ⚠️\n\nCurrent Session: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
@@ -19496,15 +19678,14 @@ function updateSessionOpsLockUI() {
             if (!await UiModal.confirm('Confirm Reschedule', msg)) return;
             
             // Safety check for moves
-            const check = await UiModal.prompt("⚠️ Move Session Confirmation", "Type 'CHANGE' to confirm moving this session:", "CHANGE");
-            if (check !== 'CHANGE') return await UiModal.alert("Cancelled.");
+            if (isMove) {
+                const check = await UiModal.prompt("⚠️ Move Session Confirmation", "Type 'CHANGE' to confirm moving this session:", "CHANGE");
+                if (check !== 'CHANGE') return await UiModal.alert("Cancelled.");
+            }
 
             try {
                 // 1. Update Students (Memory)
                 let studentCount = 0;
-                const [targetDateRaw, targetTimeRaw] = currentSession.split('|').map(p => p.trim());
-                const dateRawNorm = (targetDateRaw || "").replace(/[./-]/g, '');
-                const timeRawNorm = (targetTimeRaw || "").toUpperCase();
 
                 allStudentData.forEach(s => {
                     if (!s) return;
@@ -19524,9 +19705,17 @@ function updateSessionOpsLockUI() {
                             return;
                         }
 
-                        // Update Date/Time (keep existing Exam Name intact)
-                        s.Date = newDate;
-                        s.Time = newTime;
+                        // Update Date/Time
+                        if (isMove) {
+                            s.Date = newDate;
+                            s.Time = newTime;
+                        }
+                        // Update Exam Name if selected
+                        if (newExamName) {
+                            s['Exam Name'] = newExamName;
+                            if (s.examName !== undefined) s.examName = newExamName;
+                            if (s.ExamName !== undefined) s.ExamName = newExamName;
+                        }
                         studentCount++;
                     }
                 });
@@ -19660,7 +19849,7 @@ function updateSessionOpsLockUI() {
                     }
                 }
 
-                await UiModal.alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
+                await UiModal.alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}${newExamName ? ` and updated exam to "${newExamName}"` : ""}.\nSyncing to Cloud...`);
 
                 // 5. Cloud Sync
                 if (remainingInOldSession === 0 && typeof deleteSessionFromCloud === 'function') {
