@@ -24424,7 +24424,7 @@ async function runSystemHealthCheck() {
 // 🏷️ GLOBAL EXAM RENAME FUNCTIONS
 // ==========================================
 
-window.toggleExamRenameLock = function() {
+window.toggleExamRenameLock = async function() {
     const renameLockBtn = document.getElementById('btn-toggle-rename-lock');
     const sourceSelect = document.getElementById('edit-rename-source-exam');
     const targetSelect = document.getElementById('edit-rename-target-exam');
@@ -24438,6 +24438,16 @@ window.toggleExamRenameLock = function() {
 
     if (isLocked) {
         // --- UNLOCKING ---
+        let students = allStudentData;
+        if ((!students || students.length === 0) && typeof loadExamDataIDB === 'function') {
+            try {
+                students = (await loadExamDataIDB()) || [];
+                allStudentData = students;
+            } catch (err) {
+                console.warn("Could not load student data for exam rename:", err);
+            }
+        }
+
         sourceSelect.innerHTML = '<option value="">-- Select Exam to Rename --</option>';
 
         const examStats = new Map(); // examName -> { count: number, sessions: Set }
@@ -24454,7 +24464,7 @@ window.toggleExamRenameLock = function() {
         });
 
         if (examStats.size === 0) {
-            UiModal.alert("No exam records found in student data!");
+            await UiModal.alert("No exam records found in student data!");
             return;
         }
 
