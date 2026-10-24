@@ -283,7 +283,7 @@
                                         class="bg-blue-600 text-white border border-blue-700 px-2 py-2 rounded text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1 shadow-sm transition">
                                         ☁️ Push to Drive
                                     </button>
-                                  <button onclick="if(window.executeDriveRestore) { alert('Updates available on ribbon!'); } else if(window.restoreFromDrive) { window.restoreFromDrive(); } else { alert('Drive not linked.'); }"
+                                  <button onclick="if(window.executeDriveRestore) { UiModal.alert('Updates available on ribbon!'); } else if(window.restoreFromDrive) { window.restoreFromDrive(); } else { UiModal.alert('Drive not linked.'); }"
                                       class="bg-white text-blue-600 border border-blue-300 px-2 py-2 rounded text-xs font-bold hover:bg-blue-50 flex items-center justify-center gap-1 shadow-sm transition">
                                       📥 Fetch from Drive
                                   </button>

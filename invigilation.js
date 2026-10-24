@@ -39,7 +39,7 @@ const provider = window.firebase.provider;
 getRedirectResult(auth).catch((error) => {
     if (error.code === 'auth/missing-initial-state') {
         console.warn("Caught partitioned storage redirect error.");
-        alert("⚠️ Login Blocked by Browser Privacy Settings.\n\nTo fix this: Open this page directly in a standard browser (like Chrome or Safari). If you opened this link inside an app like WhatsApp or Telegram, the login system is blocked.");
+        UiModal.alert("⚠️ Login Blocked by Browser Privacy Settings.\n\nTo fix this: Open this page directly in a standard browser (like Chrome or Safari). If you opened this link inside an app like WhatsApp or Telegram, the login system is blocked.");
     } else {
         console.error("Auth Error:", error);
     }
@@ -170,7 +170,7 @@ onAuthStateChanged(auth, async (user) => {
             await handleLogin(user);
         } else {
             console.error("Critical Error: handleLogin function is missing!");
-            alert("System Error: Login function not found. Please refresh.");
+            await UiModal.alert("System Error: Login function not found. Please refresh.");
         }
     } else {
         // Logout Cleanup
@@ -317,13 +317,13 @@ async function handleLogin(user) {
             return;
         }
 
-        alert("⛔ Access Denied. Your email is not found in any college.");
+        await UiModal.alert("⛔ Access Denied. Your email is not found in any college.");
         signOut(auth);
         document.getElementById('login-btn').innerText = "Login with Google";
 
     } catch (e) {
         console.error("Login Error:", e);
-        alert("Login Error: " + e.message);
+        await UiModal.alert("Login Error: " + e.message);
     }
 }
 
@@ -362,7 +362,7 @@ async function verifyAndLaunch(collegeId, user, isSilentCacheCheck = false) {
         localStorage.removeItem('my_college_id'); // Clear invalid cache
         if (isSilentCacheCheck) return false; // Silently fail and let the main login function search the DB
         
-        alert("⛔ Login Failed: " + e.message);
+        await UiModal.alert("⛔ Login Failed: " + e.message);
         //signOut(auth);
         document.getElementById('login-btn').innerText = "Login with Google";
         return false;
@@ -1199,9 +1199,9 @@ function getFirstName(fullName) {
 
 // --- AUTOMATIC EMAIL SYSTEM (Google Apps Script) ---
 window.sendSingleEmail = function (btn, email, name, subject, message) {
-    if (!email) return alert("No email address for this faculty.");
+    if (!email) return UiModal.alert("No email address for this faculty.");
     // Use the global variable from your settings
-    if (!googleScriptUrl) return alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
+    if (!googleScriptUrl) return UiModal.alert("⚠️ Email Service Not Configured.\n\nPlease go to 'Settings & Roles' and paste your Google Apps Script Web App URL.");
 
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -1243,7 +1243,7 @@ window.sendSingleEmail = function (btn, email, name, subject, message) {
     })
     .catch(error => {
         console.error('FAILED...', error);
-        alert("Network Error: Could not reach Google Script.\nCheck your internet or the Script URL.");
+        UiModal.alert("Network Error: Could not reach Google Script.\nCheck your internet or the Script URL.");
         btn.disabled = false;
         btn.innerHTML = originalText;
         btn.classList.add('bg-red-600');
@@ -1274,7 +1274,7 @@ window.toggleAdminLock = async function (key) {
 }
 
 window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
-    if (!confirm(`${lockState ? '🔒 LOCK' : '🔓 UNLOCK'} Admin Posting for ${monthStr} Week ${weekNum}?\n\nThis will prevent staff from adding unavailability.`)) return;
+    if (!await UiModal.confirm(`${lockState ? '🔒 LOCK' : '🔓 UNLOCK'} Admin Posting for ${monthStr} Week ${weekNum}?\n\nThis will prevent staff from adding unavailability.`)) return;
 
     let changed = false;
     Object.keys(invigilationSlots).forEach(key => {
@@ -1302,7 +1302,7 @@ window.toggleWeekAdminLock = async function (monthStr, weekNum, lockState) {
         await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Authoritative batch lock
         renderSlotsGridAdmin();
     } else {
-        alert("No changes needed.");
+        await UiModal.alert("No changes needed.");
     }
 }
 
@@ -2441,11 +2441,11 @@ window.changeAdminMonth = function (delta) {
     currentAdminDate.setMonth(currentAdminDate.getMonth() + delta);
     renderSlotsGridAdmin();
 }
-function switchToStaffView() {
+async function switchToStaffView() {
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
     if (me) initStaffDashboard(me);
     else {
-        if (confirm("No staff profile found. Create one?")) {
+        if (await UiModal.confirm("No staff profile found. Create one?")) {
             openModal('add-staff-modal');
             document.getElementById('stf-email').value = currentUser.email;
             document.getElementById('stf-email').disabled = true;
@@ -2522,7 +2522,7 @@ window.syncSlotsToCloud = async function syncSlotsToCloud(affectedKey = null) {
                 if (cloudShardCount > 5 && localKeyCount < (cloudShardCount / 2)) {
                     console.error(`🛑 CRITICAL: Partial Data Detected! Local has ${localKeyCount} keys, but Cloud has ${cloudShardCount} shards. Sync Blocked.`);
                     updateSyncStatus("Partial Load Blocked", "error");
-                    alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
+                    await UiModal.alert("⚠️ SYNC BLOCKED: The system detected that not all data was loaded from the server. Saving now would cause data loss. Please REFRESH the page and try again.");
                     return false;
                 }
             }
@@ -2731,7 +2731,7 @@ async function saveManualSlot() {
     const reqInput = parseInt(document.getElementById('manual-slot-req').value);
 
     if (!dateInput || !timeInput || isNaN(reqInput) || reqInput < 1) {
-        alert("Please enter a valid date, time, and required count.");
+        await UiModal.alert("Please enter a valid date, time, and required count.");
         return;
     }
 
@@ -2757,7 +2757,7 @@ async function saveManualSlot() {
 
     // 4. Check for existing
     if (invigilationSlots[key]) {
-        if (!confirm(`A slot for ${key} already exists (Req: ${invigilationSlots[key].required}).\n\nOverwrite with ${reqInput}?`)) {
+        if (!await UiModal.confirm(`A slot for ${key} already exists (Req: ${invigilationSlots[key].required}).\n\nOverwrite with ${reqInput}?`)) {
             return;
         }
     }
@@ -2777,7 +2777,7 @@ async function saveManualSlot() {
         window.closeModal('add-slot-modal');
         renderSlotsGridAdmin();
     } catch (e) {
-        alert("Save failed: " + e.message);
+        await UiModal.alert("Save failed: " + e.message);
     } finally {
         window._isSavingManualSlot = false;
         if (btn) { btn.disabled = false; btn.innerText = originalText; }
@@ -2791,7 +2791,7 @@ window.saveManualSlot = saveManualSlot;
 // --- NEW: Delete Slot Function ---
 window.deleteSlot = async function (key) {
     // 1. Security Check
-    if (!confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot?\n\nSlot: ${key}\n\nThis will remove all assigned staff and records for this session.`)) return;
+    if (!await UiModal.confirm(`⚠️ DANGER ZONE ⚠️\n\nAre you sure you want to PERMANENTLY DELETE this slot?\n\nSlot: ${key}\n\nThis will remove all assigned staff and records for this session.`)) return;
 
     // 2. Delete from local object
     if (invigilationSlots[key]) {
@@ -2888,7 +2888,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
     });
 
     if (hasAdminLock) {
-        return alert(`🚫 Posting Locked! The Admin has locked the ${session} session on ${dateStr} for manual assignment. You cannot change unavailability now.`);
+        return await UiModal.alert(`🚫 Posting Locked! The Admin has locked the ${session} session on ${dateStr} for manual assignment. You cannot change unavailability now.`);
     }
     // -------------------------------------
 
@@ -2902,7 +2902,7 @@ window.toggleAdvance = async function(dateStr, email, session) {
 
     if (existingEntry) {
         // REMOVE (Simple Confirm)
-        if(confirm(`Remove 'Unavailable' status for ${session}?`)) {
+        if(await UiModal.confirm(`Remove 'Unavailable' status for ${session}?`)) {
             // A. UPDATE LOCAL DATA INSTANTLY
             advanceUnavailability[dateStr][session] = list.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             
@@ -2961,7 +2961,7 @@ window.toggleWholeDay = async function(dateStr, email) {
     });
 
     if (hasAdminLock) {
-        return alert(`🚫 Posting Locked! The Admin has locked sessions on ${dateStr} for manual assignment. You cannot change 'Whole Day' unavailability right now.`);
+        return await UiModal.alert(`🚫 Posting Locked! The Admin has locked sessions on ${dateStr} for manual assignment. You cannot change 'Whole Day' unavailability right now.`);
     }
     // -------------------------------------
 
@@ -2978,7 +2978,7 @@ window.toggleWholeDay = async function(dateStr, email) {
 
     if (isFullDay) {
         // CLEAR BOTH
-        if(confirm("Clear unavailability for the WHOLE DAY?")) {
+        if(await UiModal.confirm("Clear unavailability for the WHOLE DAY?")) {
             // A. UPDATE LOCAL DATA INSTANTLY
             advanceUnavailability[dateStr].FN = fnList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             advanceUnavailability[dateStr].AN = anList.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
@@ -3039,7 +3039,7 @@ window.toggleLock = async function (key) {
 
 // --- NEW: Lock All Function ---
 window.lockAllSessions = async function () {
-    if (!confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
+    if (!await UiModal.confirm("🔒 Are you sure you want to LOCK ALL sessions?\n\nInvigilators will not be able to volunteer for any session.")) return;
 
     let changed = false;
     Object.keys(invigilationSlots).forEach(key => {
@@ -3051,9 +3051,9 @@ window.lockAllSessions = async function () {
 
     if (changed) {
         await syncSlotsToCloud("FORCE_OVERWRITE");
-        alert("✅ All sessions have been LOCKED.");
+        await UiModal.alert("✅ All sessions have been LOCKED.");
     } else {
-        alert("ℹ️ All sessions were already locked.");
+        await UiModal.alert("ℹ️ All sessions were already locked.");
     }
 }
 
@@ -3061,7 +3061,7 @@ window.lockAllSessions = async function () {
 window.changeSlotReq = async function (key, delta) {
     const slot = invigilationSlots[key];
     const newReq = slot.required + delta;
-    if (newReq < slot.assigned.length) return alert("Cannot reduce slots below assigned count.");
+    if (newReq < slot.assigned.length) return await UiModal.alert("Cannot reduce slots below assigned count.");
     if (newReq < 1) return;
     slot.required = newReq;
     await syncSlotsToCloud(key);
@@ -3070,17 +3070,17 @@ window.changeSlotReq = async function (key, delta) {
 
 
 window.cancelDuty = async function (key, email, isLocked) {
-    if (isLocked && !isAdmin) return alert("🚫 Slot Locked! Contact Admin.");
+    if (isLocked && !isAdmin) return await UiModal.alert("🚫 Slot Locked! Contact Admin.");
 
     // Check if it's Admin Posted
     const slot = invigilationSlots[key];
     const meta = slot && slot.assignmentMeta ? slot.assignmentMeta[email] : {};
     const isAdminPosted = meta && (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
     if (isAdminPosted && !isAdmin) {
-        return alert("🚫 Action Denied.\n\nThis duty was assigned by the Admin and cannot be cancelled. Please use the 'Exchange' option.");
+        return await UiModal.alert("🚫 Action Denied.\n\nThis duty was assigned by the Admin and cannot be cancelled. Please use the 'Exchange' option.");
     }
 
-    if (confirm("Cancel duty?")) {
+    if (await UiModal.confirm("Cancel duty?")) {
         invigilationSlots[key].assigned = invigilationSlots[key].assigned.filter(e => e !== email);
         // 🛡️ [CLEANUP FIX]: Remove from exchange market immediately if cancelled
         if (invigilationSlots[key].exchangeRequests) {
@@ -3116,12 +3116,12 @@ window.setAvailability = async function (key, email, isAvailable) {
     // If trying to mark UNAVAILABLE and Admin Lock is ON -> BLOCK IT
     const slot = invigilationSlots[key];
     if (!isAvailable && slot && slot.isAdminLocked) {
-        alert("🚫 Posting Locked! You cannot mark unavailability for this slot as the Admin is finalizing assignments.");
+        await UiModal.alert("🚫 Posting Locked! You cannot mark unavailability for this slot as the Admin is finalizing assignments.");
         return;
     }
 
     if (isAvailable) {
-        if (confirm("Mark available?")) {
+        if (await UiModal.confirm("Mark available?")) {
             invigilationSlots[key].unavailable = invigilationSlots[key].unavailable.filter(u => (typeof u === 'string' ? u !== email : u.email !== email));
             logActivity("Marked Available", `${getNameFromEmail(email)} marked as available for ${key}.`);
             await syncSlotsToCloud(key); // FIX: Passing key ensures availability status syncs correctly
@@ -3160,10 +3160,10 @@ window.confirmUnavailable = async function () {
 
     // 1. Validation
     if (invigilationSlots[key] && invigilationSlots[key].isAdminLocked && markedBy !== 'Admin') {
-        return alert("🚫 Posting Locked! Admin has locked this slot.");
+        return await UiModal.alert("🚫 Posting Locked! Admin has locked this slot.");
     }
-    if (!reason) return alert("Select a reason.");
-    if (['OD', 'DL', 'Medical', 'Other'].includes(reason) && !details) return alert("Details required.");
+    if (!reason) return await UiModal.alert("Select a reason.");
+    if (['OD', 'DL', 'Medical', 'Other'].includes(reason) && !details) return await UiModal.alert("Details required.");
 
     // LOCK THE BUTTON IMMEDIATELY
     window._isConfirmingUnavailable = true;
@@ -3207,7 +3207,7 @@ window.confirmUnavailable = async function () {
         window.closeModal('unavailable-modal');
         window.closeModal('day-detail-modal');
     } catch (e) {
-        alert("Execution Error: " + e.message);
+        await UiModal.alert("Execution Error: " + e.message);
     } finally {
         // UNLOCK FOR NEXT TIME
         window._isConfirmingUnavailable = false;
@@ -3230,7 +3230,7 @@ window.confirmUnavailable = async function () {
 
 window.waNotify = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
+    if (!slot || slot.assigned.length === 0) return UiModal.alert("No staff assigned.");
 
     // Get first valid phone with prefix
     let phone = "";
@@ -3246,7 +3246,7 @@ window.waNotify = function (key) {
         }
     }
 
-    if (!phone) return alert("No valid phone numbers found.");
+    if (!phone) return UiModal.alert("No valid phone numbers found.");
     const msg = encodeURIComponent(`Exam Duty: ${key}.`);
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
 }
@@ -3297,15 +3297,15 @@ window.calculateSlotsFromSchedule = async function () {
             // 4. Update UI
             if (typeof renderSlotsGridAdmin === 'function') renderSlotsGridAdmin();
             
-            alert("✅ Synced! Loaded latest invigilation requirements from cloud.");
+            await UiModal.alert("✅ Synced! Loaded latest invigilation requirements from cloud.");
             updateSyncStatus("Synced", "success");
         } else {
-            alert("⚠️ No slot data found in cloud. Please save data in the main Exam App first.");
+            await UiModal.alert("⚠️ No slot data found in cloud. Please save data in the main Exam App first.");
         }
 
     } catch (e) {
         console.error("Slot Sync Error:", e);
-        alert("❌ Error: " + e.message);
+        await UiModal.alert("❌ Error: " + e.message);
         updateSyncStatus("Sync Failed", "error");
     } finally {
         if (btn) { btn.disabled = false; btn.innerText = "Check Cloud for Updates"; }
@@ -3342,10 +3342,10 @@ window.getSlotReserves = function (key) {
 
 window.notifySlotReserves = async function (key) {
     const reserves = getSlotReserves(key);
-    if (reserves.length === 0) return alert("No reserves identified (Assigned <= Required).");
+    if (reserves.length === 0) return await UiModal.alert("No reserves identified (Assigned <= Required).");
 
     const names = reserves.map(r => r.name).join(", ");
-    if (!confirm(`Send Notifications to ${reserves.length} Reserves?\n\n${names}`)) return;
+    if (!await UiModal.confirm(`Send Notifications to ${reserves.length} Reserves?\n\n${names}`)) return;
 
     updateSyncStatus("Sending...", "neutral");
     // Email Logic Reuse
@@ -3357,12 +3357,12 @@ window.notifySlotReserves = async function (key) {
         } catch (e) { }
     }
     updateSyncStatus("Done", "success");
-    alert(`Sent ${sent} notifications.`);
+    await UiModal.alert(`Sent ${sent} notifications.`);
 }
 
 // --- REFINED AUTO-ALLOCATION (Session-Based Reserves) ---
 window.runAutoAllocation = async function () {
-    if (!confirm("⚡ Run SESSION-BASED Auto-Assignment?\n\nThis will fill slots to REQUIRED + 10% (Reserves).\n\nRules:\n1. Highest Pending First.\n2. Exclude Adjacent Days (Rules applied to EVERYONE).\n3. Dept Saturation (Exempt Single Faculty).\n\nAssign?")) return;
+    if (!await UiModal.confirm("⚡ Run SESSION-BASED Auto-Assignment?\n\nThis will fill slots to REQUIRED + 10% (Reserves).\n\nRules:\n1. Highest Pending First.\n2. Exclude Adjacent Days (Rules applied to EVERYONE).\n3. Dept Saturation (Exempt Single Faculty).\n\nAssign?")) return;
 
     // 1. Identify Target Slots
     const targetSlots = [];
@@ -3373,7 +3373,7 @@ window.runAutoAllocation = async function () {
         }
     });
 
-    if (targetSlots.length === 0) return alert("No unlocked slots found.");
+    if (targetSlots.length === 0) return await UiModal.alert("No unlocked slots found.");
 
     targetSlots.sort((a, b) => a.date - b.date);
 
@@ -3508,7 +3508,7 @@ window.runAutoAllocation = async function () {
    await syncSlotsToCloud(key);
     renderSlotsGridAdmin();
 
-   alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
+   await UiModal.alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 //-------------------
 
@@ -3557,7 +3557,7 @@ For any queries contact examinations@gvc.ac.in _Exam Committee - ${sasPhone}_ Th
 window.sendWelcomeMessage = function(email) {
     // Safe robust lookup
     const staff = staffData.find(s => s.email && email && s.email.toLowerCase() === email.toLowerCase());
-    if (!staff) return alert("Staff record not found.");
+    if (!staff) return UiModal.alert("Staff record not found.");
     const msg = window.generateWelcomeText(staff.name, staff.dept);
     
     let phone = staff.phone || "";
@@ -3595,7 +3595,7 @@ window.saveNewStaff = async function () {
     }
 
     // 2. Validation
-    if (!name || !email) return alert("Name and Email are required.");
+    if (!name || !email) return await UiModal.alert("Name and Email are required.");
 
     // Change Button to Loading State
     const saveBtn = document.querySelector('#add-staff-modal button[onclick="saveNewStaff()"]');
@@ -3616,7 +3616,7 @@ window.saveNewStaff = async function () {
                 if (staffData.some(s => s.email === email && s !== oldData)) {
                     throw new Error("This email is already used by another staff member.");
                 }
-                if (!confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) {
+                if (!await UiModal.confirm(`Change email from ${oldEmail} to ${email}?\n\nThis will update their system access AND migrate all their past records.`)) {
                     throw new Error("Cancelled by user.");
                 }
 
@@ -3701,10 +3701,10 @@ window.saveNewStaff = async function () {
             updateAdminUI();
             
             if (isEditMode) {
-                alert("Staff profile updated successfully.");
+                await UiModal.alert("Staff profile updated successfully.");
             } else {
                 // ✅ NEW: Prompt to send welcome message immediately
-                if (confirm("✅ New staff added successfully.\n\nDo you want to send the 'Welcome to GVC' WhatsApp message now?")) {
+                if (await UiModal.confirm("✅ New staff added successfully.\n\nDo you want to send the 'Welcome to GVC' WhatsApp message now?")) {
                     window.sendWelcomeMessage(email);
                 }
             }
@@ -3713,7 +3713,7 @@ window.saveNewStaff = async function () {
     } catch (e) {
         console.error(e);
         if (e.message !== "Cancelled by user.") {
-            alert("❌ Error: " + e.message);
+            await UiModal.alert("❌ Error: " + e.message);
         }
     } finally {
         if (saveBtn) {
@@ -3733,7 +3733,7 @@ const promptMsg = "Choose action for " + staff.name + ":\n\n" +
                   "Type 'DELETE' to permanently remove their profile.\n\n" +
                   "(Recommended: ARCHIVE)";
                   
-const action = prompt(promptMsg, "ARCHIVE");
+const action = await UiModal.prompt("Staff Profile Action", promptMsg, "ARCHIVE");
 
 if (!action) return; // User cancelled
 
@@ -3746,7 +3746,7 @@ if (cleanAction === 'ARCHIVE') {
     await syncStaffToCloud(staff.email); // FIX: Make archive permanent
     await removeStaffAccess(staff.email); // Block login
     renderStaffTable();
-    alert("Staff archived successfully.");
+    await UiModal.alert("Staff archived successfully.");
 }
 else if (cleanAction === 'DELETE') {
     // Hard Delete Logic with Safety Confirmation
@@ -3757,7 +3757,7 @@ else if (cleanAction === 'DELETE') {
     const msgPart2 = "Their past duties will remain in old reports, but they will be completely ";
     const msgPart3 = "erased from the active directory.\n\nTo confirm, type exactly: " + matchText;
 
-    const confirmDelete = prompt(msgPart1 + msgPart2 + msgPart3);
+    const confirmDelete = await UiModal.prompt("⚠️ Permanent Staff Deletion", msgPart1 + msgPart2 + msgPart3, "");
 
     if (confirmDelete === matchText) {
         // Remove from the data array completely
@@ -3767,13 +3767,13 @@ else if (cleanAction === 'DELETE') {
         await syncStaffToCloud(staff.email); // FIX: Make deletion permanent
         await removeStaffAccess(staff.email); // Block login
         renderStaffTable();
-        alert("Staff profile permanently deleted.");
+        await UiModal.alert("Staff profile permanently deleted.");
     } else {
-        alert("Deletion cancelled. The confirmation text did not match.");
+        await UiModal.alert("Deletion cancelled. The confirmation text did not match.");
     }
 }
 else {
-    alert("Invalid action. Please type either ARCHIVE or DELETE.");
+    await UiModal.alert("Invalid action. Please type either ARCHIVE or DELETE.");
 }
 };
 
@@ -3781,13 +3781,13 @@ window.reactivateStaff = async function (index) {
     const staff = staffData[index];
     if (!staff) return;
 
-    if (confirm(`Reactivate ${staff.name}?\n\nThey will be able to log in to the portal again and will be included in duty assignments.`)) {
+    if (await UiModal.confirm(`Reactivate ${staff.name}?\n\nThey will be able to log in to the portal again and will be included in duty assignments.`)) {
         delete staff.status; // Remove 'archived' status
         logActivity("Staff Reactivated", `Admin reactivated staff member: ${staff.name} (${staff.email}).`);
         await syncStaffToCloud();
         await addStaffAccess(staff.email); // Restore login access
         renderStaffTable();
-        alert("Staff reactivated successfully.");
+        await UiModal.alert("Staff reactivated successfully.");
     }
 }
 
@@ -3827,7 +3827,7 @@ window.saveRoleAssignment = async function () {
     const role = document.getElementById('assign-role-select').value;
     const start = document.getElementById('assign-start-date').value;
     const end = document.getElementById('assign-end-date').value;
-    if (!start) return alert("Dates required");
+    if (!start) return await UiModal.alert("Dates required");
     if (!staffData[idx].roleHistory) staffData[idx].roleHistory = [];
     staffData[idx].roleHistory.push({ role, start, end });
     logActivity("Role Assigned", `Assigned role '${role}' to ${staffData[idx].name}.`);
@@ -4127,8 +4127,8 @@ window.addNewRoleConfig = function () {
     const name = document.getElementById('new-role-name').value.trim();
     const target = parseInt(document.getElementById('new-role-target').value);
 
-    if (!name) return alert("Enter a Role Name");
-    if (isNaN(target)) return alert("Enter a Target Number");
+    if (!name) return UiModal.alert("Enter a Role Name");
+    if (isNaN(target)) return UiModal.alert("Enter a Target Number");
 
     rolesConfig[name] = target;
     renderRolesList();
@@ -4137,14 +4137,14 @@ window.addNewRoleConfig = function () {
     document.getElementById('new-role-target').value = '';
 }
 
-window.editRoleConfig = function (role, currentTarget) {
-    const newTarget = prompt(`Update monthly duty target for "${role}":`, currentTarget);
+window.editRoleConfig = async function (role, currentTarget) {
+    const newTarget = await UiModal.prompt("Edit Role Target", `Update monthly duty target for "${role}":`, currentTarget, "number");
 
     if (newTarget === null) return; // Cancelled
 
     const targetNum = parseInt(newTarget);
     if (isNaN(targetNum) || targetNum < 0) {
-        alert("Please enter a valid number (0 or greater).");
+        await UiModal.alert("Please enter a valid number (0 or greater).");
         return;
     }
 
@@ -4155,11 +4155,11 @@ window.editRoleConfig = function (role, currentTarget) {
     renderRolesList();
 }
 
-window.deleteRoleConfig = function (role) {
+window.deleteRoleConfig = async function (role) {
     if (SYSTEM_ROLES.includes(role)) {
-        return alert("⚠️ Cannot delete System Default roles (CS, SAS, Principal).");
+        return await UiModal.alert("⚠️ Cannot delete System Default roles (CS, SAS, Principal).");
     }
-    if (confirm(`Delete role "${role}"? This will affect calculations for staff assigned this role.`)) {
+    if (await UiModal.confirm(`Delete role "${role}"? This will affect calculations for staff assigned this role.`)) {
         delete rolesConfig[role];
         renderRolesList();
     }
@@ -4172,8 +4172,8 @@ window.saveRoleConfig = async function () {
     const newExtraDates = window.vacationDutyDates ? window.vacationDutyDates.join(',') : "";
 
 
-    if (isNaN(newGlobal) || newGlobal < 0) return alert("Invalid Global Target");
-    if (isNaN(newGuest) || newGuest < 0) return alert("Invalid Guest Target");
+    if (isNaN(newGlobal) || newGlobal < 0) return await UiModal.alert("Invalid Global Target");
+    if (isNaN(newGuest) || newGuest < 0) return await UiModal.alert("Invalid Guest Target");
 
     globalDutyTarget = newGlobal;
     guestGlobalTarget = newGuest;
@@ -4508,7 +4508,7 @@ function addAttendanceRow(email, isLocked) {
 window.addSubstituteToAttendance = function () {
     // Check if a user was selected from search
     if (!currentSubstituteCandidate) {
-        return alert("Please search and select a faculty member first.");
+        return UiModal.alert("Please search and select a faculty member first.");
     }
 
     const email = currentSubstituteCandidate.email;
@@ -4516,7 +4516,7 @@ window.addSubstituteToAttendance = function () {
     // Check duplicates
     const existing = Array.from(document.querySelectorAll('.att-chk')).map(c => c.value);
     if (existing.includes(email)) {
-        return alert("This person is already in the attendance list.");
+        return UiModal.alert("This person is already in the attendance list.");
     }
 
     addAttendanceRow(email);
@@ -4543,11 +4543,11 @@ window.saveAttendance = async function () {
 
     // Validate
     if (!csVal || !sasVal) {
-        alert("⚠️ Mandatory Fields Missing\n\nPlease search and select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS).");
+        await UiModal.alert("⚠️ Mandatory Fields Missing\n\nPlease search and select both a Chief Superintendent (CS) and a Senior Assistant Superintendent (SAS).");
         return;
     }
 
-    if (!confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
+    if (!await UiModal.confirm(`Confirm attendance for ${key}?\n\nThis will update the 'Duties Done' count for all checked staff.`)) return;
 
     const presentEmails = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
 
@@ -4562,11 +4562,11 @@ window.saveAttendance = async function () {
     window.updateCompletionSessionDropdown();
     populateAttendanceSessions();
     renderStaffTable();
-    alert("Attendance & Supervision Saved!");
+    await UiModal.alert("Attendance & Supervision Saved!");
 }
 
 window.toggleAttendanceLock = async function (key, lockState) {
-    if (lockState && !confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
+    if (lockState && !await UiModal.confirm("Lock this attendance register? \n\nNo further changes will be allowed unless you unlock it.")) return;
 
     if (!invigilationSlots[key]) return;
 
@@ -4591,17 +4591,17 @@ async function volunteer(key, email) {
     const slot = invigilationSlots[key];
     // 1. NEW CHECK: Admin Lock
     if (slot.isAdminLocked) {
-        return alert("🚫 Posting Locked! This slot is reserved for manual assignment by the Admin.");
+        return await UiModal.alert("🚫 Posting Locked! This slot is reserved for manual assignment by the Admin.");
     }
     
     // 2. Standard Lock
     if (slot.isLocked) {
-        return alert("🚫 Slot Locked! Contact Admin.");
+        return await UiModal.alert("🚫 Slot Locked! Contact Admin.");
     }
     
     // 3. Prevent Double Volunteering Check
     if (slot.assigned && slot.assigned.includes(email)) {
-        return alert("You are already assigned to this slot.");
+        return await UiModal.alert("You are already assigned to this slot.");
     }
     
     const [datePart] = key.split(' | ');
@@ -4610,14 +4610,14 @@ async function volunteer(key, email) {
     // Check conflicts
     const sameDaySessions = Object.keys(invigilationSlots).filter(k => k.startsWith(datePart) && k !== key);
     const conflict = sameDaySessions.some(k => invigilationSlots[k].assigned.includes(email));
-    if (conflict && !confirm("🦸‍♂️ SUPERHERO ALERT! 🦸‍♀️\n\nYou are already on duty that day. Taking a double shift?\n\nWe appreciate your dedication! Click OK to confirm.")) return;
+    if (conflict && !await UiModal.confirm("🦸‍♂️ SUPERHERO ALERT! 🦸‍♀️\n\nYou are already on duty that day. Taking a double shift?\n\nWe appreciate your dedication! Click OK to confirm.")) return;
 
     // CHECK IF TAKING AN EXCHANGE
     if (slot.exchangeRequests && slot.exchangeRequests.length > 0) {
         // Pick the first person offering
         const originalOwner = slot.exchangeRequests[0];
 
-        if (confirm(`Accept duty exchange from ${getNameFromEmail(originalOwner)}?`)) {
+        if (await UiModal.confirm(`Accept duty exchange from ${getNameFromEmail(originalOwner)}?`)) {
             // Remove Original
             slot.assigned = slot.assigned.filter(e => e !== originalOwner);
             slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== originalOwner);
@@ -4643,7 +4643,7 @@ async function volunteer(key, email) {
     }
 
 // Standard Volunteer Logic
-    if (!confirm("Confirm duty?")) return;
+    if (!await UiModal.confirm("Confirm duty?")) return;
 
     window._isVolunteering = true;
     try {
@@ -4660,7 +4660,7 @@ async function volunteer(key, email) {
         window.closeModal('day-detail-modal');
         if (typeof renderStaffCalendar === 'function') renderStaffCalendar(email);
     } catch (e) {
-        alert("Volunteering failed: " + e.message);
+        await UiModal.alert("Volunteering failed: " + e.message);
     } finally {
         window._isVolunteering = false;
     }
@@ -4675,10 +4675,10 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
 
     // --- NEW: ADMIN LOCK CHECK ---
     if (slot.isAdminLocked) {
-        return alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
+        return await UiModal.alert("🛡️ Market Suspended.\n\nThe Admin has locked this slot for manual assignment. Exchanges cannot be processed right now.");
     }
 
-    if (!confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
+    if (!await UiModal.confirm(`Are you sure you want to take over ${sellerName}'s duty on ${key}?`)) return;
 
       // 1. Validation (🛡️ Anti-Ghosting Shield)
       if (!slot.assigned.includes(sellerEmail)) {
@@ -4688,7 +4688,7 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
               slot.exchangeRequests = slot.exchangeRequests.filter(e => e !== sellerEmail);
               await syncSlotsToCloud(key); // <--- ADD 'key' HERE
           }
-          alert("⚠️ This exchange is no longer valid. The original owner is no longer assigned to this duty.");
+          await UiModal.alert("⚠️ This exchange is no longer valid. The original owner is no longer assigned to this duty.");
           if (typeof renderExchangeMarket === 'function') renderExchangeMarket(buyerEmail);
           return;
       }
@@ -4734,14 +4734,14 @@ async function acceptExchange(key, buyerEmail, sellerEmail) {
             await syncSlotsToCloud(key);
             await syncStaffToCloud();
 
-            alert(`Success! You have accepted the duty from ${sellerName}.`);
+            await UiModal.alert(`Success! You have accepted the duty from ${sellerName}.`);
 
             window.closeModal('day-detail-modal');
             renderStaffCalendar(buyerEmail);
             renderExchangeMarket(buyerEmail);
             initStaffDashboard(buyer);
         } catch (e) {
-            alert("Exchange failed: " + e.message);
+            await UiModal.alert("Exchange failed: " + e.message);
         } finally {
             window._isAcceptingExchange = false;
         }
@@ -4754,7 +4754,7 @@ window.postForExchange = async function (key, email) {
     const slot = invigilationSlots[key];
 
     if (slot.isAdminLocked) {
-        return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. New exchange requests are disabled.");
+        return await UiModal.alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. New exchange requests are disabled.");
     }
 
     if (!slot.isLocked) {
@@ -4762,12 +4762,12 @@ window.postForExchange = async function (key, email) {
         const isAdminPosted = (meta.source === 'ADMIN' || meta.source === 'Admin' || meta.source === 'AUTO');
         
         if (!isAdminPosted) {
-            alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
+            await UiModal.alert("⚠️ Action Denied.\n\nThis slot is currently OPEN (Unlocked). Use 'Cancel Duty' if you cannot attend.");
             return;
         }
     }
 
-    if (!confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
+    if (!await UiModal.confirm("Post this duty for exchange?\n\nNOTE: You remain responsible until someone else accepts it.")) return;
 
     window._isPostingExchange = true;
     try {
@@ -4787,7 +4787,7 @@ window.postForExchange = async function (key, email) {
             await syncSlotsToCloud(key);
         }
     } catch (e) {
-        alert("Error posting exchange: " + e.message);
+        await UiModal.alert("Error posting exchange: " + e.message);
     } finally {
         window._isPostingExchange = false;
     }
@@ -4799,10 +4799,10 @@ window.withdrawExchange = async function (key, email) {
     const slot = invigilationSlots[key];
 
     if (slot.isAdminLocked) {
-        return alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. Withdrawal is disabled to prevent roster changes.");
+        return await UiModal.alert("🛡️ Action Denied.\n\nThe Admin is currently finalizing assignments for this slot. Withdrawal is disabled to prevent roster changes.");
     }
 
-    if (!confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
+    if (!await UiModal.confirm("Are you sure you want to withdraw this request and keep the duty?")) return;
 
     window._isWithdrawingExchange = true;
     try {
@@ -4819,7 +4819,7 @@ window.withdrawExchange = async function (key, email) {
             await syncSlotsToCloud(key);
         }
     } catch (e) {
-        alert("Error withdrawing exchange: " + e.message);
+        await UiModal.alert("Error withdrawing exchange: " + e.message);
     } finally {
         window._isWithdrawingExchange = false;
     }
@@ -4890,7 +4890,7 @@ window.saveDepartmentEdit = function() {
 
     // 🛡️ Email Validation Lock
     if (email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return alert("❌ Invalid Email Format. Please enter a valid email (e.g., hod@college.com)");
+        return UiModal.alert("❌ Invalid Email Format. Please enter a valid email (e.g., hod@college.com)");
     }
 
     // Update Config
@@ -4917,17 +4917,17 @@ window.addNewDepartment = function () {
     const name = nameInput.value.trim();
     const email = emailInput.value.trim();
 
-    if (!name) return alert("Enter department name");
+    if (!name) return UiModal.alert("Enter department name");
     // Email Validation Lock
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return alert("❌ Invalid Email Format. Please enter a valid email address.");
+        return UiModal.alert("❌ Invalid Email Format. Please enter a valid email address.");
     }
 
     // Convert legacy strings if present
     departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
 
     if (departmentsConfig.some(d => d.name.toLowerCase() === name.toLowerCase())) {
-        return alert("Department already exists");
+        return UiModal.alert("Department already exists");
     }
 
     departmentsConfig.push({ name: name, email: email });
@@ -4938,8 +4938,8 @@ window.addNewDepartment = function () {
     emailInput.value = '';
 }
 
-window.deleteDepartment = function (name) {
-    if (confirm(`Delete department "${name}"?`)) {
+window.deleteDepartment = async function (name) {
+    if (await UiModal.confirm(`Delete department "${name}"?`)) {
         departmentsConfig = departmentsConfig.map(d => (typeof d === 'string') ? { name: d, email: "" } : d);
         departmentsConfig = departmentsConfig.filter(d => d.name !== name);
         logActivity("Department Deleted", `Admin deleted department: ${name}.`);
@@ -4973,7 +4973,7 @@ function updateLockIcon(btnId, isLocked) {
         : "text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded border border-red-200 hover:bg-red-100 transition font-bold";
 }
 window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
-    if (!confirm(`${lockState ? '🔒 Lock' : '🔓 Unlock'} all slots in ${monthStr} - Week ${weekNum}?`)) return;
+    if (!await UiModal.confirm(`${lockState ? '🔒 Lock' : '🔓 Unlock'} all slots in ${monthStr} - Week ${weekNum}?`)) return;
 
     let changed = false;
     Object.keys(invigilationSlots).forEach(key => {
@@ -4995,14 +4995,14 @@ window.toggleWeekLock = async function (monthStr, weekNum, lockState) {
         logActivity("Weekly Lock Toggle", `Admin ${lockState ? 'LOCKED' : 'UNLOCKED'} all slots for ${monthStr} Week ${weekNum}.`);
         await syncSlotsToCloud("FORCE_OVERWRITE"); // FIX: Batch lock must stick
         renderSlotsGridAdmin();
-        alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
+        await UiModal.alert(`Week ${weekNum} has been ${lockState ? 'LOCKED' : 'UNLOCKED'}.`);
     } else {
-        alert("No slots needed updating in this week.");
+        await UiModal.alert("No slots needed updating in this week.");
     }
 }
 window.printSessionReport = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot not found.");
+    if (!slot) return UiModal.alert("Error: Slot not found.");
 
     const [datePart, timePart] = key.split(' | ');
     const collegeName = collegeData.examCollegeName || "College Name";
@@ -5390,7 +5390,7 @@ window.openCompletedDutiesModal = function (email) {
 
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     // 1. CHECK: Confirm Intent
-    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill slots with ADMIN LOCK (🛡️).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 50% (Soft Limit)`)) return;
+    if (!await UiModal.confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill slots with ADMIN LOCK (🛡️).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 50% (Soft Limit)`)) return;
 
     // 2. Identify Target Slots (MUST BE ADMIN LOCKED)
     const targetSlots = [];
@@ -5407,7 +5407,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     });
 
     if (targetSlots.length === 0) {
-        return alert(`⚠️ No ADMIN LOCKED (🛡️) slots found in Week ${weekNum}.\n\nPlease lock the week using the '🛡️ Admin' button first.`);
+        return await UiModal.alert(`⚠️ No ADMIN LOCKED (🛡️) slots found in Week ${weekNum}.\n\nPlease lock the week using the '🛡️ Admin' button first.`);
     }
 
     // 3. Sort Slots Chronologically
@@ -5625,7 +5625,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
     renderSlotsGridAdmin();
 
     // --- Bulk Reserve Notification Check (Unchanged) ---
-    alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
+    await UiModal.alert(`✅ Session Auto-Assign Complete!\nFilled ${assignedCount} positions.`);
 }
 
 window.openFacultyPeriodReport = function() {
@@ -5660,11 +5660,11 @@ window.openFacultyPeriodReport = function() {
 window.generateFacultyPeriodReport = function() {
     const fromKey = document.getElementById('period-from').value;
     const toKey   = document.getElementById('period-to').value;
-    if (!fromKey || !toKey) return alert('Please select both From and To sessions.');
+    if (!fromKey || !toKey) return UiModal.alert('Please select both From and To sessions.');
 
     const fromDate = parseDate(fromKey);
     const toDate   = parseDate(toKey);
-    if (fromDate > toDate) return alert('From session must be before To session.');
+    if (fromDate > toDate) return UiModal.alert('From session must be before To session.');
 
     const normalizeKey = k => k.replace(/^(\d{2})[-.](\d{2})[-.](\d{4})/, '$1.$2.$3');
     const seenRange = new Set();
@@ -5775,7 +5775,7 @@ window.generateFacultyPeriodReport = function() {
 
 window.printFacultyPeriodReport = function() {
     const table = document.getElementById('faculty-period-table');
-    if (table.classList.contains('hidden')) return alert('Generate the report first.');
+    if (table.classList.contains('hidden')) return UiModal.alert('Generate the report first.');
     const summary = document.getElementById('faculty-period-summary').textContent;
     const w = window.open('', '_blank');
     w.document.write(`<html><head><title>Faculty Period Report</title>
@@ -5942,7 +5942,7 @@ window.viewActivityLogs = function () {
           try {
               const snapshot = await getDocs(q);
               if (snapshot.empty) {
-                  if (direction !== 'initial') alert("No more activities found in this direction.");
+                  if (direction !== 'initial') await UiModal.alert("No more activities found in this direction.");
                   list.innerHTML = '<div class="text-center py-6 text-gray-400 italic text-xs">No logs found on this page.</div>';
                   return;
               }
@@ -5982,10 +5982,10 @@ window.viewActivityLogs = function () {
 
 // --- NEW: Global Log Downloader ---
 window.downloadFullActivityLogs = async function(btnElement) {
-    if (!currentCollegeId) return alert("❌ Error: College ID not found.");
+    if (!currentCollegeId) return await UiModal.alert("❌ Error: College ID not found.");
 
     // 🛡️ COST PROTECTION: Default to last 30 days
-    if (!confirm("Download Activity Logs for the LAST 30 DAYS?\n\n(This avoids excessive data costs).")) return;
+    if (!await UiModal.confirm("Download Activity Logs for the LAST 30 DAYS?\n\n(This avoids excessive data costs).")) return;
 
     const originalText = btnElement.innerHTML;
     btnElement.innerHTML = "⏳ Compiling Archive...";
@@ -6012,7 +6012,7 @@ window.downloadFullActivityLogs = async function(btnElement) {
         });
 
         if (allLogs.length === 0) {
-            alert("⚠️ No logs found to download.");
+            await UiModal.alert("⚠️ No logs found to download.");
         } else {
             const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -6026,7 +6026,7 @@ window.downloadFullActivityLogs = async function(btnElement) {
         }
     } catch (error) {
         console.error("Export Failed:", error);
-        alert("❌ Failed to download logs. Check console for details.");
+        await UiModal.alert("❌ Failed to download logs. Check console for details.");
     } finally {
         btnElement.innerHTML = originalText;
         btnElement.disabled = false;
@@ -6222,7 +6222,7 @@ window.openSlotReminderModal = function (key) {
         }
     });
 
-    if (Object.keys(dailyDuties).length === 0) return alert("No duties assigned for this date.");
+    if (Object.keys(dailyDuties).length === 0) return UiModal.alert("No duties assigned for this date.");
 
     // ADD BULK BUTTONS (WITH CANCEL)
     list.innerHTML = `
@@ -6553,7 +6553,7 @@ window.markAsSent = function (btn) {
 // --- 9. SEND SESSION SMS (Native App) ---
 window.sendSessionSMS = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned.");
+    if (!slot || slot.assigned.length === 0) return UiModal.alert("No staff assigned.");
 
     // 1. Get Data
     const [dateStr, timeStr] = key.split(' | ');
@@ -6570,7 +6570,7 @@ window.sendSessionSMS = function (key) {
         }
     });
 
-    if (phones.length === 0) return alert("No valid phone numbers found.");
+    if (phones.length === 0) return UiModal.alert("No valid phone numbers found.");
 
     // 3. Create Message
     const msg = `Duty: ${dateStr} ${timeStr}. Report: ${reportTime}. Link: https://examflow-india.web.app/invigilation.html -CS GVC`;
@@ -6595,7 +6595,7 @@ window.downloadAttendanceCSV = function () {
     const availableYearLabels = Object.keys(availableYearsMap).sort().reverse();
 
     if (availableYearLabels.length === 0) {
-        return alert("No attendance records found.");
+        return UiModal.alert("No attendance records found.");
     }
 
     const selectEl = document.getElementById('download-register-ay-select');
@@ -6630,7 +6630,7 @@ window.executeDownloadAttendanceCSV = function() {
 
     const selectedAcYear = availableYearsMap[selectedLabel];
     if (!selectedAcYear) {
-        return alert("Selected Academic Year not found.");
+        return UiModal.alert("Selected Academic Year not found.");
     }
 
     window.closeModal('download-register-modal');
@@ -6693,7 +6693,7 @@ window.executeDownloadAttendanceCSV = function() {
     });
 
     if (rows.length <= 1) {
-        return alert("No attendance records found for this Academic Year.");
+        return UiModal.alert("No attendance records found for this Academic Year.");
     }
 
     // Generate CSV
@@ -6749,7 +6749,7 @@ window.handleStaffCSVUpload = function (input) {
 // 4. Parse & Analyze CSV (Robust Date Parsing)
 function processStaffCSV(csvText) {
     const lines = csvText.split('\n');
-    if (lines.length < 2) return alert("CSV is empty or invalid.");
+    if (lines.length < 2) return UiModal.alert("CSV is empty or invalid.");
 
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/['"]+/g, ''));
 
@@ -6764,7 +6764,7 @@ function processStaffCSV(csvText) {
     const joinIdx = getIndex(['joining date', 'join date', 'doj', 'date of joining']);
 
     if (nameIdx === -1 || emailIdx === -1 || deptIdx === -1) {
-        alert(`Error: Missing required columns (Name, Email, Department).\nFound headers: ${headers.join(', ')}`);
+        UiModal.alert(`Error: Missing required columns (Name, Email, Department).\nFound headers: ${headers.join(', ')}`);
         return;
     }
 
@@ -6826,7 +6826,7 @@ function processStaffCSV(csvText) {
     }
 
     if (parsedData.length === 0) {
-        alert("No valid data found in CSV.");
+        UiModal.alert("No valid data found in CSV.");
         return;
     }
 
@@ -6846,7 +6846,7 @@ function processStaffCSV(csvText) {
 // 5. Modal Button Listeners
 document.getElementById('btn-staff-merge').addEventListener('click', async () => {
     if (tempUniqueStaff.length === 0) {
-        alert("No new unique staff to add.");
+        await UiModal.alert("No new unique staff to add.");
         window.closeModal('staff-conflict-modal');
         return;
     }
@@ -6859,7 +6859,7 @@ document.getElementById('btn-staff-merge').addEventListener('click', async () =>
         for (const s of tempUniqueStaff) { await addStaffAccess(s.email); }
     }
 
-    alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
+    await UiModal.alert(`✅ Successfully added ${tempUniqueStaff.length} new staff members.`);
     window.closeModal('staff-conflict-modal');
     renderStaffTable();
     updateAdminUI();
@@ -6867,7 +6867,7 @@ document.getElementById('btn-staff-merge').addEventListener('click', async () =>
 
 // 5. Replace Logic (Overwrite Database) - FIXED
 document.getElementById('btn-staff-replace').addEventListener('click', async () => {
-    if (confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
+    if (await UiModal.confirm("⚠️ WARNING: This will DELETE all existing staff data and replace it with the CSV data.\n\nAre you sure?")) {
         staffData = tempStaffData;
         await syncStaffToCloud();
 
@@ -6884,7 +6884,7 @@ document.getElementById('btn-staff-replace').addEventListener('click', async () 
         }
         // **************************************
 
-        alert("✅ Database replaced successfully & Permissions updated.");
+        await UiModal.alert("✅ Database replaced successfully & Permissions updated.");
         window.closeModal('staff-conflict-modal');
         renderStaffTable();
         updateAdminUI();
@@ -6914,7 +6914,7 @@ window.openManageHistoricalDataModal = function() {
     const labels = Object.keys(historicalAYs).sort(); // Sort chronological
 
     if (labels.length === 0) {
-        return alert("No past Academic Year data is available for deletion.\n(The Current Academic Year is protected).");
+        return UiModal.alert("No past Academic Year data is available for deletion.\n(The Current Academic Year is protected).");
     }
 
     const selectEl = document.getElementById('historical-ay-select');
@@ -6941,15 +6941,15 @@ window.confirmDeleteHistoricalData = async function() {
 
     const currentAY = getCurrentAcademicYear();
     if (targetLabel === currentAY.label) {
-        alert("SECURITY ERROR: Cannot delete the Current Academic Year.");
+        await UiModal.alert("SECURITY ERROR: Cannot delete the Current Academic Year.");
         return;
     }
 
-    if (!confirm(`⚠️ CRITICAL WARNING: You are about to PERMANENTLY DELETE all data for Academic Year ${targetLabel}.\n\nHave you downloaded all necessary reports and certificates for this year?\n\nClick OK to permanently delete.`)) {
+    if (!await UiModal.confirm(`⚠️ CRITICAL WARNING: You are about to PERMANENTLY DELETE all data for Academic Year ${targetLabel}.\n\nHave you downloaded all necessary reports and certificates for this year?\n\nClick OK to permanently delete.`)) {
         return;
     }
 
-    if (!confirm(`FINAL CONFIRMATION:\nAre you absolutely sure you want to delete ${targetLabel}? This cannot be undone.`)) {
+    if (!await UiModal.confirm(`FINAL CONFIRMATION:\nAre you absolutely sure you want to delete ${targetLabel}? This cannot be undone.`)) {
         return;
     }
 
@@ -6980,14 +6980,14 @@ window.confirmDeleteHistoricalData = async function() {
             logActivity("Data Cleanup", `Admin surgically deleted ${removedCount} records for AY ${targetLabel}.`);
             window.closeModal('historical-data-modal');
             renderSlotsGridAdmin();
-            alert(`✅ Surgical Cleanup Complete.\n\nPermanently removed ${removedCount} records for Academic Year ${targetLabel}.`);
+            await UiModal.alert(`✅ Surgical Cleanup Complete.\n\nPermanently removed ${removedCount} records for Academic Year ${targetLabel}.`);
         } else {
             // Rollback local memory if cloud sync fails
             invigilationSlots = previousSlots;
-            alert("❌ Failed to delete historical data from the cloud. Please check your connection and try again. Your local view has been restored.");
+            await UiModal.alert("❌ Failed to delete historical data from the cloud. Please check your connection and try again. Your local view has been restored.");
         }
     } else {
-        alert("No records found for that academic year.");
+        await UiModal.alert("No records found for that academic year.");
         window.closeModal('historical-data-modal');
     }
 };
@@ -7162,8 +7162,8 @@ window.sendBulkEmails = async function (mode) {
         queue = queue.filter(item => item.isNew);
     }
 
-    if (queue.length === 0) return alert("No emails match this criteria. Everyone is already alerted!");
-    if (!confirm(`Send ${queue.length} emails to faculty members?`)) return;
+    if (queue.length === 0) return await UiModal.alert("No emails match this criteria. Everyone is already alerted!");
+    if (!await UiModal.confirm(`Send ${queue.length} emails to faculty members?`)) return;
 
     // UI Setup
     const progressBar = document.getElementById('bulk-progress-bar');
@@ -7206,7 +7206,7 @@ window.sendBulkEmails = async function (mode) {
     }
 
     if (statusText) statusText.textContent = "Completed.";
-    alert(`Batch Complete.\\nSent ${sentCount} emails.`);
+    await UiModal.alert(`Batch Complete.\\nSent ${sentCount} emails.`);
     if (typeof logActivity === 'function') logActivity("Bulk Email", `Sent ${sentCount} duty intimations (${mode}).`);
 };
 
@@ -7516,7 +7516,7 @@ window.downloadMasterBackup = function () {
 }
 
 window.emergencyLogRecovery = async function() {
-    if (!confirm("⚠️ EMERGENCY RECOVERY ⚠️\n\nThis will scan all activity logs on the server to rebuild lost Volunteering and Unavailability data.\n\nAre you sure you want to proceed?")) return;
+    if (!await UiModal.confirm("⚠️ EMERGENCY RECOVERY ⚠️\n\nThis will scan all activity logs on the server to rebuild lost Volunteering and Unavailability data.\n\nAre you sure you want to proceed?")) return;
 
     try {
         updateSyncStatus("Fetching Logs for Recovery...", "syncing");
@@ -7530,7 +7530,7 @@ window.emergencyLogRecovery = async function() {
         snapshot.forEach(doc => logs.push(doc.data()));
         
         if (logs.length === 0) {
-            alert("❌ No logs found on the server to recover from.");
+            await UiModal.alert("❌ No logs found on the server to recover from.");
             updateSyncStatus("Synced", "success");
             return;
         }
@@ -7634,12 +7634,12 @@ window.emergencyLogRecovery = async function() {
 
         if (typeof window.triggerReactiveDriveSync === 'function') window.triggerReactiveDriveSync();
 
-        alert(`✅ Recovery Complete!\n\nSuccessfully reconstructed ${recoveredCount} data points from activity logs.\n\nThe page will now reload to apply the recovered data.`);
+        await UiModal.alert(`✅ Recovery Complete!\n\nSuccessfully reconstructed ${recoveredCount} data points from activity logs.\n\nThe page will now reload to apply the recovered data.`);
         location.reload();
 
     } catch (error) {
         console.error("Recovery failed:", error);
-        alert("❌ Recovery Failed: " + error.message);
+        await UiModal.alert("❌ Recovery Failed: " + error.message);
         updateSyncStatus("Error", "error");
     }
 }
@@ -7775,7 +7775,7 @@ window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompt
             });
         }
         
-        if (showPrompts) alert(`Merge Complete: ${modifiedCount} slots and advance leaves updated with imported data.`);
+        if (showPrompts) await UiModal.alert(`Merge Complete: ${modifiedCount} slots and advance leaves updated with imported data.`);
     }
 
     localStorage.setItem('examStaffData', JSON.stringify(staffData));
@@ -7790,7 +7790,7 @@ window.restoreInvigilationCloudData = async function(rawBackup, mode, showPrompt
     Object.keys(invigilationSlots).forEach(k => {
         if (parseDate(k) < currentYearStart) pastYearSlots++;
     });
-    if (showPrompts) alert(`Diagnostic: Uploading ${totalSlots} total slots, including ${pastYearSlots} slots from previous academic years.`);
+    if (showPrompts) await UiModal.alert(`Diagnostic: Uploading ${totalSlots} total slots, including ${pastYearSlots} slots from previous academic years.`);
     // --- DIAGNOSTIC END ---
 
     // Save Slots using Sharded Logic
@@ -7826,14 +7826,15 @@ window.handleMasterRestore = function (input) {
                 };
             }
 
-            if (!d) return alert("Invalid Backup File File.");
+            if (!d) return await UiModal.alert("Invalid Backup File File.");
 
             // 1. Ask User for Mode
-            const mode = prompt(
-                "♻️ RESTORE OPTIONS\n\n" +
+            const mode = await UiModal.prompt(
+                "♻️ RESTORE OPTIONS",
                 "Type '1' for FULL RESTORE (Overwrites everything)\n" +
                 "Type '2' for VOLUNTEERS & INCONVENIENCE ONLY (Merges into current slots)\n\n" +
-                "Enter choice (1 or 2):"
+                "Enter choice (1 or 2):",
+                "1"
             );
 
             if (mode !== '1' && mode !== '2') {
@@ -7846,12 +7847,12 @@ window.handleMasterRestore = function (input) {
 
             // 4. Refresh UI and reload
             updateSyncStatus("Restored", "success");
-            alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).\n\nThe page will now reload to apply all restored configurations.`);
+            await UiModal.alert(`✅ System successfully restored (${mode === '1' ? 'Full' : 'Partial'}).\n\nThe page will now reload to apply all restored configurations.`);
             location.reload();
 
         } catch (err) {
             console.error("Restore Error:", err);
-            alert("Restore Failed: " + err.message);
+            await UiModal.alert("Restore Failed: " + err.message);
             updateSyncStatus("Error", "error");
         }
         input.value = ""; // Reset input
@@ -7895,7 +7896,7 @@ window.handleAttendanceCSVUpload = function (input) {
 // 3. Process CSV (Auto-Create Slots for Past Duties)
 async function processAttendanceCSV(csvText) {
     const lines = csvText.split('\n');
-    if (lines.length < 2) return alert("CSV is empty or invalid.");
+    if (lines.length < 2) return await UiModal.alert("CSV is empty or invalid.");
 
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
     const dateIdx = headers.findIndex(h => h.includes('date'));
@@ -7904,7 +7905,7 @@ async function processAttendanceCSV(csvText) {
     const roleIdx = headers.findIndex(h => h.includes('role') || h.includes('status'));
 
     if (dateIdx === -1 || sessIdx === -1 || emailIdx === -1) {
-        return alert("Error: CSV must have Date, Session, and Staff Email columns.");
+        return await UiModal.alert("Error: CSV must have Date, Session, and Staff Email columns.");
     }
 
     tempAttendanceBatch = {}; // Reset batch
@@ -8000,11 +8001,11 @@ async function processAttendanceCSV(csvText) {
     }
 
     if (totalRecords === 0) {
-        return alert("No valid records found in CSV.");
+        return await UiModal.alert("No valid records found in CSV.");
     }
 
     if (unknownEmails.size > 0) {
-        alert(`⚠️ Warning: ${unknownEmails.size} emails are not in your Staff Database.\nThey will be marked present, but details will be missing in reports.`);
+        await UiModal.alert(`⚠️ Warning: ${unknownEmails.size} emails are not in your Staff Database.\nThey will be marked present, but details will be missing in reports.`);
     }
 
     // Show Conflict Modal
@@ -8051,7 +8052,7 @@ document.getElementById('btn-att-merge').addEventListener('click', async () => {
 
 // 5. Replace Logic (Overwrite Lists)
 document.getElementById('btn-att-replace').addEventListener('click', async () => {
-    if (!confirm("⚠️ This will OVERWRITE the attendance lists for the affected sessions with data from the CSV.\n\nAre you sure?")) return;
+    if (!await UiModal.confirm("⚠️ This will OVERWRITE the attendance lists for the affected sessions with data from the CSV.\n\nAre you sure?")) return;
 
     let updatedCount = 0;
 
@@ -8075,7 +8076,7 @@ async function finishAttendanceUpload(count, action) {
         // FIX: Bulk attendance replacement must stick
     await syncSlotsToCloud("FORCE_OVERWRITE"); 
     window.closeModal('att-conflict-modal');
-    alert(`✅ Success! ${action} attendance records for ${count} entries.`);
+    await UiModal.alert(`✅ Success! ${action} attendance records for ${count} entries.`);
     populateAttendanceSessions();
     if (ui.attSessionSelect && ui.attSessionSelect.value) {
         loadSessionAttendance();
@@ -8180,7 +8181,7 @@ window.renderManualCards = function() {
     window.filterManualStaff();
 }
 
-window.toggleManualStaffCard = function(email) {
+window.toggleManualStaffCard = async function(email) {
     if (!window.manualState.isFullEditMode) return;
     const staff = window.manualState.rankedStaff.find(s => s.email === email);
     if (staff) {
@@ -8194,7 +8195,7 @@ window.toggleManualStaffCard = function(email) {
                     ? `🛡️ EXEMPTION ALERT: This staff member is marked as EXCL (Role: ${unav.role}).`
                     : `⚠️ UNAVAILABILITY ALERT: This staff member is marked as UNAVAILABLE for this session.`;
                 
-                if (!confirm(`${warningMsg}\n\nReason: ${reason}\n\nAre you sure you want to assign them for this invigilation?`)) {
+                if (!await UiModal.confirm(`${warningMsg}\n\nReason: ${reason}\n\nAre you sure you want to assign them for this invigilation?`)) {
                     return;
                 }
             }
@@ -8207,7 +8208,7 @@ window.toggleManualStaffCard = function(email) {
 window.adminForceRemoveFromSlot = async function(email) {
     const key = window.manualState.key;
     const name = typeof getNameFromEmail === 'function' ? getNameFromEmail(email) : email;
-    if (!confirm('⚠️ Force Remove: ' + name + '\n\nThis removes them from slot:\n' + key + '\n\nNo lock required. Proceed?')) return;
+    if (!await UiModal.confirm('⚠️ Force Remove: ' + name + '\n\nThis removes them from slot:\n' + key + '\n\nNo lock required. Proceed?')) return;
 
     const slot = invigilationSlots[key];
     if (!slot) return;
@@ -8512,8 +8513,8 @@ window.unselectAllManualStaff = function () {
 
 
 // --- BULK CANCEL FUNCTION ---
-window.cancelBulkSending = function () {
-    if (confirm("Stop sending remaining emails?")) {
+window.cancelBulkSending = async function () {
+    if (await UiModal.confirm("Stop sending remaining emails?")) {
         isBulkSendingCancelled = true;
         const btn = document.getElementById('btn-cancel-bulk');
         if (btn) {
@@ -8654,7 +8655,7 @@ function setupSearchHandler(inputId, resultsId, hiddenId, excludeCurrentList) {
 
 window.viewSlotHistory = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || !slot.allocationLog) return alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
+    if (!slot || !slot.allocationLog) return UiModal.alert("No logic log available for this slot.\n(Try re-assigning via Manual Allocation to generate one).");
 
     const list = document.getElementById('inconvenience-list');
     const title = document.getElementById('inconvenience-modal-subtitle');
@@ -8669,9 +8670,9 @@ window.viewSlotHistory = function (key) {
 
 // --- NEW: SYNC STAFF PERMISSIONS BUTTON ---
 window.syncAllStaffPermissions = async function () {
-    if (!staffData || staffData.length === 0) return alert("No staff data to sync.");
+    if (!staffData || staffData.length === 0) return await UiModal.alert("No staff data to sync.");
 
-    if (!confirm(`🛡️ Sync Permissions?\n\nThis will iterate through all ${staffData.length} staff members in your database and ensure they have "Staff Access" in Firebase.\n\nUse this if people cannot log in.`)) return;
+    if (!await UiModal.confirm(`🛡️ Sync Permissions?\n\nThis will iterate through all ${staffData.length} staff members in your database and ensure they have "Staff Access" in Firebase.\n\nUse this if people cannot log in.`)) return;
 
     const btn = document.getElementById('btn-sync-perms');
     const originalText = btn ? btn.innerHTML : "Sync Permissions";
@@ -8685,10 +8686,10 @@ window.syncAllStaffPermissions = async function () {
                 count++;
             }
         }
-        alert(`✅ Success! Permissions verified/added for ${count} staff members.`);
+        await UiModal.alert(`✅ Success! Permissions verified/added for ${count} staff members.`);
     } catch (e) {
         console.error(e);
-        alert("Error syncing permissions: " + e.message);
+        await UiModal.alert("Error syncing permissions: " + e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = originalText; }
     }
@@ -8756,7 +8757,7 @@ window.executeReschedule = async function () {
     const dateInput = document.getElementById('reschedule-new-date').value;
     const timeInput = document.getElementById('reschedule-new-time').value;
 
-    if (!dateInput || !timeInput) return alert("Please select new Date and Time.");
+    if (!dateInput || !timeInput) return await UiModal.alert("Please select new Date and Time.");
 
     // 1. Generate New Key
     const [y, m, d] = dateInput.split('-');
@@ -8771,9 +8772,9 @@ window.executeReschedule = async function () {
 
     const newKey = `${formattedDate} | ${formattedTime}`;
 
-    if (newKey === oldKey) return alert("New time is the same as the old time.");
+    if (newKey === oldKey) return await UiModal.alert("New time is the same as the old time.");
     if (invigilationSlots[newKey]) {
-        if (!confirm(`Slot ${newKey} already exists! Merge staff into it?`)) return;
+        if (!await UiModal.confirm(`Slot ${newKey} already exists! Merge staff into it?`)) return;
     }
 
     // 2. Move Data
@@ -8804,7 +8805,7 @@ window.executeReschedule = async function () {
     if (affectedStaff.length > 0) {
         setTimeout(() => openRescheduleNotification(affectedStaff, oldKey, newKey), 500);
     } else {
-        alert(`✅ Session moved to ${newKey}. (No staff were assigned).`);
+        await UiModal.alert(`✅ Session moved to ${newKey}. (No staff were assigned).`);
     }
 }
 
@@ -8898,7 +8899,7 @@ function openRescheduleNotification(staffList, oldKey, newKey) {
 
 window.printDutyNotification = function (key) {
     const slot = invigilationSlots[key];
-    if (!slot || slot.assigned.length === 0) return alert("No staff assigned to this session.");
+    if (!slot || slot.assigned.length === 0) return UiModal.alert("No staff assigned to this session.");
 
     const [dateStr, timeStr] = key.split(' | ');
     const [d, m, y] = dateStr.split('.');
@@ -9632,7 +9633,7 @@ function isPrincipalUser(userStaff = null) {
 
 window.openPrincipalMonitorModal = function () {
     if (!isPrincipalUser()) {
-        alert("Access Restricted: This executive monitor is reserved for the Principal, Admin, and Super Admin.");
+        UiModal.alert("Access Restricted: This executive monitor is reserved for the Principal, Admin, and Super Admin.");
         return;
     }
 
@@ -10549,7 +10550,7 @@ window.printPrincipalMonitorReport = function () {
 
     const printWin = window.open('', '_blank');
     if (!printWin) {
-        alert("Please allow popups to view and print the Principal Monitor Report.");
+        UiModal.alert("Please allow popups to view and print the Principal Monitor Report.");
         return;
     }
     printWin.document.open();
@@ -10706,12 +10707,12 @@ function isActionAllowed(dateInput) {
 
     // 1. Block Past Dates
     if (checkDate < today) {
-        alert("🚫 Action Denied: Cannot modify records for past dates.");
+        UiModal.alert("🚫 Action Denied: Cannot modify records for past dates.");
         return false;
     }
     // 2. Block Dates > 3 Months in Future
     if (checkDate > maxDate) {
-        alert("🚫 Action Denied: You can only manage availability up to 3 months in advance.");
+        UiModal.alert("🚫 Action Denied: You can only manage availability up to 3 months in advance.");
         return false;
     }
     return true;
@@ -10734,7 +10735,7 @@ window.openVacationReportModal = function() {
         const startInput = document.getElementById('vac-start');
         const endInput = document.getElementById('vac-end');
 
-        if (!startInput || !endInput) return alert("Missing vac-start or vac-end in HTML");
+        if (!startInput || !endInput) return UiModal.alert("Missing vac-start or vac-end in HTML");
 
         startInput.value = startVal;
         endInput.value = endVal;
@@ -10764,7 +10765,7 @@ window.openVacationReportModal = function() {
 
     } catch (e) {
         console.error("Crash inside openVacationReportModal:", e);
-        alert("Error: " + e.message);
+        UiModal.alert("Error: " + e.message);
     }
 }
 
@@ -10817,7 +10818,7 @@ window.addVacationHoliday = async function() {
     if (!dateVal) return;
 
     if (vacationExtraHolidays.has(dateVal)) {
-        alert("This date is already in the list.");
+        await UiModal.alert("This date is already in the list.");
         return;
     }
 
@@ -10865,7 +10866,7 @@ window.generateVacationReport = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
-    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    if (!startStr || !endStr) return UiModal.alert("Please select start and end dates.");
 
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
@@ -10989,7 +10990,7 @@ window.generateVacationReport = function() {
         });
     });
 
-    if (reportData.length === 0) return alert("No duty records found for the selected period.");
+    if (reportData.length === 0) return UiModal.alert("No duty records found for the selected period.");
 
     // --- SORT REPORT DATA BY DEPARTMENT THEN NAME ---
     reportData.sort((a, b) => {
@@ -11133,11 +11134,12 @@ window.startNewAcademicYear = async function() {
     yearList.forEach((y, i) => { message += `${i + 1}. ${y}\n`; });
     message += "\nEnter the NUMBER of the year to clear:";
 
-    const selection = prompt(message);
+    const selection = await UiModal.prompt("⚠️ Surgical Data Clearance", message, "1");
+    if (!selection) return;
     const index = parseInt(selection) - 1;
 
     if (isNaN(index) || !yearList[index]) {
-        return alert("❌ Invalid selection.");
+        return await UiModal.alert("❌ Invalid selection.");
     }
 
     const targetAYLabel = yearList[index];
@@ -11149,7 +11151,7 @@ window.startNewAcademicYear = async function() {
     const ayEnd = new Date(startYear + 1, 4, 31);
 
     // 4. Initial Warning
-    if(!confirm(`⚠️ CONFIRM CLEARANCE FOR AY ${targetAYLabel} ⚠️\n\nThis will surgically DELETE:\n- ALL Exam Slots in this period\n- ALL Attendance for this period\n- ALL Unavailability blocks in this period\n\nProceed?`)) {
+    if(!await UiModal.confirm(`⚠️ CONFIRM CLEARANCE FOR AY ${targetAYLabel} ⚠️\n\nThis will surgically DELETE:\n- ALL Exam Slots in this period\n- ALL Attendance for this period\n- ALL Unavailability blocks in this period\n\nProceed?`)) {
         return;
     }
 
@@ -11157,9 +11159,13 @@ window.startNewAcademicYear = async function() {
     downloadMasterBackup();
 
     // 6. Final Security Check
-    const check = prompt(`🔴 FINAL SECURITY CHECK\n\nTo permanently DELETE data for ${targetAYLabel}, type 'DELETE' below:`);
+    const check = await UiModal.prompt(
+        "🔴 FINAL SECURITY CHECK",
+        `To permanently DELETE data for ${targetAYLabel}, type 'DELETE' below:`,
+        "DELETE"
+    );
     if (check !== "DELETE") {
-        return alert("❌ Action Cancelled. Incorrect confirmation code.");
+        return await UiModal.alert("❌ Action Cancelled. Incorrect confirmation code.");
     }
 
     const btn = document.querySelector('button[onclick="startNewAcademicYear()"]');
@@ -11262,13 +11268,13 @@ window.startNewAcademicYear = async function() {
         await logActivity("System Reset", `Started New Academic Year. Reset duty counts and set all staff joining dates to ${newJoinDate}.`);
 
         updateSyncStatus("Year Started", "success");
-        alert(`✅ Surgical Clearance Complete for AY ${targetAYLabel}.\n\n- Data for ${targetAYLabel} removed successfully.`);
+        await UiModal.alert(`✅ Surgical Clearance Complete for AY ${targetAYLabel}.\n\n- Data for ${targetAYLabel} removed successfully.`);
         
         window.location.reload();
 
     } catch (e) {
         console.error(e);
-        alert("Error resetting system: " + e.message);
+        await UiModal.alert("Error resetting system: " + e.message);
         updateSyncStatus("Reset Failed", "error");
         if(btn) {
             btn.disabled = false;
@@ -11438,15 +11444,15 @@ window.showLiveStaffModal = function() {
     `;
 
     if(typeof UiModal !== 'undefined') UiModal.alert("Live Status", html);
-    else alert(online.map(o => o.name).join('\n'));
+    else UiModal.alert(online.map(o => o.name).join('\n'));
 };
 // ==========================================
 // 📄 PDF GENERATION LOGIC (Added V25)
 // ==========================================
 
 // 1. ATTENDANCE REGISTER PDF
-window.downloadAttendancePDF = function () {
-    if (!confirm("Download Attendance Register PDF?")) return;
+window.downloadAttendancePDF = async function () {
+    if (!await UiModal.confirm("Download Attendance Register PDF?")) return;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -11485,7 +11491,7 @@ window.downloadAttendancePDF = function () {
         return a.name.localeCompare(b.name);
     });
 
-    if (facultyData.length === 0) return alert("No attendance records found.");
+    if (facultyData.length === 0) return await UiModal.alert("No attendance records found.");
 
     // --- Table Body ---
     const tableData = facultyData.map((f, index) => [
@@ -11541,7 +11547,7 @@ window.downloadVacationPDF = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
-    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    if (!startStr || !endStr) return UiModal.alert("Please select start and end dates.");
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
@@ -11649,7 +11655,7 @@ window.downloadVacationPDF = function() {
         });
     });
 
-    if (reportData.length === 0) return alert("No duties found in range.");
+    if (reportData.length === 0) return UiModal.alert("No duties found in range.");
 
     // Sort by Dept, then Name
     reportData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
@@ -11726,7 +11732,7 @@ window.downloadVacationCertificates = function() {
     const startStr = document.getElementById('vac-start').value;
     const endStr = document.getElementById('vac-end').value;
 
-    if (!startStr || !endStr) return alert("Please select start and end dates.");
+    if (!startStr || !endStr) return UiModal.alert("Please select start and end dates.");
     
     const startDate = new Date(startStr);
     const endDate = new Date(endStr);
@@ -11782,7 +11788,7 @@ window.downloadVacationCertificates = function() {
         });
     });
 
-    if (certificatesData.length === 0) return alert("No duties found in range.");
+    if (certificatesData.length === 0) return UiModal.alert("No duties found in range.");
 
     // Sort by Dept, then Name
     certificatesData.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
@@ -11913,7 +11919,7 @@ window.openGhostUnavailabilityModal = function(title, encodedList) {
         modal.classList.remove('hidden');
 
     } catch (e) {
-        alert("Error opening list: " + e.message);
+        UiModal.alert("Error opening list: " + e.message);
     }
 };
 
@@ -11938,7 +11944,7 @@ window.addVacationMathDate = function() {
     if (!window.vacationDutyDates) window.vacationDutyDates = [];
 
     if (window.vacationDutyDates.includes(dateVal)) {
-        alert("This date is already in the math list.");
+        UiModal.alert("This date is already in the math list.");
         return;
     }
 
@@ -12230,9 +12236,9 @@ window.sendCustomEmail = async function() {
     const subject = document.getElementById('custom-email-subject').value.trim();
     const bodyText = document.getElementById('custom-email-body').value.trim();
 
-    if (!toHods && !toFaculty && !toSpecificDepts) return alert("Please select at least one recipient group.");
-    if (!subject || !bodyText) return alert("Please enter both a Subject and a Message Body.");
-    if (!googleScriptUrl) return alert("Email sending is not configured. Please set the AppScript URL in System Integrations.");
+    if (!toHods && !toFaculty && !toSpecificDepts) return await UiModal.alert("Please select at least one recipient group.");
+    if (!subject || !bodyText) return await UiModal.alert("Please enter both a Subject and a Message Body.");
+    if (!googleScriptUrl) return await UiModal.alert("Email sending is not configured. Please set the AppScript URL in System Integrations.");
 
     let recipients = new Set();
     const selectedDepts = [];
@@ -12242,7 +12248,7 @@ window.sendCustomEmail = async function() {
         const checkedBoxes = document.querySelectorAll('#email-specific-dept-list .dept-checkbox:checked');
         checkedBoxes.forEach(cb => selectedDepts.push(cb.value));
         
-        if (selectedDepts.length === 0) return alert("Please tick at least one department from the list.");
+        if (selectedDepts.length === 0) return await UiModal.alert("Please tick at least one department from the list.");
     }
 
 
@@ -12266,8 +12272,8 @@ window.sendCustomEmail = async function() {
 
     const emailList = Array.from(recipients).filter(e => e && e.trim() !== '');
 
-    if (emailList.length === 0) return alert("No valid email addresses found for the selected targets.");
-    if (!confirm(`You are about to send this custom email to ${emailList.length} recipients.\n\nProceed?`)) return;
+    if (emailList.length === 0) return await UiModal.alert("No valid email addresses found for the selected targets.");
+    if (!await UiModal.confirm(`You are about to send this custom email to ${emailList.length} recipients.\n\nProceed?`)) return;
 
     // Send emails
     const btn = document.getElementById('btn-send-custom-email');
@@ -12309,11 +12315,11 @@ window.sendCustomEmail = async function() {
         }
 
         updateSyncStatus("Sent Custom Emails", "success");
-        alert(`✅ Finished sending Bulk Email to ${sent} recipients.`);
+        await UiModal.alert(`✅ Finished sending Bulk Email to ${sent} recipients.`);
         closeModal('custom-email-modal');
 
     } catch (err) {
-        alert("❌ Error sending emails: " + err.message);
+        await UiModal.alert("❌ Error sending emails: " + err.message);
         updateSyncStatus("Failed to send emails", "error");
     } finally {
         btn.innerHTML = `<span>📤</span> Send Message`;
@@ -12465,7 +12471,7 @@ window.triggerDeptCompletionNotification = function() {
     const sessionSelect = document.getElementById('dept-completion-session-select');
     const sessionKey = sessionSelect ? sessionSelect.value : "";
     
-    if (!sessionKey) return alert("Please select a completed session from the dropdown.");
+    if (!sessionKey) return UiModal.alert("Please select a completed session from the dropdown.");
     
     const slot = invigilationSlots[sessionKey];
     const [dateStr, timeStr] = sessionKey.split(' | ');
@@ -12611,9 +12617,9 @@ window.sendSingleDeptEmail = async function(index) {
     const item = window.currentDeptEmailQueue[index];
     if (!item || !item.email) return;
 
-    if (!googleScriptUrl) return alert("⚠️ Google Apps Script URL not found in settings.");
+    if (!googleScriptUrl) return await UiModal.alert("⚠️ Google Apps Script URL not found in settings.");
 
-    if (!confirm(`Send consolidated duty list to ${item.dept} (${item.email})?`)) return;
+    if (!await UiModal.confirm(`Send consolidated duty list to ${item.dept} (${item.email})?`)) return;
 
     const btn = document.getElementById(item.btnId);
     const status = document.getElementById(item.statusId);
@@ -12649,7 +12655,7 @@ window.sendSingleDeptEmail = async function(index) {
         console.error(e);
         if (btn) { btn.disabled = false; btn.textContent = "Retry"; }
         if (status) { status.textContent = "Failed"; status.classList.add('text-red-500'); }
-        alert("Failed to send email. Check internet or API URL.");
+        await UiModal.alert("Failed to send email. Check internet or API URL.");
     }
 };
 
@@ -12657,8 +12663,8 @@ window.sendSingleDeptEmail = async function(index) {
 window.sendBulkDeptEmails = async function() {
     const pendingItems = window.currentDeptEmailQueue.filter(i => i.status === 'pending' && i.email);
 
-    if (pendingItems.length === 0) return alert("No valid pending emails to send.");
-    if (!confirm(`Start bulk sending to ${pendingItems.length} Departments?`)) return;
+    if (pendingItems.length === 0) return await UiModal.alert("No valid pending emails to send.");
+    if (!await UiModal.confirm(`Start bulk sending to ${pendingItems.length} Departments?`)) return;
 
     // UI Setup
     const mainBtn = document.getElementById('btn-bulk-dept-send');
@@ -12723,7 +12729,7 @@ window.sendBulkDeptEmails = async function() {
     }
 
     if(statusText) statusText.textContent = "Completed.";
-    alert(`Batch Complete.\nSent to ${successCount} departments.`);
+    await UiModal.alert(`Batch Complete.\nSent to ${successCount} departments.`);
     
     // Log Bulk Action
     if (typeof logActivity === 'function') logActivity("Bulk Dept Email", `Sent consolidated lists to ${successCount} departments.`);
@@ -12733,14 +12739,14 @@ window.sendBulkDeptEmails = async function() {
 
 
 
-window.sendSingleEmailFromQueue = function(index) {
+window.sendSingleEmailFromQueue = async function(index) {
     const item = window.currentEmailQueue[index];
     if (!item) return;
     
     // Get the button element
     const btn = document.getElementById(item.btnId);
     
-    if (confirm(`Send email to ${item.name}?`)) {
+    if (await UiModal.confirm(`Send email to ${item.name}?`)) {
         // Call the main send function
         // Note: 'item.body' contains HTML, so we pass it directly
         // The main function expects (btn, email, name, subject, message)
@@ -12777,7 +12783,7 @@ window.sendIndividualEmail = async function(index) {
     const item = window.currentEmailQueue[index];
     if (!item) return;
 
-    if (!confirm(`Send official email to ${item.name}?`)) return;
+    if (!await UiModal.confirm(`Send official email to ${item.name}?`)) return;
 
     const btn = document.getElementById(item.btnId);
     const statusMsg = document.getElementById(`status-msg-${item.id}`);
@@ -12799,8 +12805,8 @@ window.processBulkQueue = async function(mode = 'all') {
     let pendingItems = window.currentEmailQueue.filter(i => i.status === 'pending');
     if (mode === 'new') pendingItems = pendingItems.filter(i => i.isNew);
     
-    if (pendingItems.length === 0) return alert("No pending emails to send.");
-    if (!confirm(`Start bulk sending to ${pendingItems.length} recipients?\n\nKeep this window open until finished.`)) return;
+    if (pendingItems.length === 0) return await UiModal.alert("No pending emails to send.");
+    if (!await UiModal.confirm(`Start bulk sending to ${pendingItems.length} recipients?\n\nKeep this window open until finished.`)) return;
 
     // UI Setup
     document.getElementById('btn-bulk-send').classList.add('hidden');
@@ -12811,7 +12817,7 @@ window.processBulkQueue = async function(mode = 'all') {
 
     for (let i = 0; i < pendingItems.length; i++) {
         if (window.isBulkSendingCancelled) {
-            alert(`Process Stopped.\nSent: ${sentCount}`);
+            await UiModal.alert(`Process Stopped.\nSent: ${sentCount}`);
             break;
         }
 
@@ -12842,7 +12848,7 @@ window.processBulkQueue = async function(mode = 'all') {
 
     document.getElementById('bulk-status-text').textContent = "Process Finished.";
     if (!window.isBulkSendingCancelled) {
-        alert(`✅ Bulk Email Complete.\nSuccessfully sent: ${sentCount} emails.`);
+        await UiModal.alert(`✅ Bulk Email Complete.\nSuccessfully sent: ${sentCount} emails.`);
     }
     
     // Reset UI
@@ -12951,7 +12957,7 @@ window.adminMarkUnavailable = function(key, email) {
 // --- ADMIN: God Access Unavailability Search (Professional Modal) ---
 window.directUnavailStaff = function(key) {
     const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot data not found.");
+    if (!slot) return UiModal.alert("Error: Slot data not found.");
 
     // Initialize Modal State
     document.getElementById('direct-unavail-slot-key').innerText = key;
@@ -13007,16 +13013,16 @@ window.selectDirectUnavailStaff = function(email, name) {
     document.getElementById('direct-unavail-dropdown').classList.add('hidden');
 };
 
-window.confirmDirectUnavail = function() {
+window.confirmDirectUnavail = async function() {
     const key = window.directUnavailState.slotKey;
     const email = document.getElementById('direct-unavail-hidden-email').value;
     const name = document.getElementById('direct-unavail-search-input').value;
     
-    if (!key || !email) return alert("Please search and select a faculty member from the autocomplete list first.");
+    if (!key || !email) return await UiModal.alert("Please search and select a faculty member from the autocomplete list first.");
 
     const slot = invigilationSlots[key];
     if (slot && slot.assigned.includes(email)) {
-        if (!confirm("⚠️ " + name + " is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
+        if (!await UiModal.confirm("⚠️ " + name + " is CURRENTLY ASSIGNED to this session. Marking them unavailable will remove them from the roster. Proceed?")) {
             return;
         }
     }
@@ -13070,7 +13076,7 @@ window.generateDepartmentConsolidatedEmail = function(deptName, duties, title) {
 
 // --- ADMIN: Remove Unavailability (From Manual Modal) ---
 window.adminRemoveUnavailable = async function(key, email, isAdvance) {
-    if(!confirm(`Remove unavailability status for this staff member?`)) return;
+    if(!await UiModal.confirm(`Remove unavailability status for this staff member?`)) return;
 
     if (isAdvance) {
         // Handle Advance Leave (Complex because it's in a different object)
@@ -13131,18 +13137,18 @@ window.executeMergeSlots = async function() {
     const tgtKey = document.getElementById('merge-target-slot').value;
     const btn = document.getElementById('btn-execute-merge');
 
-    if (!srcKey || !tgtKey) return alert("Please select both a Source and Target slot.");
-    if (srcKey === tgtKey) return alert("Source and Target cannot be the exact same slot.");
+    if (!srcKey || !tgtKey) return await UiModal.alert("Please select both a Source and Target slot.");
+    if (srcKey === tgtKey) return await UiModal.alert("Source and Target cannot be the exact same slot.");
 
     const src = invigilationSlots[srcKey];
     const tgt = invigilationSlots[tgtKey];
 
-    if (!src || !tgt) return alert("Invalid slot selection.");
+    if (!src || !tgt) return await UiModal.alert("Invalid slot selection.");
 
     const confirmMsg = `⚠️ CRITICAL WARNING: MERGING SLOTS ⚠️\n\nMoving Volunteers FROM: ${srcKey}\nINTO TARGET: ${tgtKey}\n\nAfter successfully merging, the source slot (${srcKey}) will be PERMANENTLY DELETED.\n\nType 'MERGE' to proceed:`;
-    const approval = prompt(confirmMsg);
+    const approval = await UiModal.prompt("Merge Slots Confirmation", confirmMsg, "MERGE");
     
-    if (approval !== 'MERGE') return alert("Merge Cancelled.");
+    if (approval !== 'MERGE') return await UiModal.alert("Merge Cancelled.");
 
     try {
         btn.innerHTML = "Merging Data...";
@@ -13174,12 +13180,12 @@ window.executeMergeSlots = async function() {
         await syncSlotsToCloud(srcKey); // FIX: Ensure source slot remains deleted
 
         
-        alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
+        await UiModal.alert(`✅ Successfully merged ${srcKey} volunteers into ${tgtKey}!`);
 
 
     } catch (e) {
         console.error("Merge error:", e);
-        alert("An error occurred during merge: " + e.message);
+        await UiModal.alert("An error occurred during merge: " + e.message);
     } finally {
         btn.innerHTML = "Merge Slots Now";
         btn.disabled = false;
@@ -13244,7 +13250,7 @@ window.printAttendanceReport = function () {
     });
 
     if (facultyData.length === 0) {
-        return alert("No attendance records found for the current Academic Year.");
+        return UiModal.alert("No attendance records found for the current Academic Year.");
     }
 
     const collegeName = collegeData.examCollegeName || "Government Victoria College";
@@ -13270,7 +13276,7 @@ window.printAttendanceReport = function () {
 // RESTORED: WEEKLY AUTO-ASSIGN & LOGS
 // ==========================================
 window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
-    if (!confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
+    if (!await UiModal.confirm(`⚡ Run Auto-Assignment for ${monthStr}, Week ${weekNum}?\n\nIMPORTANT: This will only fill LOCKED slots (Admin Mode).\n\nRules Applied:\n1. Max 3 duties/week\n2. Avoid Same Day & Adjacent Days\n3. Dept Cap: Max 60% of a dept per session\n4. "Show Must Go On" - Rules break if necessary.`)) return;
 
     // --- V2.0 ENGINE CONFIGURATION ---
     const AUTO_ASSIGN_WEIGHTS = {
@@ -13297,7 +13303,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
         }
     });
 
-    if (targetSlots.length === 0) return alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
+    if (targetSlots.length === 0) return await UiModal.alert(`⚠️ No LOCKED slots found in Week ${weekNum}.\n\nPlease click "🔒 Lock Week" first to enable Admin Auto-Assignment.`);
 
     targetSlots.sort((a, b) => a.date - b.date);
 
@@ -13476,7 +13482,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
     // --- FINAL VERIFICATION & COMMIT ---
     if (assignedCount === 0) {
-        return alert("⚠️ Auto-Assign Finished, but no positions could be filled (or all targets were already met).");
+        return await UiModal.alert("⚠️ Auto-Assign Finished, but no positions could be filled (or all targets were already met).");
     }
 
     // Merge Sandbox Back to Reality
@@ -13499,7 +13505,7 @@ window.runWeeklyAutoAssign = async function (monthStr, weekNum) {
 
     let alertMsg = `✅ Auto-Assign V2 Complete!\nFilled ${assignedCount} positions across ${modifiedKeys.size} sessions.`;
     if (logEntries.length > 0) alertMsg += `\n\n⚠️ ${logEntries.length} constraint warnings generated. Check Admin Logs.`;
-    alert(alertMsg);
+    await UiModal.alert(alertMsg);
 };
 
 window.viewAutoAssignLogs = async function () {
@@ -13507,7 +13513,7 @@ window.viewAutoAssignLogs = async function () {
     const snap = await getDoc(ref);
     if (snap.exists()) {
         const logs = snap.data().autoAssignLogs || [];
-        if (logs.length === 0) return alert("No logs found.");
+        if (logs.length === 0) return await UiModal.alert("No logs found.");
         const list = document.getElementById('inconvenience-list');
         const title = document.getElementById('inconvenience-modal-subtitle');
         document.querySelector('#inconvenience-modal h3').textContent = "📜 Auto-Assign Logs";
@@ -13559,7 +13565,7 @@ window.saveManualAllocation = async function () {
 
     try {
         await syncSlotsToCloud(key); // FIX: Ensure manual removals persist
-        alert('✅ Assignments Saved successfully!');
+        await UiModal.alert('✅ Assignments Saved successfully!');
         window.closeModal('manual-allocation-modal');
 
         if (window.currentUser && typeof window.logActivity === 'function') {
@@ -13570,7 +13576,7 @@ window.saveManualAllocation = async function () {
         else renderSlotsGridAdmin();
     } catch (e) {
         console.error("Save failed:", e);
-        alert('Error saving. Check console.');
+        await UiModal.alert('Error saving. Check console.');
     }
 };
 
@@ -13584,7 +13590,7 @@ window.directAddState = {
 
 window.directAddStaff = function(key) {
     const slot = invigilationSlots[key];
-    if (!slot) return alert("Error: Slot data not found.");
+    if (!slot) return UiModal.alert("Error: Slot data not found.");
 
     document.getElementById('direct-add-slot-key').textContent = key;
     window.directAddState.slotKey = key;
@@ -13713,7 +13719,7 @@ window.confirmDirectAdd = async function() {
     const key = window.directAddState.slotKey;
     const email = document.getElementById('direct-add-hidden-email').value;
     
-    if (!key || !email) return alert("Please search and select a faculty member from the autocomplete list first.");
+    if (!key || !email) return await UiModal.alert("Please search and select a faculty member from the autocomplete list first.");
 
     const slot = invigilationSlots[key];
     const staff = staffData.find(s => s.email === email);
@@ -13739,7 +13745,7 @@ window.confirmDirectAdd = async function() {
         renderSlotsGridAdmin();
     
     window.closeModal('direct-add-modal');
-    alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
+    await UiModal.alert(`✅ ${staff.name} has been successfully assigned to ${key} manually.`);
 };
 
 // ============================================================================
@@ -13750,11 +13756,11 @@ window.confirmDirectAdd = async function() {
  * Detects all academic years where the user has completed duties and presents a choice.
  */
 window.downloadInvigilationCertificate = async function() {
-    if (!currentUser) return alert("Please log in to download your certificate.");
-    if (typeof jspdf === 'undefined') return alert("PDF library not loaded.");
+    if (!currentUser) return await UiModal.alert("Please log in to download your certificate.");
+    if (typeof jspdf === 'undefined') return await UiModal.alert("PDF library not loaded.");
 
     const me = staffData.find(s => s.email.toLowerCase() === currentUser.email.toLowerCase());
-    if (!me) return alert("Staff record not found.");
+    if (!me) return await UiModal.alert("Staff record not found.");
 
     // 1. Detect All Years with Attendance
     const yearsMap = {}; // label -> { acYear, sessionCount }
@@ -13774,7 +13780,7 @@ window.downloadInvigilationCertificate = async function() {
     const activeYears = Object.keys(yearsMap).sort().reverse();
 
     if (activeYears.length === 0) {
-        return alert("No completed duties found in your record for any Academic Year.");
+        return await UiModal.alert("No completed duties found in your record for any Academic Year.");
     }
 
     // 2. Selection Logic
@@ -13840,7 +13846,7 @@ window.generateCertificateForAY = async function(acYear) {
         }
     });
 
-    if (completedSessions.length === 0) return alert("No completed duties found for this period.");
+    if (completedSessions.length === 0) return await UiModal.alert("No completed duties found for this period.");
 
     // Sort ascending by date
     completedSessions.sort((a, b) => a.date - b.date);
@@ -13926,7 +13932,7 @@ window.generateCertificateForAY = async function(acYear) {
         doc.save(`Certificate_${me.name.split(' ')[0]}_${acYear.label.replace('-', '_')}.pdf`);
     } catch (err) {
         console.error("PDF Generation Error:", err);
-        alert("Failed to generate PDF. Check console for details.");
+        await UiModal.alert("Failed to generate PDF. Check console for details.");
     }
 };
 
@@ -13970,7 +13976,7 @@ window.switchSuperAdminCollege = async function() {
     const select = document.getElementById('super-admin-college-select');
     const targetId = select ? select.value : null;
     if (!targetId) {
-        alert("Please select a college from the list.");
+        await UiModal.alert("Please select a college from the list.");
         return;
     }
     const modal = document.getElementById('super-admin-college-modal');

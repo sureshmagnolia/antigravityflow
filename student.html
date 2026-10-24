@@ -6,6 +6,7 @@
       <title>Exam Seating Status</title>
     <link rel="icon" type="image/svg+xml" href="magnolia-logo.svg?v=12.8.5">
       <script src="tailwind.js"></script>
+      <script src="ui-modal.js"></script>
     
     <style>
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -178,7 +179,7 @@
             resultContainer.innerHTML = '';
             
             if (regNo.length < 2) {
-                alert("Please enter a valid Register Number.");
+                UiModal.alert("Please enter a valid Register Number.");
                 return;
             }
 

@@ -259,7 +259,7 @@ function generateBillForSessions(billTitle, sessionData, streamType) {
     
     const rates = allRates[streamType];
     if (!rates) {
-        alert(`Error: No rate configuration found for stream '${streamType}'.`);
+        UiModal.alert(`Error: No rate configuration found for stream '${streamType}'.`);
         return null;
     }
 

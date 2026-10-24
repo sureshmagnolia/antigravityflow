@@ -96,7 +96,7 @@ window.searchStudent = async function() {
               const statusEl = document.getElementById('status');
               resultContainer.innerHTML = '';
 
-              if (regNo.length < 2) { alert("Please enter a valid Register Number."); return; }
+              if (regNo.length < 2) { await UiModal.alert("Please enter a valid Register Number."); return; }
 
               // Unconditionally save it locally
               localStorage.setItem('myExamRegNo', regNo);

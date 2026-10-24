@@ -1227,7 +1227,7 @@ async function migrateFromLocalStorage() {
         
         // NEW: Alert Logged-In Users regarding Cache Limitations
         if (window.currentCollegeId) {
-            alert("⚠️ Connectivity Lost. ExamFlow is in Offline Mode.\n\nOnly the recent/upcoming sessions saved in your local cache are available. Historical data cannot be accessed until the internet is restored.");
+            UiModal.alert("⚠️ Connectivity Lost. ExamFlow is in Offline Mode.\n\nOnly the recent/upcoming sessions saved in your local cache are available. Historical data cannot be accessed until the internet is restored.");
         }
     });
 
@@ -1249,7 +1249,7 @@ async function migrateFromLocalStorage() {
                     // Auth listener will handle the rest
                 }).catch((error) => {
                     console.error(error);
-                    alert("Login Failed: " + error.message);
+                    UiModal.alert("Login Failed: " + error.message);
                 });
         });
     }
@@ -1721,11 +1721,11 @@ async function updateLocalSlotsFromStudents() {
 }
 // --- MANUAL SLOT RECALCULATION (For logged-in admins after scribe marking) ---
 window.recalcInvigSlots = async function () {
-    if (!currentUser) return alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
+    if (!currentUser) return await UiModal.alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
 
     // 🛡️ [USER CONFIRMATION]: Explicitly state the Future-Only scope
     const confirmMsg = `🔄 RECALCULATE FUTURE SLOTS?\n\nThis will re-scan all student data to update staffing requirements for all UPCOMING exams.\n\n✅ Existing teacher assignments will be PRESERVED.\n✅ Past session data will NOT be modified.\n\nContinue?`;
-    if (!confirm(confirmMsg)) return;
+    if (!await UiModal.confirm('Push Slots', confirmMsg)) return;
 
     const btns = ['recalc-invig-slots-btn', 'recalc-invig-slots-btn-loader', 'recalc-invig-slots-btn-editor'];
     const originalStates = [];
@@ -1747,7 +1747,7 @@ window.recalcInvigSlots = async function () {
         // app.js doesn't natively fetch daily shards. If local memory is empty, abort to prevent a wipe.
         const currentSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         if (Object.keys(currentSlots).length === 0) {
-            alert('⚠️ SAFETY ABORT: Your local slot cache is empty. \n\nPlease open the "Staff & Invigilation" tab briefly to allow the system to fully sync the cloud database shards before recalculating slots.');
+            await UiModal.alert('⚠️ SAFETY ABORT: Your local slot cache is empty. \n\nPlease open the "Staff & Invigilation" tab briefly to allow the system to fully sync the cloud database shards before recalculating slots.');
             return;
         }
 
@@ -1758,13 +1758,13 @@ window.recalcInvigSlots = async function () {
                 // FIX: Recalculation should be authoritative for all slots
                 await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             }
-            alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
+            await UiModal.alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
         } else {
-            alert('ℹ️ No changes detected. Slots are already up to date.');
+            await UiModal.alert('ℹ️ No changes detected. Slots are already up to date.');
         }
     } catch (e) {
         console.error('Slot Recalc Error:', e);
-        alert('❌ Recalculation failed. Check console for details.');
+        await UiModal.alert('❌ Recalculation failed. Check console for details.');
     } finally {
         originalStates.forEach(state => {
             const btn = document.getElementById(state.id);
@@ -1942,7 +1942,7 @@ window.recalcInvigSlots = async function () {
                     console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
                     localStorage.clear();
                     sessionStorage.clear();
-                    alert("Session corrupted or expired. Please log in again.");
+                    await UiModal.alert("Session corrupted or expired. Please log in again.");
                     if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
                     location.reload();
                 }
@@ -2977,7 +2977,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     
                     message += `\nDo you want to proceed with this update to the Invigilation Database?`;
                     
-                    if (!confirm(message)) {
+                    if (!await UiModal.confirm('Invigilation Protection', message)) {
                         console.warn("🛡️ Sync Cancelled by Admin to protect slots.");
                         updateSyncStatus("Sync Cancelled", "neutral");
                         isSyncing = false;
@@ -3214,8 +3214,8 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         return `${hh}:${m} ${ampm}`;
     }
     // 🛡️ MEMORY SHIELD: Surgically deletes one session's local metadata
-    window.freeUpStorage = function(sessionKey) {
-        if(!confirm(`Clear local metadata for: ${sessionKey}?`)) return;
+    window.freeUpStorage = async function(sessionKey) {
+        if(!await UiModal.confirm('Free Up Storage', `Clear local metadata for: ${sessionKey}?`)) return;
         ['examRoomAllotment', 'examQPCodes', 'examAbsenteeList', 'examScribeAllotment', 'examInvigilatorMapping'].forEach(globalKey => {
             try {
                 let dataBlock = JSON.parse(localStorage.getItem(globalKey) || '{}');
@@ -3228,7 +3228,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
         known = known.filter(k => k !== sessionKey);
         try { localStorage.setItem('examAllKnownSessions', JSON.stringify(known)); } catch(e) {}
-        alert(`Cleared "${sessionKey}". Try saving again.`);
+        await UiModal.alert(`Cleared "${sessionKey}". Try saving again.`);
         document.getElementById('quota-exceeded-modal').classList.add('hidden');
     };
 
@@ -3626,7 +3626,7 @@ window.downloadReportPDF = function() {
     if (generators[reportType] && typeof generators[reportType] === 'function') {
         generators[reportType]();
     } else {
-        alert("PDF generation for '" + reportType + "' is not yet implemented.");
+        UiModal.alert("PDF generation for '" + reportType + "' is not yet implemented.");
     }
 };
     
@@ -3639,7 +3639,7 @@ function generateRoomWisePDF() {
     const container = document.getElementById('report-output-area');
     const pages = container.querySelectorAll('.print-page');
 
-    if (pages.length === 0) return alert("No pages found.");
+    if (pages.length === 0) return UiModal.alert("No pages found.");
 
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
@@ -3875,7 +3875,7 @@ function generateDayWisePDF() {
     
     // 1. Validation
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded.");
+        return UiModal.alert("No data loaded.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn');
@@ -4315,7 +4315,7 @@ function generateDayWisePDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error: " + e.message);
+        UiModal.alert("Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4330,7 +4330,7 @@ function generateRoomStickersPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page-sticker') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the Room Stickers HTML report first.");
+        return UiModal.alert("Please generate the Room Stickers HTML report first.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn'); 
@@ -4542,7 +4542,7 @@ function generateRoomStickersPDF() {
 
     } catch (e) {
         console.error("Sticker PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4564,7 +4564,7 @@ function generateScribeProformaPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the Scribe Proforma HTML report first.");
+        return UiModal.alert("Please generate the Scribe Proforma HTML report first.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn'); 
@@ -4679,7 +4679,7 @@ function generateScribeProformaPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4699,7 +4699,7 @@ function generateScribeProformaPDF() {
 
       // 1. Validation
       if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-          return alert("No data loaded.");
+          return UiModal.alert("No data loaded.");
       }
 
       const btn = document.getElementById('download-qp-summary-btn');
@@ -4919,7 +4919,7 @@ function generateScribeProformaPDF() {
 
     } catch (e) {
           console.error("PDF Error:", e);
-          alert("Error: " + e.message);
+          UiModal.alert("Error: " + e.message);
       } finally {
           if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
       }
@@ -4931,7 +4931,7 @@ function generateQuestionPaperReportPDF() {
     
     // 1. Validation
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded to generate Report.");
+        return UiModal.alert("No data loaded to generate Report.");
     }
 
     const btn = document.getElementById('download-qp-report-btn'); 
@@ -5208,7 +5208,7 @@ function generateQuestionPaperReportPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error: " + e.message);
+        UiModal.alert("Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -5224,7 +5224,7 @@ function generateQPDistributionPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the HTML report first.");
+        return UiModal.alert("Please generate the HTML report first.");
     }
 
     const btn = document.getElementById('download-qp-pdf-btn'); 
@@ -5439,7 +5439,7 @@ function generateQPDistributionPDF() {
 
     } catch (e) {
         console.error("PDF Scraper Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -5795,11 +5795,11 @@ if (toggleButton && sidebar) {
             saveBtn.addEventListener('click', () => {
                 const name = document.getElementById('rule-name').value.trim();
 
-                if (!name) { alert("Please enter an Exam Name."); return; }
+                if (!name) { UiModal.alert("Please enter an Exam Name."); return; }
 
                 // Check Duplicates
                 const isDuplicate = currentExamRules.some(r => r.examName.toLowerCase() === name.toLowerCase() && r.id !== editingRuleId);
-                if (isDuplicate) { alert("This Exam Name already exists."); return; }
+                if (isDuplicate) { UiModal.alert("This Exam Name already exists."); return; }
 
                 // Save Data
                 if (editingRuleId) {
@@ -5850,8 +5850,8 @@ if (toggleButton && sidebar) {
         renderExamRulesInModal();
     }
 
-    window.deleteExamRule = function (id) {
-        if (confirm("Remove this exam schedule?")) {
+    window.deleteExamRule = async function (id) {
+        if (await UiModal.confirm('Delete Exam Schedule', "Remove this exam schedule?")) {
             currentExamRules = currentExamRules.filter(r => r.id !== id);
             localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
 
@@ -7013,7 +7013,7 @@ if (toggleButton && sidebar) {
 
     async function checkManualAllotment(sessionKey) {
         if (!sessionKey || sessionKey === 'all') {
-            alert('Please select a specific session to generate this report.');
+            await UiModal.alert('Please select a specific session to generate this report.');
             return false;
         }
 
@@ -7043,7 +7043,7 @@ if (toggleButton && sidebar) {
         const totalUniqueStudents = new Set((sessionStudentRecords || []).map(s => getRegNo(s)).filter(Boolean)).size;
 
         if (totalUniqueStudents === 0) {
-            alert('No students found for this session.');
+            await UiModal.alert('No students found for this session.');
             return false;
         }
 
@@ -7098,7 +7098,7 @@ if (toggleButton && sidebar) {
         // 6. Compare counts
         if (allottedStudentCount < totalUniqueStudents) {
             const remaining = totalUniqueStudents - allottedStudentCount;
-            if (!confirm(`Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
+            if (!await UiModal.confirm('Allotment Warning', `Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
                 return false;
             }
         }
@@ -7178,7 +7178,7 @@ if (toggleButton && sidebar) {
             });
 
             if (final_student_list_for_report.length === 0) { 
-                alert("Please allot rooms before generating the Room-wise report."); 
+                await UiModal.alert("Please allot rooms before generating the Room-wise report."); 
                 generateReportButton.disabled = false;
                 generateReportButton.textContent = "Generate Room-wise Seating Report";
                 return; 
@@ -7566,7 +7566,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Error:", e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateReportButton.disabled = false;
             generateReportButton.textContent = "Generate Room-wise Seating Report";
@@ -7638,7 +7638,7 @@ if (toggleButton && sidebar) {
             });
 
             if (baseData.length === 0) { 
-                alert("Please allot rooms before generating this report."); 
+                await UiModal.alert("Please allot rooms before generating this report."); 
                 generateDaywiseReportButton.disabled = false;
                 generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
                 return; 
@@ -7924,7 +7924,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
         } finally {
             generateDaywiseReportButton.disabled = false;
             generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
@@ -8838,7 +8838,7 @@ if (toggleButton && sidebar) {
                 sessions[key].streams[stream][courseKey]++;
             });
 
-            if (Object.keys(sessions).length === 0) { alert("No data."); return; }
+            if (Object.keys(sessions).length === 0) { await UiModal.alert("No data."); return; }
 
             let allPagesHtml = '';
             let totalPages = 0;
@@ -8933,7 +8933,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error(e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateQPaperReportButton.disabled = false;
             generateQPaperReportButton.textContent = "Generate Question Paper Report";
@@ -9002,7 +9002,7 @@ if (toggleButton && sidebar) {
             });
             
             if (processed_rows_with_rooms.length === 0) { 
-                alert("Please allot rooms before generating the report."); 
+                await UiModal.alert("Please allot rooms before generating the report."); 
                 generateQpDistributionReportButton.disabled = false;
                 generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
                 return; 
@@ -9191,7 +9191,7 @@ if (toggleButton && sidebar) {
 
             } catch (e) {
                 console.error("Error:", e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateQpDistributionReportButton.disabled = false;
                 generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
@@ -9270,7 +9270,7 @@ if (toggleButton && sidebar) {
             const sessionKey = sessionSelect.value;
 
         
-            if (!sessionKey) { alert("Please select a session first."); return; }
+            if (!sessionKey) { await UiModal.alert("Please select a session first."); return; }
 
             generateAbsenteeReportButton.disabled = true;
             generateAbsenteeReportButton.textContent = "Generating...";
@@ -9290,7 +9290,7 @@ if (toggleButton && sidebar) {
                 );
                 // Guard Clause: Alert if no students found (Fixes unresponsive button)
                 if (!sessionStudents || sessionStudents.length === 0) {
-                    alert(`No students found for session: ${date} | ${time}.\n\nPossible Cause:\n- Normalized Time Mismatch (e.g. '9:30' vs '09:30')\n- No data loaded for this specific slot.`);
+                    await UiModal.alert(`No students found for session: ${date} | ${time}.\n\nPossible Cause:\n- Normalized Time Mismatch (e.g. '9:30' vs '09:30')\n- No data loaded for this specific slot.`);
                     generateAbsenteeReportButton.disabled = false;
                     generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
                     return; 
@@ -9479,7 +9479,7 @@ if (toggleButton && sidebar) {
     if (btnPrintReport) {
         btnPrintReport.addEventListener('click', () => {
             const reportContent = document.getElementById('absentee-report-output').innerHTML;
-            if (!reportContent) { alert("Please generate a report first."); return; }
+            if (!reportContent) { UiModal.alert("Please generate a report first."); return; }
 
             const printWindow = window.open('', '_blank');
             printWindow.document.write(`
@@ -9587,7 +9587,7 @@ if (toggleButton && sidebar) {
             });
 
             if (allScribeStudents.length === 0) { 
-                alert("No scribe students found in the selected sessions."); 
+                await UiModal.alert("No scribe students found in the selected sessions."); 
                 generateScribeReportButton.disabled = false;
                 generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
                 return; 
@@ -9699,7 +9699,7 @@ if (toggleButton && sidebar) {
             lastGeneratedReportType = "Scribe_Assistance_Report";
         } catch (e) {
             console.error("Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
             reportControls.classList.remove('hidden');
         } finally {
             generateScribeReportButton.disabled = false;
@@ -9940,7 +9940,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Scribe Report Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
             reportStatus.textContent = "Generation failed.";
         } finally {
             generateScribeProformaButton.disabled = false;
@@ -9971,7 +9971,7 @@ if (toggleButton && sidebar) {
     // --- Function to download the room-allocated CSV ---
     function downloadRoomCsv() {
         if (!lastGeneratedRoomData || lastGeneratedRoomData.length === 0) {
-            alert("No room data to download.");
+            UiModal.alert("No room data to download.");
             return;
         }
 
@@ -10009,7 +10009,7 @@ if (toggleButton && sidebar) {
 
 async function syncToPrintManager() {
         if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
-            return alert("No Room-wise summary data to sync. Please generate the report first.");
+            return await UiModal.alert("No Room-wise summary data to sync. Please generate the report first.");
         }
 
         const syncBtn = document.getElementById('sync-print-manager-button');
@@ -10017,7 +10017,7 @@ async function syncToPrintManager() {
         const cid = window.currentCollegeId || localStorage.getItem(COLLEGE_ID_KEY);
 
         if (!cid) {
-            return alert("College ID not found. Please ensure you are logged in or have a valid session.");
+            return await UiModal.alert("College ID not found. Please ensure you are logged in or have a valid session.");
         }
 
         try {
@@ -10036,11 +10036,11 @@ async function syncToPrintManager() {
 
             syncBtn.innerHTML = "✅ Synced Successfully!";
             setTimeout(() => { syncBtn.innerHTML = originalText; syncBtn.disabled = false; }, 3000);
-            alert("Data synced to Print Manager! You can now fetch it using your College ID in the Java app.\n\nYour College ID: " + cid);
+            await UiModal.alert("Data synced to Print Manager! You can now fetch it using your College ID in the Java app.\n\nYour College ID: " + cid);
             
         } catch (e) {
             console.error("Sync Error:", e);
-            alert("Failed to sync: " + e.message);
+            await UiModal.alert("Failed to sync: " + e.message);
             syncBtn.innerHTML = originalText;
             syncBtn.disabled = false;
         }
@@ -10048,7 +10048,7 @@ async function syncToPrintManager() {
                     
     function downloadRoomWiseSeatingJson() {
         if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
-            return alert("No Room-wise summary data to export. Please generate the report first.");
+            return UiModal.alert("No Room-wise summary data to export. Please generate the report first.");
         }
 
         const blob = new Blob([JSON.stringify(lastGeneratedRoomWiseSummary, null, 2)], { type: 'application/json' });
@@ -10109,7 +10109,7 @@ async function syncToPrintManager() {
             });
         });
 
-        if (exportData.length === 0) return alert("No QP data to export.");
+        if (exportData.length === 0) return UiModal.alert("No QP data to export.");
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -10231,7 +10231,7 @@ async function syncToPrintManager() {
 
                 // *** VALIDATION CHECK ***
                 if (!location) {
-                    alert(`Error: Location is missing for ${roomName}.\n\nPlease enter a location (e.g., "101 - Commerce Block").`);
+                    UiModal.alert(`Error: Location is missing for ${roomName}.\n\nPlease enter a location (e.g., "101 - Commerce Block").`);
                     locationInput.focus(); // Jump to the empty box
                     locationInput.classList.add('border-red-500', 'ring-1', 'ring-red-500'); // Highlight it
 
@@ -10388,11 +10388,11 @@ async function syncToPrintManager() {
 
     // --- Remove OR Edit Room Button (Event Delegation: Auto-Save) ---
     if (roomConfigContainer) {
-        roomConfigContainer.addEventListener('click', (e) => {
+        roomConfigContainer.addEventListener('click', async (e) => {
 
             // 1. HANDLE REMOVE
             if (e.target.classList.contains('remove-room-button')) {
-                if (!confirm("Delete this room?")) return;
+                if (!await UiModal.confirm('Delete Room', "Delete this room?")) return;
 
                 const row = e.target.closest('.room-row');
                 const roomName = row.getAttribute('data-room-name');
@@ -10464,7 +10464,7 @@ async function syncToPrintManager() {
 
                     // Basic Validation
                     if (!newLoc) {
-                        alert("Please enter a location (e.g., 'Ground Floor').");
+                        await UiModal.alert("Please enter a location (e.g., 'Ground Floor').");
                         return;
                     }
 
@@ -10582,7 +10582,7 @@ async function parseCsvAndLoadData(csvText) {
         }
 
         if (newJsonData.length === 0) {
-            alert("No valid data found in file.");
+            await UiModal.alert("No valid data found in file.");
             return;
         }
 
@@ -10628,7 +10628,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // PROMPT 1: ADDITIONS
         if (potentialAdds.length > 0) {
-            const userWantsToAdd = confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`);
+            const userWantsToAdd = await UiModal.confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick Confirm to ADD them.\nClick Cancel to IGNORE them.`);
             if (userWantsToAdd) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
@@ -10636,7 +10636,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // PROMPT 2: DELETIONS
         if (potentialDeletes.length > 0) {
-            const userWantsToDelete = confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
+            const userWantsToDelete = await UiModal.confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick Confirm to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
             
             if (!userWantsToDelete) {
                 // User said "Cancel" (Don't delete), so we put the old records back into the batch
@@ -10690,7 +10690,7 @@ async function parseCsvAndLoadData(csvText) {
 
         updateDashboard();
         
-        alert("✅ Data Processing Complete!");
+        await UiModal.alert("✅ Data Processing Complete!");
 
     } catch (e) {
         console.error("Error parsing CSV:", e);
@@ -11021,7 +11021,7 @@ window.real_populate_session_dropdown = function () {
         const regNo = getRegNo(selectedStudent);
 
         if (currentAbsenteeList.includes(regNo)) {
-            alert(`${regNo} is already on the absentee list.`);
+            UiModal.alert(`${regNo} is already on the absentee list.`);
             clearSearch();
             return;
         }
@@ -11185,12 +11185,12 @@ window.real_populate_session_dropdown = function () {
         });
     }
 
-    function removeAbsentee(regNo, name) {
+    async function removeAbsentee(regNo, name) {
         if (isAbsenteeListLocked) return; // Extra safety
 
         const confirmMsg = `Are you sure you want to remove ${name || regNo} from the Absentee List?`;
 
-        if (confirm(confirmMsg)) {
+        if (await UiModal.confirm('Remove Absentee', confirmMsg)) {
             currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
             saveAbsenteeList(sessionSelect.value);
             renderAbsenteeList();
@@ -11532,7 +11532,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const sessionKey = sessionSelectQP.value;
         if (!sessionKey) {
-            alert("No session selected.");
+            UiModal.alert("No session selected.");
             return;
         }
 
@@ -11645,9 +11645,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
-            const wantBackup = (typeof UiModal !== 'undefined')
-                ? await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?")
-                : confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.");
+            const wantBackup = await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?");
             if (wantBackup) {
                 // Trigger Downloads
                 const csvBtn = document.getElementById('master-download-csv-btn');
@@ -11661,9 +11659,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             // ---------------------
 
-            const confirmReset = (typeof UiModal !== 'undefined')
-                ? await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)")
-                : confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
+            const confirmReset = await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)");
             
             if (confirmReset) {
                 // 1. Clear Local Storage
@@ -11730,7 +11726,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         if (e.message && e.message.includes('Missing or insufficient permissions')) {
                             console.warn("Basic user: Skipping Firebase cloud wipe.");
                         } else {
-                            alert("Warning: Cloud wipe failed.\nError: " + e.message);
+                            await UiModal.alert("Warning: Cloud wipe failed.\nError: " + e.message);
                         }
                     }
                 }
@@ -11744,7 +11740,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 if (typeof UiModal !== 'undefined') {
                     await UiModal.alert('✅ Cleanup Successful!', 'All student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 } else {
-                    alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                    await UiModal.alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 }
                 window.location.reload();
             }
@@ -11753,14 +11749,14 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // 2. Master Reset
     if (masterResetButton) {
-        masterResetButton.addEventListener('click', () => {
-            const step1 = confirm('WARNING: This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
+        masterResetButton.addEventListener('click', async () => {
+            const step1 = await UiModal.confirm('Warning: Master Reset', 'This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
             if (!step1) return;
 
-            const step2 = confirm('ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
+            const step2 = await UiModal.confirm('Critical Confirmation', 'ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
             if (step2) {
                 localStorage.clear();
-                alert('All local data cleared. The application will now reload.');
+                await UiModal.alert('All local data cleared. The application will now reload.');
                 window.location.reload();
             }
         });
@@ -11814,7 +11810,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         smartSyncBtn.addEventListener('click', async () => {
             // 1. Browser Support Check
             if (!('showDirectoryPicker' in window)) {
-                alert("Browser not supported. Please use Chrome, Edge, or Opera.");
+                await UiModal.alert("Browser not supported. Please use Chrome, Edge, or Opera.");
                 return;
             }
 
@@ -11852,7 +11848,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     console.error("Sync Error:", err);
-                    alert("Sync Error: " + err.message);
+                    await UiModal.alert("Sync Error: " + err.message);
                 }
                 smartSyncBtn.innerHTML = getDefaultButtonContent();
                 smartSyncBtn.className = "w-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-3 rounded-md text-sm font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition shadow-sm mb-2";
@@ -11898,7 +11894,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         `Cloud File: ${cloudDateStr}\n` +
                         `Your Data:  ${localTime > 0 ? new Date(localTime).toLocaleString('en-GB', dateOpt) : "Empty"}\n\n` +
                         `Do you want to RESTORE this data?`;
-                    if (confirm(msg)) {
+                    if (await UiModal.confirm('Cloud Update Found', msg)) {
                         smartSyncBtn.textContent = "Restoring...";
                         await performSmartRestore(latestFileHandle);
                     }
@@ -11912,7 +11908,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const msg = `💾 UNSAVED LOCAL CHANGES\n\n` +
                         `Your data is newer than the backup.\n` +
                         `Do you want to UPDATE the cloud backup?`;
-                    if (confirm(msg)) {
+                    if (await UiModal.confirm('Unsaved Local Changes', msg)) {
                         smartSyncBtn.textContent = "Backing Up...";
                         await performSmartBackup(projectFolderHandle);
                     }
@@ -11922,7 +11918,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // STATE: Synced
                 updateButtonState("synced");
                 if (isInteractive) {
-                    if (confirm(`✅ System is already synced.\n\nForce create a new backup?`)) {
+                    if (await UiModal.confirm('Force Backup', `✅ System is already synced.\n\nForce create a new backup?`)) {
                         smartSyncBtn.textContent = "Backing Up...";
                         await performSmartBackup(projectFolderHandle);
                     }
@@ -12035,7 +12031,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Update UI immediately
         performSyncCheck(cachedCloudHandle, false);
-        alert("✅ Backup Complete!");
+        await UiModal.alert("✅ Backup Complete!");
     }
 
     async function performSmartRestore(fileHandle) {
@@ -12055,7 +12051,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         localStorage.setItem('pendingDriveRestoreSync', 'true');
         localStorage.removeItem('searchIndex');
 
-        alert(`✅ Restored from ${file.name}.\nPage will reload.`);
+        await UiModal.alert(`✅ Restored from ${file.name}.\nPage will reload.`);
         window.location.reload();
     }
 
@@ -12070,7 +12066,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (masterDownloadBtn) {
         masterDownloadBtn.addEventListener('click', async () => {
             if (!allStudentData || allStudentData.length === 0) {
-                alert("No data available to export.");
+                await UiModal.alert("No data available to export.");
                 return;
             }
 
@@ -12282,7 +12278,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             } catch (e) {
                 console.error("Master CSV Error:", e);
-                alert("Failed to generate Master CSV: " + e.message);
+                await UiModal.alert("Failed to generate Master CSV: " + e.message);
             } finally {
                 masterDownloadBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -12816,8 +12812,8 @@ window.real_populate_qp_code_session_dropdown = function () {
     let swapSourceIndex = null;
 
     window.toggleSwapMode = function() {
-        if (isAllotmentLocked) return alert("🔒 Allotment is Locked. Please unlock before swapping.");
-        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
+        if (isAllotmentLocked) return UiModal.alert("🔒 Allotment is Locked. Please unlock before swapping.");
+        if (currentSessionAllotment.length < 2) return UiModal.alert("At least two rooms must be allotted to perform a swap.");
         
         isSwapModeActive = !isSwapModeActive;
         swapSourceIndex = null; // Reset selection if toggled
@@ -12844,14 +12840,14 @@ window.real_populate_qp_code_session_dropdown = function () {
             const grace2 = cap2 + 3;
 
             if (r1.students.length > grace2) {
-                return alert(`Cannot swap: Room ${r2.roomName} capacity (${cap2} + 3 grace) is too small for ${r1.students.length} students.`);
+                return UiModal.alert(`Cannot swap: Room ${r2.roomName} capacity (${cap2} + 3 grace) is too small for ${r1.students.length} students.`);
             }
             if (r2.students.length > grace1) {
-                return alert(`Cannot swap: Room ${r1.roomName} capacity (${cap1} + 3 grace) is too small for ${r2.students.length} students.`);
+                return UiModal.alert(`Cannot swap: Room ${r1.roomName} capacity (${cap1} + 3 grace) is too small for ${r2.students.length} students.`);
             }
 
             if (r1.students.length > cap2 || r2.students.length > cap1) {
-                alert("⚠️ Capacity Warning: Swapping these rooms will exceed nominal capacity but stays within grace limits (max +3).");
+                UiModal.alert("⚠️ Capacity Warning: Swapping these rooms will exceed nominal capacity but stays within grace limits (max +3).");
             }
 
             // 1. Swap the Occupants (Students + Stream)
@@ -13029,8 +13025,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
        // --- CLEAR ALL ROOMS ---
     window.deleteAllRooms = async function() {
-        if (isAllotmentLocked) return alert('List is locked. Please unlock it first.');
-        if (!confirm('Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
+        if (isAllotmentLocked) return await UiModal.alert('List is locked. Please unlock it first.');
+        if (!await UiModal.confirm('Clear Room Allotments', 'Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
 
         currentSessionAllotment.forEach(roomData => {
             const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
@@ -13055,7 +13051,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
       const autoAllotBtn = document.getElementById('auto-allot-button');
       if (autoAllotBtn) {
-          autoAllotBtn.addEventListener('click', () => {
+          autoAllotBtn.addEventListener('click', async () => {
 
               // ⏰ ALLOTMENT LOCK: Warn logged-in users if allotting within 45 min of exam start
               if (currentUser && currentSessionKey) {
@@ -13081,7 +13077,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                           if (diffMins >= 0 && diffMins <= 45) {
                               const minsLeft = Math.round(diffMins);
                               // WARNING 1
-                              const warn1 = confirm(
+                              const warn1 = await UiModal.confirm(
                                   `⚠️ ALLOTMENT LOCK WARNING\n\n` +
                                   `The student portal opens in ${minsLeft} minute(s).\n\n` +
                                   `Changing the allotment now will update live seating on the Student Portal.\n\n` +
@@ -13090,7 +13086,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                               if (!warn1) return;
 
                               // WARNING 2
-                              const warn2 = confirm(
+                              const warn2 = await UiModal.confirm(
                                   `⚠️ FINAL WARNING\n\n` +
                                   `Students may already be checking their seat numbers.\n\n` +
                                   `This action CANNOT be undone once saved to the portal.\n\n` +
@@ -13099,12 +13095,13 @@ window.real_populate_qp_code_session_dropdown = function () {
                               if (!warn2) return;
 
                               // TYPED CONFIRMATION
-                              const typed = prompt(
-                                  `🔒 TYPE CONFIRMATION REQUIRED\n\n` +
-                                  `Type the word   Allot   exactly to confirm re-allotment:`
+                              const typed = await UiModal.prompt(
+                                  `🔒 TYPE CONFIRMATION REQUIRED`,
+                                  `Type the word   Allot   exactly to confirm re-allotment:`,
+                                  'Allot'
                               );
                               if (!typed || typed.trim() !== 'Allot') {
-                                  alert('❌ Confirmation failed. Allotment cancelled.');
+                                  await UiModal.alert('❌ Confirmation failed. Allotment cancelled.');
                                   return;
                               }
                           }
@@ -13276,7 +13273,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
                 
                 if (sessionStudentRecords.length === 0) {
-                    alert("No students found for this session in the master database.");
+                    await UiModal.alert("No students found for this session in the master database.");
                     return;
                 }
 
@@ -13421,7 +13418,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     
   // Delete a room from allotment (Fixed: Actually removes the room now)
     window.deleteRoom = async function (index) {
-        if (!confirm('Are you sure you want to remove this room allotment?')) return;
+        if (!await UiModal.confirm('Remove Room Allotment', 'Are you sure you want to remove this room allotment?')) return;
 
         const roomData = currentSessionAllotment[index];
         const roomName = roomData.roomName; // Capture room name before deletion
@@ -13489,11 +13486,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         const graceCap = nominalCap + 3;
         
         if (studentCount > graceCap) {
-            return alert(`Error: New room capacity (${nominalCap} + 3 grace) is too small for the current ${studentCount} students.`);
+            return UiModal.alert(`Error: New room capacity (${nominalCap} + 3 grace) is too small for the current ${studentCount} students.`);
         }
         
         if (studentCount > nominalCap) {
-            alert(`⚠️ Capacity Warning: New room capacity (${nominalCap}) is exceeded but within grace limit (max +3).`);
+            UiModal.alert(`⚠️ Capacity Warning: New room capacity (${nominalCap}) is exceeded but within grace limit (max +3).`);
         }
 
         allotment.roomName = newRoomName;
@@ -13515,7 +13512,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         
         // Alert if history is completely empty
         if (Object.keys(freqs).length === 0) {
-            alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
+            UiModal.alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
             return;
         }
 
@@ -13543,7 +13540,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
 
         if (selectedCount === 0) {
-            alert("None of your frequently used rooms are currently available.");
+            UiModal.alert("None of your frequently used rooms are currently available.");
         }
         
         // Trigger UI update directly
@@ -13830,7 +13827,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
         if (newStudents.length === 0) {
-            alert(`No unallotted students found for stream: ${targetStream}`);
+            await UiModal.alert(`No unallotted students found for stream: ${targetStream}`);
             return;
         }
 
@@ -13871,7 +13868,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         } catch (saveErr) {
             currentSessionAllotment.pop(); // 🛡️ Rollback in-memory state on storage error
             console.error('Failed to save room allotment:', saveErr);
-            alert('Storage Error: ' + (saveErr.message || 'LocalStorage Quota Exceeded. Please free up space or clear old exams.'));
+            await UiModal.alert('Storage Error: ' + (saveErr.message || 'LocalStorage Quota Exceeded. Please free up space or clear old exams.'));
         } 
 
     }
@@ -13958,7 +13955,7 @@ if (saveScribeBtn) {
         // 🛡️ [PERSISTENCE FIX]: Ensure we have a valid session key
         const sessionKey = currentSessionKey || (typeof allotmentSessionSelect !== 'undefined' ? allotmentSessionSelect.value : "");
         if (!sessionKey) {
-            alert("⚠️ Please select a session first.");
+            await UiModal.alert("⚠️ Please select a session first.");
             return;
         }
 
@@ -13986,7 +13983,7 @@ if (saveScribeBtn) {
                 await window.saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
                 console.error("❌ CRITICAL: IndexedDB save failed!", e);
-                alert("❌ Error: Could not save to Database. Your changes may be lost.");
+                await UiModal.alert("❌ Error: Could not save to Database. Your changes may be lost.");
             }
         }
 
@@ -14082,15 +14079,15 @@ if (saveScribeBtn) {
                 updateAllotmentDisplay();
             } catch (err) {
                 console.error("Critical Save Error:", err);
-                alert("🛑 SAVE FAILED: Please check your internet connection.");
+                await UiModal.alert("🛑 SAVE FAILED: Please check your internet connection.");
                 roomAllotmentStatus.textContent = 'Error: Save Failed';
             }
         });
     }
 
     if (forceSyncAllotmentButton) {
-        forceSyncAllotmentButton.addEventListener('click', () => {
-            if (!confirm("🔄 This will overwrite cloud data with your current local allotment. Continue?")) return;
+        forceSyncAllotmentButton.addEventListener('click', async () => {
+            if (!await UiModal.confirm('Force Sync Allotment', "🔄 This will overwrite cloud data with your current local allotment. Continue?")) return;
             
             // Bypass UI lock and trigger save logic
             saveRoomAllotmentButton.disabled = false;
@@ -14318,12 +14315,12 @@ if (saveScribeBtn) {
     }
 
     // 3. Remove a student (Updated with Confirmation)
-    function removeScribeStudent(regNo, name) {
+    async function removeScribeStudent(regNo, name) {
         if (isScribeListLocked) return; // Extra safety check
 
         const confirmMsg = `Are you sure you want to remove ${name} (${regNo}) from the Scribe List?`;
 
-        if (confirm(confirmMsg)) {
+        if (await UiModal.confirm('Remove Scribe Student', confirmMsg)) {
             globalScribeList = globalScribeList.filter(s => s.regNo !== regNo);
             localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
             renderGlobalScribeList();
@@ -14414,7 +14411,7 @@ if (saveScribeBtn) {
 
         // Check if already on list
         if (globalScribeList.some(s => s.regNo === regNo)) {
-            alert(`${regNo} is already on the scribe list.`);
+            UiModal.alert(`${regNo} is already on the scribe list.`);
             clearScribeSearch();
             return;
         }
@@ -14703,7 +14700,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Open the Scribe Room Modal
     window.openScribeRoomModal = async function (regNo, studentName) {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked."); // Safety Check
         studentToAllotScribeRoom = regNo;
         scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
         const searchInput = document.getElementById('scribe-room-search');
@@ -15197,7 +15194,7 @@ window.real_disable_all_report_buttons = function (disabled) {
     });
 
     // 6. Handle Edit/Delete Clicks (NEW: Opens modal)
-    editDataContainer.addEventListener('click', (e) => {
+    editDataContainer.addEventListener('click', async (e) => {
         const target = e.target;
         if (!target.closest('tr')) return; // Guard clause if click is not on a row
         const rowIndex = target.closest('tr').dataset.rowIndex;
@@ -15209,7 +15206,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
         } else if (target.classList.contains('delete-row-btn')) {
             // --- Delete Row ---
-            if (confirm('Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
+            if (await UiModal.confirm('Delete Student Record', 'Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
                 currentCourseStudents.splice(rowIndex, 1); // Remove from the array
                 renderStudentEditTable(); // Re-render the table
                 setUnsavedChanges(true);
@@ -15300,7 +15297,7 @@ window.real_disable_all_report_buttons = function (disabled) {
     // [In app.js]
 
     // [In app.js]
-    modalSaveBtn.addEventListener('click', () => {
+    modalSaveBtn.addEventListener('click', async () => {
         // 1. Capture Inputs
         const rawDate = modalDate.value;
         const rawTime = modalTime.value;
@@ -15347,7 +15344,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         } else {
             // --- ADD MODE ---
             if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
-                alert('For a new student, all fields are required.');
+                await UiModal.alert('For a new student, all fields are required.');
                 return;
             }
             studentObj = {
@@ -15362,7 +15359,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         }
 
         // 4. Save & Close
-        if (confirm("Save changes?")) {
+        if (await UiModal.confirm('Save Changes', "Save changes?")) {
             if (currentlyEditingIndex !== null) {
                 currentCourseStudents[currentlyEditingIndex] = studentObj;
             } else {
@@ -15382,7 +15379,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             return;
         }
 
-        if (confirm('This will permanently save all edits, additions, and deletions for this course/session to the main data source. Continue?')) {
+        if (await UiModal.confirm('Save All Changes', 'This will permanently save all edits, additions, and deletions for this course/session to the main data source. Continue?')) {
 
             const [date, time] = currentEditSession.split(' | ');
             const course = currentEditCourse;
@@ -15635,7 +15632,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
             // 2. Validation: Ensure at least one field is being updated
             if (!rawDate && !rawTime && !newCourseName && !newStream && !newExamName) {
-                alert("No changes detected. Please edit at least one field.");
+                await UiModal.alert("No changes detected. Please edit at least one field.");
                 return;
             }
 
@@ -15671,7 +15668,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             );
 
             if (recordsToUpdate.length === 0) {
-                alert("No records found to update.");
+                await UiModal.alert("No records found to update.");
                 return;
             }
 
@@ -15692,7 +15689,7 @@ Time:      ${newTime ? newTime : "(No Change)"}
 Are you sure you want to update these records?
 `;
 
-            if (confirm(confirmMsg)) {
+            if (await UiModal.confirm('Confirm Bulk Update', confirmMsg)) {
                 let updateCount = 0;
 
             // 6. Apply Updates
@@ -15718,7 +15715,7 @@ Are you sure you want to update these records?
                 
 
                 
-                alert(`✅ Updated ${updateCount} students! Syncing changes...`);
+                await UiModal.alert(`✅ Updated ${updateCount} students! Syncing changes...`);
                 
                 // Trigger Sync
                 if (typeof syncSessionToCloud === 'function') {
@@ -15765,7 +15762,7 @@ Are you sure you want to update these records?
               }
 
               if (data.length === 0) {
-                  alert("No data found for the selected session.");
+                  await UiModal.alert("No data found for the selected session.");
                   return;
               }
 
@@ -15824,7 +15821,7 @@ Are you sure you want to update these records?
             // -------------------------------------------------------------
 
             if (sortedSessionKeys.length === 0) {
-                alert("No upcoming exams found.");
+                await UiModal.alert("No upcoming exams found.");
                 return;
             }
 
@@ -15964,7 +15961,7 @@ Are you sure you want to update these records?
 
         } catch (e) {
             console.error("Report Error:", e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateInvigilatorReportButton.disabled = false;
             generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
@@ -16047,7 +16044,7 @@ Are you sure you want to update these records?
                 });
                 
                 if (final_student_list_for_stickers.length === 0) { 
-                    alert("Please allot rooms before generating stickers."); 
+                    await UiModal.alert("Please allot rooms before generating stickers."); 
                     generateStickerButton.disabled = false;
                     generateStickerButton.textContent = "Generate Stickers";
                     return; 
@@ -16269,7 +16266,7 @@ Are you sure you want to update these records?
 
             } catch (e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateStickerButton.disabled = false;
                 generateStickerButton.textContent = "Generate Room Stickers (2 per Page)";
@@ -16436,7 +16433,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const student = allStudentData.find(s => s.Date === date && s.Time === time && getRegNo(s) === regNo);
 
     if (!student) {
-        alert("Student not found in this session.");
+        UiModal.alert("Student not found in this session.");
         return;
     }
 
@@ -16457,7 +16454,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     });
 
     if (!allocatedStudent) {
-        alert("Student not found in any room allotment.");
+        UiModal.alert("Student not found in any room allotment.");
         return;
     }
 
@@ -16714,7 +16711,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
             });
 
             if (studentsToDelete.length === 0) {
-                alert("No students found in this course/stream to delete.");
+                await UiModal.alert("No students found in this course/stream to delete.");
                 return;
             }
 
@@ -16730,8 +16727,8 @@ This action cannot be undone.
 Are you sure?
         `;
 
-            if (confirm(confirmMsg)) {
-                if (!confirm("Are you absolutely sure?")) return;
+            if (await UiModal.confirm('Delete Course Records', confirmMsg)) {
+                if (!await UiModal.confirm('Final Confirmation', "Are you absolutely sure?")) return;
 
                 // --- 🛡️ ABSOLUTE SYNC (V14): Cascading Delete ---
                 const deletedRegNos = new Set(studentsToDelete.map(d => getRegNo(d)));
@@ -16770,7 +16767,7 @@ Are you sure?
                     await saveExamDataIDB(allStudentData, true); // true = skip redundant baseData auto-sync here as we await it next
                 }
 
-                alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
+                await UiModal.alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
 
                 // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
@@ -16901,7 +16898,7 @@ Are you sure?
     if (addWhitelistBtn) {
         addWhitelistBtn.addEventListener('click', async () => {
             const email = whitelistInput.value.trim();
-            if (!email || !email.includes('@')) return alert("Invalid Email");
+            if (!email || !email.includes('@')) return await UiModal.alert("Invalid Email");
 
             const { db, doc, setDoc, arrayUnion } = window.firebase;
             addWhitelistBtn.textContent = "Adding...";
@@ -16913,9 +16910,9 @@ Are you sure?
 
                 whitelistInput.value = '';
                 loadWhitelist();
-                alert(`✅ ${email} authorized!`);
+                await UiModal.alert(`✅ ${email} authorized!`);
             } catch (e) {
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 addWhitelistBtn.textContent = "Add";
             }
@@ -16924,7 +16921,7 @@ Are you sure?
 
     // 5. REMOVE FROM WHITELIST
     window.removeFromWhitelist = async function (email) {
-        if (!confirm(`Revoke authorization for ${email}?`)) return;
+        if (!await UiModal.confirm('Revoke Authorization', `Revoke authorization for ${email}?`)) return;
 
         const { db, doc, updateDoc, arrayRemove } = window.firebase;
         try {
@@ -16933,7 +16930,7 @@ Are you sure?
             });
             loadWhitelist();
         } catch (e) {
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         }
     };
     // 6. SET STORAGE LIMIT (SUPER ADMIN) - UPDATED
@@ -16947,8 +16944,8 @@ Are you sure?
             const targetCollegeId = adminCollegeSelect.value;
             const limitMB = parseFloat(adminStorageLimitInput.value);
 
-            if (!targetCollegeId) return alert("Please select a College from the list.");
-            if (!limitMB || limitMB <= 0) return alert("Please enter a valid MB limit.");
+            if (!targetCollegeId) return await UiModal.alert("Please select a College from the list.");
+            if (!limitMB || limitMB <= 0) return await UiModal.alert("Please enter a valid MB limit.");
 
             const bytes = Math.floor(limitMB * 1024 * 1024);
 
@@ -16964,12 +16961,12 @@ Are you sure?
 
                 // Get selected text for nicer alert
                 const selectedText = adminCollegeSelect.options[adminCollegeSelect.selectedIndex].text;
-                alert(`✅ Success! Limit for '${selectedText}' set to ${limitMB} MB.`);
+                await UiModal.alert(`✅ Success! Limit for '${selectedText}' set to ${limitMB} MB.`);
 
                 adminStorageLimitInput.value = '';
             } catch (e) {
                 console.error(e);
-                alert("Failed to update limit. " + e.message);
+                await UiModal.alert("Failed to update limit. " + e.message);
             } finally {
                 setLimitBtn.textContent = "Set Limit";
             }
@@ -17036,12 +17033,12 @@ Are you sure?
                 }
 
                 if (isAuthorized) {
-                    if (confirm("No existing database found for your account, but you are AUTHORIZED.\n\nClick OK to create a new College Database.")) {
+                    if (await UiModal.confirm('Create College Database', "No existing database found for your account, but you are AUTHORIZED.\n\nClick Confirm to create a new College Database.")) {
                         await createNewCollege(user);
                     }
                 } else {
                     // BLOCKED
-                    alert("⛔ ACCESS DENIED ⛔\n\nYou are not part of any college team, and you are not authorized to create a new database.\n\nPlease contact the Super Admin to get access.");
+                    await UiModal.alert("⛔ ACCESS DENIED ⛔\n\nYou are not part of any college team, and you are not authorized to create a new database.\n\nPlease contact the Super Admin to get access.");
                     const { auth, signOut } = window.firebase;
                     signOut(auth).then(() => location.reload());
                 }
@@ -17058,13 +17055,13 @@ Are you sure?
     // 7. SWITCH COLLEGE (SUPER ADMIN)
     const btnAdminSwitch = document.getElementById('btn-admin-switch-college');
     if (btnAdminSwitch) {
-        btnAdminSwitch.addEventListener('click', () => {
+        btnAdminSwitch.addEventListener('click', async () => {
             const select = document.getElementById('admin-college-select');
             const newCollegeId = select.value;
 
-            if (!newCollegeId) return alert("Please select a college to access.");
+            if (!newCollegeId) return await UiModal.alert("Please select a college to access.");
 
-            if (confirm(`Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
+            if (await UiModal.confirm('Switch College Dashboard', `Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
                 // 1. Update Global ID
                 currentCollegeId = newCollegeId;
                 window.currentCollegeId = newCollegeId;
@@ -17077,7 +17074,7 @@ Are you sure?
                 const modal = document.getElementById('super-admin-modal');
                 if (modal) modal.classList.add('hidden');
 
-                alert("✅ Switched! Loading data...");
+                await UiModal.alert("✅ Switched! Loading data...");
             }
         });
     }
@@ -17150,7 +17147,7 @@ if (mainLoadCsvBtn) {
             return;
         }
         if (!selectedExamName) {
-            alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
+            UiModal.alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
             return;
         }
 
@@ -17215,9 +17212,9 @@ if (mainLoadCsvBtn) {
     }
 
     if (btnReplace) {
-        btnReplace.addEventListener('click', () => {
+        btnReplace.addEventListener('click', async () => {
             // Ask one last time
-            if (confirm("Are you sure you want to overwrite ALL existing data? This cannot be undone.")) {
+            if (await UiModal.confirm('Overwrite Existing Data', "Are you sure you want to overwrite ALL existing data? This cannot be undone.")) {
                 loadStudentData(tempNewData);
                 conflictModal.classList.add('hidden');
             }
@@ -17437,7 +17434,7 @@ window.handlePythonExtraction = async function (jsonString) {
     const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
     if (!selectedExamName) {
-        alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
+        await UiModal.alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
         return;
     }
 
@@ -17445,7 +17442,7 @@ window.handlePythonExtraction = async function (jsonString) {
         let newJsonData = JSON.parse(jsonString);
 
         if (newJsonData.length === 0) {
-            alert("No student data found in PDF.");
+            await UiModal.alert("No student data found in PDF.");
             return;
         }
 
@@ -17503,14 +17500,14 @@ window.handlePythonExtraction = async function (jsonString) {
         // 5. User Prompts
         if (potentialAdds.length > 0) {
             // New students found for this specific stream
-            if (confirm(`Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
+            if (await UiModal.confirm('Add Students', `Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
         }
 
         if (potentialDeletes.length > 0) {
             // Missing students IN THIS STREAM only
-            if (confirm(`Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
+            if (await UiModal.confirm('Delete Missing Students', `Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
                 // User said YES: They are removed (excluded from finalBatch)
             } else {
                 // User said NO: Keep them
@@ -17525,11 +17522,11 @@ window.handlePythonExtraction = async function (jsonString) {
         // 7. Save & Sync
         window.loadStudentData(finalData, affectedSessions);
         
-        alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
+        await UiModal.alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
 
     } catch (e) {
         console.error("Bridge Error:", e);
-        alert("Error processing data: " + e.message);
+        await UiModal.alert("Error processing data: " + e.message);
     }
 };
 
@@ -17659,19 +17656,19 @@ window.handlePythonExtraction = async function (jsonString) {
                 loadStreamConfig();
                 syncDataToCloud('settings'); // Sync setting change
             } else if (currentStreamConfig.includes(name)) {
-                alert("Stream already exists.");
+                UiModal.alert("Stream already exists.");
             }
         });
     }
 
     // Delete Stream (Safe Version)
-    window.deleteStream = function (name) {
+    window.deleteStream = async function (name) {
         if (currentStreamConfig.length <= 1) {
-            alert("You must have at least one stream defined (e.g., Regular).");
+            await UiModal.alert("You must have at least one stream defined (e.g., Regular).");
             return;
         }
 
-        if (confirm(`Delete stream "${name}"?`)) {
+        if (await UiModal.confirm('Delete Stream', `Delete stream "${name}"?`)) {
             currentStreamConfig = currentStreamConfig.filter(s => s !== name);
             localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
             loadStreamConfig();
@@ -17730,7 +17727,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 });
 
                 if (sessionsToProcess.length === 0) {
-                    alert("No room allotments found for the selected sessions. Please allot rooms first.");
+                    await UiModal.alert("No room allotments found for the selected sessions. Please allot rooms first.");
                     return;
                 }
 
@@ -17884,7 +17881,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             } catch (e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateRoomSummaryButton.disabled = false;
                 generateRoomSummaryButton.textContent = "Generate Room Allotment Summary";
@@ -18054,7 +18051,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             } catch (err) {
                 console.error(err);
-                alert("Error: " + err.message);
+                await UiModal.alert("Error: " + err.message);
             } finally {
                 generateScribeMasterBtn.disabled = false;
                 generateScribeMasterBtn.textContent = "10-Generate Scribe Assistance Master Report";
@@ -18433,7 +18430,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 if (typeof UiModal !== 'undefined') {
                     await UiModal.alert("No File Selected", "Please select a Settings JSON file first.");
                 } else {
-                    alert("Please select a Settings JSON file first.");
+                    await UiModal.alert("Please select a Settings JSON file first.");
                 }
                 return;
             }
@@ -18477,7 +18474,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         if (typeof UiModal !== 'undefined') {
                             await UiModal.alert("Settings Restored", "✅ Settings configurations restored and synchronized with Cloud!\n\nReloading to apply changes.");
                         } else {
-                            alert("Settings updated and synced!");
+                            await UiModal.alert("Settings updated and synced!");
                         }
                         window.location.reload();
 
@@ -18485,7 +18482,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         if (typeof UiModal !== 'undefined') {
                             await UiModal.alert("No Valid Settings", "No valid settings configurations were found in this file.");
                         } else {
-                            alert("No valid settings found in this file.");
+                            await UiModal.alert("No valid settings found in this file.");
                         }
                     }
 
@@ -18494,7 +18491,7 @@ window.handlePythonExtraction = async function (jsonString) {
                     if (typeof UiModal !== 'undefined') {
                         await UiModal.alert("Invalid File", "Error parsing settings file: " + err.message);
                     } else {
-                        alert("Error parsing settings file: " + err.message);
+                        await UiModal.alert("Error parsing settings file: " + err.message);
                     }
                 }
             };
@@ -18699,7 +18696,7 @@ async function loadInitialData() {
     if (btnGenerateBill) {
         btnGenerateBill.addEventListener('click', () => {
             if (!allStudentData || allStudentData.length === 0) {
-                alert("No student data loaded.");
+                UiModal.alert("No student data loaded.");
                 return;
             }
 
@@ -18708,7 +18705,7 @@ async function loadInitialData() {
             const selectedExamName = document.getElementById('bill-exam-select').value; // Specific filter
 
             if (!selectedStream) {
-                alert("Please select a stream.");
+                UiModal.alert("Please select a stream.");
                 return;
             }
 
@@ -18720,7 +18717,7 @@ async function loadInitialData() {
             });
 
             if (filteredData.length === 0) {
-                alert(`No students found for stream: "${selectedStream}"`);
+                UiModal.alert(`No students found for stream: "${selectedStream}"`);
                 return;
             }
 
@@ -18872,7 +18869,7 @@ async function loadInitialData() {
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
             const billContent = document.getElementById('remuneration-output').innerHTML;
-            if (!billContent.trim()) return alert("No bill generated.");
+            if (!billContent.trim()) return UiModal.alert("No bill generated.");
 
             openPdfPreview(billContent, "Remuneration_Bill");
         });
@@ -19442,11 +19439,11 @@ function updateSessionOpsLockUI() {
             const targetExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : "";
             const currentSession = editSessionSelect.value;
 
-            if (!currentSession) return alert("No session selected.");
+            if (!currentSession) return await UiModal.alert("No session selected.");
 
             // Validation: Must enter at least New Date or New Time to reschedule
             if (!rawDate && !rawTime) {
-                return alert("Please enter a New Date, a New Time, or both to reschedule.");
+                return await UiModal.alert("Please enter a New Date, a New Time, or both to reschedule.");
             }
 
             // A. Determine New Date/Time (Support changing Date or Time independently)
@@ -19482,7 +19479,7 @@ function updateSessionOpsLockUI() {
 
             const newSessionKey = `${newDate} | ${newTime}`;
             if (newSessionKey === currentSession) {
-                return alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
+                return await UiModal.alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
             }
             isMove = true;
 
@@ -19496,11 +19493,11 @@ function updateSessionOpsLockUI() {
 
             const msg = `⚠️ CONFIRM SESSION RESCHEDULE ⚠️\n\nCurrent Session: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
-            if (!confirm(msg)) return;
+            if (!await UiModal.confirm('Confirm Reschedule', msg)) return;
             
             // Safety check for moves
-            const check = prompt("Type 'CHANGE' to confirm moving this session:");
-            if (check !== 'CHANGE') return alert("Cancelled.");
+            const check = await UiModal.prompt("⚠️ Move Session Confirmation", "Type 'CHANGE' to confirm moving this session:", "CHANGE");
+            if (check !== 'CHANGE') return await UiModal.alert("Cancelled.");
 
             try {
                 // 1. Update Students (Memory)
@@ -19535,7 +19532,7 @@ function updateSessionOpsLockUI() {
                 });
 
                 if (studentCount === 0) {
-                    return alert(targetExamName 
+                    return await UiModal.alert(targetExamName 
                         ? `No students found for exam "${targetExamName}" in this session.`
                         : "No students found in this session to reschedule.");
                 }
@@ -19663,7 +19660,7 @@ function updateSessionOpsLockUI() {
                     }
                 }
 
-                alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
+                await UiModal.alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
 
                 // 5. Cloud Sync
                 if (remainingInOldSession === 0 && typeof deleteSessionFromCloud === 'function') {
@@ -19679,7 +19676,7 @@ function updateSessionOpsLockUI() {
 
             } catch (e) {
                 console.error(e);
-                alert("Error during reschedule: " + e.message);
+                await UiModal.alert("Error during reschedule: " + e.message);
             }
         });
     }
@@ -19688,7 +19685,7 @@ function updateSessionOpsLockUI() {
     if (btnSessionDelete) {
         btnSessionDelete.addEventListener('click', async () => {
             const currentSession = editSessionSelect.value;
-            if (!currentSession) return alert("No session selected.");
+            if (!currentSession) return await UiModal.alert("No session selected.");
 
             // *** FIX: TRIM WHITESPACE ***
             const parts = currentSession.split('|');
@@ -19700,10 +19697,10 @@ function updateSessionOpsLockUI() {
 
             const msg = `🛑 CRITICAL WARNING: DELETE SESSION 🛑\n\nYou are about to delete the ENTIRE session:\n${currentSession}\n\nThis will remove:\n• ${targets.length} Student Records\n• All Room Allotments for this session\n• All Duty Assignments for this session\n\nAre you sure?`;
 
-            if (!confirm(msg)) return;
+            if (!await UiModal.confirm('Delete Session', msg)) return;
 
-            const check = prompt("Type 'DELETE' to confirm permanent deletion:");
-            if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
+            const check = await UiModal.prompt("🛑 Permanent Session Deletion", "Type 'DELETE' to confirm permanent deletion of this session:", "DELETE");
+            if (check !== 'DELETE') return await UiModal.alert("Cancelled. Incorrect code.");
 
             try {
                 // 1. Delete Students
@@ -19745,7 +19742,7 @@ function updateSessionOpsLockUI() {
                 // 🛡️ [FIX]: Do not delete examInvigilationSlots from app.js
                 await deleteKeyInStorage('examQPCodes');
 
-                alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
+                await UiModal.alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
                 // MODULAR SYNC (V2)
                 // This pushes an empty update to the old ID, effectively clearing it in the cloud
@@ -19755,7 +19752,7 @@ function updateSessionOpsLockUI() {
 
             } catch (e) {
                 console.error(e);
-                alert("Error during deletion: " + e.message);
+                await UiModal.alert("Error during deletion: " + e.message);
             }
                });
     }
@@ -19889,7 +19886,7 @@ window.generateBatchArchive = async function() {
         // Snapshot rates and scribe list at the moment of archiving
     const archivedRates = JSON.parse(localStorage.getItem('examRemunerationConfig') || '{}');
     const scribeAllotment = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-    if (rawChecked.length === 0) return alert("Select at least one option to archive.");
+    if (rawChecked.length === 0) return await UiModal.alert("Select at least one option to archive.");
 
     const btn = document.querySelector('#batch-archive-modal button.bg-indigo-600');
     const origText = btn.innerHTML;
@@ -20487,7 +20484,8 @@ window.generateBatchArchive = async function() {
             newWin.document.close();
             newWin.focus();
         } else {
-            alert('Please allow popups to view the Bill.');
+            if (typeof UiModal !== 'undefined') UiModal.alert('Please allow popups to view the Bill.');
+            else window.alert('Please allow popups to view the Bill.');
         }
     }
 
@@ -20521,7 +20519,7 @@ window.openBatchArchiveModal = function() {
     console.log("🔔 Archive Modal: 'openBatchArchiveModal' triggered.");
     try {
         const modal = document.getElementById('batch-archive-modal');
-        if (!modal) return alert("Archive modal not found in DOM");
+        if (!modal) return UiModal.alert("Archive modal not found in DOM");
 
         // Force visibility
         document.body.appendChild(modal);
@@ -20534,7 +20532,7 @@ window.openBatchArchiveModal = function() {
 
     } catch (error) {
         console.error("🔥 Archive Modal Error:", error);
-        alert("Error opening archive modal: " + error.message);
+        UiModal.alert("Error opening archive modal: " + error.message);
     }
 };
 
@@ -20714,9 +20712,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
     
     
     // --- NEW: Clear Scribe Room Assignment ---
-    window.removeScribeRoom = function (regNo) {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
-        if (!confirm("Unassign this student? They will return to the 'Assign Room' state.")) return;
+    window.removeScribeRoom = async function (regNo) {
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked."); // Safety Check
+        if (!await UiModal.confirm('Unassign Scribe', "Unassign this student? They will return to the 'Assign Room' state.")) return;
 
         // 1. Remove from current session mapping
         delete currentScribeAllotment[regNo];
@@ -20734,12 +20732,12 @@ window.toggleAllArchiveCheckboxes = function(check) {
     };
 
     window.clearAllScribeAllotments = async function () {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked. Unlock first to clear."); 
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked. Unlock first to clear."); 
         
         const count = Object.keys(currentScribeAllotment).length;
-        if (count === 0) return alert("No allotments to clear.");
+        if (count === 0) return await UiModal.alert("No allotments to clear.");
 
-        if (!confirm(`Are you sure you want to CLEAR ALL ${count} scribe allotments for this session? This cannot be undone.`)) return;
+        if (!await UiModal.confirm('Clear Scribe Allotments', `Are you sure you want to CLEAR ALL ${count} scribe allotments for this session? This cannot be undone.`)) return;
 
         // 1. Clear current session mapping
         currentScribeAllotment = {};
@@ -20764,7 +20762,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
             updateSyncStatus("Unsaved Changes", "warning");
         }
         renderScribeAllotmentList(currentSessionKey);
-        alert("✅ All scribe allotments for this session have been cleared.");
+        await UiModal.alert("✅ All scribe allotments for this session have been cleared.");
     };
 
 
@@ -21208,7 +21206,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
                         
                         // Ask the Admin what to do with the old staff
                         if (oldIdx > -1) {
-                             if (confirm(`Do you want to completely REMOVE ${oldStaff.name} from this session's duty list?\n\n• Click OK to remove them completely.\n• Click Cancel to keep them as a Reserve.`)) {
+                             if (await UiModal.confirm('Remove from Duty List', `Do you want to completely REMOVE ${oldStaff.name} from this session's duty list?\n\n• Click Confirm to remove them completely.
+• Click Cancel to keep them as a Reserve.`)) {
                                  // recalculate index because we pushed to array
                                  const currentOldIdx = slot.assigned.indexOf(oldStaff.email);
                                  if (currentOldIdx > -1) slot.assigned.splice(currentOldIdx, 1);
@@ -21299,7 +21298,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         const slot = invigSlots[sessionKey];
 
-        if (!slot || !slot.assigned) return alert("No staff available in portal.");
+        if (!slot || !slot.assigned) return await UiModal.alert("No staff available in portal.");
 
         const availableStaff = [...slot.assigned];
         const usedNames = new Set(Object.values(currentInvigMapping));
@@ -21352,9 +21351,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
             
             updateSyncStatus("Saved", "success");
-            alert(`Auto-assigned ${changeCount} invigilators.`);
+            await UiModal.alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
-            alert("No additional free staff found to assign.");
+            await UiModal.alert("No additional free staff found to assign.");
         }
     }
 
@@ -21370,9 +21369,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
         // Count current assignments to show in confirmation
         const currentCount = Object.keys(currentInvigMapping).length;
-        if (currentCount === 0) return alert("No invigilators assigned to clear.");
+        if (currentCount === 0) return await UiModal.alert("No invigilators assigned to clear.");
 
-        if (confirm(`Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
+        if (await UiModal.confirm('Remove Invigilator Assignments', `Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
             // Clear current session mapping
             currentInvigMapping = {};
 
@@ -21391,7 +21390,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
             // Refresh UI
             renderInvigilationPanel();
-            alert("All invigilator assignments cleared for this session.");
+            await UiModal.alert("All invigilator assignments cleared for this session.");
         }
     };
 
@@ -21758,7 +21757,7 @@ if (displayLoc) {
 
     window.printAllotmentSummary = function () {
         if (!currentSessionKey || currentSessionAllotment.length === 0) {
-            alert("Please allot rooms before printing the summary.");
+            UiModal.alert("Please allot rooms before printing the summary.");
             return;
         }
 
@@ -21902,7 +21901,7 @@ if (displayLoc) {
     
     if (btnNormalizeTime) {
         btnNormalizeTime.addEventListener('click', async () => {
-            if (!confirm("⚠️ MAINTENANCE: Fix Time Formats?\n\nThis will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
+            if (!await UiModal.confirm("⚠️ Maintenance: Fix Time Formats", "This will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
 
             btnNormalizeTime.disabled = true;
             btnNormalizeTime.textContent = "Processing...";
@@ -22032,12 +22031,12 @@ if (displayLoc) {
                     await syncDataToCloud('staff');
                 }
 
-                alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
+                await UiModal.alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
                 window.location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("Error during normalization: " + e.message);
+                await UiModal.alert("Error during normalization: " + e.message);
             } finally {
                 btnNormalizeTime.disabled = false;
                 btnNormalizeTime.textContent = "Fix/Normalize Time Formats";
@@ -23251,7 +23250,7 @@ function generateRoomSummaryPDF() {
 
     } catch (e) {
         console.error("Room Summary PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        UiModal.alert("Error generating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -23377,7 +23376,7 @@ function generateInvigilatorSummaryPDF() {
 
     } catch (e) {
         console.error("PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        UiModal.alert("Error generating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -23389,7 +23388,7 @@ function getAcquittanceData() {
     const billPages = container ? container.querySelectorAll('.print-page') : [];
     
     if (billPages.length === 0) {
-        alert("Please click 'Generate Bill' first to select the sessions.");
+        UiModal.alert("Please click 'Generate Bill' first to select the sessions.");
         return null;
     }
 
@@ -23436,7 +23435,7 @@ function getAcquittanceData() {
     });
 
     if (sessionKeys.size === 0) {
-        alert("No valid sessions found in the generated bills.");
+        UiModal.alert("No valid sessions found in the generated bills.");
         return null;
     }
 
@@ -23714,7 +23713,7 @@ function generateRemunerationBillPDF() {
     // SELECT ALL GENERATED BILLS (Not just the first one)
     const billPages = container ? container.querySelectorAll('.print-page') : [];
 
-    if (billPages.length === 0) return alert("No bill generated. Please click 'Generate Bill' first.");
+    if (billPages.length === 0) return UiModal.alert("No bill generated. Please click 'Generate Bill' first.");
 
     const btn = document.getElementById('btn-download-bill-pdf');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
@@ -23959,7 +23958,7 @@ function generateRemunerationBillPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
     }
@@ -24021,7 +24020,7 @@ function populateUploadExamDropdown() {
         // B. Trigger Alert (Only if user is on this tab)
         const extractorView = document.getElementById('view-extractor');
         if (extractorView && !extractorView.classList.contains('hidden')) {
-            alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
+            UiModal.alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
         }
     } else {
         // Reset style
@@ -24046,7 +24045,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     // Safety check: if template is missing, stop
     if (!template) { 
         console.error("Manual Template not found!"); 
-        alert("Error: Manual content is missing.");
+        UiModal.alert("Error: Manual content is missing.");
         return; 
     }
     
@@ -24080,7 +24079,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
         `);
         win.document.close(); // Essential for the browser to stop loading and render
     } else {
-        alert("Please allow pop-ups for this site to view the manual.");
+        UiModal.alert("Please allow pop-ups for this site to view the manual.");
     }
 }
 
@@ -24435,7 +24434,7 @@ window.toggleBulkLock = function() {
                 }
             };
         } else {
-            alert("No exam sessions found to delete! (List empty)");
+            UiModal.alert("No exam sessions found to delete! (List empty)");
             return;
         }
 
@@ -24495,7 +24494,7 @@ window.executeBulkDelete = async function() {
 
     // Validation
     if (!startSession || !endSession) {
-        alert("Please select both Start and End sessions.");
+        await UiModal.alert("Please select both Start and End sessions.");
         return;
     }
 
@@ -24503,12 +24502,12 @@ window.executeBulkDelete = async function() {
     const endIndex = allStudentSessions.indexOf(endSession);
 
     if (startIndex === -1 || endIndex === -1) {
-        alert("Selected sessions not found in database.");
+        await UiModal.alert("Selected sessions not found in database.");
         return;
     }
 
     if (startIndex > endIndex) {
-        alert("Start Session cannot be after End Session.");
+        await UiModal.alert("Start Session cannot be after End Session.");
         return;
     }
 
@@ -24523,7 +24522,7 @@ window.executeBulkDelete = async function() {
         confirmMsg += `\n🚨 ALL EXAMS in this range will be deleted!\n`;
     }
     confirmMsg += `\n✅ NOTE: Invigilation Volunteers & Unavailability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
-    const userInput = prompt(confirmMsg);
+    const userInput = await UiModal.prompt("🛑 Critical Warning: Range Delete", confirmMsg, "DELETE");
 
     if (userInput !== 'DELETE') return;
 
@@ -24791,11 +24790,11 @@ window.executeBulkDelete = async function() {
             localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
         }
 
-        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
+        await UiModal.alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
         console.error("Delete Error:", error);
-        alert("An error occurred: " + error.message);
+        await UiModal.alert("An error occurred: " + error.message);
     } finally {
         deleteBtn.innerHTML = "Delete Range";
     }
@@ -24806,7 +24805,7 @@ window.downloadInvigilationListPDF = async function () {
     const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
         ? allotmentSessionSelect.value 
         : document.getElementById('allotment-session-select')?.value;
-    if (!sessionKey) return alert("Please select a session first.");
+    if (!sessionKey) return await UiModal.alert("Please select a session first.");
     const [date, time] = sessionKey.split(' | ');
 
     // 1. Data Sources
@@ -24958,7 +24957,7 @@ window.downloadInvigilationListPDF = async function () {
     }
 
     // 6. Final PDF
-    if (!window.jspdf) return alert("PDF Library not loaded.");
+    if (!window.jspdf) return await UiModal.alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
@@ -25124,7 +25123,7 @@ window.downloadInvigilationListPDF = async function () {
     };
 
     window.replaceInvigilator = async function(room, name) {
-        if(!confirm(`Confirm replace with ${name}?`)) return;
+        if(!await UiModal.confirm('Confirm Replacement', `Confirm replace with ${name}?`)) return;
         await window.saveInvigAssignment(room, name); // Wait for sync
 
         
@@ -25163,7 +25162,7 @@ window.downloadInvigilationListPDF = async function () {
             const currentText = headerSyncStatus.textContent;
             if (currentText === "Saving..." || currentText === "Connecting...") return;
 
-            if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
+            if (await UiModal.confirm('Force Cloud Sync', "☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
                     updateSyncStatus("Saving...", "neutral");
         
@@ -25189,7 +25188,7 @@ window.downloadInvigilationListPDF = async function () {
                     
                     updateSyncStatus("All Synced!", "success");
                 } else {
-                    alert("Sync function is not ready yet.");
+                    await UiModal.alert("Sync function is not ready yet.");
                 }
             }
         });
@@ -25310,13 +25309,13 @@ window.downloadInvigilationListPDF = async function () {
             });
 
             if (parsedPairs.length === 0) {
-                alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject' or raw Portal Table.");
+                await UiModal.alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject' or raw Portal Table.");
                 return;
             }
 
             const sessionKey = document.getElementById('session-select-qp')?.value;
             if (!sessionKey) {
-                alert("Please select a session first.");
+                await UiModal.alert("Please select a session first.");
                 return;
             }
 
@@ -25510,7 +25509,7 @@ window.downloadInvigilationListPDF = async function () {
                 alertContainer.innerHTML = "<span class='text-red-600'>Clipboard access blocked. Please allow clipboard permissions or input manually.</span>";
                 alertContainer.classList.remove('hidden');
             } else {
-                alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
+                await UiModal.alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
             }
         }
     };
@@ -25575,10 +25574,10 @@ window.addEventListener('message', async (event) => {
             if (typeof refreshAllStats === 'function') refreshAllStats();
             if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
 
-            alert(`✅ Extension Sync Successful!\n\n${incomingData.length} students loaded and pushed to Invigilation Portal.`);
+            await UiModal.alert(`✅ Extension Sync Successful!\n\n${incomingData.length} students loaded and pushed to Invigilation Portal.`);
         } catch (err) {
             console.error("Extension Sync Failed:", err);
-            alert("❌ Extension Sync Failed. Check console for details.");
+            await UiModal.alert("❌ Extension Sync Failed. Check console for details.");
         }
     }
 });
@@ -25655,13 +25654,13 @@ window.triggerSessionExport = function() {
     const sessionKey = document.getElementById('reports-session-select')?.value;
     
     if (!sessionKey) {
-        return alert("⚠️ Please select a Session from the dropdown first.");
+        return UiModal.alert("⚠️ Please select a Session from the dropdown first.");
     }
 
     if (typeof SESSION_EXPORT_JS !== 'undefined') {
         SESSION_EXPORT_JS.exportSession(sessionKey);
     } else {
-        alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
+        UiModal.alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
     }
 };
 
