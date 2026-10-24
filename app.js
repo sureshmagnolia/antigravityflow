@@ -15079,7 +15079,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
     // Find the renderStudentEditTable function (around line 1330) and replace it with this:
 
-// 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
+// 3. Render Student Records (Self-Contained Responsive Cards, 100% Zoom Resilient)
     function renderStudentEditTable() {
         editDataContainer.innerHTML = '';
 
@@ -15096,122 +15096,110 @@ window.real_disable_all_report_buttons = function (disabled) {
         // --- LOCK CHECK ---
         const isLocked = (typeof isEditDataLocked !== 'undefined') ? isEditDataLocked : false;
         const btnState = isLocked ? 'disabled' : '';
-        const btnOpacity = isLocked ? 'opacity-50 cursor-not-allowed' : '';
+        const btnOpacity = isLocked ? 'opacity-40 cursor-not-allowed pointer-events-none' : '';
 
-        let tableHtml = `
-        <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
-            <table class="min-w-full divide-y divide-gray-200 w-full">
-                <thead class="bg-gray-50 hidden md:table-header-group">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th> <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
-    `;
+        let cardsHtml = `
+        <div class="space-y-2.5 w-full">
+            <!-- Header Bar Guide for Desktop & Large Screens -->
+            <div class="hidden lg:grid grid-cols-12 gap-3 px-4 py-2.5 bg-gray-100/90 rounded-lg text-[10px] font-bold text-gray-500 uppercase tracking-wider items-center border border-gray-200/60 shadow-2xs">
+                <div class="col-span-1 text-center font-mono">Sl</div>
+                <div class="col-span-3">Student Name & Reg No</div>
+                <div class="col-span-4">Exam Name</div>
+                <div class="col-span-2">Date & Time / Stream</div>
+                <div class="col-span-2 text-right pr-2">Actions</div>
+            </div>
+        `;
 
         pageStudents.forEach((student, index) => {
             const uniqueRowIndex = start + index;
             const serialNo = uniqueRowIndex + 1;
             const streamDisplay = student.Stream || "Regular";
-            const examDisplay = student['Exam Name'] || '-'; // ADDED
+            const examDisplay = student['Exam Name'] || student.examName || '-';
 
-            // --- Desktop Row HTML ---
-            const desktopRow = `
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                ${serialNo}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <div class="font-bold">${student.Date}</div>
-                <div class="text-xs text-gray-500">${student.Time}</div>
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
-                ${getRegNo(student)}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${student.Name}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold"> ${examDisplay}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                ${streamDisplay}
-                </span>
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 transition ${btnOpacity}" ${btnState}>Edit</button>
-                <button class="delete-row-btn text-red-600 hover:text-red-900 transition ${btnOpacity}" ${btnState}>Delete</button>
-            </td>
-        `;
-
-            // --- Mobile Card HTML ---
-            const mobileCard = `
-            <td class="md:hidden block p-3 w-full border-b border-gray-100 last:border-0 bg-white">
-                <div class="flex items-start gap-3 mb-3 w-full">
-                    <div class="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-100">
-                        ${student.Name ? student.Name.charAt(0) : '?'}
+            cardsHtml += `
+            <div data-row-index="${uniqueRowIndex}" class="student-card bg-white rounded-xl border border-gray-200/90 shadow-2xs hover:shadow-md hover:border-indigo-300 transition-all p-3 sm:p-3.5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-center">
+                    
+                    <!-- Sl (Desktop) -->
+                    <div class="hidden lg:flex col-span-1 justify-center items-center">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-xs font-mono font-bold text-gray-600 border border-gray-200/60">
+                            ${serialNo}
+                        </span>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap justify-between items-start gap-1">
-                            <div class="text-sm font-bold text-gray-900 leading-tight break-words pr-1 max-w-full">
+
+                    <!-- Student Details -->
+                    <div class="col-span-1 sm:col-span-2 lg:col-span-3 flex items-center gap-3 min-w-0">
+                        <!-- Mobile/Tablet Sl badge -->
+                        <span class="lg:hidden shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-[11px] font-mono font-bold text-gray-600 border border-gray-200/60">
+                            ${serialNo}
+                        </span>
+                        <div class="h-9 w-9 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-100 shadow-2xs">
+                            ${(student.Name ? student.Name.charAt(0) : '?').toUpperCase()}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-bold text-gray-900 truncate" title="${student.Name}">
                                 ${student.Name}
                             </div>
-                            <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">
+                            <div class="inline-block mt-0.5">
+                                <span class="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50/80 border border-indigo-100 px-1.5 py-0.5 rounded">
+                                    ${getRegNo(student)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Exam Name (Natural wrap, no zoom breakage!) -->
+                    <div class="col-span-1 sm:col-span-2 lg:col-span-4 min-w-0">
+                        <span class="lg:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Exam Name</span>
+                        <div class="text-xs font-semibold text-gray-800 break-words leading-relaxed" title="${examDisplay}">
+                            ${examDisplay}
+                        </div>
+                    </div>
+
+                    <!-- Date & Time + Stream -->
+                    <div class="col-span-1 sm:col-span-1 lg:col-span-2 min-w-0 flex flex-col gap-1">
+                        <span class="lg:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Session & Stream</span>
+                        <div class="flex items-center gap-1.5 text-xs text-gray-700">
+                            <svg class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span class="font-bold whitespace-nowrap text-gray-900">${student.Date}</span>
+                            <span class="text-gray-300">|</span>
+                            <span class="text-gray-600 whitespace-nowrap">${student.Time}</span>
+                        </div>
+                        <div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 tracking-wide uppercase">
                                 ${streamDisplay}
                             </span>
                         </div>
-                        <div class="text-xs text-gray-500 font-mono mt-1 font-semibold tracking-wide break-all">
-                            ${getRegNo(student)}
-                        </div>
                     </div>
-                </div>
-                
-                <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs bg-gray-50 p-2.5 rounded-lg border border-gray-100 mb-3">
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Exam Name</span>
-                        <span class="font-bold text-indigo-700 whitespace-nowrap">${examDisplay}</span> </div>
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
-                        <span class="font-medium text-gray-700 whitespace-nowrap">${student.Date}</span>
-                    </div>
-                    <div class="col-span-2 border-t border-gray-200 pt-1 mt-1">
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Course</span>
-                        <span class="font-medium text-gray-700 block break-words whitespace-normal leading-snug" title="${student.Course}">
-                            ${student.Course}
-                        </span>
-                    </div>
-                </div>
 
-                <div class="flex gap-2">
-                    <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        Edit
-                    </button>
-                    <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        Delete
-                    </button>
-                </div>
-            </td>
-            `;
+                    <!-- Actions: Clean, styled pill buttons, always accessible -->
+                    <div class="col-span-1 sm:col-span-1 lg:col-span-2 flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                        <button class="edit-row-btn inline-flex items-center justify-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/80 px-3 py-1.5 rounded-lg shadow-2xs hover:shadow-xs transition ${btnOpacity}" ${btnState} title="Edit Student">
+                            <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Edit</span>
+                        </button>
+                        <button class="delete-row-btn inline-flex items-center justify-center gap-1.5 text-xs font-bold text-red-600 bg-red-50/80 hover:bg-red-100 border border-red-200/80 px-3 py-1.5 rounded-lg shadow-2xs hover:shadow-xs transition ${btnOpacity}" ${btnState} title="Delete Student">
+                            <svg class="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
 
-            tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row bg-white md:border-b border-gray-200 last:border-0">
-                ${desktopRow}
-                ${mobileCard}
-            </tr>
+                </div>
+            </div>
             `;
         });
 
-        tableHtml += `</tbody></table></div>`;
-        editDataContainer.innerHTML = tableHtml;
+        cardsHtml += `</div>`;
+        editDataContainer.innerHTML = cardsHtml;
         renderEditPagination(currentCourseStudents.length);
     }
-    
+
 
 
 
@@ -15246,22 +15234,26 @@ window.real_disable_all_report_buttons = function (disabled) {
         openStudentEditModal(null); // Pass null to indicate a new student
     });
 
-    // 6. Handle Edit/Delete Clicks (NEW: Opens modal)
+    // 6. Handle Edit/Delete Clicks (Self-Contained Cards)
     editDataContainer.addEventListener('click', async (e) => {
         const target = e.target;
-        if (!target.closest('tr')) return; // Guard clause if click is not on a row
-        const rowIndex = target.closest('tr').dataset.rowIndex;
+        const rowCard = target.closest('[data-row-index]');
+        if (!rowCard) return; // Guard clause if click is not on a row card
+        const rowIndex = rowCard.dataset.rowIndex;
         if (rowIndex === undefined) return; // Guard clause
 
-        if (target.classList.contains('edit-row-btn')) {
+        const editBtn = target.closest('.edit-row-btn');
+        const deleteBtn = target.closest('.delete-row-btn');
+
+        if (editBtn) {
             // --- Open Edit Modal ---
             openStudentEditModal(rowIndex);
 
-        } else if (target.classList.contains('delete-row-btn')) {
+        } else if (deleteBtn) {
             // --- Delete Row ---
             if (await UiModal.confirm('Delete Student Record', 'Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
                 currentCourseStudents.splice(rowIndex, 1); // Remove from the array
-                renderStudentEditTable(); // Re-render the table
+                renderStudentEditTable(); // Re-render the cards
                 setUnsavedChanges(true);
             }
         }
