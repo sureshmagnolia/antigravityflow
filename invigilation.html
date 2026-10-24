@@ -2012,11 +2012,12 @@
 
     <!-- Principal / Executive Faculty Monitor Modal -->
     <div id="principal-monitor-modal"
-        class="hidden fixed inset-0 bg-gray-900/70 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 backdrop-blur-sm transition-opacity overflow-hidden"
-        style="width: 100vw; max-width: 100vw; overflow-x: hidden; touch-action: pan-y;">
+        onclick="if(event.target === this) closeModal('principal-monitor-modal')"
+        class="hidden fixed inset-0 bg-gray-900/70 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 md:p-6 backdrop-blur-sm transition-opacity overflow-hidden"
+        style="touch-action: pan-y;">
         <div
-            class="bg-white w-full max-w-full sm:max-w-4xl lg:max-w-5xl h-[92dvh] max-h-[92dvh] sm:h-[86vh] sm:max-h-[820px] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-200/80"
-            style="min-width: 0; max-width: 100vw; box-sizing: border-box; overflow-x: hidden;">
+            class="bg-white w-full max-w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl h-[92dvh] max-h-[92dvh] sm:h-[88vh] sm:max-h-[840px] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all border border-gray-200/80 mx-auto"
+            style="box-sizing: border-box;">
 
             <!-- Compartment 1: Modal Header (Fixed, shrink-0) -->
             <div class="flex justify-between items-center px-3 sm:px-5 py-2 sm:py-2.5 border-b border-gray-100 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white shrink-0 overflow-hidden">
