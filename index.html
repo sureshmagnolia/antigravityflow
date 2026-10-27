@@ -2558,92 +2558,156 @@
     </div>
 </div>
 
-<div id="auto-allot-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-opacity">
+<div id="auto-allot-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 transition-opacity">
 
-    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh] overflow-hidden">
-        <div class="p-4 border-b border-gray-200 bg-gray-50 shrink-0">
-            <h3 class="text-lg font-bold text-gray-800">⚡ Auto Allot Rooms (Randomized)</h3>
-            <p class="text-sm text-gray-500">Select available rooms. Streams will be allotted using your paper mixing strategy into randomly shuffled rooms to prevent students from having identical neighbors each day.</p>
-        </div>
-        <!-- STRATEGY PANEL INSIDE MODAL: Synced with Main Tab -->
-        <div class="px-4 py-3 bg-indigo-50 border-b border-indigo-100" id="modal-mixing-strategy-container">
-            <p class="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-2">Paper Mixing Strategy</p>
-            <div class="flex flex-col gap-2">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="modal-mixing-strategy" value="none" checked class="accent-indigo-600 h-4 w-4">
-                    <span class="text-xs text-gray-700"><strong>No Mix</strong> — Fill room with one paper only (default)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="modal-mixing-strategy" value="ratio_1_1" class="accent-indigo-600 h-4 w-4">
-                    <span class="text-xs text-gray-700"><strong>1:1 Mix</strong> — Equal split of 2 papers (50% : 50%)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="modal-mixing-strategy" value="ratio_2_1" class="accent-indigo-600 h-4 w-4">
-                    <span class="text-xs text-gray-700"><strong>2:1 Mix</strong> — Two-thirds Paper A, one-third Paper B</span>
-                </label>
-            </div>
-        </div>
+    <style>
+        #auto-allot-room-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        #auto-allot-room-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        #auto-allot-room-list::-webkit-scrollbar-thumb {
+            background: #0d9488;
+            border-radius: 4px;
+        }
+        #auto-allot-room-list::-webkit-scrollbar-thumb:hover {
+            background: #0f766e;
+        }
+        #auto-allot-room-list {
+            scrollbar-width: thin;
+            scrollbar-color: #0d9488 #f1f5f9;
+        }
+    </style>
 
-        <!-- DYNAMIC EXAM TAG GROUPING PANEL: Active ONLY if >= 2 different exam names in session -->
-        <div class="px-4 py-3 bg-teal-50 border-b border-teal-100 hidden" id="modal-exam-grouping-container">
-            <div class="flex items-center justify-between mb-1.5">
-                <p class="text-[10px] font-black text-teal-900 uppercase tracking-widest flex items-center gap-1.5">
-                    <span>🏷️</span> Exam Tag Grouping
-                </p>
-                <span class="text-[9px] font-extrabold bg-teal-200 text-teal-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Multi-Exam Session
-                </span>
-            </div>
-            <div id="modal-detected-exams-list" class="text-xs text-teal-800 bg-white/70 rounded p-2 mb-2 border border-teal-200 font-mono text-[11px] leading-tight"></div>
-            <div class="flex flex-col gap-2">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="modal-exam-grouping" value="mix" checked class="accent-teal-600 h-4 w-4">
-                    <span class="text-xs text-gray-700"><strong>Mix Exams Together</strong> — Distribute papers across all exam tags together in rooms (Default)</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="modal-exam-grouping" value="separate" class="accent-teal-600 h-4 w-4">
-                    <span class="text-xs text-gray-700"><strong>Keep Exams Separate</strong> — Allot one Exam after another (Internal paper mixing applies within each Exam)</span>
-                </label>
-            </div>
-            <div id="modal-exam-boundary-wrapper" class="mt-2 pl-6 pt-2 border-t border-teal-200/50 hidden">
-                <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700">
-                    <input type="checkbox" id="modal-exam-fresh-room-cb" checked class="accent-teal-600 h-3.5 w-3.5 rounded">
-                    <span>Start each Exam in a <strong>Fresh Room</strong> (prevents different exam booklets in the same room)</span>
-                </label>
-            </div>
-        </div>
-        <div class="border-b border-gray-100 bg-white shrink-0">
-            <div class="px-3 pt-3 pb-2 flex justify-between items-center gap-3">
-                <div class="flex gap-2 items-center flex-wrap">
-                    <div class="text-sm font-bold text-amber-700 whitespace-nowrap bg-amber-50 px-3 py-1.5 rounded border border-amber-100">
-                        Needed: <span id="auto-allot-needed-capacity" class="inline-flex items-center">0</span>
-                    </div>
-                    <div class="text-sm font-bold text-teal-700 whitespace-nowrap bg-teal-50 px-3 py-1.5 rounded border border-teal-100">
-                        Selected: <span id="auto-allot-selected-count">0</span>
-                    </div>
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col h-[90vh] max-h-[840px] min-h-[500px] overflow-hidden border border-gray-100">
+        <!-- MODAL HEADER -->
+        <div class="px-5 py-3 border-b border-gray-200 bg-gray-50/90 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5">
+                <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-teal-100 text-teal-700 text-sm font-bold shadow-xs">⚡</span>
+                <div>
+                    <h3 class="text-sm sm:text-base font-bold text-gray-800 leading-tight">Auto Allot Rooms (Randomized)</h3>
+                    <p class="text-[11px] text-gray-500 leading-tight mt-0.5">Select available rooms to allot with your configured paper mixing & exam grouping.</p>
                 </div>
-                <button type="button" onclick="selectFrequentRoomsAutoAllot()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded font-bold transition whitespace-nowrap shadow-sm">
+            </div>
+            <button type="button" id="close-auto-allot-modal-x" class="text-gray-400 hover:text-gray-700 hover:bg-gray-200/70 w-7 h-7 flex items-center justify-center rounded-lg transition text-base leading-none font-bold" title="Close">
+                ✕
+            </button>
+        </div>
+
+        <!-- COMPACT CONFIGURATION SECTION -->
+        <div class="px-5 py-2.5 bg-slate-50 border-b border-gray-200 shrink-0 space-y-2">
+            <!-- 1. PAPER MIXING STRATEGY -->
+            <div id="modal-mixing-strategy-container">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[10px] font-black text-indigo-900 uppercase tracking-widest flex items-center gap-1">
+                        <span>📄</span> Paper Mixing Strategy
+                    </span>
+                    <span class="text-[10px] text-indigo-600 font-medium">Applied per room</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <label class="flex items-center gap-2 p-1.5 px-2.5 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 cursor-pointer text-xs transition shadow-xs">
+                        <input type="radio" name="modal-mixing-strategy" value="none" checked class="accent-indigo-600 h-3.5 w-3.5">
+                        <div class="truncate">
+                            <span class="font-bold text-gray-800 text-[11px]">No Mix</span>
+                            <span class="text-[10px] text-gray-500 block truncate">One paper / room</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-2 p-1.5 px-2.5 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 cursor-pointer text-xs transition shadow-xs">
+                        <input type="radio" name="modal-mixing-strategy" value="ratio_1_1" class="accent-indigo-600 h-3.5 w-3.5">
+                        <div class="truncate">
+                            <span class="font-bold text-gray-800 text-[11px]">1:1 Mix</span>
+                            <span class="text-[10px] text-gray-500 block truncate">50% : 50% split</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-2 p-1.5 px-2.5 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 cursor-pointer text-xs transition shadow-xs">
+                        <input type="radio" name="modal-mixing-strategy" value="ratio_2_1" class="accent-indigo-600 h-3.5 w-3.5">
+                        <div class="truncate">
+                            <span class="font-bold text-gray-800 text-[11px]">2:1 Mix</span>
+                            <span class="text-[10px] text-gray-500 block truncate">67% : 33% split</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 2. DYNAMIC EXAM TAG GROUPING: Active ONLY if >= 2 different exam names in session -->
+            <div id="modal-exam-grouping-container" class="pt-2 border-t border-gray-200/80 hidden">
+                <div class="flex items-center justify-between mb-1.5 flex-wrap gap-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] font-black text-teal-900 uppercase tracking-widest flex items-center gap-1">
+                            <span>🏷️</span> Exam Tag Grouping
+                        </span>
+                        <span class="text-[9px] font-extrabold bg-teal-200 text-teal-800 px-1.5 py-0.2 rounded uppercase tracking-wider">
+                            Multi-Exam
+                        </span>
+                    </div>
+                    <div id="modal-detected-exams-list" class="flex items-center gap-1.5 flex-wrap"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center gap-2 p-1.5 px-2.5 bg-white rounded-lg border border-gray-200 hover:border-teal-300 cursor-pointer text-xs transition shadow-xs">
+                        <input type="radio" name="modal-exam-grouping" value="mix" checked class="accent-teal-600 h-3.5 w-3.5">
+                        <div class="truncate">
+                            <span class="font-bold text-gray-800 text-[11px]">Mix Exams Together</span>
+                            <span class="text-[10px] text-gray-500 block truncate">Distribute papers across all tags</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-2 p-1.5 px-2.5 bg-white rounded-lg border border-gray-200 hover:border-teal-300 cursor-pointer text-xs transition shadow-xs">
+                        <input type="radio" name="modal-exam-grouping" value="separate" class="accent-teal-600 h-3.5 w-3.5">
+                        <div class="truncate">
+                            <span class="font-bold text-gray-800 text-[11px]">Keep Exams Separate</span>
+                            <span class="text-[10px] text-gray-500 block truncate">Allot one exam after another</span>
+                        </div>
+                    </label>
+                </div>
+                <div id="modal-exam-boundary-wrapper" class="mt-1.5 px-1 flex items-center justify-between hidden">
+                    <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-teal-900 font-medium">
+                        <input type="checkbox" id="modal-exam-fresh-room-cb" checked class="accent-teal-600 h-3.5 w-3.5 rounded">
+                        <span>Start each Exam in a <strong>Fresh Room</strong> (prevents mixed exam booklets)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROOM SELECTION TOOLBAR (Needed, Selected, Frequent, Search) -->
+        <div class="px-5 py-2 bg-white border-b border-gray-200 shrink-0 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 flex items-center gap-1.5 shadow-xs">
+                    <span class="text-amber-600 font-medium text-[11px]">Needed:</span>
+                    <span id="auto-allot-needed-capacity" class="inline-flex items-center font-bold">0</span>
+                </div>
+                <div class="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 flex items-center gap-1.5 shadow-xs">
+                    <span class="text-teal-600 font-medium text-[11px]">Selected:</span>
+                    <span id="auto-allot-selected-count" class="font-extrabold text-sm text-teal-700">0</span>
+                </div>
+                <button type="button" onclick="selectFrequentRoomsAutoAllot()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-2.5 py-1.5 rounded-lg font-bold transition whitespace-nowrap shadow-xs">
                     ⭐ Select Frequent
                 </button>
             </div>
-            <div class="px-3 pb-3 relative">
-                <input type="text" id="auto-allot-search" placeholder="🔍 Search room..." class="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none shadow-sm">
-                <svg class="w-4 h-4 text-gray-400 absolute left-6 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <div class="relative w-full sm:w-56 shrink-0">
+                <input type="text" id="auto-allot-search" placeholder="Search room..." class="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-teal-500 outline-none shadow-xs bg-gray-50 focus:bg-white transition">
+                <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
         </div>
-        <div id="auto-allot-room-list" class="flex-1 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50/50">
+
+        <!-- ROOM LIST: Generous scrollable container with custom teal scrollbar -->
+        <div id="auto-allot-room-list" class="flex-1 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 bg-slate-50/70 min-h-[220px]" style="scrollbar-gutter: stable; scrollbar-width: thin;">
         </div>
-        <div class="p-4 border-t border-gray-200 bg-white shrink-0 flex justify-between items-center flex-wrap gap-3">
-            <div class="flex items-center gap-4">
-                <div class="text-sm text-gray-600 font-medium">Total Capacity: <span id="auto-allot-total-capacity" class="font-bold text-gray-900">0</span></div>
-                <label class="flex items-center gap-1.5 cursor-pointer text-sm font-bold text-teal-800 bg-teal-50 px-2 py-1 rounded border border-teal-100 shadow-sm transition hover:bg-teal-100">
-                    <input type="checkbox" id="auto-allot-randomize-cb" checked class="accent-teal-600 w-4 h-4 cursor-pointer">
-                    Randomise Allotment
+
+        <!-- FOOTER: Fixed at bottom -->
+        <div class="px-5 py-3 border-t border-gray-200 bg-white shrink-0 flex justify-between items-center flex-wrap gap-3">
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-gray-600 font-medium">Total Capacity: <span id="auto-allot-total-capacity" class="font-extrabold text-sm text-gray-900">0</span></div>
+                <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 shadow-xs transition hover:bg-teal-100">
+                    <input type="checkbox" id="auto-allot-randomize-cb" checked class="accent-teal-600 w-3.5 h-3.5 cursor-pointer">
+                    <span>Randomise Allotment</span>
                 </label>
             </div>
             <div class="flex gap-2">
-                <button id="close-auto-allot-modal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm">Cancel</button>
-                <button id="run-auto-allot-button" class="px-4 py-2 text-sm font-bold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 transition shadow-sm">Run Auto Allotment</button>
+                <button id="close-auto-allot-modal" class="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 shadow-xs transition">Cancel</button>
+                <button id="run-auto-allot-button" class="px-5 py-2 text-xs font-bold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50 transition shadow-sm flex items-center gap-1.5">
+                    <span>⚡</span> Run Auto Allotment
+                </button>
             </div>
         </div>
     </div>
@@ -5163,7 +5227,7 @@
 </div>
 
 <script src="session_export.js"></script>
-<script src="app.js?v=12.8.20"></script>
+<script src="app.js?v=12.8.21"></script>
 <script src="excel_extraction.js"></script>    
 <!-- Global Datalist for Searchable Parent Rooms -->
 <datalist id="parent-rooms-list"></datalist>

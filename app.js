@@ -12482,14 +12482,19 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         const escapeStr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        const examSummaryHtml = exams.map(e => 
-            `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
+        
+        // Compact badges for modal header row
+        const modalSummaryHtml = exams.map(e => 
+            `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 border border-teal-200 text-[10px] font-bold" title="${escapeStr(e.name)}: ${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})">` +
+            `<span class="truncate max-w-[130px] font-semibold">${escapeStr(e.name)}</span>` +
+            `<span class="bg-teal-200/90 text-teal-800 px-1 rounded text-[9px] font-black">${e.count}</span>` +
+            `</span>`
         ).join('');
 
         if (modalContainer) {
             modalContainer.classList.remove('hidden');
             const listDiv = document.getElementById('modal-detected-exams-list');
-            if (listDiv) listDiv.innerHTML = examSummaryHtml;
+            if (listDiv) listDiv.innerHTML = modalSummaryHtml;
         }
 
         if (mainContainer) {
@@ -13363,8 +13368,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         document.getElementById('run-auto-allot-button').disabled = count === 0;
     }
 
-    document.getElementById('close-auto-allot-modal')?.addEventListener('click', () => {
-        document.getElementById('auto-allot-modal').classList.add('hidden');
+    document.querySelectorAll('#close-auto-allot-modal, #close-auto-allot-modal-x').forEach(btn => {
+        btn?.addEventListener('click', () => {
+            document.getElementById('auto-allot-modal').classList.add('hidden');
+        });
     });
 
     document.getElementById('run-auto-allot-button')?.addEventListener('click', async () => {
