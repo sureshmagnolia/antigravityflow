@@ -12496,7 +12496,17 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
 
         const escapeStr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        const examSummaryHtml = exams.map(e => 
+        
+        // Compact badges for modal header row
+        const modalSummaryHtml = exams.map(e => 
+            `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-100 text-teal-900 border border-teal-200 text-[10px] font-bold shadow-xs" title="${escapeStr(e.name)}: ${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})">` +
+            `<span class="truncate max-w-[140px] font-bold">${escapeStr(e.name)}</span>` +
+            `<span class="bg-teal-200 text-teal-800 px-1 rounded text-[9px] font-black">${e.count}</span>` +
+            `</span>`
+        ).join('');
+
+        // Full items for main room allotment tab
+        const mainSummaryHtml = exams.map(e => 
             `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
         ).join('');
 
@@ -12506,13 +12516,13 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (modalContainer) {
             modalContainer.classList.remove('hidden');
             const listDiv = document.getElementById('modal-detected-exams-list');
-            if (listDiv) listDiv.innerHTML = examSummaryHtml;
+            if (listDiv) listDiv.innerHTML = modalSummaryHtml;
         }
 
         if (mainContainer) {
             mainContainer.classList.remove('hidden');
             const mainListDiv = document.getElementById('main-detected-exams-list');
-            if (mainListDiv) mainListDiv.innerHTML = examSummaryHtml;
+            if (mainListDiv) mainListDiv.innerHTML = mainSummaryHtml;
         }
     }
     window.updateExamGroupingUI = updateExamGroupingUI;
