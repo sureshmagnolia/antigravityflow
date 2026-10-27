@@ -335,7 +335,7 @@ function handleAuthClick() {
     tokenClient.callback = async (resp) => {
         if (resp.error) {
             if (resp.error === 'access_denied') {
-               alert("❌ Access Denied: You must tick the 'Google Drive' checkbox in the Google login screen to use this feature.");
+               await UiModal.alert("❌ Access Denied: You must tick the 'Google Drive' checkbox in the Google login screen to use this feature.");
                return;
             }
             throw resp;
@@ -410,7 +410,7 @@ async function getBackupFolder() {
         const authMsg = pruneDriveAuthOnFailure(e);
         if (authMsg) {
             if (!document.getElementById('drive-sync-status-ribbon')?.classList.contains('hidden')) {
-                 alert("⚠️ " + authMsg);
+                 await UiModal.alert("⚠️ " + authMsg);
             }
             throw new Error(authMsg);
         }
@@ -598,11 +598,11 @@ async function syncData(source = "AUTO") {
         console.error(e);
         const authMsg = pruneDriveAuthOnFailure(e);
         if (authMsg) {
-            alert("⚠️ " + authMsg);
+            await UiModal.alert("⚠️ " + authMsg);
         } else if (e.message && e.message.includes('expired')) {
-            alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
+            await UiModal.alert("⚠️ Google Drive session expired.\n\nPlease click the 'Reconnect Drive' button in Settings and try again.");
         } else {
-            alert("Backup Failed: " + e.message);
+            await UiModal.alert("Backup Failed: " + e.message);
         }
         if (btn) {
             btn.innerHTML = "❌ Error";
@@ -904,11 +904,11 @@ async function restoreFromDrive() {
             orderBy: 'createdTime desc',
             fields: 'files(id, name, createdTime)'
         });
-        if (res.result.files.length === 0) return alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
+        if (res.result.files.length === 0) return await UiModal.alert(`No ${isProUser ? 'Invigilation' : 'ExamFlow'} backups found.`);
         showRestoreModal(res.result.files);
     } catch (e) { 
         pruneDriveAuthOnFailure(e);
-        alert("Error: " + e.message); 
+        await UiModal.alert("Error: " + e.message); 
     }
 }
 
@@ -965,7 +965,7 @@ window.executeRestore = async function(fileId, cloudTime = null) {
         }
     } catch (e) { 
         pruneDriveAuthOnFailure(e);
-        return alert("Fetch Error: " + e.message); 
+        return await UiModal.alert("Fetch Error: " + e.message); 
     }
 
     // 2. SHOW CUSTOM UI MODAL with Text Confirmation
@@ -1036,7 +1036,7 @@ window.executeRestore = async function(fileId, cloudTime = null) {
 
 async function processRestore(cloudData, isMerge, cloudTime = null) {
     if (!cloudData || typeof cloudData !== 'object') {
-        return alert("Execution Error: Invalid or empty backup data received.");
+        return await UiModal.alert("Execution Error: Invalid or empty backup data received.");
     }
 
     window.isDriveRestoringData = true; // 🛡️ STRICT SEPARATION: Only affects Drive. Stops auto-sync loops.
@@ -1147,20 +1147,12 @@ async function processRestore(cloudData, isMerge, cloudTime = null) {
         // 🛡️ [REMOVED]: pendingDriveRestoreSync is no longer needed because cloud is now updated BEFORE refresh.
 
         window.isDriveRestoringData = false;
-        if (typeof UiModal !== 'undefined') {
-            await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
-        } else {
-            alert("✅ Restored & Synced successfully! Reloading to apply changes.");
-        }
+        await UiModal.alert("Restore Successful", "✅ Restored & Synced successfully! Reloading to apply changes.");
         location.reload();
 
     } catch (e) { 
         window.isDriveRestoringData = false;
-        if (typeof UiModal !== 'undefined') {
-            await UiModal.alert("Execution Error", "Restore execution failed: " + e.message);
-        } else {
-            alert("Execution Error: " + e.message); 
-        }
+        await UiModal.alert("Execution Error", "Restore execution failed: " + e.message);
     }
 
 }
@@ -1191,7 +1183,7 @@ window.ExamCloudCache = {
 
         // 2. CLOUD USER: Offline Check
         if (!navigator.onLine) {
-            alert("⚠️ Cannot fetch historical data for " + dateKey + " while offline. Please connect to the internet.");
+            await UiModal.alert("⚠️ Cannot fetch historical data for " + dateKey + " while offline. Please connect to the internet.");
             return [];
         }
 
@@ -1248,7 +1240,7 @@ window.ExamCloudCache = {
             // Only alert if we know it's an actual unexpected error, ignore 404s for empty exam days
             if(e.message !== "File missing" && !e.message.includes("Object 'historical_sessions")) {
                 console.error("Cloud Fetch Error:", e);
-                alert("Cloud Request Failed: " + e.message);
+                await UiModal.alert("Cloud Request Failed: " + e.message);
             }
             return []; 
         }
@@ -1263,13 +1255,13 @@ window.ExamCloudCache = {
 window.startHistoricalMigration = async function() {
     // Only logged-in users can push to cloud
     if (!window.currentCollegeId) {
-        alert("Basic Users operate exclusively offline. Cloud Migration requires a Firebase Login.");
+        await UiModal.alert("Basic Users operate exclusively offline. Cloud Migration requires a Firebase Login.");
         return;
     }
 
     const fileInput = document.getElementById('historical-json-upload');
     if (!fileInput.files.length) {
-        alert("Please select a JSON file first.");
+        await UiModal.alert("Please select a JSON file first.");
         return;
     }
 
@@ -1288,7 +1280,7 @@ window.startHistoricalMigration = async function() {
             const studentArray = isFullBackup ? (parsed.examBaseData || []) : parsed;
             
             if (!Array.isArray(studentArray) || studentArray.length === 0) {
-                alert("Invalid JSON. No valid student records found.");
+                await UiModal.alert("Invalid JSON. No valid student records found.");
                 return;
             }
 
@@ -1316,10 +1308,10 @@ window.startHistoricalMigration = async function() {
 
 
             const uniqueDates = Object.keys(groupedByDate);
-            if (!confirm(`Found ${uniqueDates.length} unique dates in your data.\n\nReady to upload to Firebase Storage?`)) return;
+            if (!await UiModal.confirm("Cloud Migration", `Found ${uniqueDates.length} unique dates in your data.\n\nReady to upload to Firebase Storage?`)) return;
 
             // NEW: Ask Merge or Overwrite for cloud chunks
-            const isMergeCloud = confirm("CLOUD UPLOAD MODE:\n\nClick [OK] to MERGE with existing cloud data (safe, keeps old records).\nClick [Cancel] to OVERWRITE — replaces existing cloud chunks entirely.");
+            const isMergeCloud = await UiModal.confirm("Cloud Upload Mode", "Click [Confirm] to MERGE with existing cloud data (safe, keeps old records).\nClick [Cancel] to OVERWRITE — replaces existing cloud chunks entirely.");
 
 
             // 2. Upload Chunks loop
@@ -1374,11 +1366,11 @@ window.startHistoricalMigration = async function() {
             }
 
             if (btn) btn.innerHTML = originalText;
-            alert(`✅ Migration Complete! Successfully uploaded ${successCount} date chunks to Firebase Storage.`);
+            await UiModal.alert(`✅ Migration Complete! Successfully uploaded ${successCount} date chunks to Firebase Storage.`);
             
         } catch (err) {
             console.error("Migration Error:", err);
-            alert("Migration Failed: " + err.message);
+            await UiModal.alert("Migration Failed: " + err.message);
         }
     };
 
@@ -1391,11 +1383,11 @@ window.startHistoricalMigration = async function() {
 // ==========================================
 window.archiveAllToCloud = async function() {
     if (!window.currentCollegeId) {
-        alert("Cloud Archive requires Firebase Login.");
+        await UiModal.alert("Cloud Archive requires Firebase Login.");
         return;
     }
     if (!navigator.onLine) {
-        alert("You are offline. Please connect to the internet first.");
+        await UiModal.alert("You are offline. Please connect to the internet first.");
         return;
     }
 
@@ -1406,7 +1398,7 @@ window.archiveAllToCloud = async function() {
     // Load all student data from IDB
     const allStudents = await loadExamDataIDB();
     if (!allStudents || allStudents.length === 0) {
-        alert("No student data found in your local database.");
+        await UiModal.alert("No student data found in your local database.");
         return;
     }
 
@@ -1425,11 +1417,11 @@ window.archiveAllToCloud = async function() {
 
     const uniqueDates = Object.keys(groupedByDate);
     if (uniqueDates.length === 0) {
-        alert("No past sessions found to archive.");
+        await UiModal.alert("No past sessions found to archive.");
         return;
     }
 
-    if (!confirm(`Found ${uniqueDates.length} past session date(s) in your local database.\n\nThis will upload them all to Firebase Storage as cold archive.\n\nProceed?`)) return;
+    if (!await UiModal.confirm("Archive Past Sessions", `Found ${uniqueDates.length} past session date(s) in your local database.\n\nThis will upload them all to Firebase Storage as cold archive.\n\nProceed?`)) return;
 
     // Load aux data from localStorage
     const rawRoomAllotment      = JSON.parse(localStorage.getItem('examAllotmentData') || '{}');
@@ -1468,7 +1460,7 @@ window.archiveAllToCloud = async function() {
     }
 
     if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
-    alert(`✅ Done! Successfully archived ${successCount} date(s) to Firebase Storage.`);
+    await UiModal.alert(`✅ Done! Successfully archived ${successCount} date(s) to Firebase Storage.`);
 };
 
 
@@ -1477,7 +1469,7 @@ window.archiveAllToCloud = async function() {
 // ==========================================
 window.openCloudDeleteModal = async function() {
     if (!window.currentCollegeId) {
-        alert("This requires Firebase Login.");
+        await UiModal.alert("This requires Firebase Login.");
         return;
     }
 
@@ -1515,7 +1507,7 @@ window.openCloudDeleteModal = async function() {
 };
 
 window.deleteCloudFile = async function(fullPath) {
-    if (!confirm(`Delete this file from cloud?\n\n${fullPath}\n\nThis cannot be undone.`)) return;
+    if (!await UiModal.confirm("Delete Cloud File", `Delete this file from cloud?\n\n${fullPath}\n\nThis cannot be undone.`)) return;
     try {
         const { storage, ref, deleteObject } = window.firebase;
         const fileRef = ref(storage, fullPath);
@@ -1523,7 +1515,7 @@ window.deleteCloudFile = async function(fullPath) {
         // Refresh the list
         await window.openCloudDeleteModal();
     } catch (e) {
-        alert("Delete failed: " + e.message);
+        await UiModal.alert("Delete failed: " + e.message);
     }
 };
 

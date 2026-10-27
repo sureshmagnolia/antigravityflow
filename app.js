@@ -1227,7 +1227,7 @@ async function migrateFromLocalStorage() {
         
         // NEW: Alert Logged-In Users regarding Cache Limitations
         if (window.currentCollegeId) {
-            alert("⚠️ Connectivity Lost. ExamFlow is in Offline Mode.\n\nOnly the recent/upcoming sessions saved in your local cache are available. Historical data cannot be accessed until the internet is restored.");
+            UiModal.alert("⚠️ Connectivity Lost. ExamFlow is in Offline Mode.\n\nOnly the recent/upcoming sessions saved in your local cache are available. Historical data cannot be accessed until the internet is restored.");
         }
     });
 
@@ -1249,7 +1249,7 @@ async function migrateFromLocalStorage() {
                     // Auth listener will handle the rest
                 }).catch((error) => {
                     console.error(error);
-                    alert("Login Failed: " + error.message);
+                    UiModal.alert("Login Failed: " + error.message);
                 });
         });
     }
@@ -1395,6 +1395,7 @@ function populateAllExamDropdowns() {
         { id: 'upload-exam-select', defaultText: '-- Select Exam Name --' }, // Upload Tab
         { id: 'bulk-new-exam-name', defaultText: '-- No Change --' }, // Bulk Edit
         { id: 'modal-edit-exam-name', defaultText: '-- Select Exam Name --' }, // Student Edit
+        { id: 'edit-rename-target-exam', defaultText: '-- Select Master Exam Name --' }, // Global Rename Target
         { id: 'bill-exam-select', defaultText: '-- Generate All --' } // Bill Gen (Optional)
     ];
 
@@ -1721,11 +1722,11 @@ async function updateLocalSlotsFromStudents() {
 }
 // --- MANUAL SLOT RECALCULATION (For logged-in admins after scribe marking) ---
 window.recalcInvigSlots = async function () {
-    if (!currentUser) return alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
+    if (!currentUser) return await UiModal.alert('⚠️ You must be logged in to push slot data to the Invigilation Portal.');
 
     // 🛡️ [USER CONFIRMATION]: Explicitly state the Future-Only scope
     const confirmMsg = `🔄 RECALCULATE FUTURE SLOTS?\n\nThis will re-scan all student data to update staffing requirements for all UPCOMING exams.\n\n✅ Existing teacher assignments will be PRESERVED.\n✅ Past session data will NOT be modified.\n\nContinue?`;
-    if (!confirm(confirmMsg)) return;
+    if (!await UiModal.confirm('Push Slots', confirmMsg)) return;
 
     const btns = ['recalc-invig-slots-btn', 'recalc-invig-slots-btn-loader', 'recalc-invig-slots-btn-editor'];
     const originalStates = [];
@@ -1747,7 +1748,7 @@ window.recalcInvigSlots = async function () {
         // app.js doesn't natively fetch daily shards. If local memory is empty, abort to prevent a wipe.
         const currentSlots = JSON.parse(localStorage.getItem('examInvigilationSlots') || '{}');
         if (Object.keys(currentSlots).length === 0) {
-            alert('⚠️ SAFETY ABORT: Your local slot cache is empty. \n\nPlease open the "Staff & Invigilation" tab briefly to allow the system to fully sync the cloud database shards before recalculating slots.');
+            await UiModal.alert('⚠️ SAFETY ABORT: Your local slot cache is empty. \n\nPlease open the "Staff & Invigilation" tab briefly to allow the system to fully sync the cloud database shards before recalculating slots.');
             return;
         }
 
@@ -1758,13 +1759,13 @@ window.recalcInvigSlots = async function () {
                 // FIX: Recalculation should be authoritative for all slots
                 await syncDataToCloud('slots', "FORCE_OVERWRITE"); 
             }
-            alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
+            await UiModal.alert('✅ Invigilation slots recalculated and pushed to the Invigilation Portal.\n\nScribe students are now correctly counted in slot requirements.');
         } else {
-            alert('ℹ️ No changes detected. Slots are already up to date.');
+            await UiModal.alert('ℹ️ No changes detected. Slots are already up to date.');
         }
     } catch (e) {
         console.error('Slot Recalc Error:', e);
-        alert('❌ Recalculation failed. Check console for details.');
+        await UiModal.alert('❌ Recalculation failed. Check console for details.');
     } finally {
         originalStates.forEach(state => {
             const btn = document.getElementById(state.id);
@@ -1942,7 +1943,7 @@ window.recalcInvigSlots = async function () {
                     console.error("❌ Corrupt College ID detected! Forcing cache wipe.");
                     localStorage.clear();
                     sessionStorage.clear();
-                    alert("Session corrupted or expired. Please log in again.");
+                    await UiModal.alert("Session corrupted or expired. Please log in again.");
                     if (window.firebase && window.firebase.auth) window.firebase.auth.signOut();
                     location.reload();
                 }
@@ -2977,7 +2978,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
                     
                     message += `\nDo you want to proceed with this update to the Invigilation Database?`;
                     
-                    if (!confirm(message)) {
+                    if (!await UiModal.confirm('Invigilation Protection', message)) {
                         console.warn("🛡️ Sync Cancelled by Admin to protect slots.");
                         updateSyncStatus("Sync Cancelled", "neutral");
                         isSyncing = false;
@@ -3214,8 +3215,8 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         return `${hh}:${m} ${ampm}`;
     }
     // 🛡️ MEMORY SHIELD: Surgically deletes one session's local metadata
-    window.freeUpStorage = function(sessionKey) {
-        if(!confirm(`Clear local metadata for: ${sessionKey}?`)) return;
+    window.freeUpStorage = async function(sessionKey) {
+        if(!await UiModal.confirm('Free Up Storage', `Clear local metadata for: ${sessionKey}?`)) return;
         ['examRoomAllotment', 'examQPCodes', 'examAbsenteeList', 'examScribeAllotment', 'examInvigilatorMapping'].forEach(globalKey => {
             try {
                 let dataBlock = JSON.parse(localStorage.getItem(globalKey) || '{}');
@@ -3228,7 +3229,7 @@ async function deleteSessionFromCloud(sessionKey, skipIndexUpdate = false) {
         let known = JSON.parse(localStorage.getItem('examAllKnownSessions') || '[]');
         known = known.filter(k => k !== sessionKey);
         try { localStorage.setItem('examAllKnownSessions', JSON.stringify(known)); } catch(e) {}
-        alert(`Cleared "${sessionKey}". Try saving again.`);
+        await UiModal.alert(`Cleared "${sessionKey}". Try saving again.`);
         document.getElementById('quota-exceeded-modal').classList.add('hidden');
     };
 
@@ -3626,7 +3627,7 @@ window.downloadReportPDF = function() {
     if (generators[reportType] && typeof generators[reportType] === 'function') {
         generators[reportType]();
     } else {
-        alert("PDF generation for '" + reportType + "' is not yet implemented.");
+        UiModal.alert("PDF generation for '" + reportType + "' is not yet implemented.");
     }
 };
     
@@ -3639,7 +3640,7 @@ function generateRoomWisePDF() {
     const container = document.getElementById('report-output-area');
     const pages = container.querySelectorAll('.print-page');
 
-    if (pages.length === 0) return alert("No pages found.");
+    if (pages.length === 0) return UiModal.alert("No pages found.");
 
     const btn = document.getElementById('download-pdf-report-btn');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Processing..."; }
@@ -3875,7 +3876,7 @@ function generateDayWisePDF() {
     
     // 1. Validation
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded.");
+        return UiModal.alert("No data loaded.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn');
@@ -4315,7 +4316,7 @@ function generateDayWisePDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error: " + e.message);
+        UiModal.alert("Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4330,7 +4331,7 @@ function generateRoomStickersPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page-sticker') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the Room Stickers HTML report first.");
+        return UiModal.alert("Please generate the Room Stickers HTML report first.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn'); 
@@ -4542,7 +4543,7 @@ function generateRoomStickersPDF() {
 
     } catch (e) {
         console.error("Sticker PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4564,7 +4565,7 @@ function generateScribeProformaPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the Scribe Proforma HTML report first.");
+        return UiModal.alert("Please generate the Scribe Proforma HTML report first.");
     }
 
     const btn = document.getElementById('download-pdf-report-btn'); 
@@ -4679,7 +4680,7 @@ function generateScribeProformaPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -4699,7 +4700,7 @@ function generateScribeProformaPDF() {
 
       // 1. Validation
       if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-          return alert("No data loaded.");
+          return UiModal.alert("No data loaded.");
       }
 
       const btn = document.getElementById('download-qp-summary-btn');
@@ -4919,7 +4920,7 @@ function generateScribeProformaPDF() {
 
     } catch (e) {
           console.error("PDF Error:", e);
-          alert("Error: " + e.message);
+          UiModal.alert("Error: " + e.message);
       } finally {
           if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
       }
@@ -4931,7 +4932,7 @@ function generateQuestionPaperReportPDF() {
     
     // 1. Validation
     if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
-        return alert("No data loaded to generate Report.");
+        return UiModal.alert("No data loaded to generate Report.");
     }
 
     const btn = document.getElementById('download-qp-report-btn'); 
@@ -5208,7 +5209,7 @@ function generateQuestionPaperReportPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error: " + e.message);
+        UiModal.alert("Error: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -5224,7 +5225,7 @@ function generateQPDistributionPDF() {
     const pages = reportContainer ? reportContainer.querySelectorAll('.print-page') : [];
 
     if (pages.length === 0) {
-        return alert("Please generate the HTML report first.");
+        return UiModal.alert("Please generate the HTML report first.");
     }
 
     const btn = document.getElementById('download-qp-pdf-btn'); 
@@ -5439,7 +5440,7 @@ function generateQPDistributionPDF() {
 
     } catch (e) {
         console.error("PDF Scraper Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -5591,7 +5592,13 @@ if (toggleButton && sidebar) {
     // This is kept for backward compatibility to prevent crashes.
  /** ✅ FIXED: Corrected variable name to allStudentData **/
   function getExamName(date, time, stream) {
-      if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return "";
+      if (typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) {
+          const raw = localStorage.getItem('examBaseData');
+          if (raw) {
+              try { allStudentData = JSON.parse(raw); } catch (e) {}
+          }
+      }
+      if (!allStudentData || allStudentData.length === 0) return "";
       
       // Normalize inputs
       const dSafe = (date || "").trim();
@@ -5610,12 +5617,12 @@ if (toggleButton && sidebar) {
 
     // 2. Extract the Exam Name tagged during upload
     // ✅ FIXED: Look for both "Exam Name" (CSV/PDF) and "examName" (Internal)
-    const names = sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean);
+    const names = [...new Set(sessionStudents.map(s => s.examName || s['Exam Name']).filter(Boolean))];
 
     if (names.length === 0) return "";
     
-    // Return the first valid one found for the session
-    return names[0];
+    // Return all distinct exam names for the session/stream joined with ' & ', or the single name
+    return names.join(' & ');
 }
 
     
@@ -5792,20 +5799,22 @@ if (toggleButton && sidebar) {
 
         const saveBtn = document.getElementById('save-rule-btn');
         if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
+            saveBtn.addEventListener('click', async () => {
                 const name = document.getElementById('rule-name').value.trim();
 
-                if (!name) { alert("Please enter an Exam Name."); return; }
+                if (!name) { await UiModal.alert("Please enter an Exam Name."); return; }
 
                 // Check Duplicates
                 const isDuplicate = currentExamRules.some(r => r.examName.toLowerCase() === name.toLowerCase() && r.id !== editingRuleId);
-                if (isDuplicate) { alert("This Exam Name already exists."); return; }
+                if (isDuplicate) { await UiModal.alert("This Exam Name already exists."); return; }
 
+                let oldExamName = null;
                 // Save Data
                 if (editingRuleId) {
                     // Update Existing
                     const ruleIndex = currentExamRules.findIndex(r => r.id === editingRuleId);
                     if (ruleIndex !== -1) {
+                        oldExamName = currentExamRules[ruleIndex].examName;
                         currentExamRules[ruleIndex] = { ...currentExamRules[ruleIndex], examName: name };
                     }
                     editingRuleId = null;
@@ -5816,7 +5825,7 @@ if (toggleButton && sidebar) {
                 }
 
                 localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
-                populateAllExamDropdowns(); // <--- ADD THIS LINE to refresh all dropdowns instantly
+                populateAllExamDropdowns(); // Refresh all dropdowns instantly
                 isAddingExamSchedule = false;
                 renderExamRulesInModal();
                 renderExamNameSettings();
@@ -5825,6 +5834,56 @@ if (toggleButton && sidebar) {
                 if (typeof populateUploadExamDropdown === 'function') populateUploadExamDropdown();
                 
                 if (typeof syncDataToCloud === 'function') syncDataToCloud('settings');
+
+                // 🔄 AUTO-CASCADE RENAME TO STUDENT RECORDS IN DATABASE
+                if (oldExamName && oldExamName !== name) {
+                    let students = allStudentData;
+                    if ((!students || students.length === 0) && typeof loadExamDataIDB === 'function') {
+                        try {
+                            students = (await loadExamDataIDB()) || [];
+                            allStudentData = students;
+                        } catch (loadErr) {
+                            console.warn("Could not load student data for cascade check:", loadErr);
+                        }
+                    }
+
+                    const matchingStudents = (students || []).filter(s => {
+                        if (!s) return false;
+                        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                        return sExam === oldExamName;
+                    });
+
+                    if (matchingStudents.length > 0) {
+                        const cascadeConfirm = await UiModal.confirm(
+                            "Cascade Exam Rename",
+                            `Found ${matchingStudents.length} student record(s) currently tagged with:\n"${oldExamName}"\n\nDo you want to automatically cascade this rename and update all ${matchingStudents.length} student record(s) to:\n"${name}"\nacross the database?`
+                        );
+
+                        if (cascadeConfirm) {
+                            matchingStudents.forEach(s => {
+                                s['Exam Name'] = name;
+                                if (s.examName !== undefined) s.examName = name;
+                                if (s.ExamName !== undefined) s.ExamName = name;
+                            });
+
+                            if (typeof saveExamDataIDB === 'function') {
+                                await saveExamDataIDB(allStudentData);
+                            }
+                            if (typeof syncDataToCloud === 'function') {
+                                await syncDataToCloud('baseData');
+                            }
+                            UiModal.toast(`✅ Renamed ${matchingStudents.length} student records to "${name}".`);
+
+                            // Refresh Session Ops if a session is currently selected
+                            if (typeof window.populateSessionOpsExamDropdown === 'function') {
+                                const editSelect = document.getElementById('edit-session-select');
+                                if (editSelect && editSelect.value) {
+                                    window.populateSessionOpsExamDropdown(editSelect.value);
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
     }    
@@ -5850,8 +5909,8 @@ if (toggleButton && sidebar) {
         renderExamRulesInModal();
     }
 
-    window.deleteExamRule = function (id) {
-        if (confirm("Remove this exam schedule?")) {
+    window.deleteExamRule = async function (id) {
+        if (await UiModal.confirm('Delete Exam Schedule', "Remove this exam schedule?")) {
             currentExamRules = currentExamRules.filter(r => r.id !== id);
             localStorage.setItem(EXAM_RULES_KEY, JSON.stringify(currentExamRules));
 
@@ -7013,7 +7072,7 @@ if (toggleButton && sidebar) {
 
     async function checkManualAllotment(sessionKey) {
         if (!sessionKey || sessionKey === 'all') {
-            alert('Please select a specific session to generate this report.');
+            await UiModal.alert('Please select a specific session to generate this report.');
             return false;
         }
 
@@ -7043,7 +7102,7 @@ if (toggleButton && sidebar) {
         const totalUniqueStudents = new Set((sessionStudentRecords || []).map(s => getRegNo(s)).filter(Boolean)).size;
 
         if (totalUniqueStudents === 0) {
-            alert('No students found for this session.');
+            await UiModal.alert('No students found for this session.');
             return false;
         }
 
@@ -7098,7 +7157,7 @@ if (toggleButton && sidebar) {
         // 6. Compare counts
         if (allottedStudentCount < totalUniqueStudents) {
             const remaining = totalUniqueStudents - allottedStudentCount;
-            if (!confirm(`Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
+            if (!await UiModal.confirm('Allotment Warning', `Warning: Not all students are allotted.\n\nTotal: ${totalUniqueStudents}\nAllotted: ${allottedStudentCount}\nMissing: ${remaining}\n\nGenerate report anyway?`)) {
                 return false;
             }
         }
@@ -7152,8 +7211,26 @@ if (toggleButton && sidebar) {
             const scribeListRaw = JSON.parse(localStorage.getItem(typeof SCRIBE_LIST_KEY !== 'undefined' ? SCRIBE_LIST_KEY : 'examScribeList') || '[]');
             const scribeRegNos = new Set(scribeListRaw.map(s => s.regNo));
             
-            const final_student_list_for_report = [];
+            // 🛡️ Fast lookup map for student Exam Name (hydrates historical or quota-trimmed allotments)
+            const studentExamLookupMap = new Map();
+            const sourceBaseStudents = (typeof allStudentData !== 'undefined' && Array.isArray(allStudentData) && allStudentData.length > 0)
+                ? allStudentData
+                : JSON.parse(localStorage.getItem('examBaseData') || '[]');
 
+            sourceBaseStudents.forEach(b => {
+                const reg = (getRegNo(b) || '').toString().trim().toUpperCase();
+                const d = (b.Date || '').toString().trim();
+                const t = (b.Time || '').toString().trim();
+                const c = (b.Course || '').toString().trim().toUpperCase();
+                const exam = (b['Exam Name'] || b.examName || b.ExamName || '').toString().trim();
+                if (reg && exam) {
+                    if (d && t && c) studentExamLookupMap.set(`${reg}|${d}|${t}|${c}`, exam);
+                    if (d && t) studentExamLookupMap.set(`${reg}|${d}|${t}`, exam);
+                    if (!studentExamLookupMap.has(reg)) studentExamLookupMap.set(reg, exam);
+                }
+            });
+
+            const final_student_list_for_report = [];
 
             // Flatten saved allotment into student rows
             sessionsToProcess.forEach(sk => {
@@ -7163,22 +7240,32 @@ if (toggleButton && sidebar) {
                 sessionAllotment.forEach(room => {
                     (room.students || []).forEach(s => {
                         const isOfficialScribe = scribeRegNos.has(getRegNo(s));
+                        const reg = (getRegNo(s) || '').toString().trim().toUpperCase();
+                        const sCourse = (s.Course || '').toString().trim().toUpperCase();
+                        const dNorm = (s.Date || skDate || '').toString().trim();
+                        const tNorm = (s.Time || skTime || '').toString().trim();
+                        const resolvedExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim() ||
+                                             studentExamLookupMap.get(`${reg}|${dNorm}|${tNorm}|${sCourse}`) ||
+                                             studentExamLookupMap.get(`${reg}|${dNorm}|${tNorm}`) ||
+                                             studentExamLookupMap.get(reg) || '';
                         final_student_list_for_report.push({
                             ...s,                      // Original Student Keys
-                            Date: s.Date || skDate,
-                            Time: s.Time || skTime,
+                            Date: dNorm,
+                            Time: tNorm,
                             'Room No': room.roomName, // Physical Room
                             seatNumber: s.seat || '?', // The STICKY SEAT
                             isScribeChecked: isOfficialScribe, // FLAG FOR HIGHLIGHTING
                             isPlaceholder: isOfficialScribe,  // FIX: needed by courseCounts scribe exclusion
-                            Stream: room.stream || 'Regular'
+                            Stream: room.stream || 'Regular',
+                            'Exam Name': resolvedExam,
+                            examName: resolvedExam
                         });
                     });
                 });
             });
 
             if (final_student_list_for_report.length === 0) { 
-                alert("Please allot rooms before generating the Room-wise report."); 
+                await UiModal.alert("Please allot rooms before generating the Room-wise report."); 
                 generateReportButton.disabled = false;
                 generateReportButton.textContent = "Generate Room-wise Seating Report";
                 return; 
@@ -7282,7 +7369,19 @@ if (toggleButton && sidebar) {
                 const sessionQPCodes = qpCodeMap[sessionKeyPipe] || {};
                 const pageStream = session.students.length > 0 ? (session.students[0].Stream || "Regular") : "Regular";
 
-                const examName = getExamName(session.Date, session.Time, pageStream);
+                // 🏷️ Room-specific Exam Name: Collect unique exam tags among students in THIS room
+                const roomExamTags = new Set();
+                (session.students || []).forEach(s => {
+                    const tag = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+                    if (tag) roomExamTags.add(tag);
+                });
+
+                let examName = '';
+                if (roomExamTags.size > 0) {
+                    examName = Array.from(roomExamTags).join(' / ');
+                } else {
+                    examName = (typeof getExamName === 'function') ? getExamName(session.Date, session.Time, pageStream) : '';
+                }
                 const examNameHtml = examName ? `<h2 class="print-exam-name" style="font-size:14pt; font-weight:bold; margin:2px 0; text-align:center;">${examName}</h2>` : "";
 
 
@@ -7566,7 +7665,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Error:", e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateReportButton.disabled = false;
             generateReportButton.textContent = "Generate Room-wise Seating Report";
@@ -7638,7 +7737,7 @@ if (toggleButton && sidebar) {
             });
 
             if (baseData.length === 0) { 
-                alert("Please allot rooms before generating this report."); 
+                await UiModal.alert("Please allot rooms before generating this report."); 
                 generateDaywiseReportButton.disabled = false;
                 generateDaywiseReportButton.textContent = "Generate Day-wise Student List";
                 return; 
@@ -7924,7 +8023,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
         } finally {
             generateDaywiseReportButton.disabled = false;
             generateDaywiseReportButton.textContent = "Generate Seating Details for Candidates (Compact)";
@@ -8838,7 +8937,7 @@ if (toggleButton && sidebar) {
                 sessions[key].streams[stream][courseKey]++;
             });
 
-            if (Object.keys(sessions).length === 0) { alert("No data."); return; }
+            if (Object.keys(sessions).length === 0) { await UiModal.alert("No data."); return; }
 
             let allPagesHtml = '';
             let totalPages = 0;
@@ -8933,7 +9032,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error(e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateQPaperReportButton.disabled = false;
             generateQPaperReportButton.textContent = "Generate Question Paper Report";
@@ -9002,7 +9101,7 @@ if (toggleButton && sidebar) {
             });
             
             if (processed_rows_with_rooms.length === 0) { 
-                alert("Please allot rooms before generating the report."); 
+                await UiModal.alert("Please allot rooms before generating the report."); 
                 generateQpDistributionReportButton.disabled = false;
                 generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
                 return; 
@@ -9191,7 +9290,7 @@ if (toggleButton && sidebar) {
 
             } catch (e) {
                 console.error("Error:", e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateQpDistributionReportButton.disabled = false;
                 generateQpDistributionReportButton.textContent = "Generate QP Distribution by QP-Code Report";
@@ -9270,7 +9369,7 @@ if (toggleButton && sidebar) {
             const sessionKey = sessionSelect.value;
 
         
-            if (!sessionKey) { alert("Please select a session first."); return; }
+            if (!sessionKey) { await UiModal.alert("Please select a session first."); return; }
 
             generateAbsenteeReportButton.disabled = true;
             generateAbsenteeReportButton.textContent = "Generating...";
@@ -9290,7 +9389,7 @@ if (toggleButton && sidebar) {
                 );
                 // Guard Clause: Alert if no students found (Fixes unresponsive button)
                 if (!sessionStudents || sessionStudents.length === 0) {
-                    alert(`No students found for session: ${date} | ${time}.\n\nPossible Cause:\n- Normalized Time Mismatch (e.g. '9:30' vs '09:30')\n- No data loaded for this specific slot.`);
+                    await UiModal.alert(`No students found for session: ${date} | ${time}.\n\nPossible Cause:\n- Normalized Time Mismatch (e.g. '9:30' vs '09:30')\n- No data loaded for this specific slot.`);
                     generateAbsenteeReportButton.disabled = false;
                     generateAbsenteeReportButton.textContent = "Generate Absentee Statement";
                     return; 
@@ -9479,7 +9578,7 @@ if (toggleButton && sidebar) {
     if (btnPrintReport) {
         btnPrintReport.addEventListener('click', () => {
             const reportContent = document.getElementById('absentee-report-output').innerHTML;
-            if (!reportContent) { alert("Please generate a report first."); return; }
+            if (!reportContent) { UiModal.alert("Please generate a report first."); return; }
 
             const printWindow = window.open('', '_blank');
             printWindow.document.write(`
@@ -9587,7 +9686,7 @@ if (toggleButton && sidebar) {
             });
 
             if (allScribeStudents.length === 0) { 
-                alert("No scribe students found in the selected sessions."); 
+                await UiModal.alert("No scribe students found in the selected sessions."); 
                 generateScribeReportButton.disabled = false;
                 generateScribeReportButton.textContent = "Generate Scribe Assistance Report";
                 return; 
@@ -9699,7 +9798,7 @@ if (toggleButton && sidebar) {
             lastGeneratedReportType = "Scribe_Assistance_Report";
         } catch (e) {
             console.error("Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
             reportControls.classList.remove('hidden');
         } finally {
             generateScribeReportButton.disabled = false;
@@ -9940,7 +10039,7 @@ if (toggleButton && sidebar) {
 
         } catch (e) {
             console.error("Scribe Report Error:", e);
-            alert("Error generating report: " + e.message);
+            await UiModal.alert("Error generating report: " + e.message);
             reportStatus.textContent = "Generation failed.";
         } finally {
             generateScribeProformaButton.disabled = false;
@@ -9971,7 +10070,7 @@ if (toggleButton && sidebar) {
     // --- Function to download the room-allocated CSV ---
     function downloadRoomCsv() {
         if (!lastGeneratedRoomData || lastGeneratedRoomData.length === 0) {
-            alert("No room data to download.");
+            UiModal.alert("No room data to download.");
             return;
         }
 
@@ -10009,7 +10108,7 @@ if (toggleButton && sidebar) {
 
 async function syncToPrintManager() {
         if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
-            return alert("No Room-wise summary data to sync. Please generate the report first.");
+            return await UiModal.alert("No Room-wise summary data to sync. Please generate the report first.");
         }
 
         const syncBtn = document.getElementById('sync-print-manager-button');
@@ -10017,7 +10116,7 @@ async function syncToPrintManager() {
         const cid = window.currentCollegeId || localStorage.getItem(COLLEGE_ID_KEY);
 
         if (!cid) {
-            return alert("College ID not found. Please ensure you are logged in or have a valid session.");
+            return await UiModal.alert("College ID not found. Please ensure you are logged in or have a valid session.");
         }
 
         try {
@@ -10036,11 +10135,11 @@ async function syncToPrintManager() {
 
             syncBtn.innerHTML = "✅ Synced Successfully!";
             setTimeout(() => { syncBtn.innerHTML = originalText; syncBtn.disabled = false; }, 3000);
-            alert("Data synced to Print Manager! You can now fetch it using your College ID in the Java app.\n\nYour College ID: " + cid);
+            await UiModal.alert("Data synced to Print Manager! You can now fetch it using your College ID in the Java app.\n\nYour College ID: " + cid);
             
         } catch (e) {
             console.error("Sync Error:", e);
-            alert("Failed to sync: " + e.message);
+            await UiModal.alert("Failed to sync: " + e.message);
             syncBtn.innerHTML = originalText;
             syncBtn.disabled = false;
         }
@@ -10048,7 +10147,7 @@ async function syncToPrintManager() {
                     
     function downloadRoomWiseSeatingJson() {
         if (!lastGeneratedRoomWiseSummary || lastGeneratedRoomWiseSummary.length === 0) {
-            return alert("No Room-wise summary data to export. Please generate the report first.");
+            return UiModal.alert("No Room-wise summary data to export. Please generate the report first.");
         }
 
         const blob = new Blob([JSON.stringify(lastGeneratedRoomWiseSummary, null, 2)], { type: 'application/json' });
@@ -10109,7 +10208,7 @@ async function syncToPrintManager() {
             });
         });
 
-        if (exportData.length === 0) return alert("No QP data to export.");
+        if (exportData.length === 0) return UiModal.alert("No QP data to export.");
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -10231,7 +10330,7 @@ async function syncToPrintManager() {
 
                 // *** VALIDATION CHECK ***
                 if (!location) {
-                    alert(`Error: Location is missing for ${roomName}.\n\nPlease enter a location (e.g., "101 - Commerce Block").`);
+                    UiModal.alert(`Error: Location is missing for ${roomName}.\n\nPlease enter a location (e.g., "101 - Commerce Block").`);
                     locationInput.focus(); // Jump to the empty box
                     locationInput.classList.add('border-red-500', 'ring-1', 'ring-red-500'); // Highlight it
 
@@ -10388,11 +10487,11 @@ async function syncToPrintManager() {
 
     // --- Remove OR Edit Room Button (Event Delegation: Auto-Save) ---
     if (roomConfigContainer) {
-        roomConfigContainer.addEventListener('click', (e) => {
+        roomConfigContainer.addEventListener('click', async (e) => {
 
             // 1. HANDLE REMOVE
             if (e.target.classList.contains('remove-room-button')) {
-                if (!confirm("Delete this room?")) return;
+                if (!await UiModal.confirm('Delete Room', "Delete this room?")) return;
 
                 const row = e.target.closest('.room-row');
                 const roomName = row.getAttribute('data-room-name');
@@ -10464,7 +10563,7 @@ async function syncToPrintManager() {
 
                     // Basic Validation
                     if (!newLoc) {
-                        alert("Please enter a location (e.g., 'Ground Floor').");
+                        await UiModal.alert("Please enter a location (e.g., 'Ground Floor').");
                         return;
                     }
 
@@ -10582,7 +10681,7 @@ async function parseCsvAndLoadData(csvText) {
         }
 
         if (newJsonData.length === 0) {
-            alert("No valid data found in file.");
+            await UiModal.alert("No valid data found in file.");
             return;
         }
 
@@ -10628,7 +10727,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // PROMPT 1: ADDITIONS
         if (potentialAdds.length > 0) {
-            const userWantsToAdd = confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick OK to ADD them.\nClick Cancel to IGNORE them.`);
+            const userWantsToAdd = await UiModal.confirm(`🟢 NEW RECORDS FOUND\n\nFound ${potentialAdds.length} new student(s) in this file.\n\nClick Confirm to ADD them.\nClick Cancel to IGNORE them.`);
             if (userWantsToAdd) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
@@ -10636,7 +10735,7 @@ async function parseCsvAndLoadData(csvText) {
 
         // PROMPT 2: DELETIONS
         if (potentialDeletes.length > 0) {
-            const userWantsToDelete = confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick OK to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
+            const userWantsToDelete = await UiModal.confirm(`🔴 MISSING RECORDS FOUND\n\nFound ${potentialDeletes.length} student(s) in the System who are MISSING from this new file.\n\nClick Confirm to DELETE them from the System.\nClick Cancel to KEEP them (Safe Mode).`);
             
             if (!userWantsToDelete) {
                 // User said "Cancel" (Don't delete), so we put the old records back into the batch
@@ -10690,7 +10789,7 @@ async function parseCsvAndLoadData(csvText) {
 
         updateDashboard();
         
-        alert("✅ Data Processing Complete!");
+        await UiModal.alert("✅ Data Processing Complete!");
 
     } catch (e) {
         console.error("Error parsing CSV:", e);
@@ -11021,7 +11120,7 @@ window.real_populate_session_dropdown = function () {
         const regNo = getRegNo(selectedStudent);
 
         if (currentAbsenteeList.includes(regNo)) {
-            alert(`${regNo} is already on the absentee list.`);
+            UiModal.alert(`${regNo} is already on the absentee list.`);
             clearSearch();
             return;
         }
@@ -11185,12 +11284,12 @@ window.real_populate_session_dropdown = function () {
         });
     }
 
-    function removeAbsentee(regNo, name) {
+    async function removeAbsentee(regNo, name) {
         if (isAbsenteeListLocked) return; // Extra safety
 
         const confirmMsg = `Are you sure you want to remove ${name || regNo} from the Absentee List?`;
 
-        if (confirm(confirmMsg)) {
+        if (await UiModal.confirm('Remove Absentee', confirmMsg)) {
             currentAbsenteeList = currentAbsenteeList.filter(r => r !== regNo);
             saveAbsenteeList(sessionSelect.value);
             renderAbsenteeList();
@@ -11532,7 +11631,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         const sessionKey = sessionSelectQP.value;
         if (!sessionKey) {
-            alert("No session selected.");
+            UiModal.alert("No session selected.");
             return;
         }
 
@@ -11645,9 +11744,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (resetStudentDataButton) {
         resetStudentDataButton.addEventListener('click', async () => {
             // --- SAFETY PROMPT ---
-            const wantBackup = (typeof UiModal !== 'undefined')
-                ? await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?")
-                : confirm("🛡️ SAFETY CHECK 🛡️\n\nWould you like to download a FULL BACKUP (CSV + JSON) before clearing student data?\n\nClick OK to Backup & Proceed.\nClick Cancel to Proceed without Backup.");
+            const wantBackup = await UiModal.confirm("🛡️ SAFETY CHECK 🛡️", "Would you like to download a FULL BACKUP (CSV + JSON) before clearing student data?");
             if (wantBackup) {
                 // Trigger Downloads
                 const csvBtn = document.getElementById('master-download-csv-btn');
@@ -11661,9 +11758,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
             // ---------------------
 
-            const confirmReset = (typeof UiModal !== 'undefined')
-                ? await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)")
-                : confirm('🧹 CONFIRM CLEANUP 🧹\n\nAre you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)');
+            const confirmReset = await UiModal.confirm("🧹 CONFIRM CLEANUP 🧹", "Are you sure you want to reset all student data?\n\nThis will clear:\n• Main Student Database\n• Absentee Lists\n• QP Codes\n• Room Allotments\n• Scribe Assignments\n\n(Settings & College Name will be KEPT.)");
             
             if (confirmReset) {
                 // 1. Clear Local Storage
@@ -11730,7 +11825,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         if (e.message && e.message.includes('Missing or insufficient permissions')) {
                             console.warn("Basic user: Skipping Firebase cloud wipe.");
                         } else {
-                            alert("Warning: Cloud wipe failed.\nError: " + e.message);
+                            await UiModal.alert("Warning: Cloud wipe failed.\nError: " + e.message);
                         }
                     }
                 }
@@ -11744,7 +11839,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 if (typeof UiModal !== 'undefined') {
                     await UiModal.alert('✅ Cleanup Successful!', 'All student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 } else {
-                    alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
+                    await UiModal.alert('✅ Cleanup Successful!\nAll student data and allotments have been cleared from Browser and Cloud.\n\nThe app will now reload.');
                 }
                 window.location.reload();
             }
@@ -11753,14 +11848,14 @@ window.real_populate_qp_code_session_dropdown = function () {
 
     // 2. Master Reset
     if (masterResetButton) {
-        masterResetButton.addEventListener('click', () => {
-            const step1 = confirm('WARNING: This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
+        masterResetButton.addEventListener('click', async () => {
+            const step1 = await UiModal.confirm('Warning: Master Reset', 'This will clear ALL saved data (Rooms, College Name, Absentees, QP Codes, and Base Data) from your browser. Continue?');
             if (!step1) return;
 
-            const step2 = confirm('ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
+            const step2 = await UiModal.confirm('Critical Confirmation', 'ARE YOU ABSOLUTELY SURE? This action cannot be undone.');
             if (step2) {
                 localStorage.clear();
-                alert('All local data cleared. The application will now reload.');
+                await UiModal.alert('All local data cleared. The application will now reload.');
                 window.location.reload();
             }
         });
@@ -11814,7 +11909,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         smartSyncBtn.addEventListener('click', async () => {
             // 1. Browser Support Check
             if (!('showDirectoryPicker' in window)) {
-                alert("Browser not supported. Please use Chrome, Edge, or Opera.");
+                await UiModal.alert("Browser not supported. Please use Chrome, Edge, or Opera.");
                 return;
             }
 
@@ -11852,7 +11947,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     console.error("Sync Error:", err);
-                    alert("Sync Error: " + err.message);
+                    await UiModal.alert("Sync Error: " + err.message);
                 }
                 smartSyncBtn.innerHTML = getDefaultButtonContent();
                 smartSyncBtn.className = "w-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-3 rounded-md text-sm font-bold hover:bg-indigo-100 flex items-center justify-center gap-2 transition shadow-sm mb-2";
@@ -11898,7 +11993,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                         `Cloud File: ${cloudDateStr}\n` +
                         `Your Data:  ${localTime > 0 ? new Date(localTime).toLocaleString('en-GB', dateOpt) : "Empty"}\n\n` +
                         `Do you want to RESTORE this data?`;
-                    if (confirm(msg)) {
+                    if (await UiModal.confirm('Cloud Update Found', msg)) {
                         smartSyncBtn.textContent = "Restoring...";
                         await performSmartRestore(latestFileHandle);
                     }
@@ -11912,7 +12007,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                     const msg = `💾 UNSAVED LOCAL CHANGES\n\n` +
                         `Your data is newer than the backup.\n` +
                         `Do you want to UPDATE the cloud backup?`;
-                    if (confirm(msg)) {
+                    if (await UiModal.confirm('Unsaved Local Changes', msg)) {
                         smartSyncBtn.textContent = "Backing Up...";
                         await performSmartBackup(projectFolderHandle);
                     }
@@ -11922,7 +12017,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                 // STATE: Synced
                 updateButtonState("synced");
                 if (isInteractive) {
-                    if (confirm(`✅ System is already synced.\n\nForce create a new backup?`)) {
+                    if (await UiModal.confirm('Force Backup', `✅ System is already synced.\n\nForce create a new backup?`)) {
                         smartSyncBtn.textContent = "Backing Up...";
                         await performSmartBackup(projectFolderHandle);
                     }
@@ -12035,7 +12130,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
         // Update UI immediately
         performSyncCheck(cachedCloudHandle, false);
-        alert("✅ Backup Complete!");
+        await UiModal.alert("✅ Backup Complete!");
     }
 
     async function performSmartRestore(fileHandle) {
@@ -12055,7 +12150,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         localStorage.setItem('pendingDriveRestoreSync', 'true');
         localStorage.removeItem('searchIndex');
 
-        alert(`✅ Restored from ${file.name}.\nPage will reload.`);
+        await UiModal.alert(`✅ Restored from ${file.name}.\nPage will reload.`);
         window.location.reload();
     }
 
@@ -12070,7 +12165,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     if (masterDownloadBtn) {
         masterDownloadBtn.addEventListener('click', async () => {
             if (!allStudentData || allStudentData.length === 0) {
-                alert("No data available to export.");
+                await UiModal.alert("No data available to export.");
                 return;
             }
 
@@ -12282,7 +12377,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
             } catch (e) {
                 console.error("Master CSV Error:", e);
-                alert("Failed to generate Master CSV: " + e.message);
+                await UiModal.alert("Failed to generate Master CSV: " + e.message);
             } finally {
                 masterDownloadBtn.innerHTML = `
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -12377,9 +12472,118 @@ window.real_populate_qp_code_session_dropdown = function () {
         }
     }
    
+    // --- NEW: Dynamic Exam Tag Grouping Helpers ---
+    function studentMatchesExamGroup(student, group) {
+        if (!student || !group) return true;
+        const targetExam = (typeof group === 'string' ? group : (group.examName || group.name || '')).trim().toLowerCase();
+        if (!targetExam) return true;
+        const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
+        return sExam === targetExam;
+    }
+    window.studentMatchesExamGroup = studentMatchesExamGroup;
+
+    function getSessionExamTags(sessionKey) {
+        if (!sessionKey || typeof allStudentData === 'undefined' || !allStudentData || allStudentData.length === 0) return [];
+        const [date, time] = sessionKey.split(' | ');
+        const sessStudents = (typeof window.getStudentsForSession === 'function')
+            ? window.getStudentsForSession(allStudentData, date, time)
+            : allStudentData.filter(s => s.Date === date && s.Time === time);
+        if (!sessStudents || sessStudents.length === 0) return [];
+        
+        // ONLY Exam Name tags are taken into account for Tag grouping. Streams are NOT considered different exams.
+        const examMap = new Map();
+        sessStudents.forEach(s => {
+            const rawName = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+            const examName = rawName || 'Default Exam';
+            if (!examMap.has(examName)) {
+                examMap.set(examName, { count: 0, courses: new Set(), streams: new Set() });
+            }
+            const entry = examMap.get(examName);
+            entry.count++;
+            const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
+            if (c) entry.courses.add(c);
+            const st = (s.Stream || s.stream || 'Regular').toString().trim();
+            if (st) entry.streams.add(st);
+        });
+
+        return Array.from(examMap.entries()).map(([name, data]) => ({
+            name,
+            displayName: name,
+            type: 'exam',
+            examName: name,
+            count: data.count,
+            courseCount: data.courses.size,
+            courses: Array.from(data.courses),
+            streams: Array.from(data.streams)
+        })).sort((a, b) => b.count - a.count);
+    }
+    window.getSessionExamTags = getSessionExamTags;
+
+    function updateExamGroupingUI(sessionKey) {
+        const key = sessionKey || (document.getElementById('allotment-session-select')?.value) || currentSessionKey;
+        const exams = key ? getSessionExamTags(key) : [];
+        const hasMultiple = exams.length >= 2;
+
+        const modalContainer = document.getElementById('modal-exam-grouping-container');
+        const mainContainer = document.getElementById('main-exam-grouping-container');
+
+        if (!hasMultiple) {
+            if (modalContainer) modalContainer.classList.add('hidden');
+            if (mainContainer) mainContainer.classList.add('hidden');
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (modalBoundary) modalBoundary.classList.add('hidden');
+            if (mainBoundary) mainBoundary.classList.add('hidden');
+            return;
+        }
+
+        const escapeStr = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        
+        // Compact badges for modal header row
+        const modalSummaryHtml = exams.map(e => 
+            `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-100 text-teal-900 border border-teal-200 text-[10px] font-bold shadow-xs" title="${escapeStr(e.name)}: ${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})">` +
+            `<span class="truncate max-w-[140px] font-bold">${escapeStr(e.name)}</span>` +
+            `<span class="bg-teal-200 text-teal-800 px-1 rounded text-[9px] font-black">${e.count}</span>` +
+            `</span>`
+        ).join('');
+
+        // Full items for main room allotment tab
+        const mainSummaryHtml = exams.map(e => 
+            `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
+        ).join('');
+
+        const modalBadge = document.getElementById('modal-exam-grouping-badge');
+        if (modalBadge) modalBadge.textContent = 'Multi-Exam Session';
+
+        if (modalContainer) {
+            modalContainer.classList.remove('hidden');
+            const listDiv = document.getElementById('modal-detected-exams-list');
+            if (listDiv) listDiv.innerHTML = modalSummaryHtml;
+        }
+
+        if (mainContainer) {
+            mainContainer.classList.remove('hidden');
+            const mainListDiv = document.getElementById('main-detected-exams-list');
+            if (mainListDiv) mainListDiv.innerHTML = mainSummaryHtml;
+        }
+
+        const currentGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
+        const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+        const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+        if (modalBoundary) {
+            if (currentGrouping === 'separate') modalBoundary.classList.remove('hidden');
+            else modalBoundary.classList.add('hidden');
+        }
+        if (mainBoundary) {
+            if (currentGrouping === 'separate') mainBoundary.classList.remove('hidden');
+            else mainBoundary.classList.add('hidden');
+        }
+    }
+    window.updateExamGroupingUI = updateExamGroupingUI;
+
     // --- NEW: Pre-splits the session student list into Part A and Part B (Course-Level Zero-Collision) ---
-    // Call this whenever a new session is loaded OR strategy radio changes.
-    function precomputeSessionParts(sessionKey, strategy) {
+    // Call this whenever a new session is loaded OR strategy radio changes (supports targetExamName for isolated mixing).
+    function precomputeSessionParts(sessionKey, strategy, targetExamName = null) {
         mixingActiveStrategy = strategy || 'none';
         mixingParts = {};  // Reset all per-stream data
 
@@ -12388,11 +12592,16 @@ window.real_populate_qp_code_session_dropdown = function () {
         const [date, time] = sessionKey.split(' | ');
 
         // Get all students for this session
-        const sessionStudents = (typeof window.getStudentsForSession === 'function')
+        let sessionStudents = (typeof window.getStudentsForSession === 'function')
             ? window.getStudentsForSession(allStudentData, date, time)
             : [];
 
         if (!sessionStudents || sessionStudents.length === 0) return;
+
+        if (targetExamName) {
+            sessionStudents = sessionStudents.filter(s => studentMatchesExamGroup(s, targetExamName));
+            if (sessionStudents.length === 0) return;
+        }
 
         // Get every distinct stream present in this session
         const streams = [...new Set(sessionStudents.map(s => (s.Stream || s.stream || 'Regular').toString().trim()))];
@@ -12496,6 +12705,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     // Load Room Allotment for a session (with Vault Fallback)
     function loadRoomAllotment(sessionKey) {
         currentSessionKey = sessionKey;
+        if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(sessionKey);
         let allAllotments = JSON.parse(localStorage.getItem(ROOM_ALLOTMENT_KEY) || '{}');
         if ((!allAllotments[sessionKey] || allAllotments[sessionKey].length === 0) && typeof window.getRoomAllotmentIDB === 'function') {
             window.getRoomAllotmentIDB(sessionKey).then(vaulted => {
@@ -12816,8 +13026,8 @@ window.real_populate_qp_code_session_dropdown = function () {
     let swapSourceIndex = null;
 
     window.toggleSwapMode = function() {
-        if (isAllotmentLocked) return alert("🔒 Allotment is Locked. Please unlock before swapping.");
-        if (currentSessionAllotment.length < 2) return alert("At least two rooms must be allotted to perform a swap.");
+        if (isAllotmentLocked) return UiModal.alert("🔒 Allotment is Locked. Please unlock before swapping.");
+        if (currentSessionAllotment.length < 2) return UiModal.alert("At least two rooms must be allotted to perform a swap.");
         
         isSwapModeActive = !isSwapModeActive;
         swapSourceIndex = null; // Reset selection if toggled
@@ -12844,14 +13054,14 @@ window.real_populate_qp_code_session_dropdown = function () {
             const grace2 = cap2 + 3;
 
             if (r1.students.length > grace2) {
-                return alert(`Cannot swap: Room ${r2.roomName} capacity (${cap2} + 3 grace) is too small for ${r1.students.length} students.`);
+                return UiModal.alert(`Cannot swap: Room ${r2.roomName} capacity (${cap2} + 3 grace) is too small for ${r1.students.length} students.`);
             }
             if (r2.students.length > grace1) {
-                return alert(`Cannot swap: Room ${r1.roomName} capacity (${cap1} + 3 grace) is too small for ${r2.students.length} students.`);
+                return UiModal.alert(`Cannot swap: Room ${r1.roomName} capacity (${cap1} + 3 grace) is too small for ${r2.students.length} students.`);
             }
 
             if (r1.students.length > cap2 || r2.students.length > cap1) {
-                alert("⚠️ Capacity Warning: Swapping these rooms will exceed nominal capacity but stays within grace limits (max +3).");
+                UiModal.alert("⚠️ Capacity Warning: Swapping these rooms will exceed nominal capacity but stays within grace limits (max +3).");
             }
 
             // 1. Swap the Occupants (Students + Stream)
@@ -13029,8 +13239,8 @@ window.real_populate_qp_code_session_dropdown = function () {
 
        // --- CLEAR ALL ROOMS ---
     window.deleteAllRooms = async function() {
-        if (isAllotmentLocked) return alert('List is locked. Please unlock it first.');
-        if (!confirm('Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
+        if (isAllotmentLocked) return await UiModal.alert('List is locked. Please unlock it first.');
+        if (!await UiModal.confirm('Clear Room Allotments', 'Are you sure you want to clear ALL room allotments for this session? This action cannot be undone.')) return;
 
         currentSessionAllotment.forEach(roomData => {
             const allInvigMappings = JSON.parse(localStorage.getItem('examInvigilatorMapping') || '{}');
@@ -13055,7 +13265,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     // --- AUTO ALLOT (RANDOMIZED) LOGIC ---
       const autoAllotBtn = document.getElementById('auto-allot-button');
       if (autoAllotBtn) {
-          autoAllotBtn.addEventListener('click', () => {
+          autoAllotBtn.addEventListener('click', async () => {
 
               // ⏰ ALLOTMENT LOCK: Warn logged-in users if allotting within 45 min of exam start
               if (currentUser && currentSessionKey) {
@@ -13081,7 +13291,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                           if (diffMins >= 0 && diffMins <= 45) {
                               const minsLeft = Math.round(diffMins);
                               // WARNING 1
-                              const warn1 = confirm(
+                              const warn1 = await UiModal.confirm(
                                   `⚠️ ALLOTMENT LOCK WARNING\n\n` +
                                   `The student portal opens in ${minsLeft} minute(s).\n\n` +
                                   `Changing the allotment now will update live seating on the Student Portal.\n\n` +
@@ -13090,7 +13300,7 @@ window.real_populate_qp_code_session_dropdown = function () {
                               if (!warn1) return;
 
                               // WARNING 2
-                              const warn2 = confirm(
+                              const warn2 = await UiModal.confirm(
                                   `⚠️ FINAL WARNING\n\n` +
                                   `Students may already be checking their seat numbers.\n\n` +
                                   `This action CANNOT be undone once saved to the portal.\n\n` +
@@ -13099,12 +13309,13 @@ window.real_populate_qp_code_session_dropdown = function () {
                               if (!warn2) return;
 
                               // TYPED CONFIRMATION
-                              const typed = prompt(
-                                  `🔒 TYPE CONFIRMATION REQUIRED\n\n` +
-                                  `Type the word   Allot   exactly to confirm re-allotment:`
+                              const typed = await UiModal.prompt(
+                                  `🔒 TYPE CONFIRMATION REQUIRED`,
+                                  `Type the word   Allot   exactly to confirm re-allotment:`,
+                                  'Allot'
                               );
                               if (!typed || typed.trim() !== 'Allot') {
-                                  alert('❌ Confirmation failed. Allotment cancelled.');
+                                  await UiModal.alert('❌ Confirmation failed. Allotment cancelled.');
                                   return;
                               }
                           }
@@ -13202,6 +13413,22 @@ window.real_populate_qp_code_session_dropdown = function () {
             const modalRadio = document.querySelector(`input[name="modal-mixing-strategy"][value="${currentMainVal}"]`);
             if (modalRadio) modalRadio.checked = true;
 
+            // SYNC: Read current Main Tab exam grouping and pre-select in modal
+            const currentMainExamGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
+            const modalExamRadio = document.querySelector(`input[name="modal-exam-grouping"][value="${currentMainExamGrouping}"]`);
+            if (modalExamRadio) modalExamRadio.checked = true;
+            const modalExamBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            if (modalExamBoundary) {
+                if (currentMainExamGrouping === 'separate') modalExamBoundary.classList.remove('hidden');
+                else modalExamBoundary.classList.add('hidden');
+            }
+            const mainFreshCb = document.getElementById('main-exam-fresh-room-cb');
+            const modalFreshCb = document.getElementById('modal-exam-fresh-room-cb');
+            if (mainFreshCb && modalFreshCb) {
+                modalFreshCb.checked = mainFreshCb.checked;
+            }
+            if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(currentSessionKey);
+
             document.getElementById('auto-allot-modal').classList.remove('hidden');
         });
     }
@@ -13218,8 +13445,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         document.getElementById('run-auto-allot-button').disabled = count === 0;
     }
 
-    document.getElementById('close-auto-allot-modal')?.addEventListener('click', () => {
-        document.getElementById('auto-allot-modal').classList.add('hidden');
+    document.querySelectorAll('#close-auto-allot-modal, #close-auto-allot-modal-x').forEach(btn => {
+        btn?.addEventListener('click', () => {
+            document.getElementById('auto-allot-modal').classList.add('hidden');
+        });
     });
 
     document.getElementById('run-auto-allot-button')?.addEventListener('click', async () => {
@@ -13257,45 +13486,132 @@ window.real_populate_qp_code_session_dropdown = function () {
         const mainRadio = document.querySelector(`input[name="mixing-strategy"][value="${activeStrategy}"]`);
         if (mainRadio) mainRadio.checked = true;
 
-        // CRITICAL: Re-compute mixing parts with the NEW strategy BEFORE the allotment loop
-        // Without this, mixingParts is stale and mixing never activates correctly
-        if (typeof precomputeSessionParts === 'function') {
-            precomputeSessionParts(currentSessionKey, activeStrategy);
-        }
+        // READ Exam Grouping Mode and SYNC back to Main Tab
+        const examGroupingMode = document.querySelector('input[name="modal-exam-grouping"]:checked')?.value || 'separate';
+        const mainExamRadio = document.querySelector(`input[name="main-exam-grouping"][value="${examGroupingMode}"]`);
+        if (mainExamRadio) mainExamRadio.checked = true;
+        const freshRoomPerExam = document.getElementById('modal-exam-fresh-room-cb') ? document.getElementById('modal-exam-fresh-room-cb').checked : false;
+        const mainFreshCb = document.getElementById('main-exam-fresh-room-cb');
+        if (mainFreshCb) mainFreshCb.checked = freshRoomPerExam;
 
-        let roomIndex = 0;
-        // Process sequentially to respect Paper Mixing Engine internally
-        for (const stream of currentStreamConfig) {
-            let remainingForStream = true;
-            const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+        const detectedExams = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+        const hasMultipleExams = detectedExams.length >= 2;
 
-            while (remainingForStream && roomIndex < selectedRooms.length) {
-                const r = selectedRooms[roomIndex];
-                
-                const [date, time] = currentSessionKey.split(' | ');
-                const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
-                
-                if (sessionStudentRecords.length === 0) {
-                    alert("No students found for this session in the master database.");
-                    return;
+        if (hasMultipleExams && examGroupingMode === 'separate') {
+            // 🏷️ SEPARATE EXAMS ALLOTMENT: Allot one Exam/Stream group after another
+            let roomIndex = 0;
+            for (const group of detectedExams) {
+                // Precompute mixing pools strictly for THIS group's courses
+                if (typeof precomputeSessionParts === 'function') {
+                    precomputeSessionParts(currentSessionKey, activeStrategy, group);
                 }
 
-                const allottedRegNos = new Set();
-                currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
-                
-                const candidates = sessionStudentRecords.filter(s => {
-                    const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
-                    return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower;
-                });
-                
-                if (candidates.length === 0) {
-                    remainingForStream = false;
+                // If fresh room is disabled and previous room has capacity, top it up
+                if (!freshRoomPerExam && currentSessionAllotment.length > 0) {
+                    const lastRoom = currentSessionAllotment[currentSessionAllotment.length - 1];
+                    const freeSeats = (parseInt(lastRoom.capacity) || 30) - lastRoom.students.length;
+                    if (freeSeats > 0) {
+                        const [date, time] = currentSessionKey.split(' | ');
+                        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+                        const allottedRegNos = new Set();
+                        currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                        const lastRoomStream = (lastRoom.stream || "Regular").toString().trim().toLowerCase();
+                        const topUpCandidates = sessionStudentRecords.filter(s => {
+                            const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sStream === lastRoomStream && studentMatchesExamGroup(s, group);
+                        });
+                        if (topUpCandidates.length > 0) {
+                            const topUpSlice = topUpCandidates.slice(0, freeSeats);
+                            const startSeat = lastRoom.students.length;
+                            topUpSlice.forEach((s, idx) => {
+                                const reg = getRegNo(s);
+                                lastRoom.students.push({
+                                    'Register Number': reg,
+                                    RegisterNo: reg,
+                                    Name: s.Name || s.name || '',
+                                    Course: s.Course || s.course || '',
+                                    Stream: s.Stream || s.stream || lastRoom.stream || 'Regular',
+                                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
+                                    seat: startSeat + idx + 1
+                                });
+                            });
+                        }
+                    }
+                }
+
+                // Streams follow previous rules strictly
+                for (const stream of currentStreamConfig) {
+                    let remainingForStream = true;
+                    const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+
+                    while (remainingForStream && roomIndex < selectedRooms.length) {
+                        const r = selectedRooms[roomIndex];
+                        const [date, time] = currentSessionKey.split(' | ');
+                        const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+
+                        const allottedRegNos = new Set();
+                        currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+
+                        const candidates = sessionStudentRecords.filter(s => {
+                            const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower && studentMatchesExamGroup(s, group);
+                        });
+
+                        if (candidates.length === 0) {
+                            remainingForStream = false;
+                            break;
+                        }
+
+                        await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy, group);
+                        roomIndex++;
+                    }
+                }
+
+                if (roomIndex >= selectedRooms.length) {
                     break;
                 }
-                
-                // Programmatically invoke the internal filling engine (silent UI sync variant)
-                await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy);
-                roomIndex++;
+            }
+        } else {
+            // 🌐 MIX EXAMS TOGETHER (Standard Flow)
+            if (typeof precomputeSessionParts === 'function') {
+                precomputeSessionParts(currentSessionKey, activeStrategy);
+            }
+
+            let roomIndex = 0;
+            // Process sequentially to respect Paper Mixing Engine internally
+            for (const stream of currentStreamConfig) {
+                let remainingForStream = true;
+                const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
+
+                while (remainingForStream && roomIndex < selectedRooms.length) {
+                    const r = selectedRooms[roomIndex];
+                    
+                    const [date, time] = currentSessionKey.split(' | ');
+                    const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
+                    
+                    if (sessionStudentRecords.length === 0) {
+                        await UiModal.alert("No students found for this session in the master database.");
+                        return;
+                    }
+
+                    const allottedRegNos = new Set();
+                    currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                    
+                    const candidates = sessionStudentRecords.filter(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        return !allottedRegNos.has(getRegNo(s)) && sStream === targetStreamLower;
+                    });
+                    
+                    if (candidates.length === 0) {
+                        remainingForStream = false;
+                        break;
+                    }
+                    
+                    // Programmatically invoke the internal filling engine (silent UI sync variant)
+                    await selectRoomForAllotmentSilent(r.name, r.capacity, stream, activeStrategy);
+                    roomIndex++;
+                }
             }
         }
         
@@ -13311,7 +13627,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
     // Invisible equivalent to your existing selectRoomForAllotment that respects Mixing Engine fully
-    async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none') {
+    async function selectRoomForAllotmentSilent(roomName, capacity, targetStream, strategy = 'none', targetExamName = null) {
         const [date, time] = currentSessionKey.split(' | ');
         const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
         const allottedRegNos = new Set();
@@ -13339,6 +13655,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         for (const student of sessionStudentRecords) {
             const sStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(getRegNo(student)) && sStream === targetStreamNormalized) {
+                if (targetExamName && !studentMatchesExamGroup(student, targetExamName)) continue;
                 candidates.push(student);
             }
         }
@@ -13358,8 +13675,16 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
-        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
+            return true;
+        }) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
+            return true;
+        }) : [];
 
         if (candidates.length <= leftoverThreshold) {
             // Guard: Remaining students fit within room capacity + 3 grace
@@ -13408,6 +13733,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     Name: s.Name || s.name || '',
                     Course: s.Course || s.course || '',
                     Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
                     seat: idx + 1
                 };
             }
@@ -13421,7 +13748,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     
   // Delete a room from allotment (Fixed: Actually removes the room now)
     window.deleteRoom = async function (index) {
-        if (!confirm('Are you sure you want to remove this room allotment?')) return;
+        if (!await UiModal.confirm('Remove Room Allotment', 'Are you sure you want to remove this room allotment?')) return;
 
         const roomData = currentSessionAllotment[index];
         const roomName = roomData.roomName; // Capture room name before deletion
@@ -13489,11 +13816,11 @@ window.real_populate_qp_code_session_dropdown = function () {
         const graceCap = nominalCap + 3;
         
         if (studentCount > graceCap) {
-            return alert(`Error: New room capacity (${nominalCap} + 3 grace) is too small for the current ${studentCount} students.`);
+            return UiModal.alert(`Error: New room capacity (${nominalCap} + 3 grace) is too small for the current ${studentCount} students.`);
         }
         
         if (studentCount > nominalCap) {
-            alert(`⚠️ Capacity Warning: New room capacity (${nominalCap}) is exceeded but within grace limit (max +3).`);
+            UiModal.alert(`⚠️ Capacity Warning: New room capacity (${nominalCap}) is exceeded but within grace limit (max +3).`);
         }
 
         allotment.roomName = newRoomName;
@@ -13515,7 +13842,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         
         // Alert if history is completely empty
         if (Object.keys(freqs).length === 0) {
-            alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
+            UiModal.alert("No room history found! Allot and 'Save' some rooms first so the system can learn your frequently used rooms.");
             return;
         }
 
@@ -13543,7 +13870,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
 
         if (selectedCount === 0) {
-            alert("None of your frequently used rooms are currently available.");
+            UiModal.alert("None of your frequently used rooms are currently available.");
         }
         
         // Trigger UI update directly
@@ -13711,7 +14038,7 @@ window.real_populate_qp_code_session_dropdown = function () {
     }
 
     // Select a room and allot students (Auto-Save & Sync enabled)
-       async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none') {
+       async function selectRoomForAllotment(roomName, capacity, targetStream, strategy = 'none', targetExamName = null) {
         const [rawDate, rawTime] = (currentSessionKey || '').split(' | ');
         const date = (rawDate || '').trim();
         const time = (rawTime || '').trim();
@@ -13756,11 +14083,32 @@ window.real_populate_qp_code_session_dropdown = function () {
             return regA.localeCompare(regB);
         });
 
+        // Auto-detect target exam if in separate mode and not explicitly passed
+        const mainGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
+        if (!targetExamName && mainGrouping === 'separate') {
+            const detected = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
+            if (detected.length >= 2) {
+                for (const ex of detected) {
+                    const hasUnallotted = sessionStudentRecords.some(s => {
+                        const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                        return sStream === (targetStream || "Regular").toString().trim().toLowerCase() && 
+                               studentMatchesExamGroup(s, ex) && 
+                               !allottedRegNos.has(getRegNo(s));
+                    });
+                    if (hasUnallotted) {
+                        targetExamName = ex;
+                        break;
+                    }
+                }
+            }
+        }
+
         const targetStreamNormalized = (targetStream || "Regular").toString().trim().toLowerCase();
         for (const student of sessionStudentRecords) {
             const regNo = getRegNo(student);
             const studentStream = (student.Stream || "Regular").toString().trim().toLowerCase();
             if (!allottedRegNos.has(regNo) && studentStream === targetStreamNormalized) {
+                if (targetExamName && !studentMatchesExamGroup(student, targetExamName)) continue;
                 candidates.push(student);
             }
         }
@@ -13785,8 +14133,16 @@ window.real_populate_qp_code_session_dropdown = function () {
             }
         }
 
-        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
-        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => !allottedRegNos.has(getRegNo(s))) : [];
+        const unallottedPoolA = (streamPart && streamPart.poolA) ? streamPart.poolA.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
+            return true;
+        }) : [];
+        const unallottedPoolB = (streamPart && streamPart.poolB) ? streamPart.poolB.filter(s => {
+            if (allottedRegNos.has(getRegNo(s))) return false;
+            if (targetExamName && !studentMatchesExamGroup(s, targetExamName)) return false;
+            return true;
+        }) : [];
 
         if (candidates.length <= leftoverThreshold) {
             // Guard: Remaining students fit within room capacity + 3 grace
@@ -13830,7 +14186,7 @@ window.real_populate_qp_code_session_dropdown = function () {
 
 
         if (newStudents.length === 0) {
-            alert(`No unallotted students found for stream: ${targetStream}`);
+            await UiModal.alert(`No unallotted students found for stream: ${targetStream}`);
             return;
         }
 
@@ -13844,6 +14200,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     Name: s.Name || s.name || '',
                     Course: s.Course || s.course || '',
                     Stream: s.Stream || s.stream || targetStream || 'Regular',
+                    'Exam Name': s['Exam Name'] || s.examName || s.ExamName || '',
+                    examName: s['Exam Name'] || s.examName || s.ExamName || '',
                     seat: idx + 1
                 };
             }
@@ -13871,7 +14229,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         } catch (saveErr) {
             currentSessionAllotment.pop(); // 🛡️ Rollback in-memory state on storage error
             console.error('Failed to save room allotment:', saveErr);
-            alert('Storage Error: ' + (saveErr.message || 'LocalStorage Quota Exceeded. Please free up space or clear old exams.'));
+            await UiModal.alert('Storage Error: ' + (saveErr.message || 'LocalStorage Quota Exceeded. Please free up space or clear old exams.'));
         } 
 
     }
@@ -13907,7 +14265,7 @@ window.real_populate_qp_code_session_dropdown = function () {
             // 2. Pre-compute mixing parts for the new session
             const activeStrategy = document.querySelector('input[name="mixing-strategy"]:checked')?.value || 'none';
             precomputeSessionParts(sessionKey, activeStrategy);
-
+            if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(sessionKey);
 
             populateAbsenteeQpFilter(sessionKey);
 
@@ -13931,6 +14289,50 @@ window.real_populate_qp_code_session_dropdown = function () {
     addRoomAllotmentButton.addEventListener('click', () => {
         showRoomSelectionModal();
     });
+    // --- Dynamic Exam Grouping Sync & Listeners ---
+    document.querySelectorAll('input[name="modal-exam-grouping"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const val = radio.value;
+            const mainRadio = document.querySelector(`input[name="main-exam-grouping"][value="${val}"]`);
+            if (mainRadio) mainRadio.checked = true;
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (val === 'separate') {
+                if (modalBoundary) modalBoundary.classList.remove('hidden');
+                if (mainBoundary) mainBoundary.classList.remove('hidden');
+            } else {
+                if (modalBoundary) modalBoundary.classList.add('hidden');
+                if (mainBoundary) mainBoundary.classList.add('hidden');
+            }
+        });
+    });
+
+    document.querySelectorAll('input[name="main-exam-grouping"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            const val = radio.value;
+            const modalRadio = document.querySelector(`input[name="modal-exam-grouping"][value="${val}"]`);
+            if (modalRadio) modalRadio.checked = true;
+            const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+            const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+            if (val === 'separate') {
+                if (modalBoundary) modalBoundary.classList.remove('hidden');
+                if (mainBoundary) mainBoundary.classList.remove('hidden');
+            } else {
+                if (modalBoundary) modalBoundary.classList.add('hidden');
+                if (mainBoundary) mainBoundary.classList.add('hidden');
+            }
+        });
+    });
+
+    document.getElementById('modal-exam-fresh-room-cb')?.addEventListener('change', (e) => {
+        const mainCb = document.getElementById('main-exam-fresh-room-cb');
+        if (mainCb) mainCb.checked = e.target.checked;
+    });
+    document.getElementById('main-exam-fresh-room-cb')?.addEventListener('change', (e) => {
+        const modalCb = document.getElementById('modal-exam-fresh-room-cb');
+        if (modalCb) modalCb.checked = e.target.checked;
+    });
+
     // Re-compute session parts whenever the mixing strategy changes
     document.querySelectorAll('input[name="mixing-strategy"], input[name="modal-mixing-strategy"]').forEach(radio => {
         radio.addEventListener('change', () => {
@@ -13958,7 +14360,7 @@ if (saveScribeBtn) {
         // 🛡️ [PERSISTENCE FIX]: Ensure we have a valid session key
         const sessionKey = currentSessionKey || (typeof allotmentSessionSelect !== 'undefined' ? allotmentSessionSelect.value : "");
         if (!sessionKey) {
-            alert("⚠️ Please select a session first.");
+            await UiModal.alert("⚠️ Please select a session first.");
             return;
         }
 
@@ -13986,7 +14388,7 @@ if (saveScribeBtn) {
                 await window.saveScribeAllotmentIDB(sessionKey, currentScribeAllotment);
             } catch (e) {
                 console.error("❌ CRITICAL: IndexedDB save failed!", e);
-                alert("❌ Error: Could not save to Database. Your changes may be lost.");
+                await UiModal.alert("❌ Error: Could not save to Database. Your changes may be lost.");
             }
         }
 
@@ -14082,15 +14484,15 @@ if (saveScribeBtn) {
                 updateAllotmentDisplay();
             } catch (err) {
                 console.error("Critical Save Error:", err);
-                alert("🛑 SAVE FAILED: Please check your internet connection.");
+                await UiModal.alert("🛑 SAVE FAILED: Please check your internet connection.");
                 roomAllotmentStatus.textContent = 'Error: Save Failed';
             }
         });
     }
 
     if (forceSyncAllotmentButton) {
-        forceSyncAllotmentButton.addEventListener('click', () => {
-            if (!confirm("🔄 This will overwrite cloud data with your current local allotment. Continue?")) return;
+        forceSyncAllotmentButton.addEventListener('click', async () => {
+            if (!await UiModal.confirm('Force Sync Allotment', "🔄 This will overwrite cloud data with your current local allotment. Continue?")) return;
             
             // Bypass UI lock and trigger save logic
             saveRoomAllotmentButton.disabled = false;
@@ -14318,12 +14720,12 @@ if (saveScribeBtn) {
     }
 
     // 3. Remove a student (Updated with Confirmation)
-    function removeScribeStudent(regNo, name) {
+    async function removeScribeStudent(regNo, name) {
         if (isScribeListLocked) return; // Extra safety check
 
         const confirmMsg = `Are you sure you want to remove ${name} (${regNo}) from the Scribe List?`;
 
-        if (confirm(confirmMsg)) {
+        if (await UiModal.confirm('Remove Scribe Student', confirmMsg)) {
             globalScribeList = globalScribeList.filter(s => s.regNo !== regNo);
             localStorage.setItem(SCRIBE_LIST_KEY, JSON.stringify(globalScribeList));
             renderGlobalScribeList();
@@ -14414,7 +14816,7 @@ if (saveScribeBtn) {
 
         // Check if already on list
         if (globalScribeList.some(s => s.regNo === regNo)) {
-            alert(`${regNo} is already on the scribe list.`);
+            UiModal.alert(`${regNo} is already on the scribe list.`);
             clearScribeSearch();
             return;
         }
@@ -14703,7 +15105,7 @@ function renderScribeAllotmentList(sessionKey) {
 
     // Open the Scribe Room Modal
     window.openScribeRoomModal = async function (regNo, studentName) {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked."); // Safety Check
         studentToAllotScribeRoom = regNo;
         scribeRoomModalTitle.textContent = `Select Room for ${studentName} (${regNo})`;
         const searchInput = document.getElementById('scribe-room-search');
@@ -15029,7 +15431,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
     // Find the renderStudentEditTable function (around line 1330) and replace it with this:
 
-// 3. Render Table (Responsive: Cute Card on Mobile, Table on PC)
+// 3. Render Student Records (Self-Contained Responsive Cards, 100% Zoom Resilient)
     function renderStudentEditTable() {
         editDataContainer.innerHTML = '';
 
@@ -15046,122 +15448,110 @@ window.real_disable_all_report_buttons = function (disabled) {
         // --- LOCK CHECK ---
         const isLocked = (typeof isEditDataLocked !== 'undefined') ? isEditDataLocked : false;
         const btnState = isLocked ? 'disabled' : '';
-        const btnOpacity = isLocked ? 'opacity-50 cursor-not-allowed' : '';
+        const btnOpacity = isLocked ? 'opacity-40 cursor-not-allowed pointer-events-none' : '';
 
-        let tableHtml = `
-        <div class="overflow-hidden border-b border-gray-200 sm:rounded-lg">
-            <table class="min-w-full divide-y divide-gray-200 w-full">
-                <thead class="bg-gray-50 hidden md:table-header-group">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Sl</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date & Time</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Reg No</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Exam Name</th> <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Stream</th>
-                        <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200 block md:table-row-group w-full">
-    `;
+        let cardsHtml = `
+        <div class="space-y-2.5 w-full">
+            <!-- Header Bar Guide for Desktop & Large Screens -->
+            <div class="hidden lg:grid grid-cols-12 gap-3 px-4 py-2.5 bg-gray-100/90 rounded-lg text-[10px] font-bold text-gray-500 uppercase tracking-wider items-center border border-gray-200/60 shadow-2xs">
+                <div class="col-span-1 text-center font-mono">Sl</div>
+                <div class="col-span-3">Student Name & Reg No</div>
+                <div class="col-span-4">Exam Name</div>
+                <div class="col-span-2">Date & Time / Stream</div>
+                <div class="col-span-2 text-right pr-2">Actions</div>
+            </div>
+        `;
 
         pageStudents.forEach((student, index) => {
             const uniqueRowIndex = start + index;
             const serialNo = uniqueRowIndex + 1;
             const streamDisplay = student.Stream || "Regular";
-            const examDisplay = student['Exam Name'] || '-'; // ADDED
+            const examDisplay = student['Exam Name'] || student.examName || '-';
 
-            // --- Desktop Row HTML ---
-            const desktopRow = `
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                ${serialNo}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <div class="font-bold">${student.Date}</div>
-                <div class="text-xs text-gray-500">${student.Time}</div>
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-900">
-                ${getRegNo(student)}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${student.Name}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold"> ${examDisplay}
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap">
-                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                ${streamDisplay}
-                </span>
-            </td>
-            <td class="hidden md:table-cell px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button class="edit-row-btn text-indigo-600 hover:text-indigo-900 mr-3 transition ${btnOpacity}" ${btnState}>Edit</button>
-                <button class="delete-row-btn text-red-600 hover:text-red-900 transition ${btnOpacity}" ${btnState}>Delete</button>
-            </td>
-        `;
-
-            // --- Mobile Card HTML ---
-            const mobileCard = `
-            <td class="md:hidden block p-3 w-full border-b border-gray-100 last:border-0 bg-white">
-                <div class="flex items-start gap-3 mb-3 w-full">
-                    <div class="h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-100">
-                        ${student.Name ? student.Name.charAt(0) : '?'}
+            cardsHtml += `
+            <div data-row-index="${uniqueRowIndex}" class="student-card bg-white rounded-xl border border-gray-200/90 shadow-2xs hover:shadow-md hover:border-indigo-300 transition-all p-3 sm:p-3.5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-center">
+                    
+                    <!-- Sl (Desktop) -->
+                    <div class="hidden lg:flex col-span-1 justify-center items-center">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 text-xs font-mono font-bold text-gray-600 border border-gray-200/60">
+                            ${serialNo}
+                        </span>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap justify-between items-start gap-1">
-                            <div class="text-sm font-bold text-gray-900 leading-tight break-words pr-1 max-w-full">
+
+                    <!-- Student Details -->
+                    <div class="col-span-1 sm:col-span-2 lg:col-span-3 flex items-center gap-3 min-w-0">
+                        <!-- Mobile/Tablet Sl badge -->
+                        <span class="lg:hidden shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-[11px] font-mono font-bold text-gray-600 border border-gray-200/60">
+                            ${serialNo}
+                        </span>
+                        <div class="h-9 w-9 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-100 shadow-2xs">
+                            ${(student.Name ? student.Name.charAt(0) : '?').toUpperCase()}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-bold text-gray-900 truncate" title="${student.Name}">
                                 ${student.Name}
                             </div>
-                            <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 uppercase tracking-wide">
+                            <div class="inline-block mt-0.5">
+                                <span class="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50/80 border border-indigo-100 px-1.5 py-0.5 rounded">
+                                    ${getRegNo(student)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Exam Name (Natural wrap, no zoom breakage!) -->
+                    <div class="col-span-1 sm:col-span-2 lg:col-span-4 min-w-0">
+                        <span class="lg:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Exam Name</span>
+                        <div class="text-xs font-semibold text-gray-800 break-words leading-relaxed" title="${examDisplay}">
+                            ${examDisplay}
+                        </div>
+                    </div>
+
+                    <!-- Date & Time + Stream -->
+                    <div class="col-span-1 sm:col-span-1 lg:col-span-2 min-w-0 flex flex-col gap-1">
+                        <span class="lg:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Session & Stream</span>
+                        <div class="flex items-center gap-1.5 text-xs text-gray-700">
+                            <svg class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span class="font-bold whitespace-nowrap text-gray-900">${student.Date}</span>
+                            <span class="text-gray-300">|</span>
+                            <span class="text-gray-600 whitespace-nowrap">${student.Time}</span>
+                        </div>
+                        <div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 tracking-wide uppercase">
                                 ${streamDisplay}
                             </span>
                         </div>
-                        <div class="text-xs text-gray-500 font-mono mt-1 font-semibold tracking-wide break-all">
-                            ${getRegNo(student)}
-                        </div>
                     </div>
-                </div>
-                
-                <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-xs bg-gray-50 p-2.5 rounded-lg border border-gray-100 mb-3">
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Exam Name</span>
-                        <span class="font-bold text-indigo-700 whitespace-nowrap">${examDisplay}</span> </div>
-                    <div>
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
-                        <span class="font-medium text-gray-700 whitespace-nowrap">${student.Date}</span>
-                    </div>
-                    <div class="col-span-2 border-t border-gray-200 pt-1 mt-1">
-                        <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider">Course</span>
-                        <span class="font-medium text-gray-700 block break-words whitespace-normal leading-snug" title="${student.Course}">
-                            ${student.Course}
-                        </span>
-                    </div>
-                </div>
 
-                <div class="flex gap-2">
-                    <button class="edit-row-btn flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        Edit
-                    </button>
-                    <button class="delete-row-btn flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold py-2 rounded-lg shadow-sm flex items-center justify-center gap-2 transition ${btnOpacity}" ${btnState}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        Delete
-                    </button>
-                </div>
-            </td>
-            `;
+                    <!-- Actions: Clean, styled pill buttons, always accessible -->
+                    <div class="col-span-1 sm:col-span-1 lg:col-span-2 flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                        <button class="edit-row-btn inline-flex items-center justify-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/80 px-3 py-1.5 rounded-lg shadow-2xs hover:shadow-xs transition ${btnOpacity}" ${btnState} title="Edit Student">
+                            <svg class="w-3.5 h-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Edit</span>
+                        </button>
+                        <button class="delete-row-btn inline-flex items-center justify-center gap-1.5 text-xs font-bold text-red-600 bg-red-50/80 hover:bg-red-100 border border-red-200/80 px-3 py-1.5 rounded-lg shadow-2xs hover:shadow-xs transition ${btnOpacity}" ${btnState} title="Delete Student">
+                            <svg class="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
 
-            tableHtml += `
-            <tr data-row-index="${uniqueRowIndex}" class="block md:table-row bg-white md:border-b border-gray-200 last:border-0">
-                ${desktopRow}
-                ${mobileCard}
-            </tr>
+                </div>
+            </div>
             `;
         });
 
-        tableHtml += `</tbody></table></div>`;
-        editDataContainer.innerHTML = tableHtml;
+        cardsHtml += `</div>`;
+        editDataContainer.innerHTML = cardsHtml;
         renderEditPagination(currentCourseStudents.length);
     }
-    
+
 
 
 
@@ -15196,22 +15586,26 @@ window.real_disable_all_report_buttons = function (disabled) {
         openStudentEditModal(null); // Pass null to indicate a new student
     });
 
-    // 6. Handle Edit/Delete Clicks (NEW: Opens modal)
-    editDataContainer.addEventListener('click', (e) => {
+    // 6. Handle Edit/Delete Clicks (Self-Contained Cards)
+    editDataContainer.addEventListener('click', async (e) => {
         const target = e.target;
-        if (!target.closest('tr')) return; // Guard clause if click is not on a row
-        const rowIndex = target.closest('tr').dataset.rowIndex;
+        const rowCard = target.closest('[data-row-index]');
+        if (!rowCard) return; // Guard clause if click is not on a row card
+        const rowIndex = rowCard.dataset.rowIndex;
         if (rowIndex === undefined) return; // Guard clause
 
-        if (target.classList.contains('edit-row-btn')) {
+        const editBtn = target.closest('.edit-row-btn');
+        const deleteBtn = target.closest('.delete-row-btn');
+
+        if (editBtn) {
             // --- Open Edit Modal ---
             openStudentEditModal(rowIndex);
 
-        } else if (target.classList.contains('delete-row-btn')) {
+        } else if (deleteBtn) {
             // --- Delete Row ---
-            if (confirm('Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
+            if (await UiModal.confirm('Delete Student Record', 'Are you sure you want to delete this student record? This change will be temporary until you click "Save All Changes".')) {
                 currentCourseStudents.splice(rowIndex, 1); // Remove from the array
-                renderStudentEditTable(); // Re-render the table
+                renderStudentEditTable(); // Re-render the cards
                 setUnsavedChanges(true);
             }
         }
@@ -15300,7 +15694,7 @@ window.real_disable_all_report_buttons = function (disabled) {
     // [In app.js]
 
     // [In app.js]
-    modalSaveBtn.addEventListener('click', () => {
+    modalSaveBtn.addEventListener('click', async () => {
         // 1. Capture Inputs
         const rawDate = modalDate.value;
         const rawTime = modalTime.value;
@@ -15347,7 +15741,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         } else {
             // --- ADD MODE ---
             if (!newRegNo || !newName || !rawDate || !rawTime || !newCourse) {
-                alert('For a new student, all fields are required.');
+                await UiModal.alert('For a new student, all fields are required.');
                 return;
             }
             studentObj = {
@@ -15362,7 +15756,7 @@ window.real_disable_all_report_buttons = function (disabled) {
         }
 
         // 4. Save & Close
-        if (confirm("Save changes?")) {
+        if (await UiModal.confirm('Save Changes', "Save changes?")) {
             if (currentlyEditingIndex !== null) {
                 currentCourseStudents[currentlyEditingIndex] = studentObj;
             } else {
@@ -15382,7 +15776,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             return;
         }
 
-        if (confirm('This will permanently save all edits, additions, and deletions for this course/session to the main data source. Continue?')) {
+        if (await UiModal.confirm('Save All Changes', 'This will permanently save all edits, additions, and deletions for this course/session to the main data source. Continue?')) {
 
             const [date, time] = currentEditSession.split(' | ');
             const course = currentEditCourse;
@@ -15635,7 +16029,7 @@ window.real_disable_all_report_buttons = function (disabled) {
 
             // 2. Validation: Ensure at least one field is being updated
             if (!rawDate && !rawTime && !newCourseName && !newStream && !newExamName) {
-                alert("No changes detected. Please edit at least one field.");
+                await UiModal.alert("No changes detected. Please edit at least one field.");
                 return;
             }
 
@@ -15671,7 +16065,7 @@ window.real_disable_all_report_buttons = function (disabled) {
             );
 
             if (recordsToUpdate.length === 0) {
-                alert("No records found to update.");
+                await UiModal.alert("No records found to update.");
                 return;
             }
 
@@ -15692,7 +16086,7 @@ Time:      ${newTime ? newTime : "(No Change)"}
 Are you sure you want to update these records?
 `;
 
-            if (confirm(confirmMsg)) {
+            if (await UiModal.confirm('Confirm Bulk Update', confirmMsg)) {
                 let updateCount = 0;
 
             // 6. Apply Updates
@@ -15718,7 +16112,7 @@ Are you sure you want to update these records?
                 
 
                 
-                alert(`✅ Updated ${updateCount} students! Syncing changes...`);
+                await UiModal.alert(`✅ Updated ${updateCount} students! Syncing changes...`);
                 
                 // Trigger Sync
                 if (typeof syncSessionToCloud === 'function') {
@@ -15765,7 +16159,7 @@ Are you sure you want to update these records?
               }
 
               if (data.length === 0) {
-                  alert("No data found for the selected session.");
+                  await UiModal.alert("No data found for the selected session.");
                   return;
               }
 
@@ -15824,7 +16218,7 @@ Are you sure you want to update these records?
             // -------------------------------------------------------------
 
             if (sortedSessionKeys.length === 0) {
-                alert("No upcoming exams found.");
+                await UiModal.alert("No upcoming exams found.");
                 return;
             }
 
@@ -15964,7 +16358,7 @@ Are you sure you want to update these records?
 
         } catch (e) {
             console.error("Report Error:", e);
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         } finally {
             generateInvigilatorReportButton.disabled = false;
             generateInvigilatorReportButton.textContent = "Generate Invigilator Requirement Summary";
@@ -16047,7 +16441,7 @@ Are you sure you want to update these records?
                 });
                 
                 if (final_student_list_for_stickers.length === 0) { 
-                    alert("Please allot rooms before generating stickers."); 
+                    await UiModal.alert("Please allot rooms before generating stickers."); 
                     generateStickerButton.disabled = false;
                     generateStickerButton.textContent = "Generate Stickers";
                     return; 
@@ -16269,7 +16663,7 @@ Are you sure you want to update these records?
 
             } catch (e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateStickerButton.disabled = false;
                 generateStickerButton.textContent = "Generate Room Stickers (2 per Page)";
@@ -16436,7 +16830,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     const student = allStudentData.find(s => s.Date === date && s.Time === time && getRegNo(s) === regNo);
 
     if (!student) {
-        alert("Student not found in this session.");
+        UiModal.alert("Student not found in this session.");
         return;
     }
 
@@ -16457,7 +16851,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
     });
 
     if (!allocatedStudent) {
-        alert("Student not found in any room allotment.");
+        UiModal.alert("Student not found in any room allotment.");
         return;
     }
 
@@ -16714,7 +17108,7 @@ function showStudentDetailsModal(regNo, sessionKey) {
             });
 
             if (studentsToDelete.length === 0) {
-                alert("No students found in this course/stream to delete.");
+                await UiModal.alert("No students found in this course/stream to delete.");
                 return;
             }
 
@@ -16730,8 +17124,8 @@ This action cannot be undone.
 Are you sure?
         `;
 
-            if (confirm(confirmMsg)) {
-                if (!confirm("Are you absolutely sure?")) return;
+            if (await UiModal.confirm('Delete Course Records', confirmMsg)) {
+                if (!await UiModal.confirm('Final Confirmation', "Are you absolutely sure?")) return;
 
                 // --- 🛡️ ABSOLUTE SYNC (V14): Cascading Delete ---
                 const deletedRegNos = new Set(studentsToDelete.map(d => getRegNo(d)));
@@ -16770,7 +17164,7 @@ Are you sure?
                     await saveExamDataIDB(allStudentData, true); // true = skip redundant baseData auto-sync here as we await it next
                 }
 
-                alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
+                await UiModal.alert(`Deep Deleted ${studentsToDelete.length} records from all modules.\nThe page will now reload.`);
 
                 // MODULAR SYNC (V2)
                 if (typeof syncSessionToCloud === 'function') {
@@ -16901,7 +17295,7 @@ Are you sure?
     if (addWhitelistBtn) {
         addWhitelistBtn.addEventListener('click', async () => {
             const email = whitelistInput.value.trim();
-            if (!email || !email.includes('@')) return alert("Invalid Email");
+            if (!email || !email.includes('@')) return await UiModal.alert("Invalid Email");
 
             const { db, doc, setDoc, arrayUnion } = window.firebase;
             addWhitelistBtn.textContent = "Adding...";
@@ -16913,9 +17307,9 @@ Are you sure?
 
                 whitelistInput.value = '';
                 loadWhitelist();
-                alert(`✅ ${email} authorized!`);
+                await UiModal.alert(`✅ ${email} authorized!`);
             } catch (e) {
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 addWhitelistBtn.textContent = "Add";
             }
@@ -16924,7 +17318,7 @@ Are you sure?
 
     // 5. REMOVE FROM WHITELIST
     window.removeFromWhitelist = async function (email) {
-        if (!confirm(`Revoke authorization for ${email}?`)) return;
+        if (!await UiModal.confirm('Revoke Authorization', `Revoke authorization for ${email}?`)) return;
 
         const { db, doc, updateDoc, arrayRemove } = window.firebase;
         try {
@@ -16933,7 +17327,7 @@ Are you sure?
             });
             loadWhitelist();
         } catch (e) {
-            alert("Error: " + e.message);
+            await UiModal.alert("Error: " + e.message);
         }
     };
     // 6. SET STORAGE LIMIT (SUPER ADMIN) - UPDATED
@@ -16947,8 +17341,8 @@ Are you sure?
             const targetCollegeId = adminCollegeSelect.value;
             const limitMB = parseFloat(adminStorageLimitInput.value);
 
-            if (!targetCollegeId) return alert("Please select a College from the list.");
-            if (!limitMB || limitMB <= 0) return alert("Please enter a valid MB limit.");
+            if (!targetCollegeId) return await UiModal.alert("Please select a College from the list.");
+            if (!limitMB || limitMB <= 0) return await UiModal.alert("Please enter a valid MB limit.");
 
             const bytes = Math.floor(limitMB * 1024 * 1024);
 
@@ -16964,12 +17358,12 @@ Are you sure?
 
                 // Get selected text for nicer alert
                 const selectedText = adminCollegeSelect.options[adminCollegeSelect.selectedIndex].text;
-                alert(`✅ Success! Limit for '${selectedText}' set to ${limitMB} MB.`);
+                await UiModal.alert(`✅ Success! Limit for '${selectedText}' set to ${limitMB} MB.`);
 
                 adminStorageLimitInput.value = '';
             } catch (e) {
                 console.error(e);
-                alert("Failed to update limit. " + e.message);
+                await UiModal.alert("Failed to update limit. " + e.message);
             } finally {
                 setLimitBtn.textContent = "Set Limit";
             }
@@ -17036,12 +17430,12 @@ Are you sure?
                 }
 
                 if (isAuthorized) {
-                    if (confirm("No existing database found for your account, but you are AUTHORIZED.\n\nClick OK to create a new College Database.")) {
+                    if (await UiModal.confirm('Create College Database', "No existing database found for your account, but you are AUTHORIZED.\n\nClick Confirm to create a new College Database.")) {
                         await createNewCollege(user);
                     }
                 } else {
                     // BLOCKED
-                    alert("⛔ ACCESS DENIED ⛔\n\nYou are not part of any college team, and you are not authorized to create a new database.\n\nPlease contact the Super Admin to get access.");
+                    await UiModal.alert("⛔ ACCESS DENIED ⛔\n\nYou are not part of any college team, and you are not authorized to create a new database.\n\nPlease contact the Super Admin to get access.");
                     const { auth, signOut } = window.firebase;
                     signOut(auth).then(() => location.reload());
                 }
@@ -17058,13 +17452,13 @@ Are you sure?
     // 7. SWITCH COLLEGE (SUPER ADMIN)
     const btnAdminSwitch = document.getElementById('btn-admin-switch-college');
     if (btnAdminSwitch) {
-        btnAdminSwitch.addEventListener('click', () => {
+        btnAdminSwitch.addEventListener('click', async () => {
             const select = document.getElementById('admin-college-select');
             const newCollegeId = select.value;
 
-            if (!newCollegeId) return alert("Please select a college to access.");
+            if (!newCollegeId) return await UiModal.alert("Please select a college to access.");
 
-            if (confirm(`Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
+            if (await UiModal.confirm('Switch College Dashboard', `Switch dashboard to view data for this college?\nID: ${newCollegeId}`)) {
                 // 1. Update Global ID
                 currentCollegeId = newCollegeId;
                 window.currentCollegeId = newCollegeId;
@@ -17077,7 +17471,7 @@ Are you sure?
                 const modal = document.getElementById('super-admin-modal');
                 if (modal) modal.classList.add('hidden');
 
-                alert("✅ Switched! Loading data...");
+                await UiModal.alert("✅ Switched! Loading data...");
             }
         });
     }
@@ -17150,7 +17544,7 @@ if (mainLoadCsvBtn) {
             return;
         }
         if (!selectedExamName) {
-            alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
+            UiModal.alert("⚠️ Please select an Exam Name (e.g., 'B.Sc S5') from the configuration box above before uploading.");
             return;
         }
 
@@ -17215,9 +17609,9 @@ if (mainLoadCsvBtn) {
     }
 
     if (btnReplace) {
-        btnReplace.addEventListener('click', () => {
+        btnReplace.addEventListener('click', async () => {
             // Ask one last time
-            if (confirm("Are you sure you want to overwrite ALL existing data? This cannot be undone.")) {
+            if (await UiModal.confirm('Overwrite Existing Data', "Are you sure you want to overwrite ALL existing data? This cannot be undone.")) {
                 loadStudentData(tempNewData);
                 conflictModal.classList.add('hidden');
             }
@@ -17437,7 +17831,7 @@ window.handlePythonExtraction = async function (jsonString) {
     const selectedStream = streamSelect ? streamSelect.value : "Regular";
 
     if (!selectedExamName) {
-        alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
+        await UiModal.alert("⚠️ Extraction Paused.\n\nPlease select an Exam Name in the configuration box.");
         return;
     }
 
@@ -17445,7 +17839,7 @@ window.handlePythonExtraction = async function (jsonString) {
         let newJsonData = JSON.parse(jsonString);
 
         if (newJsonData.length === 0) {
-            alert("No student data found in PDF.");
+            await UiModal.alert("No student data found in PDF.");
             return;
         }
 
@@ -17503,14 +17897,14 @@ window.handlePythonExtraction = async function (jsonString) {
         // 5. User Prompts
         if (potentialAdds.length > 0) {
             // New students found for this specific stream
-            if (confirm(`Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
+            if (await UiModal.confirm('Add Students', `Found ${potentialAdds.length} new students for ${selectedStream} stream. Add them?`)) {
                 finalBatch = finalBatch.concat(potentialAdds);
             }
         }
 
         if (potentialDeletes.length > 0) {
             // Missing students IN THIS STREAM only
-            if (confirm(`Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
+            if (await UiModal.confirm('Delete Missing Students', `Found ${potentialDeletes.length} students missing from this file (previously in ${selectedStream} database). Delete them?`)) {
                 // User said YES: They are removed (excluded from finalBatch)
             } else {
                 // User said NO: Keep them
@@ -17525,11 +17919,11 @@ window.handlePythonExtraction = async function (jsonString) {
         // 7. Save & Sync
         window.loadStudentData(finalData, affectedSessions);
         
-        alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
+        await UiModal.alert(`✅ PDF Processed!\n\n• Stream: ${selectedStream}\n• Synced ${affectedSessions.size} Session(s) to Cloud`);
 
     } catch (e) {
         console.error("Bridge Error:", e);
-        alert("Error processing data: " + e.message);
+        await UiModal.alert("Error processing data: " + e.message);
     }
 };
 
@@ -17659,19 +18053,19 @@ window.handlePythonExtraction = async function (jsonString) {
                 loadStreamConfig();
                 syncDataToCloud('settings'); // Sync setting change
             } else if (currentStreamConfig.includes(name)) {
-                alert("Stream already exists.");
+                UiModal.alert("Stream already exists.");
             }
         });
     }
 
     // Delete Stream (Safe Version)
-    window.deleteStream = function (name) {
+    window.deleteStream = async function (name) {
         if (currentStreamConfig.length <= 1) {
-            alert("You must have at least one stream defined (e.g., Regular).");
+            await UiModal.alert("You must have at least one stream defined (e.g., Regular).");
             return;
         }
 
-        if (confirm(`Delete stream "${name}"?`)) {
+        if (await UiModal.confirm('Delete Stream', `Delete stream "${name}"?`)) {
             currentStreamConfig = currentStreamConfig.filter(s => s !== name);
             localStorage.setItem(STREAM_CONFIG_KEY, JSON.stringify(currentStreamConfig));
             loadStreamConfig();
@@ -17730,7 +18124,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 });
 
                 if (sessionsToProcess.length === 0) {
-                    alert("No room allotments found for the selected sessions. Please allot rooms first.");
+                    await UiModal.alert("No room allotments found for the selected sessions. Please allot rooms first.");
                     return;
                 }
 
@@ -17884,7 +18278,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             } catch (e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                await UiModal.alert("Error: " + e.message);
             } finally {
                 generateRoomSummaryButton.disabled = false;
                 generateRoomSummaryButton.textContent = "Generate Room Allotment Summary";
@@ -18054,7 +18448,7 @@ window.handlePythonExtraction = async function (jsonString) {
 
             } catch (err) {
                 console.error(err);
-                alert("Error: " + err.message);
+                await UiModal.alert("Error: " + err.message);
             } finally {
                 generateScribeMasterBtn.disabled = false;
                 generateScribeMasterBtn.textContent = "10-Generate Scribe Assistance Master Report";
@@ -18433,7 +18827,7 @@ window.handlePythonExtraction = async function (jsonString) {
                 if (typeof UiModal !== 'undefined') {
                     await UiModal.alert("No File Selected", "Please select a Settings JSON file first.");
                 } else {
-                    alert("Please select a Settings JSON file first.");
+                    await UiModal.alert("Please select a Settings JSON file first.");
                 }
                 return;
             }
@@ -18477,7 +18871,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         if (typeof UiModal !== 'undefined') {
                             await UiModal.alert("Settings Restored", "✅ Settings configurations restored and synchronized with Cloud!\n\nReloading to apply changes.");
                         } else {
-                            alert("Settings updated and synced!");
+                            await UiModal.alert("Settings updated and synced!");
                         }
                         window.location.reload();
 
@@ -18485,7 +18879,7 @@ window.handlePythonExtraction = async function (jsonString) {
                         if (typeof UiModal !== 'undefined') {
                             await UiModal.alert("No Valid Settings", "No valid settings configurations were found in this file.");
                         } else {
-                            alert("No valid settings found in this file.");
+                            await UiModal.alert("No valid settings found in this file.");
                         }
                     }
 
@@ -18494,7 +18888,7 @@ window.handlePythonExtraction = async function (jsonString) {
                     if (typeof UiModal !== 'undefined') {
                         await UiModal.alert("Invalid File", "Error parsing settings file: " + err.message);
                     } else {
-                        alert("Error parsing settings file: " + err.message);
+                        await UiModal.alert("Error parsing settings file: " + err.message);
                     }
                 }
             };
@@ -18699,7 +19093,7 @@ async function loadInitialData() {
     if (btnGenerateBill) {
         btnGenerateBill.addEventListener('click', () => {
             if (!allStudentData || allStudentData.length === 0) {
-                alert("No student data loaded.");
+                UiModal.alert("No student data loaded.");
                 return;
             }
 
@@ -18708,7 +19102,7 @@ async function loadInitialData() {
             const selectedExamName = document.getElementById('bill-exam-select').value; // Specific filter
 
             if (!selectedStream) {
-                alert("Please select a stream.");
+                UiModal.alert("Please select a stream.");
                 return;
             }
 
@@ -18720,7 +19114,7 @@ async function loadInitialData() {
             });
 
             if (filteredData.length === 0) {
-                alert(`No students found for stream: "${selectedStream}"`);
+                UiModal.alert(`No students found for stream: "${selectedStream}"`);
                 return;
             }
 
@@ -18872,7 +19266,7 @@ async function loadInitialData() {
     if (btnPrintBill) {
         btnPrintBill.addEventListener('click', () => {
             const billContent = document.getElementById('remuneration-output').innerHTML;
-            if (!billContent.trim()) return alert("No bill generated.");
+            if (!billContent.trim()) return UiModal.alert("No bill generated.");
 
             openPdfPreview(billContent, "Remuneration_Bill");
         });
@@ -19378,7 +19772,7 @@ async function loadInitialData() {
     const btnSessionLock = document.getElementById('btn-session-ops-lock');
     const sessionOpsControls = document.getElementById('session-ops-controls');
     const sessionDateInput = document.getElementById('session-new-date');
-    const sessionExamNameInput = document.getElementById('session-new-exam-name'); // <--- ADD THIS
+    const sessionExamNameInput = document.getElementById('session-new-exam-name');
     const sessionTimeInput = document.getElementById('session-new-time');
     const btnSessionReschedule = document.getElementById('btn-session-reschedule');
     const btnSessionDelete = document.getElementById('btn-session-delete');
@@ -19394,7 +19788,6 @@ async function loadInitialData() {
 function updateSessionOpsLockUI() {
         if (!btnSessionLock || !sessionOpsControls) return;
         
-        // Include the new input in the list
         const controls = [sessionDateInput, sessionTimeInput, btnSessionReschedule, btnSessionDelete, sessionExamNameInput];
 
         if (isSessionOpsLocked) {
@@ -19442,11 +19835,11 @@ function updateSessionOpsLockUI() {
             const targetExamName = sessionExamNameInput ? sessionExamNameInput.value.trim() : "";
             const currentSession = editSessionSelect.value;
 
-            if (!currentSession) return alert("No session selected.");
+            if (!currentSession) return await UiModal.alert("No session selected.");
 
             // Validation: Must enter at least New Date or New Time to reschedule
             if (!rawDate && !rawTime) {
-                return alert("Please enter a New Date, a New Time, or both to reschedule.");
+                return await UiModal.alert("Please enter a New Date, a New Time, or both to reschedule.");
             }
 
             // A. Determine New Date/Time (Support changing Date or Time independently)
@@ -19482,7 +19875,7 @@ function updateSessionOpsLockUI() {
 
             const newSessionKey = `${newDate} | ${newTime}`;
             if (newSessionKey === currentSession) {
-                return alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
+                return await UiModal.alert("The selected New Date and Time are identical to the current session. Please choose a different date or time.");
             }
             isMove = true;
 
@@ -19496,11 +19889,11 @@ function updateSessionOpsLockUI() {
 
             const msg = `⚠️ CONFIRM SESSION RESCHEDULE ⚠️\n\nCurrent Session: ${currentSession}\n\nCHANGES:\n${changesMsg}\nProceed?`;
 
-            if (!confirm(msg)) return;
+            if (!await UiModal.confirm('Confirm Reschedule', msg)) return;
             
             // Safety check for moves
-            const check = prompt("Type 'CHANGE' to confirm moving this session:");
-            if (check !== 'CHANGE') return alert("Cancelled.");
+            const check = await UiModal.prompt("⚠️ Move Session Confirmation", "Type 'CHANGE' to confirm moving this session:", "CHANGE");
+            if (check !== 'CHANGE') return await UiModal.alert("Cancelled.");
 
             try {
                 // 1. Update Students (Memory)
@@ -19535,7 +19928,7 @@ function updateSessionOpsLockUI() {
                 });
 
                 if (studentCount === 0) {
-                    return alert(targetExamName 
+                    return await UiModal.alert(targetExamName 
                         ? `No students found for exam "${targetExamName}" in this session.`
                         : "No students found in this session to reschedule.");
                 }
@@ -19663,7 +20056,7 @@ function updateSessionOpsLockUI() {
                     }
                 }
 
-                alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
+                await UiModal.alert(`✅ Successfully Rescheduled ${studentCount} records to ${newSessionKey}.\nSyncing to Cloud...`);
 
                 // 5. Cloud Sync
                 if (remainingInOldSession === 0 && typeof deleteSessionFromCloud === 'function') {
@@ -19679,7 +20072,7 @@ function updateSessionOpsLockUI() {
 
             } catch (e) {
                 console.error(e);
-                alert("Error during reschedule: " + e.message);
+                await UiModal.alert("Error during reschedule: " + e.message);
             }
         });
     }
@@ -19688,7 +20081,7 @@ function updateSessionOpsLockUI() {
     if (btnSessionDelete) {
         btnSessionDelete.addEventListener('click', async () => {
             const currentSession = editSessionSelect.value;
-            if (!currentSession) return alert("No session selected.");
+            if (!currentSession) return await UiModal.alert("No session selected.");
 
             // *** FIX: TRIM WHITESPACE ***
             const parts = currentSession.split('|');
@@ -19700,10 +20093,10 @@ function updateSessionOpsLockUI() {
 
             const msg = `🛑 CRITICAL WARNING: DELETE SESSION 🛑\n\nYou are about to delete the ENTIRE session:\n${currentSession}\n\nThis will remove:\n• ${targets.length} Student Records\n• All Room Allotments for this session\n• All Duty Assignments for this session\n\nAre you sure?`;
 
-            if (!confirm(msg)) return;
+            if (!await UiModal.confirm('Delete Session', msg)) return;
 
-            const check = prompt("Type 'DELETE' to confirm permanent deletion:");
-            if (check !== 'DELETE') return alert("Cancelled. Incorrect code.");
+            const check = await UiModal.prompt("🛑 Permanent Session Deletion", "Type 'DELETE' to confirm permanent deletion of this session:", "DELETE");
+            if (check !== 'DELETE') return await UiModal.alert("Cancelled. Incorrect code.");
 
             try {
                 // 1. Delete Students
@@ -19745,7 +20138,7 @@ function updateSessionOpsLockUI() {
                 // 🛡️ [FIX]: Do not delete examInvigilationSlots from app.js
                 await deleteKeyInStorage('examQPCodes');
 
-                alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
+                await UiModal.alert(`✅ Deleted ${targets.length} records and cleaned up all session data.`);
 
                 // MODULAR SYNC (V2)
                 // This pushes an empty update to the old ID, effectively clearing it in the cloud
@@ -19755,7 +20148,7 @@ function updateSessionOpsLockUI() {
 
             } catch (e) {
                 console.error(e);
-                alert("Error during deletion: " + e.message);
+                await UiModal.alert("Error during deletion: " + e.message);
             }
                });
     }
@@ -19889,7 +20282,7 @@ window.generateBatchArchive = async function() {
         // Snapshot rates and scribe list at the moment of archiving
     const archivedRates = JSON.parse(localStorage.getItem('examRemunerationConfig') || '{}');
     const scribeAllotment = JSON.parse(localStorage.getItem('examScribeAllotment') || '{}');
-    if (rawChecked.length === 0) return alert("Select at least one option to archive.");
+    if (rawChecked.length === 0) return await UiModal.alert("Select at least one option to archive.");
 
     const btn = document.querySelector('#batch-archive-modal button.bg-indigo-600');
     const origText = btn.innerHTML;
@@ -20487,7 +20880,8 @@ window.generateBatchArchive = async function() {
             newWin.document.close();
             newWin.focus();
         } else {
-            alert('Please allow popups to view the Bill.');
+            if (typeof UiModal !== 'undefined') UiModal.alert('Please allow popups to view the Bill.');
+            else window.alert('Please allow popups to view the Bill.');
         }
     }
 
@@ -20521,7 +20915,7 @@ window.openBatchArchiveModal = function() {
     console.log("🔔 Archive Modal: 'openBatchArchiveModal' triggered.");
     try {
         const modal = document.getElementById('batch-archive-modal');
-        if (!modal) return alert("Archive modal not found in DOM");
+        if (!modal) return UiModal.alert("Archive modal not found in DOM");
 
         // Force visibility
         document.body.appendChild(modal);
@@ -20534,7 +20928,7 @@ window.openBatchArchiveModal = function() {
 
     } catch (error) {
         console.error("🔥 Archive Modal Error:", error);
-        alert("Error opening archive modal: " + error.message);
+        UiModal.alert("Error opening archive modal: " + error.message);
     }
 };
 
@@ -20714,9 +21108,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
     
     
     // --- NEW: Clear Scribe Room Assignment ---
-    window.removeScribeRoom = function (regNo) {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked."); // Safety Check
-        if (!confirm("Unassign this student? They will return to the 'Assign Room' state.")) return;
+    window.removeScribeRoom = async function (regNo) {
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked."); // Safety Check
+        if (!await UiModal.confirm('Unassign Scribe', "Unassign this student? They will return to the 'Assign Room' state.")) return;
 
         // 1. Remove from current session mapping
         delete currentScribeAllotment[regNo];
@@ -20734,12 +21128,12 @@ window.toggleAllArchiveCheckboxes = function(check) {
     };
 
     window.clearAllScribeAllotments = async function () {
-        if (isScribeAllotmentLocked) return alert("Scribe Allotment is Locked. Unlock first to clear."); 
+        if (isScribeAllotmentLocked) return await UiModal.alert("Scribe Allotment is Locked. Unlock first to clear."); 
         
         const count = Object.keys(currentScribeAllotment).length;
-        if (count === 0) return alert("No allotments to clear.");
+        if (count === 0) return await UiModal.alert("No allotments to clear.");
 
-        if (!confirm(`Are you sure you want to CLEAR ALL ${count} scribe allotments for this session? This cannot be undone.`)) return;
+        if (!await UiModal.confirm('Clear Scribe Allotments', `Are you sure you want to CLEAR ALL ${count} scribe allotments for this session? This cannot be undone.`)) return;
 
         // 1. Clear current session mapping
         currentScribeAllotment = {};
@@ -20764,7 +21158,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
             updateSyncStatus("Unsaved Changes", "warning");
         }
         renderScribeAllotmentList(currentSessionKey);
-        alert("✅ All scribe allotments for this session have been cleared.");
+        await UiModal.alert("✅ All scribe allotments for this session have been cleared.");
     };
 
 
@@ -21208,7 +21602,8 @@ window.toggleAllArchiveCheckboxes = function(check) {
                         
                         // Ask the Admin what to do with the old staff
                         if (oldIdx > -1) {
-                             if (confirm(`Do you want to completely REMOVE ${oldStaff.name} from this session's duty list?\n\n• Click OK to remove them completely.\n• Click Cancel to keep them as a Reserve.`)) {
+                             if (await UiModal.confirm('Remove from Duty List', `Do you want to completely REMOVE ${oldStaff.name} from this session's duty list?\n\n• Click Confirm to remove them completely.
+• Click Cancel to keep them as a Reserve.`)) {
                                  // recalculate index because we pushed to array
                                  const currentOldIdx = slot.assigned.indexOf(oldStaff.email);
                                  if (currentOldIdx > -1) slot.assigned.splice(currentOldIdx, 1);
@@ -21299,7 +21694,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
         const staffData = JSON.parse(localStorage.getItem('examStaffData') || '[]');
         const slot = invigSlots[sessionKey];
 
-        if (!slot || !slot.assigned) return alert("No staff available in portal.");
+        if (!slot || !slot.assigned) return await UiModal.alert("No staff available in portal.");
 
         const availableStaff = [...slot.assigned];
         const usedNames = new Set(Object.values(currentInvigMapping));
@@ -21352,9 +21747,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
             
             updateSyncStatus("Saved", "success");
-            alert(`Auto-assigned ${changeCount} invigilators.`);
+            await UiModal.alert(`Auto-assigned ${changeCount} invigilators.`);
         } else {
-            alert("No additional free staff found to assign.");
+            await UiModal.alert("No additional free staff found to assign.");
         }
     }
 
@@ -21370,9 +21765,9 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
         // Count current assignments to show in confirmation
         const currentCount = Object.keys(currentInvigMapping).length;
-        if (currentCount === 0) return alert("No invigilators assigned to clear.");
+        if (currentCount === 0) return await UiModal.alert("No invigilators assigned to clear.");
 
-        if (confirm(`Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
+        if (await UiModal.confirm('Remove Invigilator Assignments', `Are you sure you want to REMOVE ALL ${currentCount} invigilator assignments for this session?\n\nThis action cannot be undone.`)) {
             // Clear current session mapping
             currentInvigMapping = {};
 
@@ -21391,7 +21786,7 @@ window.toggleAllArchiveCheckboxes = function(check) {
 
             // Refresh UI
             renderInvigilationPanel();
-            alert("All invigilator assignments cleared for this session.");
+            await UiModal.alert("All invigilator assignments cleared for this session.");
         }
     };
 
@@ -21758,7 +22153,7 @@ if (displayLoc) {
 
     window.printAllotmentSummary = function () {
         if (!currentSessionKey || currentSessionAllotment.length === 0) {
-            alert("Please allot rooms before printing the summary.");
+            UiModal.alert("Please allot rooms before printing the summary.");
             return;
         }
 
@@ -21902,7 +22297,7 @@ if (displayLoc) {
     
     if (btnNormalizeTime) {
         btnNormalizeTime.addEventListener('click', async () => {
-            if (!confirm("⚠️ MAINTENANCE: Fix Time Formats?\n\nThis will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
+            if (!await UiModal.confirm("⚠️ Maintenance: Fix Time Formats", "This will scan ALL data (Students, Allotments, Invigilation, Scribes) and unify time formats (e.g., '2:00 PM' -> '02:00 PM').\n\nIf you have split sessions, they will be MERGED.\n\nProceed?")) return;
 
             btnNormalizeTime.disabled = true;
             btnNormalizeTime.textContent = "Processing...";
@@ -22032,12 +22427,12 @@ if (displayLoc) {
                     await syncDataToCloud('staff');
                 }
 
-                alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
+                await UiModal.alert(`✅ Normalization Complete!\n\n• Updated ${studentUpdateCount} student records.\n• Merged split sessions.\n\nThe page will now reload.`);
                 window.location.reload();
 
             } catch (e) {
                 console.error(e);
-                alert("Error during normalization: " + e.message);
+                await UiModal.alert("Error during normalization: " + e.message);
             } finally {
                 btnNormalizeTime.disabled = false;
                 btnNormalizeTime.textContent = "Fix/Normalize Time Formats";
@@ -23251,7 +23646,7 @@ function generateRoomSummaryPDF() {
 
     } catch (e) {
         console.error("Room Summary PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        UiModal.alert("Error generating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -23377,7 +23772,7 @@ function generateInvigilatorSummaryPDF() {
 
     } catch (e) {
         console.error("PDF Gen Error:", e);
-        alert("Error generating PDF: " + e.message);
+        UiModal.alert("Error generating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = "📄 Download PDF"; }
     }
@@ -23389,7 +23784,7 @@ function getAcquittanceData() {
     const billPages = container ? container.querySelectorAll('.print-page') : [];
     
     if (billPages.length === 0) {
-        alert("Please click 'Generate Bill' first to select the sessions.");
+        UiModal.alert("Please click 'Generate Bill' first to select the sessions.");
         return null;
     }
 
@@ -23436,7 +23831,7 @@ function getAcquittanceData() {
     });
 
     if (sessionKeys.size === 0) {
-        alert("No valid sessions found in the generated bills.");
+        UiModal.alert("No valid sessions found in the generated bills.");
         return null;
     }
 
@@ -23714,7 +24109,7 @@ function generateRemunerationBillPDF() {
     // SELECT ALL GENERATED BILLS (Not just the first one)
     const billPages = container ? container.querySelectorAll('.print-page') : [];
 
-    if (billPages.length === 0) return alert("No bill generated. Please click 'Generate Bill' first.");
+    if (billPages.length === 0) return UiModal.alert("No bill generated. Please click 'Generate Bill' first.");
 
     const btn = document.getElementById('btn-download-bill-pdf');
     if(btn) { btn.disabled = true; btn.innerHTML = "⏳ Generating..."; }
@@ -23959,7 +24354,7 @@ function generateRemunerationBillPDF() {
 
     } catch (e) {
         console.error("PDF Error:", e);
-        alert("Error creating PDF: " + e.message);
+        UiModal.alert("Error creating PDF: " + e.message);
     } finally {
         if(btn) { btn.disabled = false; btn.innerHTML = `📄 Download PDF`; }
     }
@@ -24021,7 +24416,7 @@ function populateUploadExamDropdown() {
         // B. Trigger Alert (Only if user is on this tab)
         const extractorView = document.getElementById('view-extractor');
         if (extractorView && !extractorView.classList.contains('hidden')) {
-            alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
+            UiModal.alert("⚠️ No Exam Names found!\n\nPlease go to Settings > Exam Configuration to define your exams (e.g., 'B.Sc S5', 'B.A S3') before uploading data.");
         }
     } else {
         // Reset style
@@ -24046,7 +24441,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
     // Safety check: if template is missing, stop
     if (!template) { 
         console.error("Manual Template not found!"); 
-        alert("Error: Manual content is missing.");
+        UiModal.alert("Error: Manual content is missing.");
         return; 
     }
     
@@ -24080,7 +24475,7 @@ window.openManualNewTab = function() {   // <--- CHANGE THIS LINE ONLY
         `);
         win.document.close(); // Essential for the browser to stop loading and render
     } else {
-        alert("Please allow pop-ups for this site to view the manual.");
+        UiModal.alert("Please allow pop-ups for this site to view the manual.");
     }
 }
 
@@ -24369,6 +24764,220 @@ async function runSystemHealthCheck() {
 // BULK DELETE FUNCTIONS (Global Scope & Corrected Data Source)
 // ==========================================
 
+// ==========================================
+// 🏷️ GLOBAL EXAM RENAME FUNCTIONS
+// ==========================================
+
+window.toggleExamRenameLock = async function() {
+    const renameLockBtn = document.getElementById('btn-toggle-rename-lock');
+    const sourceSelect = document.getElementById('edit-rename-source-exam');
+    const targetSelect = document.getElementById('edit-rename-target-exam');
+    const renameBtn = document.getElementById('btn-edit-bulk-rename');
+    const controlsDiv = document.getElementById('bulk-rename-controls');
+    const countBadge = document.getElementById('rename-source-count-badge');
+
+    if (!renameLockBtn || !sourceSelect || !targetSelect || !renameBtn || !controlsDiv) return;
+
+    const isLocked = sourceSelect.disabled;
+
+    if (isLocked) {
+        // --- UNLOCKING ---
+        let students = allStudentData;
+        if ((!students || students.length === 0) && typeof loadExamDataIDB === 'function') {
+            try {
+                students = (await loadExamDataIDB()) || [];
+                allStudentData = students;
+            } catch (err) {
+                console.warn("Could not load student data for exam rename:", err);
+            }
+        }
+
+        sourceSelect.innerHTML = '<option value="">-- Select Exam to Rename --</option>';
+
+        const examStats = new Map(); // examName -> { count: number, sessions: Set }
+        (allStudentData || []).forEach(s => {
+            if (!s) return;
+            const name = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+            if (!name) return;
+            if (!examStats.has(name)) {
+                examStats.set(name, { count: 0, sessions: new Set() });
+            }
+            const stat = examStats.get(name);
+            stat.count++;
+            stat.sessions.add(`${s.Date} | ${s.Time}`);
+        });
+
+        if (examStats.size === 0) {
+            await UiModal.alert("No exam records found in student data!");
+            return;
+        }
+
+        const sortedNames = Array.from(examStats.keys()).sort();
+        sortedNames.forEach(name => {
+            const stat = examStats.get(name);
+            const sessCount = stat.sessions.size;
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = `${name} (${stat.count} students in ${sessCount} session${sessCount === 1 ? '' : 's'})`;
+            sourceSelect.appendChild(opt);
+        });
+
+        // Populate Target Master Exam Dropdown from Settings (examRulesConfig)
+        const rulesRaw = localStorage.getItem('examRulesConfig');
+        const rules = rulesRaw ? JSON.parse(rulesRaw) : [];
+        const masterNames = [...new Set(rules.map(r => r.examName))].sort();
+
+        targetSelect.innerHTML = '<option value="">-- Select Master Exam Name --</option>';
+        if (masterNames.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = "(No Exams Configured in Settings)";
+            opt.disabled = true;
+            targetSelect.appendChild(opt);
+        } else {
+            masterNames.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                targetSelect.appendChild(opt);
+            });
+        }
+
+        sourceSelect.onchange = function() {
+            const chosen = this.value;
+            if (countBadge) {
+                if (chosen && examStats.has(chosen)) {
+                    const st = examStats.get(chosen);
+                    countBadge.textContent = `(${st.count} students, ${st.sessions.size} session${st.sessions.size === 1 ? '' : 's'})`;
+                } else {
+                    countBadge.textContent = '';
+                }
+            }
+        };
+
+        sourceSelect.disabled = false;
+        targetSelect.disabled = false;
+        renameBtn.disabled = false;
+
+        sourceSelect.classList.remove('bg-gray-100');
+        sourceSelect.classList.add('bg-white');
+        targetSelect.classList.remove('bg-gray-100');
+        targetSelect.classList.add('bg-white');
+        controlsDiv.classList.remove('opacity-50', 'pointer-events-none');
+
+        renameLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+            <span class="text-amber-700 font-bold">Unlocked</span>
+        `;
+        renameLockBtn.className = "text-xs flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-300 px-3 py-1.5 rounded hover:bg-amber-100 transition shadow-sm";
+
+    } else {
+        // --- LOCKING ---
+        sourceSelect.disabled = true;
+        targetSelect.disabled = true;
+        renameBtn.disabled = true;
+
+        sourceSelect.innerHTML = '<option value="">-- Locked --</option>';
+        targetSelect.innerHTML = '<option value="">-- Locked --</option>';
+        if (countBadge) countBadge.textContent = '';
+
+        sourceSelect.classList.add('bg-gray-100');
+        sourceSelect.classList.remove('bg-white');
+        targetSelect.classList.add('bg-gray-100');
+        targetSelect.classList.remove('bg-white');
+        controlsDiv.classList.add('opacity-50', 'pointer-events-none');
+
+        renameLockBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <span>Locked</span>
+        `;
+        renameLockBtn.className = "text-xs flex items-center gap-1 bg-white text-gray-500 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 transition shadow-sm";
+    }
+};
+
+window.executeGlobalExamRename = async function() {
+    const sourceSelect = document.getElementById('edit-rename-source-exam');
+    const targetSelect = document.getElementById('edit-rename-target-exam');
+    if (!sourceSelect || !targetSelect) return;
+
+    const sourceExam = sourceSelect.value.trim();
+    const targetExam = targetSelect.value.trim();
+
+    if (!sourceExam) {
+        return await UiModal.alert("Please select the Current Exam Name to rename.");
+    }
+    if (!targetExam) {
+        return await UiModal.alert("Please select the Target Master Exam to rename to.");
+    }
+    if (sourceExam === targetExam) {
+        return await UiModal.alert("The Current Exam Name and Target Exam Name are identical. Please choose a different Target Exam.");
+    }
+
+    let students = allStudentData;
+    if ((!students || students.length === 0) && typeof loadExamDataIDB === 'function') {
+        try {
+            students = (await loadExamDataIDB()) || [];
+            allStudentData = students;
+        } catch (loadErr) {
+            console.warn("Could not load student data for global rename:", loadErr);
+        }
+    }
+
+    const matchingStudents = (students || []).filter(s => {
+        if (!s) return false;
+        const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+        return sExam === sourceExam;
+    });
+
+    if (matchingStudents.length === 0) {
+        return await UiModal.alert(`No student records found tagged with "${sourceExam}".`);
+    }
+
+    const affectedSessions = new Set();
+    matchingStudents.forEach(s => {
+        if (s.Date && s.Time) affectedSessions.add(`${s.Date} | ${s.Time}`);
+    });
+
+    const confirmMsg = `⚠️ CONFIRM GLOBAL EXAM RENAME ⚠️\n\n• Current Exam: "${sourceExam}"\n• Rename To: "${targetExam}"\n\nAFFECTED RECORDS:\n• ${matchingStudents.length} Student Records\n• ${affectedSessions.size} Exam Sessions\n\nThis will update all matching student records across the entire database.\n\nProceed?`;
+    if (!await UiModal.confirm('Confirm Global Exam Rename', confirmMsg)) return;
+
+    const promptCheck = await UiModal.prompt("⚠️ Confirm Global Rename", "Type 'RENAME' to confirm updating all records across the database:", "RENAME");
+    if (promptCheck !== 'RENAME') return await UiModal.alert("Operation cancelled.");
+
+    try {
+        let updatedCount = 0;
+        allStudentData.forEach(s => {
+            if (!s) return;
+            const sExam = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
+            if (sExam === sourceExam) {
+                s['Exam Name'] = targetExam;
+                if (s.examName !== undefined) s.examName = targetExam;
+                if (s.ExamName !== undefined) s.ExamName = targetExam;
+                updatedCount++;
+            }
+        });
+
+        await saveExamDataIDB(allStudentData);
+        if (typeof syncDataToCloud === 'function') {
+            await syncDataToCloud('baseData');
+        }
+        for (const sess of affectedSessions) {
+            if (typeof syncSessionToCloud === 'function') {
+                await syncSessionToCloud(sess);
+            }
+        }
+
+        await UiModal.alert(`✅ Successfully renamed ${updatedCount} student record(s) across ${affectedSessions.size} session(s) to:\n"${targetExam}".\n\nSyncing to cloud and refreshing...`);
+        window.location.reload();
+    } catch (e) {
+        console.error("Error during global exam rename:", e);
+        await UiModal.alert("Error during global exam rename: " + e.message);
+    }
+};
+
 // 1. Toggle Lock Function
 window.toggleBulkLock = function() {
     const bulkLockBtn = document.getElementById('btn-toggle-bulk-lock');
@@ -24435,7 +25044,7 @@ window.toggleBulkLock = function() {
                 }
             };
         } else {
-            alert("No exam sessions found to delete! (List empty)");
+            UiModal.alert("No exam sessions found to delete! (List empty)");
             return;
         }
 
@@ -24495,7 +25104,7 @@ window.executeBulkDelete = async function() {
 
     // Validation
     if (!startSession || !endSession) {
-        alert("Please select both Start and End sessions.");
+        await UiModal.alert("Please select both Start and End sessions.");
         return;
     }
 
@@ -24503,12 +25112,12 @@ window.executeBulkDelete = async function() {
     const endIndex = allStudentSessions.indexOf(endSession);
 
     if (startIndex === -1 || endIndex === -1) {
-        alert("Selected sessions not found in database.");
+        await UiModal.alert("Selected sessions not found in database.");
         return;
     }
 
     if (startIndex > endIndex) {
-        alert("Start Session cannot be after End Session.");
+        await UiModal.alert("Start Session cannot be after End Session.");
         return;
     }
 
@@ -24523,7 +25132,7 @@ window.executeBulkDelete = async function() {
         confirmMsg += `\n🚨 ALL EXAMS in this range will be deleted!\n`;
     }
     confirmMsg += `\n✅ NOTE: Invigilation Volunteers & Unavailability will be PRESERVED.\n\nType 'DELETE' to confirm:`;
-    const userInput = prompt(confirmMsg);
+    const userInput = await UiModal.prompt("🛑 Critical Warning: Range Delete", confirmMsg, "DELETE");
 
     if (userInput !== 'DELETE') return;
 
@@ -24791,11 +25400,11 @@ window.executeBulkDelete = async function() {
             localStorage.setItem('examAllKnownSessions', JSON.stringify(knownRegistry));
         }
 
-        alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
+        await UiModal.alert(`✅ Successfully deleted ${sessionsToDelete.length} sessions.\nInvigilation Volunteers have been preserved.`);
         window.location.reload();
     } catch (error) {
         console.error("Delete Error:", error);
-        alert("An error occurred: " + error.message);
+        await UiModal.alert("An error occurred: " + error.message);
     } finally {
         deleteBtn.innerHTML = "Delete Range";
     }
@@ -24806,7 +25415,7 @@ window.downloadInvigilationListPDF = async function () {
     const sessionKey = (typeof allotmentSessionSelect !== 'undefined' && allotmentSessionSelect.value) 
         ? allotmentSessionSelect.value 
         : document.getElementById('allotment-session-select')?.value;
-    if (!sessionKey) return alert("Please select a session first.");
+    if (!sessionKey) return await UiModal.alert("Please select a session first.");
     const [date, time] = sessionKey.split(' | ');
 
     // 1. Data Sources
@@ -24958,7 +25567,7 @@ window.downloadInvigilationListPDF = async function () {
     }
 
     // 6. Final PDF
-    if (!window.jspdf) return alert("PDF Library not loaded.");
+    if (!window.jspdf) return await UiModal.alert("PDF Library not loaded.");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
@@ -25124,7 +25733,7 @@ window.downloadInvigilationListPDF = async function () {
     };
 
     window.replaceInvigilator = async function(room, name) {
-        if(!confirm(`Confirm replace with ${name}?`)) return;
+        if(!await UiModal.confirm('Confirm Replacement', `Confirm replace with ${name}?`)) return;
         await window.saveInvigAssignment(room, name); // Wait for sync
 
         
@@ -25163,7 +25772,7 @@ window.downloadInvigilationListPDF = async function () {
             const currentText = headerSyncStatus.textContent;
             if (currentText === "Saving..." || currentText === "Connecting...") return;
 
-            if (confirm("☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
+            if (await UiModal.confirm('Force Cloud Sync', "☁️ FORCE SYNC: Save all local data to the Cloud now?")) {
                 if (typeof syncDataToCloud === 'function') {
                     updateSyncStatus("Saving...", "neutral");
         
@@ -25189,7 +25798,7 @@ window.downloadInvigilationListPDF = async function () {
                     
                     updateSyncStatus("All Synced!", "success");
                 } else {
-                    alert("Sync function is not ready yet.");
+                    await UiModal.alert("Sync function is not ready yet.");
                 }
             }
         });
@@ -25257,113 +25866,279 @@ window.downloadInvigilationListPDF = async function () {
             const rawPrefix = document.getElementById('qp-import-prefix-input').value;
             const prefix = rawPrefix.trim().toUpperCase();
 
+            // -------------------------------------------------------------
+            // 🧠 ENHANCED DUAL-SYLLABUS & DUAL-STREAM PARSER ENGINE
+            // Anticipates both 2024 FYUGP & Pre-2024 (CBCSS) formats across
+            // Single-line (tab/dash/comma) and Multi-line alternating pastes.
+            // -------------------------------------------------------------
+
+            function isQpCodeString(str) {
+                if (!str) return false;
+                const clean = str.trim().toUpperCase().replace(/[\s\-_]/g, '');
+                // Standard QP code pattern: 4-8 digits, optional prefix letter (D, C, QP, etc.), optional suffix letter (A, B)
+                return /^[A-Z]{0,3}\d{4,8}[A-Z]{0,2}$/.test(clean);
+            }
+
+            function parseStreamHeader(str) {
+                if (!str) return null;
+                const clean = str.trim().toUpperCase();
+                if (/^(EDE|E\.D\.E\.?)(\s+STREAM)?$/i.test(clean) || clean === 'STREAM: EDE' || clean === '[EDE]') {
+                    return "EDE";
+                }
+                if (/^(REGULAR|REG)(\s+STREAM)?$/i.test(clean) || clean === 'STREAM: REGULAR' || clean === '[REGULAR]') {
+                    return "Regular";
+                }
+                const m = clean.match(/^([A-Z\s]+)\s+STREAM$/i);
+                if (m) {
+                    return m[1].trim();
+                }
+                return null;
+            }
+
+            function extractCourseMeta(courseStr) {
+                if (!courseStr) return { code: null, year: null, title: '', raw: '' };
+                const text = courseStr.trim();
+
+                // 1. Syllabus Year (e.g. 2019, 2020, 2024)
+                const ym = text.match(/\b(20\d{2})\b/);
+                const year = ym ? ym[1] : null;
+
+                // 2. Course Code (e.g. BOT5CJ302, MTS5B06, ZOL5B07T, BCM5B08, COM4CJ204)
+                const codeMatches = text.match(/\b([A-Za-z]{2,5}\d[A-Za-z0-9]{2,7}(?:\([0-9A-Za-z]+\))?)\b/g);
+                let code = null;
+                if (codeMatches) {
+                    const filtered = codeMatches.filter(c => !/^20\d{2}$/.test(c));
+                    if (filtered.length > 0) code = filtered[0].toUpperCase();
+                }
+
+                // 3. Clean Normalized Subject Title
+                let clean = text;
+                clean = clean.replace(/\[.*?\]/g, ' '); // remove bracketed department/syllabus
+                if (code) {
+                    const esc = code.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+                    clean = clean.replace(new RegExp(`\\(?\\b${esc}\\b\\)?`, 'gi'), ' ');
+                }
+                clean = clean.replace(/\((Core|VAC|SEC|Minor|AEC|MDC)\s*[^)]*\)/gi, ' ');
+                clean = clean.replace(/^[A-Za-z0-9\-_/]+\s*-\s*/, ' ');
+                clean = clean.replace(/--+/g, ' ');
+                clean = clean.replace(/^[\s\-_:,]+|[\s\-_:,]+$/g, '').replace(/\s+/g, ' ').toUpperCase();
+
+                return {
+                    code: code,
+                    year: year,
+                    title: clean,
+                    raw: text.toUpperCase()
+                };
+            }
+
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            
-            // We use an Array to hold all portal rows for Deep Fuzzy Searching
             const parsedPairs = [];
+            let currentStream = "Regular";
 
-            lines.forEach(line => {
+            function addParsedPair(searchString, qpCode, streamHint) {
+                if (!searchString || !qpCode) return;
+                let finalQpCode = qpCode.trim().toUpperCase().replace(/\s+/g, '');
+                if (prefix && !finalQpCode.startsWith(prefix)) {
+                    finalQpCode = prefix + finalQpCode;
+                }
+                const effectiveStream = streamHint || currentStream || "Regular";
+                const isEde = finalQpCode.endsWith('A') || effectiveStream.toUpperCase().includes('EDE');
+
+                parsedPairs.push({
+                    searchText: searchString.trim(),
+                    code: finalQpCode,
+                    stream: effectiveStream,
+                    isEde: isEde,
+                    meta: extractCourseMeta(searchString)
+                });
+            }
+
+            let lineIdx = 0;
+            while (lineIdx < lines.length) {
+                const line = lines[lineIdx];
+
+                // 1. Stream Header Marker (e.g. "EDE Stream", "Regular Stream")
+                const streamHeader = parseStreamHeader(line);
+                if (streamHeader) {
+                    currentStream = streamHeader;
+                    lineIdx++;
+                    continue;
+                }
+
+                // 2. Tab-separated on same line (Portal table or clipboard TSV)
                 const tabParts = line.split('\t').map(p => p.trim()).filter(p => p);
-                const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
-                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
-
-                let searchString = null, qpCode = null;
-
-            // ⚡ SMART DETECTION: University Portal Table
-                if (tabParts.length >= 4 && line.includes('--(')) {
-                    qpCode = tabParts[0]; 
-                    // FACTOR IN YEAR: Combine Subject Name + Syllabus Year (e.g. "Applied Costing... 2024")
-                    const syllabus = tabParts[3] ? ` ${tabParts[3].replace(/[()]/g, '')}` : '';
-                    searchString = (tabParts[1] + syllabus).toUpperCase(); 
-                } 
-                // Fallback Generic Manual Parsing (e.g. "Subject [tab] Code")
-                else if (tabParts.length >= 2) {
-                    // Try to detect if the last part is a short code and first part is long subject
-                    if (tabParts[0].length > tabParts[tabParts.length-1].length) {
-                        searchString = tabParts[0].toUpperCase();
-                        qpCode = tabParts[tabParts.length - 1];
-                    } else {
-                        searchString = tabParts[tabParts.length - 1].toUpperCase();
+                if (tabParts.length >= 2) {
+                    let searchString = null, qpCode = null;
+                    if (tabParts.length >= 4 && line.includes('--(')) {
                         qpCode = tabParts[0];
+                        const syllabus = tabParts[3] ? ` ${tabParts[3].replace(/[()]/g, '')}` : '';
+                        searchString = (tabParts[1] + syllabus);
+                    } else if (isQpCodeString(tabParts[0])) {
+                        qpCode = tabParts[0];
+                        searchString = tabParts.slice(1).join(' ');
+                    } else if (isQpCodeString(tabParts[tabParts.length - 1])) {
+                        qpCode = tabParts[tabParts.length - 1];
+                        searchString = tabParts.slice(0, -1).join(' ');
+                    } else {
+                        if (tabParts[0].length > tabParts[tabParts.length - 1].length) {
+                            searchString = tabParts[0];
+                            qpCode = tabParts[tabParts.length - 1];
+                        } else {
+                            searchString = tabParts[tabParts.length - 1];
+                            qpCode = tabParts[0];
+                        }
                     }
-                } else if (dashParts.length === 2) {
-                    searchString = dashParts[0].toUpperCase();
-                    qpCode = dashParts[1];
-                } else if (commaParts.length >= 2) {
-                    searchString = commaParts[0].toUpperCase();
-                    qpCode = commaParts[commaParts.length - 1];
+                    if (searchString && qpCode) {
+                        addParsedPair(searchString, qpCode, currentStream);
+                    }
+                    lineIdx++;
+                    continue;
                 }
 
-                if (searchString && qpCode && qpCode !== searchString) {
-                    // Compress structure to remove bad portal spaces (e.g. "1234 A" -> "1234A")
-                    let finalQpCode = qpCode.trim().toUpperCase().replace(/\s+/g, '');
-                    if (prefix && !finalQpCode.startsWith(prefix)) {
-                        finalQpCode = prefix + finalQpCode;
-                    }
-                    
-                    parsedPairs.push({
-                        searchText: searchString, // Native unmolested string
-                        code: finalQpCode,
-                        isEde: finalQpCode.endsWith('A') // Flags "A" suffix for EDE
-                    });
+                // 3. Comma, Colon, or Dash separated on same line (ONLY if one side is a genuine QP Code)
+                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
+                if (commaParts.length === 2 && (isQpCodeString(commaParts[0]) || isQpCodeString(commaParts[1]))) {
+                    const qp = isQpCodeString(commaParts[0]) ? commaParts[0] : commaParts[1];
+                    const crs = isQpCodeString(commaParts[0]) ? commaParts[1] : commaParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
                 }
-            });
+
+                const colonParts = line.split(':').map(p => p.trim()).filter(p => p);
+                if (colonParts.length === 2 && (isQpCodeString(colonParts[0]) || isQpCodeString(colonParts[1]))) {
+                    const qp = isQpCodeString(colonParts[0]) ? colonParts[0] : colonParts[1];
+                    const crs = isQpCodeString(colonParts[0]) ? colonParts[1] : colonParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
+                }
+
+                const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
+                if (dashParts.length === 2 && (isQpCodeString(dashParts[0]) || isQpCodeString(dashParts[1]))) {
+                    const qp = isQpCodeString(dashParts[0]) ? dashParts[0] : dashParts[1];
+                    const crs = isQpCodeString(dashParts[0]) ? dashParts[1] : dashParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
+                }
+
+                // 4. Multi-line Alternating (e.g. Line 1: Course, Line 2: QP Code OR Line 1: QP Code, Line 2: Course)
+                if (lineIdx + 1 < lines.length) {
+                    const nextLine = lines[lineIdx + 1];
+                    if (!parseStreamHeader(nextLine)) {
+                        if (isQpCodeString(nextLine) && !isQpCodeString(line)) {
+                            addParsedPair(line, nextLine, currentStream);
+                            lineIdx += 2;
+                            continue;
+                        } else if (isQpCodeString(line) && !isQpCodeString(nextLine)) {
+                            addParsedPair(nextLine, line, currentStream);
+                            lineIdx += 2;
+                            continue;
+                        }
+                    }
+                }
+
+                lineIdx++;
+            }
 
             if (parsedPairs.length === 0) {
-                alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject' or raw Portal Table.");
+                await UiModal.alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject', multi-line 'Subject \n Code', or raw Portal Table.");
                 return;
             }
 
             const sessionKey = document.getElementById('session-select-qp')?.value;
             if (!sessionKey) {
-                alert("Please select a session first.");
+                await UiModal.alert("Please select a session first.");
                 return;
             }
 
             let matched = 0;
             const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
-            // Track used pairs to find missing in examflow
+            // Track used pairs and matched inputs
             const usedPairs = new Set();
             const matchedInputs = new Set();
 
-            // PASS 1: Truly Exact Matches
-            inputs.forEach(input => {
-                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
+            function getCandidatePairs(input) {
+                const streamName = (input.dataset.stream || "Regular").trim().toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
-                
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
+                return validPairs;
+            }
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
-                if (perfectMatch) {
-                    input.value = perfectMatch.code;
-                    usedPairs.add(perfectMatch);
+            // PASS 1: Course Code Exact Match (Highest Confidence: e.g. BOT5CJ302, MTS5B06, BCM5B08, BBA5B08)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.code) return;
+
+                const candidates = getCandidatePairs(input);
+                const match = candidates.find(p => !usedPairs.has(p) && p.meta.code && p.meta.code === uiMeta.code);
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
                     matchedInputs.add(input);
                     matched++;
                 }
             });
 
-            // PASS 2: Substring Matches (Length Weighted)
+            // PASS 2: Truly Exact Raw/Sanitized String Match
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
-
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
-                const isEdeStream = streamName.includes("EDE");
-                
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0) validPairs = parsedPairs;
+                const candidates = getCandidatePairs(input);
+
+                const match = candidates.find(p => !usedPairs.has(p) && p.searchText.toUpperCase() === uiCourseName);
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
+                    matchedInputs.add(input);
+                    matched++;
+                }
+            });
+
+            // PASS 3: Exact Normalized Title Match (+ Syllabus Year Check)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.title) return;
+
+                const candidates = getCandidatePairs(input);
+                const match = candidates.find(p => {
+                    if (usedPairs.has(p) || !p.meta.title) return false;
+                    if (p.meta.title !== uiMeta.title) return false;
+                    if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return false;
+                    return true;
+                });
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
+                    matchedInputs.add(input);
+                    matched++;
+                }
+            });
+
+            // PASS 4: Substring Title Match (Length Weighted)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const candidates = getCandidatePairs(input);
 
                 let bestMatch = null;
                 let maxLength = 0;
 
-                validPairs.forEach(p => {
-                    // Allowed multiple mapping by not filtering out usedPairs in Phase 2
-                    if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
-                        if (p.searchText.length > maxLength) {
-                            maxLength = p.searchText.length;
+                candidates.forEach(p => {
+                    if (usedPairs.has(p)) return;
+                    const pTitle = p.meta.title || p.searchText.toUpperCase();
+                    const uTitle = uiMeta.title || uiCourseName;
+
+                    if (pTitle && uTitle && (pTitle.includes(uTitle) || uTitle.includes(pTitle))) {
+                        if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                        if (pTitle.length > maxLength) {
+                            maxLength = pTitle.length;
                             bestMatch = p;
                         }
                     }
@@ -25377,31 +26152,23 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
+            // PASS 5: Deep Word-Tokenizing Sequence-Aware Match (Fuzzy Fallback)
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
-
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
-                const isEdeStream = streamName.includes("EDE");
-                
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0) validPairs = parsedPairs;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                const candidates = getCandidatePairs(input);
 
-                // Strip years from the fuzzy text search array so they don't corrupt the coreRatio
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
                 const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
 
-                const uiYearMatch = uiCourseName.match(/20\d{2}/);
-                const uiYear = uiYearMatch ? uiYearMatch[0] : null;
-
                 if (words.length > 0) {
-                    let candidates = [];
+                    let candidateList = [];
 
-                    validPairs.forEach(p => {
-                        const pYearMatch = p.searchText.match(/20\d{2}/);
-                        const pYear = pYearMatch ? pYearMatch[0] : null;
+                    candidates.forEach(p => {
+                        if (usedPairs.has(p)) return;
+                        const pYear = p.meta.year;
 
                         let score = 0;
                         let coreScore = 0;
@@ -25409,16 +26176,16 @@ window.downloadInvigilationListPDF = async function () {
                         let prevMatchedIndex = -1;
                         let lastFoundIndex = -1;
 
-                        const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
-                        
+                        const portalWords = p.searchText.toUpperCase().split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+
                         words.forEach(w => {
                             const startIndex = lastFoundIndex === -1 ? 0 : lastFoundIndex + 1;
                             const pIdx = portalWords.indexOf(w, startIndex);
-                            
+
                             if (pIdx !== -1) {
                                 score++;
                                 if (coreWords.includes(w)) coreScore++;
-                                
+
                                 if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
                                     consecutiveMatches++;
                                 }
@@ -25426,24 +26193,19 @@ window.downloadInvigilationListPDF = async function () {
                                 prevMatchedIndex = pIdx;
                             }
                         });
-                        
-                        const totalScore = coreScore + (consecutiveMatches * 2);
 
-                        // Threshold: Must have > 60% core words matched STRICTLY IN SEQUENCE
+                        const totalScore = coreScore + (consecutiveMatches * 2);
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
                         if ((coreRatio > 0.6 || coreWords.length === 0) && totalScore > 0) {
-                            candidates.push({ p, totalScore, pYear });
+                            candidateList.push({ p, totalScore, pYear });
                         }
                     });
 
                     let bestMatch = null;
-
-                    if (candidates.length === 1) {
-                        // Scenario 1: Only 1 portal entry matches this subject. Map it regardless of year mismatch.
-                        bestMatch = candidates[0].p;
-                    } else if (candidates.length > 1) {
-                        // Scenario 2: Multiple entries. Enforce strict year matching.
-                        const yearMatched = candidates.filter(c => !uiYear || !c.pYear || c.pYear === uiYear);
+                    if (candidateList.length === 1) {
+                        bestMatch = candidateList[0].p;
+                    } else if (candidateList.length > 1) {
+                        const yearMatched = candidateList.filter(c => !uiMeta.year || !c.pYear || c.pYear === uiMeta.year);
                         if (yearMatched.length > 0) {
                             yearMatched.sort((a, b) => b.totalScore - a.totalScore);
                             bestMatch = yearMatched[0].p;
@@ -25459,7 +26221,8 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // ERROR REPORTING (Missing Courses Alert)
+
+                        // ERROR REPORTING (Missing Courses Alert)
             const missingInPortal = [];
             inputs.forEach(input => {
                 if (!input.value) {
@@ -25510,7 +26273,7 @@ window.downloadInvigilationListPDF = async function () {
                 alertContainer.innerHTML = "<span class='text-red-600'>Clipboard access blocked. Please allow clipboard permissions or input manually.</span>";
                 alertContainer.classList.remove('hidden');
             } else {
-                alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
+                await UiModal.alert("Clipboard access blocked. Please allow clipboard permissions or input manually.");
             }
         }
     };
@@ -25575,10 +26338,10 @@ window.addEventListener('message', async (event) => {
             if (typeof refreshAllStats === 'function') refreshAllStats();
             if (typeof populate_session_dropdown === 'function') populate_session_dropdown();
 
-            alert(`✅ Extension Sync Successful!\n\n${incomingData.length} students loaded and pushed to Invigilation Portal.`);
+            await UiModal.alert(`✅ Extension Sync Successful!\n\n${incomingData.length} students loaded and pushed to Invigilation Portal.`);
         } catch (err) {
             console.error("Extension Sync Failed:", err);
-            alert("❌ Extension Sync Failed. Check console for details.");
+            await UiModal.alert("❌ Extension Sync Failed. Check console for details.");
         }
     }
 });
@@ -25655,13 +26418,13 @@ window.triggerSessionExport = function() {
     const sessionKey = document.getElementById('reports-session-select')?.value;
     
     if (!sessionKey) {
-        return alert("⚠️ Please select a Session from the dropdown first.");
+        return UiModal.alert("⚠️ Please select a Session from the dropdown first.");
     }
 
     if (typeof SESSION_EXPORT_JS !== 'undefined') {
         SESSION_EXPORT_JS.exportSession(sessionKey);
     } else {
-        alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
+        UiModal.alert("Error: Export Module (session_export.js) not found. Check index.html inclusion.");
     }
 };
 
