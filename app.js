@@ -25514,60 +25514,184 @@ window.downloadInvigilationListPDF = async function () {
             const rawPrefix = document.getElementById('qp-import-prefix-input').value;
             const prefix = rawPrefix.trim().toUpperCase();
 
+            // -------------------------------------------------------------
+            // 🧠 ENHANCED DUAL-SYLLABUS & DUAL-STREAM PARSER ENGINE
+            // Anticipates both 2024 FYUGP & Pre-2024 (CBCSS) formats across
+            // Single-line (tab/dash/comma) and Multi-line alternating pastes.
+            // -------------------------------------------------------------
+
+            function isQpCodeString(str) {
+                if (!str) return false;
+                const clean = str.trim().toUpperCase().replace(/[\s\-_]/g, '');
+                // Standard QP code pattern: 4-8 digits, optional prefix letter (D, C, QP, etc.), optional suffix letter (A, B)
+                return /^[A-Z]{0,3}\d{4,8}[A-Z]{0,2}$/.test(clean);
+            }
+
+            function parseStreamHeader(str) {
+                if (!str) return null;
+                const clean = str.trim().toUpperCase();
+                if (/^(EDE|E\.D\.E\.?)(\s+STREAM)?$/i.test(clean) || clean === 'STREAM: EDE' || clean === '[EDE]') {
+                    return "EDE";
+                }
+                if (/^(REGULAR|REG)(\s+STREAM)?$/i.test(clean) || clean === 'STREAM: REGULAR' || clean === '[REGULAR]') {
+                    return "Regular";
+                }
+                const m = clean.match(/^([A-Z\s]+)\s+STREAM$/i);
+                if (m) {
+                    return m[1].trim();
+                }
+                return null;
+            }
+
+            function extractCourseMeta(courseStr) {
+                if (!courseStr) return { code: null, year: null, title: '', raw: '' };
+                const text = courseStr.trim();
+
+                // 1. Syllabus Year (e.g. 2019, 2020, 2024)
+                const ym = text.match(/\b(20\d{2})\b/);
+                const year = ym ? ym[1] : null;
+
+                // 2. Course Code (e.g. BOT5CJ302, MTS5B06, ZOL5B07T, BCM5B08, COM4CJ204)
+                const codeMatches = text.match(/\b([A-Za-z]{2,5}\d[A-Za-z0-9]{2,7}(?:\([0-9A-Za-z]+\))?)\b/g);
+                let code = null;
+                if (codeMatches) {
+                    const filtered = codeMatches.filter(c => !/^20\d{2}$/.test(c));
+                    if (filtered.length > 0) code = filtered[0].toUpperCase();
+                }
+
+                // 3. Clean Normalized Subject Title
+                let clean = text;
+                clean = clean.replace(/\[.*?\]/g, ' '); // remove bracketed department/syllabus
+                if (code) {
+                    const esc = code.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+                    clean = clean.replace(new RegExp(`\\(?\\b${esc}\\b\\)?`, 'gi'), ' ');
+                }
+                clean = clean.replace(/\((Core|VAC|SEC|Minor|AEC|MDC)\s*[^)]*\)/gi, ' ');
+                clean = clean.replace(/^[A-Za-z0-9\-_/]+\s*-\s*/, ' ');
+                clean = clean.replace(/--+/g, ' ');
+                clean = clean.replace(/^[\s\-_:,]+|[\s\-_:,]+$/g, '').replace(/\s+/g, ' ').toUpperCase();
+
+                return {
+                    code: code,
+                    year: year,
+                    title: clean,
+                    raw: text.toUpperCase()
+                };
+            }
+
             const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            
-            // We use an Array to hold all portal rows for Deep Fuzzy Searching
             const parsedPairs = [];
+            let currentStream = "Regular";
 
-            lines.forEach(line => {
+            function addParsedPair(searchString, qpCode, streamHint) {
+                if (!searchString || !qpCode) return;
+                let finalQpCode = qpCode.trim().toUpperCase().replace(/\s+/g, '');
+                if (prefix && !finalQpCode.startsWith(prefix)) {
+                    finalQpCode = prefix + finalQpCode;
+                }
+                const effectiveStream = streamHint || currentStream || "Regular";
+                const isEde = finalQpCode.endsWith('A') || effectiveStream.toUpperCase().includes('EDE');
+
+                parsedPairs.push({
+                    searchText: searchString.trim(),
+                    code: finalQpCode,
+                    stream: effectiveStream,
+                    isEde: isEde,
+                    meta: extractCourseMeta(searchString)
+                });
+            }
+
+            let lineIdx = 0;
+            while (lineIdx < lines.length) {
+                const line = lines[lineIdx];
+
+                // 1. Stream Header Marker (e.g. "EDE Stream", "Regular Stream")
+                const streamHeader = parseStreamHeader(line);
+                if (streamHeader) {
+                    currentStream = streamHeader;
+                    lineIdx++;
+                    continue;
+                }
+
+                // 2. Tab-separated on same line (Portal table or clipboard TSV)
                 const tabParts = line.split('\t').map(p => p.trim()).filter(p => p);
-                const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
-                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
-
-                let searchString = null, qpCode = null;
-
-            // ⚡ SMART DETECTION: University Portal Table
-                if (tabParts.length >= 4 && line.includes('--(')) {
-                    qpCode = tabParts[0]; 
-                    // FACTOR IN YEAR: Combine Subject Name + Syllabus Year (e.g. "Applied Costing... 2024")
-                    const syllabus = tabParts[3] ? ` ${tabParts[3].replace(/[()]/g, '')}` : '';
-                    searchString = (tabParts[1] + syllabus).toUpperCase(); 
-                } 
-                // Fallback Generic Manual Parsing (e.g. "Subject [tab] Code")
-                else if (tabParts.length >= 2) {
-                    // Try to detect if the last part is a short code and first part is long subject
-                    if (tabParts[0].length > tabParts[tabParts.length-1].length) {
-                        searchString = tabParts[0].toUpperCase();
-                        qpCode = tabParts[tabParts.length - 1];
-                    } else {
-                        searchString = tabParts[tabParts.length - 1].toUpperCase();
+                if (tabParts.length >= 2) {
+                    let searchString = null, qpCode = null;
+                    if (tabParts.length >= 4 && line.includes('--(')) {
                         qpCode = tabParts[0];
+                        const syllabus = tabParts[3] ? ` ${tabParts[3].replace(/[()]/g, '')}` : '';
+                        searchString = (tabParts[1] + syllabus);
+                    } else if (isQpCodeString(tabParts[0])) {
+                        qpCode = tabParts[0];
+                        searchString = tabParts.slice(1).join(' ');
+                    } else if (isQpCodeString(tabParts[tabParts.length - 1])) {
+                        qpCode = tabParts[tabParts.length - 1];
+                        searchString = tabParts.slice(0, -1).join(' ');
+                    } else {
+                        if (tabParts[0].length > tabParts[tabParts.length - 1].length) {
+                            searchString = tabParts[0];
+                            qpCode = tabParts[tabParts.length - 1];
+                        } else {
+                            searchString = tabParts[tabParts.length - 1];
+                            qpCode = tabParts[0];
+                        }
                     }
-                } else if (dashParts.length === 2) {
-                    searchString = dashParts[0].toUpperCase();
-                    qpCode = dashParts[1];
-                } else if (commaParts.length >= 2) {
-                    searchString = commaParts[0].toUpperCase();
-                    qpCode = commaParts[commaParts.length - 1];
+                    if (searchString && qpCode) {
+                        addParsedPair(searchString, qpCode, currentStream);
+                    }
+                    lineIdx++;
+                    continue;
                 }
 
-                if (searchString && qpCode && qpCode !== searchString) {
-                    // Compress structure to remove bad portal spaces (e.g. "1234 A" -> "1234A")
-                    let finalQpCode = qpCode.trim().toUpperCase().replace(/\s+/g, '');
-                    if (prefix && !finalQpCode.startsWith(prefix)) {
-                        finalQpCode = prefix + finalQpCode;
-                    }
-                    
-                    parsedPairs.push({
-                        searchText: searchString, // Native unmolested string
-                        code: finalQpCode,
-                        isEde: finalQpCode.endsWith('A') // Flags "A" suffix for EDE
-                    });
+                // 3. Comma, Colon, or Dash separated on same line (ONLY if one side is a genuine QP Code)
+                const commaParts = line.split(',').map(p => p.trim()).filter(p => p);
+                if (commaParts.length === 2 && (isQpCodeString(commaParts[0]) || isQpCodeString(commaParts[1]))) {
+                    const qp = isQpCodeString(commaParts[0]) ? commaParts[0] : commaParts[1];
+                    const crs = isQpCodeString(commaParts[0]) ? commaParts[1] : commaParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
                 }
-            });
+
+                const colonParts = line.split(':').map(p => p.trim()).filter(p => p);
+                if (colonParts.length === 2 && (isQpCodeString(colonParts[0]) || isQpCodeString(colonParts[1]))) {
+                    const qp = isQpCodeString(colonParts[0]) ? colonParts[0] : colonParts[1];
+                    const crs = isQpCodeString(colonParts[0]) ? colonParts[1] : colonParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
+                }
+
+                const dashParts = line.split(/\s+-\s+/).map(p => p.trim()).filter(p => p);
+                if (dashParts.length === 2 && (isQpCodeString(dashParts[0]) || isQpCodeString(dashParts[1]))) {
+                    const qp = isQpCodeString(dashParts[0]) ? dashParts[0] : dashParts[1];
+                    const crs = isQpCodeString(dashParts[0]) ? dashParts[1] : dashParts[0];
+                    addParsedPair(crs, qp, currentStream);
+                    lineIdx++;
+                    continue;
+                }
+
+                // 4. Multi-line Alternating (e.g. Line 1: Course, Line 2: QP Code OR Line 1: QP Code, Line 2: Course)
+                if (lineIdx + 1 < lines.length) {
+                    const nextLine = lines[lineIdx + 1];
+                    if (!parseStreamHeader(nextLine)) {
+                        if (isQpCodeString(nextLine) && !isQpCodeString(line)) {
+                            addParsedPair(line, nextLine, currentStream);
+                            lineIdx += 2;
+                            continue;
+                        } else if (isQpCodeString(line) && !isQpCodeString(nextLine)) {
+                            addParsedPair(nextLine, line, currentStream);
+                            lineIdx += 2;
+                            continue;
+                        }
+                    }
+                }
+
+                lineIdx++;
+            }
 
             if (parsedPairs.length === 0) {
-                await UiModal.alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject' or raw Portal Table.");
+                await UiModal.alert("Could not detect any valid codes. Format expected: 'Code [tab] Subject', multi-line 'Subject \n Code', or raw Portal Table.");
                 return;
             }
 
@@ -25580,47 +25704,89 @@ window.downloadInvigilationListPDF = async function () {
             let matched = 0;
             const inputs = Array.from(document.querySelectorAll('#qp-code-container input[data-course]'));
 
-            // Track used pairs to find missing in examflow
+            // Track used pairs and matched inputs
             const usedPairs = new Set();
             const matchedInputs = new Set();
 
-            // PASS 1: Truly Exact Matches
-            inputs.forEach(input => {
-                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
+            function getCandidatePairs(input) {
+                const streamName = (input.dataset.stream || "Regular").trim().toUpperCase();
                 const isEdeStream = streamName.includes("EDE");
-                
                 let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
                 if (validPairs.length === 0) validPairs = parsedPairs;
+                return validPairs;
+            }
 
-                const perfectMatch = validPairs.find(p => p.searchText === uiCourseName);
-                if (perfectMatch) {
-                    input.value = perfectMatch.code;
-                    usedPairs.add(perfectMatch);
+            // PASS 1: Course Code Exact Match (Highest Confidence: e.g. BOT5CJ302, MTS5B06, BCM5B08, BBA5B08)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.code) return;
+
+                const candidates = getCandidatePairs(input);
+                const match = candidates.find(p => !usedPairs.has(p) && p.meta.code && p.meta.code === uiMeta.code);
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
                     matchedInputs.add(input);
                     matched++;
                 }
             });
 
-            // PASS 2: Substring Matches (Length Weighted)
+            // PASS 2: Truly Exact Raw/Sanitized String Match
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
-
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
-                const isEdeStream = streamName.includes("EDE");
-                
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0) validPairs = parsedPairs;
+                const candidates = getCandidatePairs(input);
+
+                const match = candidates.find(p => !usedPairs.has(p) && p.searchText.toUpperCase() === uiCourseName);
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
+                    matchedInputs.add(input);
+                    matched++;
+                }
+            });
+
+            // PASS 3: Exact Normalized Title Match (+ Syllabus Year Check)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                if (!uiMeta.title) return;
+
+                const candidates = getCandidatePairs(input);
+                const match = candidates.find(p => {
+                    if (usedPairs.has(p) || !p.meta.title) return false;
+                    if (p.meta.title !== uiMeta.title) return false;
+                    if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return false;
+                    return true;
+                });
+                if (match) {
+                    input.value = match.code;
+                    usedPairs.add(match);
+                    matchedInputs.add(input);
+                    matched++;
+                }
+            });
+
+            // PASS 4: Substring Title Match (Length Weighted)
+            inputs.forEach(input => {
+                if (matchedInputs.has(input)) return;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
+                const candidates = getCandidatePairs(input);
 
                 let bestMatch = null;
                 let maxLength = 0;
 
-                validPairs.forEach(p => {
-                    // Allowed multiple mapping by not filtering out usedPairs in Phase 2
-                    if (p.searchText.includes(uiCourseName) || uiCourseName.includes(p.searchText)) {
-                        if (p.searchText.length > maxLength) {
-                            maxLength = p.searchText.length;
+                candidates.forEach(p => {
+                    if (usedPairs.has(p)) return;
+                    const pTitle = p.meta.title || p.searchText.toUpperCase();
+                    const uTitle = uiMeta.title || uiCourseName;
+
+                    if (pTitle && uTitle && (pTitle.includes(uTitle) || uTitle.includes(pTitle))) {
+                        if (uiMeta.year && p.meta.year && uiMeta.year !== p.meta.year) return;
+                        if (pTitle.length > maxLength) {
+                            maxLength = pTitle.length;
                             bestMatch = p;
                         }
                     }
@@ -25634,31 +25800,23 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // PASS 3: Deep Word-Tokenizing Sequence-Aware Match
+            // PASS 5: Deep Word-Tokenizing Sequence-Aware Match (Fuzzy Fallback)
             inputs.forEach(input => {
                 if (matchedInputs.has(input)) return;
-
                 const uiCourseName = sanitizeCourseName(input.dataset.course).trim().toUpperCase();
-                const streamName = (input.dataset.stream || "").toUpperCase();
-                const isEdeStream = streamName.includes("EDE");
-                
-                let validPairs = parsedPairs.filter(p => p.isEde === isEdeStream);
-                if (validPairs.length === 0) validPairs = parsedPairs;
+                const uiMeta = extractCourseMeta(input.dataset.course);
+                const candidates = getCandidatePairs(input);
 
-                // Strip years from the fuzzy text search array so they don't corrupt the coreRatio
                 const words = uiCourseName.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2 && !w.match(/^20\d{2}$/));
                 const ignoreWords = ['SYLLABUS', 'PART', 'PAPER', 'BASIC', 'COMMON', 'COURSE', 'PROGRAMME', 'EXAMINATION', 'CORE', 'COMPLEMENTARY', 'OPEN', 'ELECTIVE'];
                 const coreWords = words.filter(w => !ignoreWords.includes(w) && isNaN(w));
 
-                const uiYearMatch = uiCourseName.match(/20\d{2}/);
-                const uiYear = uiYearMatch ? uiYearMatch[0] : null;
-
                 if (words.length > 0) {
-                    let candidates = [];
+                    let candidateList = [];
 
-                    validPairs.forEach(p => {
-                        const pYearMatch = p.searchText.match(/20\d{2}/);
-                        const pYear = pYearMatch ? pYearMatch[0] : null;
+                    candidates.forEach(p => {
+                        if (usedPairs.has(p)) return;
+                        const pYear = p.meta.year;
 
                         let score = 0;
                         let coreScore = 0;
@@ -25666,16 +25824,16 @@ window.downloadInvigilationListPDF = async function () {
                         let prevMatchedIndex = -1;
                         let lastFoundIndex = -1;
 
-                        const portalWords = p.searchText.split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
-                        
+                        const portalWords = p.searchText.toUpperCase().split(/[\s,.\-\[\]()]+/).filter(w => w.length > 2);
+
                         words.forEach(w => {
                             const startIndex = lastFoundIndex === -1 ? 0 : lastFoundIndex + 1;
                             const pIdx = portalWords.indexOf(w, startIndex);
-                            
+
                             if (pIdx !== -1) {
                                 score++;
                                 if (coreWords.includes(w)) coreScore++;
-                                
+
                                 if (prevMatchedIndex !== -1 && pIdx === prevMatchedIndex + 1) {
                                     consecutiveMatches++;
                                 }
@@ -25683,24 +25841,19 @@ window.downloadInvigilationListPDF = async function () {
                                 prevMatchedIndex = pIdx;
                             }
                         });
-                        
-                        const totalScore = coreScore + (consecutiveMatches * 2);
 
-                        // Threshold: Must have > 60% core words matched STRICTLY IN SEQUENCE
+                        const totalScore = coreScore + (consecutiveMatches * 2);
                         const coreRatio = coreWords.length > 0 ? coreScore / coreWords.length : 0;
                         if ((coreRatio > 0.6 || coreWords.length === 0) && totalScore > 0) {
-                            candidates.push({ p, totalScore, pYear });
+                            candidateList.push({ p, totalScore, pYear });
                         }
                     });
 
                     let bestMatch = null;
-
-                    if (candidates.length === 1) {
-                        // Scenario 1: Only 1 portal entry matches this subject. Map it regardless of year mismatch.
-                        bestMatch = candidates[0].p;
-                    } else if (candidates.length > 1) {
-                        // Scenario 2: Multiple entries. Enforce strict year matching.
-                        const yearMatched = candidates.filter(c => !uiYear || !c.pYear || c.pYear === uiYear);
+                    if (candidateList.length === 1) {
+                        bestMatch = candidateList[0].p;
+                    } else if (candidateList.length > 1) {
+                        const yearMatched = candidateList.filter(c => !uiMeta.year || !c.pYear || c.pYear === uiMeta.year);
                         if (yearMatched.length > 0) {
                             yearMatched.sort((a, b) => b.totalScore - a.totalScore);
                             bestMatch = yearMatched[0].p;
@@ -25716,7 +25869,8 @@ window.downloadInvigilationListPDF = async function () {
                 }
             });
 
-            // ERROR REPORTING (Missing Courses Alert)
+
+                        // ERROR REPORTING (Missing Courses Alert)
             const missingInPortal = [];
             inputs.forEach(input => {
                 if (!input.value) {
