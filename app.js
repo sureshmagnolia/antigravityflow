@@ -12484,10 +12484,6 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (!hasMultiple) {
             if (modalContainer) modalContainer.classList.add('hidden');
             if (mainContainer) mainContainer.classList.add('hidden');
-            const modalMix = document.querySelector('input[name="modal-exam-grouping"][value="mix"]');
-            if (modalMix) modalMix.checked = true;
-            const mainMix = document.querySelector('input[name="main-exam-grouping"][value="mix"]');
-            if (mainMix) mainMix.checked = true;
             const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
             const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
             if (modalBoundary) modalBoundary.classList.add('hidden');
@@ -12523,6 +12519,18 @@ window.real_populate_qp_code_session_dropdown = function () {
             mainContainer.classList.remove('hidden');
             const mainListDiv = document.getElementById('main-detected-exams-list');
             if (mainListDiv) mainListDiv.innerHTML = mainSummaryHtml;
+        }
+
+        const currentGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
+        const modalBoundary = document.getElementById('modal-exam-boundary-wrapper');
+        const mainBoundary = document.getElementById('main-exam-boundary-wrapper');
+        if (modalBoundary) {
+            if (currentGrouping === 'separate') modalBoundary.classList.remove('hidden');
+            else modalBoundary.classList.add('hidden');
+        }
+        if (mainBoundary) {
+            if (currentGrouping === 'separate') mainBoundary.classList.remove('hidden');
+            else mainBoundary.classList.add('hidden');
         }
     }
     window.updateExamGroupingUI = updateExamGroupingUI;
@@ -13360,13 +13368,18 @@ window.real_populate_qp_code_session_dropdown = function () {
             if (modalRadio) modalRadio.checked = true;
 
             // SYNC: Read current Main Tab exam grouping and pre-select in modal
-            const currentMainExamGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'mix';
+            const currentMainExamGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
             const modalExamRadio = document.querySelector(`input[name="modal-exam-grouping"][value="${currentMainExamGrouping}"]`);
             if (modalExamRadio) modalExamRadio.checked = true;
             const modalExamBoundary = document.getElementById('modal-exam-boundary-wrapper');
             if (modalExamBoundary) {
                 if (currentMainExamGrouping === 'separate') modalExamBoundary.classList.remove('hidden');
                 else modalExamBoundary.classList.add('hidden');
+            }
+            const mainFreshCb = document.getElementById('main-exam-fresh-room-cb');
+            const modalFreshCb = document.getElementById('modal-exam-fresh-room-cb');
+            if (mainFreshCb && modalFreshCb) {
+                modalFreshCb.checked = mainFreshCb.checked;
             }
             if (typeof updateExamGroupingUI === 'function') updateExamGroupingUI(currentSessionKey);
 
@@ -13428,10 +13441,10 @@ window.real_populate_qp_code_session_dropdown = function () {
         if (mainRadio) mainRadio.checked = true;
 
         // READ Exam Grouping Mode and SYNC back to Main Tab
-        const examGroupingMode = document.querySelector('input[name="modal-exam-grouping"]:checked')?.value || 'mix';
+        const examGroupingMode = document.querySelector('input[name="modal-exam-grouping"]:checked')?.value || 'separate';
         const mainExamRadio = document.querySelector(`input[name="main-exam-grouping"][value="${examGroupingMode}"]`);
         if (mainExamRadio) mainExamRadio.checked = true;
-        const freshRoomPerExam = document.getElementById('modal-exam-fresh-room-cb') ? document.getElementById('modal-exam-fresh-room-cb').checked : true;
+        const freshRoomPerExam = document.getElementById('modal-exam-fresh-room-cb') ? document.getElementById('modal-exam-fresh-room-cb').checked : false;
         const mainFreshCb = document.getElementById('main-exam-fresh-room-cb');
         if (mainFreshCb) mainFreshCb.checked = freshRoomPerExam;
 
@@ -14021,7 +14034,7 @@ window.real_populate_qp_code_session_dropdown = function () {
         });
 
         // Auto-detect target exam if in separate mode and not explicitly passed
-        const mainGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'mix';
+        const mainGrouping = document.querySelector('input[name="main-exam-grouping"]:checked')?.value || 'separate';
         if (!targetExamName && mainGrouping === 'separate') {
             const detected = (typeof getSessionExamTags === 'function') ? getSessionExamTags(currentSessionKey) : [];
             if (detected.length >= 2) {
