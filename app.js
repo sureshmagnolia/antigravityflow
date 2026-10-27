@@ -13446,8 +13446,10 @@ window.real_populate_qp_code_session_dropdown = function () {
                         const sessionStudentRecords = window.getStudentsForSession(allStudentData, date, time);
                         const allottedRegNos = new Set();
                         currentSessionAllotment.forEach(rm => rm.students.forEach(s => allottedRegNos.add(getRegNo(s))));
+                        const lastRoomStream = (lastRoom.stream || "Regular").toString().trim().toLowerCase();
                         const topUpCandidates = sessionStudentRecords.filter(s => {
-                            return !allottedRegNos.has(getRegNo(s)) && studentMatchesExamGroup(s, group);
+                            const sStream = (s.Stream || "Regular").toString().trim().toLowerCase();
+                            return !allottedRegNos.has(getRegNo(s)) && sStream === lastRoomStream && studentMatchesExamGroup(s, group);
                         });
                         if (topUpCandidates.length > 0) {
                             const topUpSlice = topUpCandidates.slice(0, freeSeats);
