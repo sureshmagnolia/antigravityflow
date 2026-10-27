@@ -12429,19 +12429,9 @@ window.real_populate_qp_code_session_dropdown = function () {
     // --- NEW: Dynamic Exam Tag Grouping Helpers ---
     function studentMatchesExamGroup(student, group) {
         if (!student || !group) return true;
-        if (typeof group === 'string') {
-            const gNorm = group.trim().toLowerCase();
-            const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
-            const sStream = (student.Stream || student.stream || 'Regular').toString().trim().toLowerCase();
-            return sExam === gNorm || sStream === gNorm;
-        }
-        if (group.type === 'stream') {
-            const sStream = (student.Stream || student.stream || 'Regular').toString().trim().toLowerCase();
-            const targetStream = (group.stream || group.displayName || group.name || '').toString().trim().toLowerCase();
-            return sStream === targetStream;
-        }
+        const targetExam = (typeof group === 'string' ? group : (group.examName || group.name || '')).trim().toLowerCase();
+        if (!targetExam) return true;
         const sExam = (student['Exam Name'] || student.examName || student.ExamName || '').toString().trim().toLowerCase();
-        const targetExam = (group.examName || group.name || '').toString().trim().toLowerCase();
         return sExam === targetExam;
     }
     window.studentMatchesExamGroup = studentMatchesExamGroup;
@@ -12454,89 +12444,32 @@ window.real_populate_qp_code_session_dropdown = function () {
             : allStudentData.filter(s => s.Date === date && s.Time === time);
         if (!sessStudents || sessStudents.length === 0) return [];
         
-        // 1. Gather distinct Exam Names
+        // ONLY Exam Name tags are taken into account for Tag grouping. Streams are NOT considered different exams.
         const examMap = new Map();
-        // 2. Gather distinct Streams
-        const streamMap = new Map();
-
         sessStudents.forEach(s => {
             const rawName = (s['Exam Name'] || s.examName || s.ExamName || '').toString().trim();
-            if (rawName) {
-                if (!examMap.has(rawName)) {
-                    examMap.set(rawName, { count: 0, courses: new Set(), streams: new Set() });
-                }
-                const eEntry = examMap.get(rawName);
-                eEntry.count++;
-                const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
-                if (c) eEntry.courses.add(c);
-                const st = (s.Stream || s.stream || 'Regular').toString().trim();
-                if (st) eEntry.streams.add(st);
+            const examName = rawName || 'Default Exam';
+            if (!examMap.has(examName)) {
+                examMap.set(examName, { count: 0, courses: new Set(), streams: new Set() });
             }
-
-            const streamName = (s.Stream || s.stream || 'Regular').toString().trim();
-            if (streamName) {
-                if (!streamMap.has(streamName)) {
-                    streamMap.set(streamName, { count: 0, courses: new Set(), exams: new Set() });
-                }
-                const sEntry = streamMap.get(streamName);
-                sEntry.count++;
-                const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
-                if (c) sEntry.courses.add(c);
-                if (rawName) sEntry.exams.add(rawName);
-            }
-        });
-
-        // Scenario A: Multiple distinct Exam Names exist (e.g. "5 th sem FYUGP" and "5th Sem CBCSS")
-        if (examMap.size >= 2) {
-            return Array.from(examMap.entries()).map(([name, data]) => ({
-                name,
-                displayName: name,
-                type: 'exam',
-                examName: name,
-                count: data.count,
-                courseCount: data.courses.size,
-                courses: Array.from(data.courses),
-                streams: Array.from(data.streams)
-            })).sort((a, b) => b.count - a.count);
-        }
-
-        // Scenario B: Only 1 (or 0) Exam Name, but Multiple distinct Streams exist (e.g. "Regular" and "EDE")
-        if (streamMap.size >= 2) {
-            const singleExamName = examMap.size === 1 ? Array.from(examMap.keys())[0] : '';
-            return Array.from(streamMap.entries()).map(([stream, data]) => {
-                const label = singleExamName ? `${singleExamName} (${stream})` : `${stream} Stream`;
-                return {
-                    name: label,
-                    displayName: stream,
-                    type: 'stream',
-                    stream: stream,
-                    examName: singleExamName,
-                    count: data.count,
-                    courseCount: data.courses.size,
-                    courses: Array.from(data.courses),
-                    streams: [stream]
-                };
-            }).sort((a, b) => b.count - a.count);
-        }
-
-        // Single Exam and Single Stream
-        const defaultName = examMap.size === 1 ? Array.from(examMap.keys())[0] : 'Default Exam';
-        const allCourses = new Set();
-        sessStudents.forEach(s => {
+            const entry = examMap.get(examName);
+            entry.count++;
             const c = (s.Course || s.course || s['Course Name'] || 'Unknown').toString().trim();
-            if (c) allCourses.add(c);
+            if (c) entry.courses.add(c);
+            const st = (s.Stream || s.stream || 'Regular').toString().trim();
+            if (st) entry.streams.add(st);
         });
 
-        return [{
-            name: defaultName,
-            displayName: defaultName,
+        return Array.from(examMap.entries()).map(([name, data]) => ({
+            name,
+            displayName: name,
             type: 'exam',
-            examName: defaultName,
-            count: sessStudents.length,
-            courseCount: allCourses.size,
-            courses: Array.from(allCourses),
-            streams: Array.from(streamMap.keys())
-        }];
+            examName: name,
+            count: data.count,
+            courseCount: data.courses.size,
+            courses: Array.from(data.courses),
+            streams: Array.from(data.streams)
+        })).sort((a, b) => b.count - a.count);
     }
     window.getSessionExamTags = getSessionExamTags;
 
@@ -12567,10 +12500,8 @@ window.real_populate_qp_code_session_dropdown = function () {
             `<div class="flex items-center justify-between py-0.5"><span class="font-semibold truncate max-w-[280px]" title="${escapeStr(e.name)}">• ${escapeStr(e.name)}</span><span class="text-teal-700 font-bold ml-2 shrink-0">${e.count} students (${e.courseCount} ${e.courseCount === 1 ? 'course' : 'courses'})</span></div>`
         ).join('');
 
-        const isStreamGrouping = exams.some(e => e.type === 'stream');
-        const badgeText = isStreamGrouping ? 'Multi-Stream Session' : 'Multi-Exam Session';
         const modalBadge = document.getElementById('modal-exam-grouping-badge');
-        if (modalBadge) modalBadge.textContent = badgeText;
+        if (modalBadge) modalBadge.textContent = 'Multi-Exam Session';
 
         if (modalContainer) {
             modalContainer.classList.remove('hidden');
@@ -13536,11 +13467,8 @@ window.real_populate_qp_code_session_dropdown = function () {
                     }
                 }
 
-                const streamsForGroup = (group.type === 'stream') 
-                    ? [group.stream]
-                    : (group.streams && group.streams.length > 0 ? group.streams : currentStreamConfig);
-
-                for (const stream of streamsForGroup) {
+                // Streams follow previous rules strictly
+                for (const stream of currentStreamConfig) {
                     let remainingForStream = true;
                     const targetStreamLower = (stream || "Regular").toString().trim().toLowerCase();
 
